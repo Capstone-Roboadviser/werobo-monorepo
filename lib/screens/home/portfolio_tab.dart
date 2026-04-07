@@ -6,7 +6,6 @@ import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import '../../models/rebalance_data.dart';
 import '../../services/mobile_backend_api.dart';
-import '../../services/mock_chart_data.dart';
 import '../onboarding/widgets/portfolio_charts.dart';
 import '../onboarding/widgets/vestor_pie_chart.dart';
 
@@ -54,8 +53,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
                   color: parseBackendHexColor(line.color),
                   dashed: line.style != 'solid',
                   points: line.points
-                      .map((p) =>
-                          ChartPoint(date: p.date, value: p.returnPct))
+                      .map((p) => ChartPoint(date: p.date, value: p.returnPct))
                       .toList(),
                 ))
             .toList();
@@ -79,10 +77,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
     final details = PortfolioData.detailsFor(type);
     final rebalanceEvents = MockRebalanceData.eventsFor(type);
 
-    // Prepend promised return line to comparison data
-    final lines = _comparisonLines != null
-        ? [MockChartData.promisedReturnLine(type), ..._comparisonLines!]
-        : null;
+    final lines = _comparisonLines;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -92,8 +87,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 20),
-            Text('내 포트폴리오',
-                style: WeRoboTypography.heading2.themed(context)),
+            Text('내 포트폴리오', style: WeRoboTypography.heading2.themed(context)),
             const SizedBox(height: 16),
 
             // View toggle
@@ -149,8 +143,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
             const SizedBox(height: 20),
 
             // Rebalancing history
-            Text('리밸런싱 기록',
-                style: WeRoboTypography.heading3.themed(context)),
+            Text('리밸런싱 기록', style: WeRoboTypography.heading3.themed(context)),
             const SizedBox(height: 12),
             ...rebalanceEvents.asMap().entries.map((entry) {
               final i = entry.key;
@@ -158,8 +151,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
               return _RebalanceEventCard(
                 event: event,
                 isExpanded: _expandedEvent == i,
-                onTap: () => setState(() =>
-                    _expandedEvent = _expandedEvent == i ? null : i),
+                onTap: () => setState(
+                    () => _expandedEvent = _expandedEvent == i ? null : i),
               );
             }),
             const SizedBox(height: 32),
@@ -201,8 +194,7 @@ class _ToggleChip extends StatelessWidget {
             textAlign: TextAlign.center,
             style: WeRoboTypography.caption.copyWith(
               fontWeight: FontWeight.w600,
-              color:
-                  isActive ? WeRoboColors.white : tc.textTertiary,
+              color: isActive ? WeRoboColors.white : tc.textTertiary,
             ),
           ),
         ),
@@ -269,15 +261,12 @@ class _AllocationView extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(d.category.name,
-                            style: WeRoboTypography.bodySmall.copyWith(
-                                color: tc.textPrimary)),
+                            style: WeRoboTypography.bodySmall
+                                .copyWith(color: tc.textPrimary)),
                         if (d.tickers.isNotEmpty)
                           Text(
-                            d.tickers
-                                .map((t) => t.symbol)
-                                .join(', '),
-                            style: WeRoboTypography.caption
-                                .themed(context),
+                            d.tickers.map((t) => t.symbol).join(', '),
+                            style: WeRoboTypography.caption.themed(context),
                           ),
                       ],
                     ),
@@ -302,8 +291,7 @@ class _AllocationView extends StatelessWidget {
       return Text(
         key: const ValueKey('default'),
         '포트폴리오\n비중',
-        style: WeRoboTypography.heading3
-            .copyWith(color: tc.textPrimary),
+        style: WeRoboTypography.heading3.copyWith(color: tc.textPrimary),
         textAlign: TextAlign.center,
       );
     }
@@ -322,8 +310,7 @@ class _AllocationView extends StatelessWidget {
         ),
         Text(
           '${detail.category.percentage.toInt()}%',
-          style: WeRoboTypography.number
-              .copyWith(color: tc.textPrimary),
+          style: WeRoboTypography.number.copyWith(color: tc.textPrimary),
         ),
         const SizedBox(height: 4),
         ...detail.tickers.take(3).map((t) => Text(
@@ -426,16 +413,14 @@ class _NextRebalanceCard extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: WeRoboColors.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text('87일',
                 style: WeRoboTypography.caption.copyWith(
-                    color: WeRoboColors.primary,
-                    fontWeight: FontWeight.w600)),
+                    color: WeRoboColors.primary, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -484,8 +469,7 @@ class _RebalanceEventCard extends StatelessWidget {
                     color: tc.accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(Icons.check_rounded,
-                      size: 20, color: tc.accent),
+                  child: Icon(Icons.check_rounded, size: 20, color: tc.accent),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -498,8 +482,7 @@ class _RebalanceEventCard extends StatelessWidget {
                               fontWeight: FontWeight.w500,
                               fontFamily: WeRoboFonts.english)),
                       Text(event.status,
-                          style: WeRoboTypography.caption
-                              .themed(context)),
+                          style: WeRoboTypography.caption.themed(context)),
                     ],
                   ),
                 ),
@@ -537,14 +520,10 @@ class _RebalanceEventCard extends StatelessWidget {
         children: [
           // Before/after stacked bars
           _AllocationBar(
-              label: '변경 전',
-              changes: event.changes,
-              useBefore: true),
+              label: '변경 전', changes: event.changes, useBefore: true),
           const SizedBox(height: 6),
           _AllocationBar(
-              label: '변경 후',
-              changes: event.changes,
-              useBefore: false),
+              label: '변경 후', changes: event.changes, useBefore: false),
           const SizedBox(height: 14),
 
           // Per-sector change rows
@@ -565,8 +544,8 @@ class _RebalanceEventCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(change.sectorName,
-                        style: WeRoboTypography.caption.copyWith(
-                            color: tc.textPrimary)),
+                        style: WeRoboTypography.caption
+                            .copyWith(color: tc.textPrimary)),
                   ),
                   Text(
                     '${change.beforePct.toStringAsFixed(1)}%',
@@ -592,12 +571,10 @@ class _RebalanceEventCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: (isPositive
-                              ? tc.accent
-                              : WeRoboColors.warning)
+                      color: (isPositive ? tc.accent : WeRoboColors.warning)
                           .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
                     ),
@@ -607,9 +584,7 @@ class _RebalanceEventCard extends StatelessWidget {
                         fontFamily: WeRoboFonts.english,
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        color: isPositive
-                            ? tc.accent
-                            : WeRoboColors.warning,
+                        color: isPositive ? tc.accent : WeRoboColors.warning,
                       ),
                     ),
                   ),
@@ -643,8 +618,7 @@ class _AllocationBar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: WeRoboTypography.caption
-                .copyWith(color: tc.textSecondary)),
+            style: WeRoboTypography.caption.copyWith(color: tc.textSecondary)),
         const SizedBox(height: 4),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),
@@ -656,8 +630,8 @@ class _AllocationBar extends StatelessWidget {
                 return Flexible(
                   flex: (pct * 10).round().clamp(1, 1000),
                   child: Container(
-                    color: change.color
-                        .withValues(alpha: useBefore ? 0.5 : 1.0),
+                    color:
+                        change.color.withValues(alpha: useBefore ? 0.5 : 1.0),
                   ),
                 );
               }).toList(),
