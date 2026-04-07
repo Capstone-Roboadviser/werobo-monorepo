@@ -10,6 +10,16 @@ double _asDouble(Object? value) {
   return double.tryParse(value?.toString() ?? '') ?? 0;
 }
 
+double _normalizeComparisonReturn(Object? value) {
+  final parsed = _asDouble(value);
+  // The comparison-backtest payload is intended to be a ratio (0.0834 = 8.34%),
+  // but some backend builds return percentage points (8.34). Normalize for charts.
+  if (parsed.abs() > 5) {
+    return parsed / 100;
+  }
+  return parsed;
+}
+
 DateTime _parseDate(Object? value) {
   return DateTime.tryParse(value?.toString() ?? '') ??
       DateTime.fromMillisecondsSinceEpoch(0);
@@ -444,7 +454,7 @@ class MobileComparisonLinePoint {
   factory MobileComparisonLinePoint.fromJson(Map<String, dynamic> json) {
     return MobileComparisonLinePoint(
       date: _parseDate(json['date']),
-      returnPct: _asDouble(json['return_pct']),
+      returnPct: _normalizeComparisonReturn(json['return_pct']),
     );
   }
 }
