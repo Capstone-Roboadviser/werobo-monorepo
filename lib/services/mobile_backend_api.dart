@@ -32,7 +32,7 @@ class MobileBackendApi {
   ];
 
   final HttpClient _client = HttpClient()
-    ..connectionTimeout = const Duration(seconds: 8);
+    ..connectionTimeout = const Duration(seconds: 20);
 
   Future<MobileRecommendationResponse> fetchRecommendation({
     required double propensityScore,
@@ -46,7 +46,7 @@ class MobileBackendApi {
         'data_source': dataSource,
       },
       parser: MobileRecommendationResponse.fromJson,
-      timeout: const Duration(seconds: 8),
+      timeout: const Duration(seconds: 20),
     );
   }
 
@@ -64,7 +64,7 @@ class MobileBackendApi {
         'data_source': dataSource,
       },
       parser: MobileVolatilityHistoryResponse.fromJson,
-      timeout: const Duration(seconds: 8),
+      timeout: const Duration(seconds: 20),
     );
   }
 
@@ -75,7 +75,7 @@ class MobileBackendApi {
         'data_source': dataSource,
       },
       parser: MobileComparisonBacktestResponse.fromJson,
-      timeout: const Duration(seconds: 8),
+      timeout: const Duration(seconds: 20),
     );
   }
 
