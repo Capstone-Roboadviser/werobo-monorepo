@@ -208,8 +208,7 @@ class _EfficientFrontierPage extends StatefulWidget {
   });
 
   @override
-  State<_EfficientFrontierPage> createState() =>
-      _EfficientFrontierPageState();
+  State<_EfficientFrontierPage> createState() => _EfficientFrontierPageState();
 }
 
 class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
@@ -344,4 +343,3 @@ class _StatCard extends StatelessWidget {
     );
   }
 }
-

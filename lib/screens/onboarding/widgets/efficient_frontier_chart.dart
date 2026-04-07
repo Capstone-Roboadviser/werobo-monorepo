@@ -13,8 +13,7 @@ class EfficientFrontierChart extends StatefulWidget {
   });
 
   @override
-  State<EfficientFrontierChart> createState() =>
-      _EfficientFrontierChartState();
+  State<EfficientFrontierChart> createState() => _EfficientFrontierChartState();
 }
 
 class _EfficientFrontierChartState extends State<EfficientFrontierChart>
@@ -201,7 +200,10 @@ class _FrontierPainter extends CustomPainter {
               (points[i].dy + points[i + 1].dy) / 2,
             );
             curvePath.quadraticBezierTo(
-              points[i].dx, points[i].dy, cp.dx, cp.dy,
+              points[i].dx,
+              points[i].dy,
+              cp.dx,
+              cp.dy,
             );
           } else {
             curvePath.lineTo(points[i].dx, points[i].dy);
