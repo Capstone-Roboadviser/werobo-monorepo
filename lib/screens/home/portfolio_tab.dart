@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
+import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import '../../services/mobile_backend_api.dart';
 import '../onboarding/widgets/portfolio_charts.dart';
@@ -134,6 +135,12 @@ class _PortfolioTabState extends State<PortfolioTab> {
             ),
             const SizedBox(height: 16),
 
+            // Risk & return summary
+            _PortfolioStatsCard(
+              portfolio: portfolioState.selectedPortfolio,
+            ),
+            const SizedBox(height: 16),
+
             // View toggle
             Container(
               decoration: BoxDecoration(
@@ -197,6 +204,97 @@ class _PortfolioTabState extends State<PortfolioTab> {
             const SizedBox(height: 32),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Portfolio stats card ──
+
+class _PortfolioStatsCard extends StatelessWidget {
+  final MobilePortfolioRecommendation? portfolio;
+
+  const _PortfolioStatsCard({required this.portfolio});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final p = portfolio;
+    if (p == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 14,
+      ),
+      decoration: BoxDecoration(
+        color: tc.card,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _StatItem(
+            label: '예상 수익률',
+            value: p.expectedReturnLabel,
+            valueColor: WeRoboColors.primary,
+          ),
+          _statDivider(tc),
+          _StatItem(
+            label: '위험도',
+            value: p.volatilityLabel,
+            valueColor: tc.textPrimary,
+          ),
+          _statDivider(tc),
+          _StatItem(
+            label: '샤프 비율',
+            value: p.sharpeRatio.toStringAsFixed(2),
+            valueColor: tc.textPrimary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _statDivider(WeRoboThemeColors tc) {
+    return Container(
+      width: 1,
+      height: 32,
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      color: tc.textTertiary.withValues(alpha: 0.2),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color valueColor;
+
+  const _StatItem({
+    required this.label,
+    required this.value,
+    required this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: WeRoboTypography.caption.themed(context),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: WeRoboTypography.bodySmall.copyWith(
+              fontWeight: FontWeight.w700,
+              fontFamily: WeRoboFonts.english,
+              color: valueColor,
+            ),
+          ),
+        ],
       ),
     );
   }
