@@ -98,6 +98,39 @@ class _PortfolioTabState extends State<PortfolioTab> {
     return null;
   }
 
+  static const _mockRebalanceRecords = <_RebalanceRecord>[
+    _RebalanceRecord(
+      date: '2026-03-31',
+      status: '완료',
+      delta: '+1.4%',
+      details: '미국 가치주 30% → 28%, 단기 채권 28% → 30%',
+    ),
+    _RebalanceRecord(
+      date: '2025-12-31',
+      status: '완료',
+      delta: '+0.9%',
+      details: '인프라 채권 28% → 30%, 신성장주 7% → 5%',
+    ),
+    _RebalanceRecord(
+      date: '2025-09-30',
+      status: '완료',
+      delta: '+2.1%',
+      details: '미국 성장주 8% → 10%, 금 5% → 3%',
+    ),
+    _RebalanceRecord(
+      date: '2025-06-30',
+      status: '완료',
+      delta: '+0.6%',
+      details: '현금성자산 12% → 10%, 미국 가치주 17% → 19%',
+    ),
+    _RebalanceRecord(
+      date: '2025-03-31',
+      status: '완료',
+      delta: '+1.8%',
+      details: '단기 채권 25% → 28%, 신성장주 8% → 5%',
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
@@ -111,6 +144,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
         .where((d) => d.isBefore(DateTime.now()))
         .toList()
       ..sort((a, b) => b.compareTo(a));
+    final useMock = pastDates.isEmpty;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -193,14 +227,24 @@ class _PortfolioTabState extends State<PortfolioTab> {
             _NextRebalanceCard(rebalanceDates: rebalanceDates),
             const SizedBox(height: 20),
 
-            // Rebalancing history from API
-            if (pastDates.isNotEmpty) ...[
-              Text('리밸런싱 기록',
-                  style: WeRoboTypography.heading3.themed(context)),
-              const SizedBox(height: 12),
-              ...pastDates
-                  .map((date) => _RebalanceDateCard(date: date)),
-            ],
+            // Rebalancing history
+            Text('리밸런싱 기록',
+                style: WeRoboTypography.heading3.themed(context)),
+            const SizedBox(height: 12),
+            if (useMock)
+              ..._mockRebalanceRecords.map((r) =>
+                  _RebalanceDateDetailCard(record: r))
+            else
+              ...pastDates.map((date) => _RebalanceDateDetailCard(
+                    record: _RebalanceRecord(
+                      date:
+                          '${date.year}-${date.month.toString().padLeft(2, '0')}'
+                          '-${date.day.toString().padLeft(2, '0')}',
+                      status: '완료',
+                      delta: '',
+                      details: '',
+                    ),
+                  )),
             const SizedBox(height: 32),
           ],
         ),
@@ -618,19 +662,32 @@ class _NextRebalanceCard extends StatelessWidget {
   }
 }
 
-// ── Rebalance date card (from API backtest data) ──
+// ── Rebalance record model ──
 
-class _RebalanceDateCard extends StatelessWidget {
-  final DateTime date;
+class _RebalanceRecord {
+  final String date;
+  final String status;
+  final String delta;
+  final String details;
 
-  const _RebalanceDateCard({required this.date});
+  const _RebalanceRecord({
+    required this.date,
+    required this.status,
+    required this.delta,
+    required this.details,
+  });
+}
+
+// ── Detailed rebalance card ──
+
+class _RebalanceDateDetailCard extends StatelessWidget {
+  final _RebalanceRecord record;
+
+  const _RebalanceDateDetailCard({required this.record});
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final dateStr =
-        '${date.year}-${date.month.toString().padLeft(2, '0')}'
-        '-${date.day.toString().padLeft(2, '0')}';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -640,6 +697,7 @@ class _RebalanceDateCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 40,
@@ -656,17 +714,36 @@ class _RebalanceDateCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(dateStr,
+                Text(record.date,
                     style: WeRoboTypography.bodySmall.copyWith(
                         color: tc.textPrimary,
                         fontWeight: FontWeight.w500,
                         fontFamily: WeRoboFonts.english)),
-                Text('리밸런싱 완료',
+                Text('리밸런싱 ${record.status}',
                     style: WeRoboTypography.caption
                         .themed(context)),
+                if (record.details.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    record.details,
+                    style: WeRoboTypography.caption.copyWith(
+                      color: tc.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
+          if (record.delta.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(record.delta,
+                  style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.accent,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: WeRoboFonts.english)),
+            ),
         ],
       ),
     );
