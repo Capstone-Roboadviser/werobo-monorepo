@@ -28,7 +28,7 @@ class LegacyFastapiDemoAdapter:
             SimulationDataSource as LegacySimulationDataSource,
         )
         from app.domain.models import UserProfile as LegacyUserProfile
-        from app.engine.frontier import select_frontier_point_index
+        from app.engine.frontier import build_frontier_options
         from app.engine.math import portfolio_metrics_from_weights, risk_contributions
         from app.services.portfolio_service import PortfolioSimulationService
 
@@ -39,7 +39,7 @@ class LegacyFastapiDemoAdapter:
         self.LegacyRiskProfile = LegacyRiskProfile
         self.LegacySimulationDataSource = LegacySimulationDataSource
         self.LegacyUserProfile = LegacyUserProfile
-        self.select_frontier_point_index = select_frontier_point_index
+        self.build_frontier_options = build_frontier_options
         self.portfolio_metrics_from_weights = portfolio_metrics_from_weights
         self.risk_contributions = risk_contributions
         self.RISK_FREE_RATE = RISK_FREE_RATE
@@ -109,14 +109,8 @@ class LegacyFastapiDemoAdapter:
             investment_horizon=investment_horizon,
             data_source=data_source,
         )
-        target_volatility = self.portfolio_service.mapping_service.resolve_target_volatility(
-            legacy_user_profile
-        )
-        point_index = self.select_frontier_point_index(
-            context.frontier_points,
-            target_volatility,
-        )
-        point = context.frontier_points[point_index]
+        point = self._select_profile_option_point(context, risk_profile)
+        target_volatility = float(point.volatility)
 
         optimization_weights = self.portfolio_service._weights_for_optimization(
             point.weights,
@@ -179,6 +173,26 @@ class LegacyFastapiDemoAdapter:
             "stock_allocations": stock_allocations,
             "stock_weights": {str(k).upper(): float(v) for k, v in point.weights.items()},
         }
+
+    def _select_profile_option_point(
+        self,
+        context,
+        risk_profile: RiskProfile,
+    ):
+        profile_keys = (
+            RiskProfile.CONSERVATIVE,
+            RiskProfile.BALANCED,
+            RiskProfile.GROWTH,
+        )
+        option_points = self.build_frontier_options(context.frontier_points)
+        point_map = {
+            profile: point
+            for profile, (_, point) in zip(profile_keys, option_points)
+        }
+        point = point_map.get(risk_profile)
+        if point is None:
+            raise RuntimeError(f"{risk_profile.value} 대표 포트폴리오 포인트를 찾지 못했습니다.")
+        return point
 
     def _build_portfolio_snapshot(
         self,
