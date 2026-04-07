@@ -124,7 +124,7 @@ class _ServiceDescriptionPage extends StatelessWidget {
         children: [
           const Spacer(flex: 1),
           Text(
-            'AI가 찾아주는\n최적의 포트폴리오',
+            '데이터가 찾아주는\n최적의 포트폴리오',
             style: WeRoboTypography.heading2.themed(context),
             textAlign: TextAlign.center,
           ),
