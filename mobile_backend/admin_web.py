@@ -140,6 +140,10 @@ def render_admin_page() -> HTMLResponse:
       font-weight: 600;
       cursor: pointer;
     }
+    button:disabled {
+      opacity: 0.6;
+      cursor: wait;
+    }
     button.secondary {
       background: white;
       color: var(--primary);
@@ -509,6 +513,9 @@ def render_admin_page() -> HTMLResponse:
     const $$ = (selector) => Array.from(document.querySelectorAll(selector));
     let assetCatalog = [];
     let assetRoleTemplates = [];
+    let isRefreshingPrices = false;
+    let refreshLoadingTimer = null;
+    let refreshLoadingStartedAt = null;
 
     function showMessage(selector, text, isError = false) {
       const el = $(selector);
@@ -521,6 +528,51 @@ def render_admin_page() -> HTMLResponse:
       const el = $(selector);
       el.style.display = 'none';
       el.textContent = '';
+    }
+
+    function formatElapsedSeconds(totalSeconds) {
+      const seconds = Math.max(0, Math.floor(totalSeconds));
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      if (minutes <= 0) return `${remainingSeconds}초`;
+      return `${minutes}분 ${remainingSeconds}초`;
+    }
+
+    function renderRefreshLoadingMessage() {
+      if (!refreshLoadingStartedAt) return;
+      const elapsedSeconds = (Date.now() - refreshLoadingStartedAt) / 1000;
+      const refreshMode = $('#refresh-mode').value;
+      showMessage(
+        '#refresh-result',
+        [
+          '가격 갱신 실행 중입니다.',
+          `모드: ${refreshMode}`,
+          `경과 시간: ${formatElapsedSeconds(elapsedSeconds)}`,
+          '중복 실행을 막기 위해 버튼이 잠겨 있습니다.',
+        ].join('\\n'),
+      );
+    }
+
+    function setRefreshLoadingState(isLoading) {
+      isRefreshingPrices = isLoading;
+      $('#refresh-prices').disabled = isLoading;
+      $('#refresh-mode').disabled = isLoading;
+      $('#lookback-years').disabled = isLoading;
+
+      if (isLoading) {
+        refreshLoadingStartedAt = Date.now();
+        $('#refresh-prices').textContent = '가격 갱신 중...';
+        renderRefreshLoadingMessage();
+        refreshLoadingTimer = window.setInterval(renderRefreshLoadingMessage, 1000);
+        return;
+      }
+
+      $('#refresh-prices').textContent = '가격 갱신 실행';
+      refreshLoadingStartedAt = null;
+      if (refreshLoadingTimer) {
+        window.clearInterval(refreshLoadingTimer);
+        refreshLoadingTimer = null;
+      }
     }
 
     function normalizeTicker(value) {
@@ -1013,7 +1065,9 @@ def render_admin_page() -> HTMLResponse:
     }
 
     async function refreshPrices() {
+      if (isRefreshingPrices) return;
       hideMessage('#refresh-result');
+      setRefreshLoadingState(true);
       try {
         const payload = {
           version_id: null,
@@ -1028,6 +1082,8 @@ def render_admin_page() -> HTMLResponse:
         await reloadAll();
       } catch (error) {
         showMessage('#refresh-result', error.message, true);
+      } finally {
+        setRefreshLoadingState(false);
       }
     }
 
