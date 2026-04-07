@@ -1,13 +1,21 @@
 import 'package:flutter/material.dart';
+
 import '../../app/theme.dart';
+import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
+import '../../services/mobile_backend_api.dart';
 import 'widgets/portfolio_charts.dart';
 import 'widgets/vestor_pie_chart.dart';
 
 class ConfirmationScreen extends StatefulWidget {
-  final InvestmentType investmentType;
+  final MobileRecommendationResponse recommendation;
+  final String selectedPortfolioCode;
 
-  const ConfirmationScreen({super.key, required this.investmentType});
+  const ConfirmationScreen({
+    super.key,
+    required this.recommendation,
+    required this.selectedPortfolioCode,
+  });
 
   @override
   State<ConfirmationScreen> createState() => _ConfirmationScreenState();
@@ -19,14 +27,24 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
 
+  late MobilePortfolioRecommendation _portfolio;
   late List<PortfolioCategoryDetail> _details;
   late List<PortfolioCategory> _categories;
+
+  bool _isLoadingCharts = true;
+  String? _chartError;
+  List<ChartPoint>? _volatilityPoints;
+  List<ChartPoint>? _performancePoints;
+  List<ChartLine>? _comparisonLines;
+  List<DateTime>? _rebalanceDates;
 
   @override
   void initState() {
     super.initState();
-    _details = PortfolioData.detailsFor(widget.investmentType);
-    _categories = PortfolioData.categoriesFor(widget.investmentType);
+    _portfolio = widget.recommendation
+        .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
+    _details = _portfolio.toCategoryDetails();
+    _categories = _portfolio.toCategories();
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -35,6 +53,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
     );
     _fadeController.forward();
+    _loadChartData();
   }
 
   @override
@@ -43,14 +62,117 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     super.dispose();
   }
 
-  /// Build the center content for the pie chart
+  Future<void> _loadChartData() async {
+    setState(() {
+      _isLoadingCharts = true;
+      _chartError = null;
+    });
+
+    MobileVolatilityHistoryResponse? volatilityHistory;
+    MobileComparisonBacktestResponse? comparisonBacktest;
+    final errors = <String>[];
+
+    try {
+      volatilityHistory =
+          await MobileBackendApi.instance.fetchVolatilityHistory(
+        riskProfile: _portfolio.code,
+        investmentHorizon:
+            widget.recommendation.resolvedProfile.investmentHorizon,
+      );
+    } catch (error) {
+      errors.add(_friendlyError(error));
+    }
+
+    try {
+      comparisonBacktest =
+          await MobileBackendApi.instance.fetchComparisonBacktest();
+    } catch (error) {
+      errors.add(_friendlyError(error));
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingCharts = false;
+      _chartError = errors.isEmpty ? null : errors.first;
+
+      if (volatilityHistory != null) {
+        _volatilityPoints = volatilityHistory.points
+            .map(
+              (point) => ChartPoint(
+                date: point.date,
+                value: point.volatility,
+              ),
+            )
+            .toList();
+      }
+
+      if (comparisonBacktest != null) {
+        _rebalanceDates = comparisonBacktest.rebalanceDates;
+        _comparisonLines = comparisonBacktest.lines
+            .map(
+              (line) => ChartLine(
+                key: line.key,
+                label: line.label,
+                color: parseBackendHexColor(line.color),
+                dashed: line.style != 'solid',
+                points: line.points
+                    .map(
+                      (point) => ChartPoint(
+                        date: point.date,
+                        value: point.returnPct,
+                      ),
+                    )
+                    .toList(),
+              ),
+            )
+            .toList();
+        _performancePoints = _extractPerformancePoints(comparisonBacktest);
+      }
+    });
+  }
+
+  List<ChartPoint>? _extractPerformancePoints(
+    MobileComparisonBacktestResponse comparisonBacktest,
+  ) {
+    MobileComparisonLine? selectedLine;
+    for (final line in comparisonBacktest.lines) {
+      if (line.key == _portfolio.code) {
+        selectedLine = line;
+        break;
+      }
+    }
+
+    selectedLine ??= comparisonBacktest.lines.isNotEmpty
+        ? comparisonBacktest.lines.first
+        : null;
+
+    return selectedLine?.points
+        .map(
+          (point) => ChartPoint(
+            date: point.date,
+            value: point.returnPct,
+          ),
+        )
+        .toList();
+  }
+
+  String _friendlyError(Object error) {
+    if (error is MobileBackendException) {
+      return error.message;
+    }
+    return '차트 데이터를 불러오지 못했어요.';
+  }
+
   Widget _buildPieCenter() {
     if (_selectedSector == null) {
       return Text(
         key: const ValueKey('default'),
         '포트폴리오\n비중',
-        style: WeRoboTypography.heading3
-            .copyWith(color: WeRoboColors.textPrimary),
+        style:
+            WeRoboTypography.heading3.copyWith(color: WeRoboColors.textPrimary),
         textAlign: TextAlign.center,
       );
     }
@@ -76,20 +198,71 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
           ),
         ),
         const SizedBox(height: 4),
-        // Mini ticker list inside center
-        ...detail.tickers.map((t) => Padding(
-              padding: const EdgeInsets.only(bottom: 2),
-              child: Text(
-                '${t.symbol} ${t.percentage.toStringAsFixed(1)}%',
-                style: TextStyle(
-                  fontFamily: WeRoboFonts.english,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w500,
-                  color: WeRoboColors.textSecondary,
-                  height: 1.3,
+        ...detail.tickers.take(3).map(
+              (ticker) => Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Text(
+                  '${ticker.symbol} ${ticker.percentage.toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    fontFamily: WeRoboFonts.english,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500,
+                    color: WeRoboColors.textSecondary,
+                    height: 1.3,
+                  ),
                 ),
               ),
-            )),
+            ),
+      ],
+    );
+  }
+
+  Widget _buildChartsSection() {
+    if (_isLoadingCharts) {
+      return const Center(
+        child: CircularProgressIndicator(color: WeRoboColors.primary),
+      );
+    }
+
+    if (_volatilityPoints == null &&
+        _performancePoints == null &&
+        _comparisonLines == null) {
+      return _ChartErrorState(
+        message: _chartError ?? '차트 데이터를 불러오지 못했어요.',
+        onRetry: _loadChartData,
+      );
+    }
+
+    return Column(
+      children: [
+        if (_chartError != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: WeRoboColors.warning.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _chartError!,
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: WeRoboColors.textPrimary,
+                ),
+              ),
+            ),
+          ),
+        Expanded(
+          child: PortfolioCharts(
+            type: _portfolio.investmentType,
+            volatilityPoints: _volatilityPoints,
+            performancePoints: _performancePoints,
+            comparisonLines: _comparisonLines,
+            rebalanceDates: _rebalanceDates,
+            useFallbackMock: false,
+          ),
+        ),
       ],
     );
   }
@@ -103,26 +276,27 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
           opacity: _fadeAnim,
           child: Column(
             children: [
-              // Header
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 12, 24, 0),
                 child: Row(
                   children: [
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back_ios_rounded,
-                          size: 20, color: WeRoboColors.textPrimary),
+                      icon: const Icon(
+                        Icons.arrow_back_ios_rounded,
+                        size: 20,
+                        color: WeRoboColors.textPrimary,
+                      ),
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
-                        color: WeRoboColors.primary
-                            .withValues(alpha: 0.1),
+                        color: WeRoboColors.primary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        widget.investmentType.label,
+                        _portfolio.label,
                         style: WeRoboTypography.bodySmall.copyWith(
                           fontWeight: FontWeight.w600,
                           color: WeRoboColors.primary,
@@ -138,8 +312,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                 ),
               ),
               const SizedBox(height: 12),
-
-              // Pie chart with center detail
               SizedBox(
                 height: 260,
                 child: VestorPieChart(
@@ -155,13 +327,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                 ),
               ),
               const SizedBox(height: 16),
-
-              // Charts section
-              Expanded(
-                child: PortfolioCharts(type: widget.investmentType),
-              ),
-
-              // Confirm button
+              Expanded(child: _buildChartsSection()),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
                 child: SizedBox(
@@ -170,8 +336,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content:
-                              Text('투자 확정 완료! 홈 화면으로 이동합니다.'),
+                          content: Text('투자 확정 완료! 홈 화면으로 이동합니다.'),
                           behavior: SnackBarBehavior.floating,
                         ),
                       );
@@ -188,3 +353,45 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   }
 }
 
+class _ChartErrorState extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ChartErrorState({
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              '차트 데이터를 불러오지 못했어요',
+              style: WeRoboTypography.heading3,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              style: WeRoboTypography.bodySmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: 180,
+              child: ElevatedButton(
+                onPressed: onRetry,
+                child: const Text('다시 시도'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

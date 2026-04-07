@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../models/mobile_backend_models.dart';
+import '../../services/mobile_backend_api.dart';
 import 'result_screen.dart';
 
 class PortfolioLoadingScreen extends StatefulWidget {
@@ -17,6 +19,11 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
   late AnimationController _progressController;
   late AnimationController _rotationController;
   late Animation<double> _progressAnimation;
+  MobileRecommendationResponse? _recommendation;
+  String? _errorMessage;
+  bool _animationFinished = false;
+  bool _requestFinished = false;
+  bool _hasNavigated = false;
 
   @override
   void initState() {
@@ -39,27 +46,15 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
       vsync: this,
     )..repeat();
 
-    _progressController.forward();
-
     _progressController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        Future.delayed(const Duration(milliseconds: 500), () {
-          if (mounted) {
-            Navigator.of(context).pushReplacement(
-              PageRouteBuilder(
-                pageBuilder: (context, animation, secondaryAnimation) =>
-                    PortfolioResultScreen(dotT: widget.dotT),
-                transitionsBuilder:
-                    (context, animation, secondaryAnimation, child) {
-                  return FadeTransition(opacity: animation, child: child);
-                },
-                transitionDuration: const Duration(milliseconds: 400),
-              ),
-            );
-          }
-        });
+        _animationFinished = true;
+        _tryProceed();
       }
     });
+
+    _progressController.forward();
+    _loadRecommendation();
   }
 
   @override
@@ -69,8 +64,91 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     super.dispose();
   }
 
+  Future<void> _loadRecommendation() async {
+    setState(() {
+      _errorMessage = null;
+      _recommendation = null;
+    });
+    _requestFinished = false;
+
+    try {
+      final recommendation =
+          await MobileBackendApi.instance.fetchRecommendation(
+        propensityScore: widget.dotT * 100,
+      );
+      if (recommendation.portfolios.isEmpty) {
+        throw const MobileBackendException('추천 포트폴리오가 아직 준비되지 않았어요.');
+      }
+      if (!mounted) {
+        return;
+      }
+
+      _requestFinished = true;
+      setState(() {
+        _recommendation = recommendation;
+      });
+      _tryProceed();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      _requestFinished = true;
+      setState(() {
+        _errorMessage = _friendlyError(error);
+      });
+    }
+  }
+
+  String _friendlyError(Object error) {
+    if (error is MobileBackendException) {
+      return error.message;
+    }
+    return '포트폴리오 데이터를 불러오지 못했어요.';
+  }
+
+  void _tryProceed() {
+    if (!_animationFinished ||
+        !_requestFinished ||
+        _recommendation == null ||
+        _hasNavigated ||
+        !mounted) {
+      return;
+    }
+
+    _hasNavigated = true;
+    Future.delayed(const Duration(milliseconds: 250), () {
+      if (!mounted) {
+        return;
+      }
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) =>
+              PortfolioResultScreen(
+            recommendation: _recommendation!,
+            selectedPortfolioCode: _recommendation!.recommendedPortfolioCode,
+          ),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 400),
+        ),
+      );
+    });
+  }
+
+  void _retry() {
+    _animationFinished = false;
+    _requestFinished = false;
+    _hasNavigated = false;
+    _progressController.forward(from: 0);
+    _loadRecommendation();
+  }
+
   @override
   Widget build(BuildContext context) {
+    final hasError = _errorMessage != null;
+
     return Scaffold(
       backgroundColor: WeRoboColors.surface,
       body: Center(
@@ -107,16 +185,31 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
             ),
             const SizedBox(height: 40),
             Text(
-              '최적 포트폴리오를 찾는 중...',
+              hasError ? '추천 포트폴리오를 불러오지 못했어요' : '최적 포트폴리오를 찾는 중...',
               style: WeRoboTypography.body.copyWith(
                 color: WeRoboColors.textSecondary,
               ),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
-            Text(
-              '잠시만 기다려 주세요',
-              style: WeRoboTypography.caption,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                hasError ? _errorMessage! : '잠시만 기다려 주세요',
+                style: WeRoboTypography.caption,
+                textAlign: TextAlign.center,
+              ),
             ),
+            if (hasError) ...[
+              const SizedBox(height: 20),
+              SizedBox(
+                width: 180,
+                child: ElevatedButton(
+                  onPressed: _retry,
+                  child: const Text('다시 시도'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -176,7 +269,6 @@ class _LoadingRingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _LoadingRingPainter oldDelegate) {
-    return oldDelegate.progress != progress ||
-        oldDelegate.rotation != rotation;
+    return oldDelegate.progress != progress || oldDelegate.rotation != rotation;
   }
 }
