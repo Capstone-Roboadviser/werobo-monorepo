@@ -18,19 +18,35 @@ class _PortfolioTabState extends State<PortfolioTab> {
   int _viewTab = 0; // 0 = 비중, 1 = 성과 추이
   int? _selectedSector;
 
-  // Card 2 API data (volatility-history + return-history)
+  // Card 2 API data (volatility-history)
   bool _isLoadingHistory = false;
   InvestmentType? _loadedHistoryType;
   List<ChartPoint>? _volatilityPoints;
-  List<ChartPoint>? _performancePoints;
+
+  // Card 7 backtest fetch guard
+  bool _backtestFetched = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final type = PortfolioStateProvider.of(context).type;
+    final state = PortfolioStateProvider.of(context);
+    final type = state.type;
     if (_loadedHistoryType != type) {
       _fetchHistoryForType(type);
     }
+    if (!_backtestFetched && state.backtest == null) {
+      _fetchBacktest();
+    }
+  }
+
+  Future<void> _fetchBacktest() async {
+    _backtestFetched = true;
+    try {
+      final bt = await MobileBackendApi.instance
+          .fetchComparisonBacktest();
+      if (!mounted) return;
+      PortfolioStateProvider.of(context).setBacktest(bt);
+    } catch (_) {}
   }
 
   Future<void> _fetchHistoryForType(InvestmentType type) async {
@@ -47,7 +63,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
         rec?.resolvedProfile.investmentHorizon ?? 'medium';
 
     List<ChartPoint>? volPoints;
-    List<ChartPoint>? retPoints;
 
     try {
       final volResponse = await MobileBackendApi.instance
@@ -63,25 +78,10 @@ class _PortfolioTabState extends State<PortfolioTab> {
           .toList();
     } catch (_) {}
 
-    try {
-      final retResponse = await MobileBackendApi.instance
-          .fetchReturnHistory(
-        riskProfile: portfolio?.code ?? type.riskCode,
-        investmentHorizon: horizon,
-      );
-      retPoints = retResponse.points
-          .map((p) => ChartPoint(
-                date: p.date,
-                value: p.expectedReturn,
-              ))
-          .toList();
-    } catch (_) {}
-
     if (!mounted) return;
     setState(() {
       _isLoadingHistory = false;
       _volatilityPoints = volPoints;
-      _performancePoints = retPoints;
     });
   }
 
@@ -162,7 +162,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
                       key: ValueKey('trend_${type.name}'),
                       type: type,
                       volatilityPoints: _volatilityPoints,
-                      performancePoints: _performancePoints,
                       comparisonLines: lines,
                       rebalanceDates: rebalanceDates,
                       isLoading: _isLoadingHistory,
@@ -384,7 +383,6 @@ class _AllocationView extends StatelessWidget {
 class _TrendView extends StatelessWidget {
   final InvestmentType type;
   final List<ChartPoint>? volatilityPoints;
-  final List<ChartPoint>? performancePoints;
   final List<ChartLine> comparisonLines;
   final List<DateTime> rebalanceDates;
   final bool isLoading;
@@ -393,7 +391,6 @@ class _TrendView extends StatelessWidget {
     super.key,
     required this.type,
     this.volatilityPoints,
-    this.performancePoints,
     required this.comparisonLines,
     required this.rebalanceDates,
     this.isLoading = false,
@@ -403,7 +400,6 @@ class _TrendView extends StatelessWidget {
   Widget build(BuildContext context) {
     if (isLoading &&
         volatilityPoints == null &&
-        performancePoints == null &&
         comparisonLines.isEmpty) {
       return const SizedBox(
         height: 400,
@@ -420,7 +416,6 @@ class _TrendView extends StatelessWidget {
       child: PortfolioCharts(
         type: type,
         volatilityPoints: volatilityPoints,
-        performancePoints: performancePoints,
         comparisonLines:
             comparisonLines.isNotEmpty ? comparisonLines : null,
         rebalanceDates:
