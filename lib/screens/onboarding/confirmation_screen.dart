@@ -40,6 +40,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   List<ChartPoint>? _performancePoints;
   List<ChartLine>? _comparisonLines;
   List<DateTime>? _rebalanceDates;
+  MobileComparisonBacktestResponse? _backtestResponse;
 
   @override
   void initState() {
@@ -72,9 +73,11 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     });
 
     MobileVolatilityHistoryResponse? volatilityHistory;
+    MobileReturnHistoryResponse? returnHistory;
     MobileComparisonBacktestResponse? comparisonBacktest;
     final errors = <String>[];
 
+    // Card 2: volatility-history
     try {
       volatilityHistory =
           await MobileBackendApi.instance.fetchVolatilityHistory(
@@ -86,6 +89,19 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       errors.add(_friendlyError(error));
     }
 
+    // Card 2: return-history
+    try {
+      returnHistory =
+          await MobileBackendApi.instance.fetchReturnHistory(
+        riskProfile: _portfolio.code,
+        investmentHorizon:
+            widget.recommendation.resolvedProfile.investmentHorizon,
+      );
+    } catch (error) {
+      errors.add(_friendlyError(error));
+    }
+
+    // Card 7: comparison-backtest
     try {
       comparisonBacktest =
           await MobileBackendApi.instance.fetchComparisonBacktest();
@@ -112,7 +128,19 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
             .toList();
       }
 
+      if (returnHistory != null) {
+        _performancePoints = returnHistory.points
+            .map(
+              (point) => ChartPoint(
+                date: point.date,
+                value: point.expectedReturn,
+              ),
+            )
+            .toList();
+      }
+
       if (comparisonBacktest != null) {
+        _backtestResponse = comparisonBacktest;
         _rebalanceDates = comparisonBacktest.rebalanceDates;
         _comparisonLines = comparisonBacktest.lines
             .map(
@@ -132,34 +160,8 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
               ),
             )
             .toList();
-        _performancePoints = _extractPerformancePoints(comparisonBacktest);
       }
     });
-  }
-
-  List<ChartPoint>? _extractPerformancePoints(
-    MobileComparisonBacktestResponse comparisonBacktest,
-  ) {
-    MobileComparisonLine? selectedLine;
-    for (final line in comparisonBacktest.lines) {
-      if (line.key == _portfolio.code) {
-        selectedLine = line;
-        break;
-      }
-    }
-
-    selectedLine ??= comparisonBacktest.lines.isNotEmpty
-        ? comparisonBacktest.lines.first
-        : null;
-
-    return selectedLine?.points
-        .map(
-          (point) => ChartPoint(
-            date: point.date,
-            value: point.returnPct,
-          ),
-        )
-        .toList();
   }
 
   String _friendlyError(Object error) {
@@ -273,7 +275,14 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   }
 
   void _confirmPortfolio() {
-    PortfolioStateProvider.of(context).setType(_portfolio.investmentType);
+    final state = PortfolioStateProvider.of(context);
+    state.setTypeAndRecommendation(
+      _portfolio.investmentType,
+      widget.recommendation,
+    );
+    if (_backtestResponse != null) {
+      state.setBacktest(_backtestResponse!);
+    }
     Navigator.of(context).pushAndRemoveUntil(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => const HomeShell(),

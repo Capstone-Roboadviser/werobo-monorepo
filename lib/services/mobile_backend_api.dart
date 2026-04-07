@@ -68,6 +68,24 @@ class MobileBackendApi {
     );
   }
 
+  Future<MobileReturnHistoryResponse> fetchReturnHistory({
+    required String riskProfile,
+    String investmentHorizon = 'medium',
+    int rollingWindow = 20,
+  }) {
+    return _postWithFallback(
+      path: '/portfolios/return-history',
+      bodyForDataSource: (dataSource) => <String, dynamic>{
+        'risk_profile': riskProfile,
+        'investment_horizon': investmentHorizon,
+        'rolling_window': rollingWindow,
+        'data_source': dataSource,
+      },
+      parser: MobileReturnHistoryResponse.fromJson,
+      timeout: const Duration(seconds: 20),
+    );
+  }
+
   Future<MobileComparisonBacktestResponse> fetchComparisonBacktest() {
     return _postWithFallback(
       path: '/portfolios/comparison-backtest',
