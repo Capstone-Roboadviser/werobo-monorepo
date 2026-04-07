@@ -136,6 +136,21 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
               ),
             )
             .toList();
+
+        // Extract performance points from the portfolio's
+        // return line in comparison-backtest.
+        final code = _portfolio.code;
+        for (final line in comparisonBacktest.lines) {
+          if (line.key == code) {
+            _performancePoints = line.points
+                .map((p) => ChartPoint(
+                      date: p.date,
+                      value: p.returnPct,
+                    ))
+                .toList();
+            break;
+          }
+        }
       }
     });
   }
