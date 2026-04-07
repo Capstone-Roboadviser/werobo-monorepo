@@ -203,34 +203,33 @@ class _AnimatedStatChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 14),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: WeRoboColors.lightGray, width: 1),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: WeRoboTypography.caption.copyWith(color: color)),
-          const SizedBox(height: 2),
-          TweenAnimationBuilder<double>(
-            tween: Tween<double>(end: _parseValue(value)),
-            duration: const Duration(milliseconds: 600),
-            curve: Curves.easeOutCubic,
-            builder: (context, val, _) {
-              return Text(
-                '${val.toStringAsFixed(1)}%',
-                style: WeRoboTypography.heading3.copyWith(
-                  color: WeRoboColors.textPrimary,
-                  fontFamily: WeRoboFonts.english,
-                  fontFeatures: const [FontFeature.tabularFigures()],
-                ),
-              );
-            },
-          ),
-        ],
+      children: [
+        Text(label,
+            style: WeRoboTypography.caption.copyWith(
+                color: WeRoboColors.textSecondary)),
+        const SizedBox(height: 4),
+        TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: _parseValue(value)),
+          duration: const Duration(milliseconds: 600),
+          curve: Curves.easeOutCubic,
+          builder: (context, val, _) {
+            return Text(
+              '${val.toStringAsFixed(1)}%',
+              style: WeRoboTypography.number.copyWith(
+                color: WeRoboColors.textPrimary,
+                fontFamily: WeRoboFonts.english,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            );
+          },
+        ),
+      ],
       ),
     );
   }

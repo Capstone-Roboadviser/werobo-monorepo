@@ -113,27 +113,14 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                       icon: const Icon(Icons.arrow_back_ios_rounded,
                           size: 20, color: WeRoboColors.textPrimary),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: WeRoboColors.primary
-                            .withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                    Expanded(
                       child: Text(
-                        widget.investmentType.label,
-                        style: WeRoboTypography.bodySmall.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: WeRoboColors.primary,
-                        ),
+                        '${widget.investmentType.label} 포트폴리오 상세',
+                        style: WeRoboTypography.heading3,
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      '포트폴리오 상세',
-                      style: WeRoboTypography.heading3,
-                    ),
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),

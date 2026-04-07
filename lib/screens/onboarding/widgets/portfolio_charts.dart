@@ -237,6 +237,22 @@ class _VolReturnViewState extends State<_VolReturnView>
     return all.where((p) => p.date.isAfter(cutoff)).toList();
   }
 
+  double _expectedVolatility() {
+    return widget.type == InvestmentType.safe
+        ? 0.084
+        : widget.type == InvestmentType.balanced
+            ? 0.108
+            : 0.137;
+  }
+
+  double _expectedReturn() {
+    return widget.type == InvestmentType.safe
+        ? 0.062
+        : widget.type == InvestmentType.balanced
+            ? 0.085
+            : 0.112;
+  }
+
   @override
   Widget build(BuildContext context) {
     final points = _points;
@@ -306,7 +322,7 @@ class _VolReturnViewState extends State<_VolReturnView>
                   onPanUpdate: (d) {
                     if (points.isEmpty) return;
                     final x = d.localPosition.dx - 36;
-                    final chartW = constraints.maxWidth - 36;
+                    final chartW = constraints.maxWidth - 36 - 12;
                     final idx = ((x / chartW) * (points.length - 1))
                         .round()
                         .clamp(0, points.length - 1);
@@ -328,6 +344,12 @@ class _VolReturnViewState extends State<_VolReturnView>
                               : WeRoboColors.accent,
                           touchIndex: _touchIndex,
                           valueLabel: _subTab == 0 ? '변동성' : '수익률',
+                          baselineValue: _subTab == 0
+                              ? _expectedVolatility()
+                              : _expectedReturn(),
+                          baselineLabel: _subTab == 0
+                              ? '기대 변동성'
+                              : '기대 수익률',
                         ),
                       );
                     },
@@ -424,7 +446,7 @@ class _ComparisonViewState extends State<_ComparisonView>
                   onPanUpdate: (d) {
                     if (lines.isEmpty || lines[0].points.isEmpty) return;
                     final x = d.localPosition.dx - 36;
-                    final chartW = constraints.maxWidth - 36;
+                    final chartW = constraints.maxWidth - 36 - 12;
                     final count = lines[0].points.length;
                     final idx = ((x / chartW) * (count - 1))
                         .round()
@@ -498,6 +520,8 @@ class _AreaChartPainter extends CustomPainter {
   final Color color;
   final int? touchIndex;
   final String valueLabel;
+  final double? baselineValue;
+  final String? baselineLabel;
 
   _AreaChartPainter({
     required this.points,
@@ -505,23 +529,54 @@ class _AreaChartPainter extends CustomPainter {
     required this.color,
     this.touchIndex,
     required this.valueLabel,
+    this.baselineValue,
+    this.baselineLabel,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
     const padL = 36.0;
+    const padR = 12.0;
     const padB = 18.0;
-    final w = size.width - padL;
+    final w = size.width - padL - padR;
     final h = size.height - padB;
 
     final values = points.map((p) => p.value).toList();
-    final minY = values.reduce(min);
-    final maxY = values.reduce(max);
+    var minY = values.reduce(min);
+    var maxY = values.reduce(max);
+    // Include baseline in range if provided
+    if (baselineValue != null) {
+      if (baselineValue! < minY) minY = baselineValue!;
+      if (baselineValue! > maxY) maxY = baselineValue!;
+    }
     final rangeY = (maxY - minY).clamp(0.001, double.infinity);
 
     // Grid
-    _drawGrid(canvas, size, padL, padB, h, minY, rangeY);
+    _drawGrid(canvas, size, padL, padR, padB, h, minY, rangeY);
+
+    // Baseline horizontal dashed line
+    if (baselineValue != null) {
+      final by = h - ((baselineValue! - minY) / rangeY) * h;
+      final dashPaint = Paint()
+        ..color = color.withValues(alpha: 0.5)
+        ..strokeWidth = 1;
+      for (double dx = padL; dx < size.width - padR; dx += 8) {
+        canvas.drawLine(
+            Offset(dx, by),
+            Offset((dx + 4).clamp(0, size.width - padR), by),
+            dashPaint);
+      }
+      // Label
+      final blStyle = TextStyle(
+        fontSize: 9,
+        color: color,
+        fontWeight: FontWeight.w600,
+        fontFamily: WeRoboFonts.english,
+      );
+      _drawText(canvas, baselineLabel ?? '',
+          Offset(padL + 4, by - 14), blStyle);
+    }
 
     // Build path
     final drawCount = (points.length * progress).ceil().clamp(0, points.length);
@@ -598,8 +653,8 @@ class _AreaChartPainter extends CustomPainter {
     _drawDateLabels(canvas, size, padL, w, h, padB);
   }
 
-  void _drawGrid(Canvas canvas, Size size, double padL, double padB,
-      double h, double minY, double rangeY) {
+  void _drawGrid(Canvas canvas, Size size, double padL, double padR,
+      double padB, double h, double minY, double rangeY) {
     final gridPaint = Paint()
       ..color = WeRoboColors.lightGray.withValues(alpha: 0.3)
       ..strokeWidth = 0.5;
@@ -612,7 +667,7 @@ class _AreaChartPainter extends CustomPainter {
     for (int i = 0; i <= 4; i++) {
       final y = h - h * i / 4;
       canvas.drawLine(
-          Offset(padL, y), Offset(size.width, y), gridPaint);
+          Offset(padL, y), Offset(size.width - padR, y), gridPaint);
       final val = minY + rangeY * i / 4;
       _drawText(canvas, '${(val * 100).toStringAsFixed(1)}%',
           Offset(0, y - 6), labelStyle);
@@ -701,8 +756,9 @@ class _MultiLineChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (lines.isEmpty) return;
     const padL = 36.0;
+    const padR = 12.0;
     const padB = 18.0;
-    final w = size.width - padL;
+    final w = size.width - padL - padR;
     final h = size.height - padB;
 
     // Y range across all lines
@@ -728,7 +784,7 @@ class _MultiLineChartPainter extends CustomPainter {
 
     for (int i = 0; i <= 4; i++) {
       final y = h - h * i / 4;
-      canvas.drawLine(Offset(padL, y), Offset(size.width, y), gridPaint);
+      canvas.drawLine(Offset(padL, y), Offset(size.width - padR, y), gridPaint);
       final val = minY + rangeY * i / 4;
       _drawText(canvas, '${(val * 100).toStringAsFixed(1)}%',
           Offset(0, y - 6), labelStyle);
