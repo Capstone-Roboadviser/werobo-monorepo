@@ -7,8 +7,13 @@ import '../models/mobile_backend_models.dart';
 class MobileBackendException implements Exception {
   final String message;
   final int? statusCode;
+  final List<String> attemptLogs;
 
-  const MobileBackendException(this.message, {this.statusCode});
+  const MobileBackendException(
+    this.message, {
+    this.statusCode,
+    this.attemptLogs = const [],
+  });
 
   @override
   String toString() {
@@ -104,6 +109,7 @@ class MobileBackendApi {
     required Duration timeout,
   }) async {
     Object? lastError;
+    final attemptLogs = <String>[];
 
     for (final dataSource in _dataSources) {
       try {
@@ -115,16 +121,31 @@ class MobileBackendApi {
         );
       } catch (error) {
         lastError = error;
+        attemptLogs.add(_formatAttemptLog(
+          path: path,
+          dataSource: dataSource,
+          error: error,
+        ));
       }
     }
 
     if (lastError is MobileBackendException) {
-      throw lastError;
+      throw MobileBackendException(
+        lastError.message,
+        statusCode: lastError.statusCode,
+        attemptLogs: attemptLogs,
+      );
     }
     if (lastError is TimeoutException) {
-      throw const MobileBackendException('서버 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.');
+      throw MobileBackendException(
+        '서버 응답이 지연되고 있어요. 잠시 후 다시 시도해 주세요.',
+        attemptLogs: attemptLogs,
+      );
     }
-    throw MobileBackendException(lastError?.toString() ?? '알 수 없는 오류가 발생했습니다.');
+    throw MobileBackendException(
+      lastError?.toString() ?? '알 수 없는 오류가 발생했습니다.',
+      attemptLogs: attemptLogs,
+    );
   }
 
   Future<T> _post<T>({
@@ -158,5 +179,20 @@ class MobileBackendApi {
       detail ?? '서버 요청에 실패했습니다.',
       statusCode: response.statusCode,
     );
+  }
+
+  String _formatAttemptLog({
+    required String path,
+    required String dataSource,
+    required Object error,
+  }) {
+    if (error is MobileBackendException) {
+      final status = error.statusCode == null ? 'error' : '${error.statusCode}';
+      return '$dataSource $path -> $status ${error.message}';
+    }
+    if (error is TimeoutException) {
+      return '$dataSource $path -> timeout';
+    }
+    return '$dataSource $path -> ${error.runtimeType}';
   }
 }

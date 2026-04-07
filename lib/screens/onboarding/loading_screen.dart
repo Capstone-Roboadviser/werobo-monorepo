@@ -21,6 +21,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
   late AnimationController _rotationController;
   late Animation<double> _progressAnimation;
   MobileRecommendationResponse? _recommendation;
+  MobileRecommendationResponse? _fallbackRecommendation;
   String? _errorMessage;
   bool _animationFinished = false;
   bool _requestFinished = false;
@@ -69,6 +70,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     setState(() {
       _errorMessage = null;
       _recommendation = null;
+      _fallbackRecommendation = null;
     });
     _requestFinished = false;
 
@@ -94,24 +96,19 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         return;
       }
 
-      // Fall back to hardcoded portfolio data so the demo always works
-      final fallback = _buildFallbackRecommendation();
       _requestFinished = true;
       setState(() {
-        _recommendation = fallback;
+        _errorMessage = _buildUiErrorMessage(error);
+        _fallbackRecommendation = _buildFallbackRecommendation();
       });
-      _tryProceed();
     }
   }
 
   MobileRecommendationResponse _buildFallbackRecommendation() {
     final type = InvestmentType.fromDotT(widget.dotT);
-    final categories = PortfolioData.categoriesFor(type);
-    final details = PortfolioData.detailsFor(type);
-    final (risk, returnRate) = PortfolioData.statsFor(type);
+    final (risk, _) = PortfolioData.statsFor(type);
 
     final riskVal = double.parse(risk.replaceAll('%', '')) / 100;
-    final returnVal = double.parse(returnRate.replaceAll('%', '')) / 100;
 
     MobilePortfolioRecommendation buildPortfolio(InvestmentType t) {
       final cats = PortfolioData.categoriesFor(t);
@@ -162,6 +159,28 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         for (final t in InvestmentType.values) buildPortfolio(t),
       ],
     );
+  }
+
+  String _buildUiErrorMessage(Object error) {
+    if (error is MobileBackendException) {
+      if (error.attemptLogs.isNotEmpty) {
+        return error.attemptLogs.join('\n');
+      }
+      return error.message;
+    }
+    return '외부 추천 API 호출에 실패했어요. 다시 시도하거나 데모로 계속 진행할 수 있어요.';
+  }
+
+  void _continueWithDemo() {
+    final fallback = _fallbackRecommendation;
+    if (fallback == null) {
+      return;
+    }
+    setState(() {
+      _recommendation = fallback;
+      _errorMessage = null;
+    });
+    _tryProceed();
   }
 
   void _tryProceed() {
@@ -265,6 +284,16 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
                 child: ElevatedButton(
                   onPressed: _retry,
                   child: const Text('다시 시도'),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: 180,
+                child: OutlinedButton(
+                  onPressed: _fallbackRecommendation == null
+                      ? null
+                      : _continueWithDemo,
+                  child: const Text('데모로 계속 보기'),
                 ),
               ),
             ],
