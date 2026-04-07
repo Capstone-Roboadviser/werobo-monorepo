@@ -373,6 +373,10 @@ class _ComparisonViewState extends State<_ComparisonView>
     with SingleTickerProviderStateMixin {
   late AnimationController _drawCtrl;
   int? _touchIndex;
+  int _range = 4; // index into _ranges
+
+  static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
+  static const _rangeDays = [7, 90, 365, 1825, 99999];
 
   @override
   void initState() {
@@ -389,12 +393,29 @@ class _ComparisonViewState extends State<_ComparisonView>
     super.dispose();
   }
 
+  List<ChartLine> _filterByRange(List<ChartLine> rawLines) {
+    final cutoff =
+        DateTime.now().subtract(Duration(days: _rangeDays[_range]));
+    return rawLines.map((line) {
+      final filtered =
+          line.points.where((p) => p.date.isAfter(cutoff)).toList();
+      return ChartLine(
+        key: line.key,
+        label: line.label,
+        color: line.color,
+        dashed: line.dashed,
+        points: filtered.isNotEmpty ? filtered : line.points,
+      );
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final lines = widget.comparisonLines ??
+    final rawLines = widget.comparisonLines ??
         (widget.useFallbackMock
             ? MockChartData.comparisonLines(widget.type)
             : const <ChartLine>[]);
+    final lines = rawLines.isEmpty ? rawLines : _filterByRange(rawLines);
     final rebalanceDates = widget.rebalanceDates ??
         (widget.useFallbackMock
             ? MockChartData.rebalanceDates
@@ -404,6 +425,43 @@ class _ComparisonViewState extends State<_ComparisonView>
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
+          // Time range chips
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: List.generate(_rangeLabels.length, (i) {
+              final active = _range == i;
+              return Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() => _range = i);
+                    _drawCtrl.forward(from: 0);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: active
+                          ? WeRoboColors.primary
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      _rangeLabels[i],
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: active
+                            ? WeRoboColors.white
+                            : WeRoboColors.textTertiary,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          const SizedBox(height: 8),
           // Chart
           Expanded(
             child: lines.isEmpty

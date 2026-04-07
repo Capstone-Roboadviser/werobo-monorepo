@@ -82,4 +82,25 @@ class MockChartData {
     DateTime(2025, 12, 31),
     DateTime(2026, 3, 31),
   ];
+
+  /// Flat dashed line at the promised return rate for benchmarking.
+  static ChartLine promisedReturnLine(InvestmentType type) {
+    final rate = type == InvestmentType.safe
+        ? 0.062
+        : type == InvestmentType.balanced
+            ? 0.085
+            : 0.112;
+    final baseDate = DateTime(2025, 12, 8);
+    final points = List.generate(
+      120,
+      (i) => ChartPoint(date: baseDate.add(Duration(days: i)), value: rate),
+    );
+    return ChartLine(
+      key: 'promised_return',
+      label: '목표 수익률',
+      color: WeRoboColors.warning,
+      dashed: true,
+      points: points,
+    );
+  }
 }
