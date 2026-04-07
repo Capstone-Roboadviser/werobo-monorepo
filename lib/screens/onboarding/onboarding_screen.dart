@@ -123,11 +123,17 @@ class _ServiceDescriptionPage extends StatelessWidget {
         children: [
           const Spacer(flex: 1),
           Text(
-            '우리가 제공할\n서비스 설명',
+            'AI가 찾아주는\n최적의 포트폴리오',
             style: WeRoboTypography.heading2,
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 12),
+          Text(
+            '글로벌 자산에 분산 투자하여\n안정적인 수익을 추구합니다',
+            style: WeRoboTypography.bodySmall,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 32),
           const DonutChart(),
           const SizedBox(height: 32),
           // Legend
