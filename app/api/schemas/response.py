@@ -21,8 +21,8 @@ class AssetClassResponse(BaseModel):
     role_name: str = Field(..., description="현재 적용 role 이름", examples=["대표 종목 1개"])
     role_description: str = Field(..., description="role 설명")
     selection_mode: str = Field(..., description="후보 종목을 컴포넌트 후보로 만드는 방식", examples=["single_representative"])
-    weighting_mode: str = Field(..., description="컴포넌트 내부 가중 방식", examples=["single"])
-    return_mode: str = Field(..., description="수익률 해석 모드", examples=["historical_mean"])
+    weighting_mode: str = Field(..., description="컴포넌트 내부 바스켓 가중 방식", examples=["single"])
+    return_mode: str = Field(..., description="기대수익률/배당 반영 모드", examples=["black_litterman_plus_dividend_yield"])
 
 
 class AssetUniverseResponse(BaseModel):
@@ -34,8 +34,8 @@ class AssetRoleTemplateResponse(BaseModel):
     name: str = Field(..., description="role 이름", examples=["동일비중 바스켓"])
     description: str = Field(..., description="role 설명")
     selection_mode: str = Field(..., description="후보 선택 방식", examples=["all_members"])
-    weighting_mode: str = Field(..., description="가중 방식", examples=["equal_weight"])
-    return_mode: str = Field(..., description="수익률 해석 방식", examples=["historical_mean"])
+    weighting_mode: str = Field(..., description="바스켓 내부 가중 방식", examples=["inverse_volatility"])
+    return_mode: str = Field(..., description="기대수익률/배당 반영 방식", examples=["black_litterman_plus_dividend_yield"])
 
 
 class FrontierPointResponse(BaseModel):
@@ -160,8 +160,8 @@ class ManagedUniverseAssetRoleResponse(BaseModel):
     role_name: str = Field(..., description="적용된 role 이름", examples=["동일비중 바스켓"])
     role_description: str = Field(..., description="role 설명")
     selection_mode: str = Field(..., description="선택 방식", examples=["all_members"])
-    weighting_mode: str = Field(..., description="가중 방식", examples=["equal_weight"])
-    return_mode: str = Field(..., description="수익률 해석 방식", examples=["historical_mean"])
+    weighting_mode: str = Field(..., description="바스켓 내부 가중 방식", examples=["base_weight"])
+    return_mode: str = Field(..., description="기대수익률/배당 반영 방식", examples=["black_litterman_plus_dividend_yield"])
 
 
 class ManagedUniverseAssetRoleCatalogResponse(BaseModel):

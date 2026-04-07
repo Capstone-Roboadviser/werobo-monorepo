@@ -200,6 +200,7 @@ class PortfolioComponentCandidate:
     weighting_mode: str
     return_mode: str
     member_tickers: tuple[str, ...]
+    member_base_weights: dict[str, float] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

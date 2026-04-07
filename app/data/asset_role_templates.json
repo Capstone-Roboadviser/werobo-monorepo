@@ -1,26 +1,26 @@
 [
   {
     "key": "single_representative",
-    "name": "대표 종목 1개",
-    "description": "후보 종목 중 대표 종목 1개를 선택해 포트폴리오 구성에 반영합니다.",
+    "name": "대표 종목 1개 배당반영 BL",
+    "description": "후보 종목 중 대표 종목 1개를 선택해 Efficient Frontier 후보로 사용하고, Black-Litterman 기대수익률에 배당수익률을 추가 반영합니다.",
     "selection_mode": "single_representative",
     "weighting_mode": "single",
-    "return_mode": "historical_mean"
+    "return_mode": "black_litterman_plus_dividend_yield"
   },
   {
     "key": "equal_weight_basket",
-    "name": "동일비중 바스켓",
-    "description": "후보 종목 전체를 동일비중 바스켓으로 묶어 하나의 포트폴리오 컴포넌트로 사용합니다.",
+    "name": "전체 후보 사용 배당반영 BL",
+    "description": "자산군에 등록된 후보 종목 전체를 개별 Efficient Frontier 후보로 사용하고, Black-Litterman 기대수익률에 배당수익률을 추가 반영합니다.",
     "selection_mode": "all_members",
-    "weighting_mode": "equal_weight",
-    "return_mode": "historical_mean"
+    "weighting_mode": "individual_candidates",
+    "return_mode": "black_litterman_plus_dividend_yield"
   },
   {
     "key": "equal_weight_dividend_basket",
-    "name": "배당 가산 동일비중 바스켓",
-    "description": "후보 종목 전체를 동일비중 바스켓으로 묶고, 배당 지급 주기를 추정해 연환산 배당수익률을 기대수익률에 가산합니다.",
+    "name": "배당 가산 전체 후보 BL",
+    "description": "호환용 role입니다. 자산군에 등록된 후보 종목 전체를 개별 Efficient Frontier 후보로 사용하고, Black-Litterman 기대수익률에 배당수익률을 추가 반영합니다.",
     "selection_mode": "all_members",
-    "weighting_mode": "equal_weight",
-    "return_mode": "historical_mean_plus_dividend_yield"
+    "weighting_mode": "individual_candidates",
+    "return_mode": "black_litterman_plus_dividend_yield"
   }
 ]

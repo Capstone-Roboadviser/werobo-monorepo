@@ -24,6 +24,33 @@ class EfficientFrontierOptimizer:
         ordered_covariance = covariance.reindex(index=constraints.asset_codes, columns=constraints.asset_codes)
         self._validate_covariance(ordered_covariance)
 
+        frontier_points = self._build_target_return_frontier(
+            ordered_returns=ordered_returns,
+            ordered_covariance=ordered_covariance,
+            constraints=constraints,
+            point_count=point_count,
+        )
+        if not frontier_points:
+            frontier_points = self._build_risk_aversion_frontier(
+                ordered_returns=ordered_returns,
+                ordered_covariance=ordered_covariance,
+                constraints=constraints,
+                point_count=point_count,
+            )
+        if not frontier_points:
+            raise RuntimeError("효율적 투자선 포인트를 생성하지 못했습니다.")
+        return self._clean_frontier(frontier_points)
+
+    def _build_target_return_frontier(
+        self,
+        *,
+        ordered_returns: pd.Series,
+        ordered_covariance: pd.DataFrame,
+        constraints: ConstraintSet,
+        point_count: int,
+    ) -> list[FrontierPoint]:
+        frontier_points: list[FrontierPoint] = []
+
         min_volatility_result = minimize(
             lambda weights: portfolio_performance(weights, ordered_returns, ordered_covariance)[1],
             constraints.initial_weights,
@@ -40,11 +67,10 @@ class EfficientFrontierOptimizer:
         )
 
         if not min_volatility_result.success or not max_return_result.success:
-            raise RuntimeError("효율적 투자선 계산에 실패했습니다.")
+            return []
 
         min_frontier_return = portfolio_performance(min_volatility_result.x, ordered_returns, ordered_covariance)[0]
         max_return = portfolio_performance(max_return_result.x, ordered_returns, ordered_covariance)[0]
-        frontier_points: list[FrontierPoint] = []
 
         for target_return in np.linspace(min_frontier_return, max_return, point_count):
             result = minimize(
@@ -77,9 +103,50 @@ class EfficientFrontierOptimizer:
                 )
             )
 
-        if not frontier_points:
-            raise RuntimeError("효율적 투자선 포인트를 생성하지 못했습니다.")
-        return self._clean_frontier(frontier_points)
+        return frontier_points
+
+    def _build_risk_aversion_frontier(
+        self,
+        *,
+        ordered_returns: pd.Series,
+        ordered_covariance: pd.DataFrame,
+        constraints: ConstraintSet,
+        point_count: int,
+    ) -> list[FrontierPoint]:
+        frontier_points: list[FrontierPoint] = []
+        seen_keys: set[tuple[float, float]] = set()
+        gamma_values = np.geomspace(1e-3, 1e3, num=max(point_count * 3, 60))
+
+        for gamma in gamma_values:
+            result = minimize(
+                lambda weights, gamma=gamma: -self._risk_adjusted_utility(
+                    weights,
+                    ordered_returns,
+                    ordered_covariance,
+                    gamma,
+                ),
+                constraints.initial_weights,
+                method="SLSQP",
+                bounds=constraints.bounds,
+                constraints=constraints.scipy_constraints,
+            )
+            if not result.success:
+                continue
+
+            expected_return, volatility = portfolio_performance(result.x, ordered_returns, ordered_covariance)
+            key = (round(float(volatility), 8), round(float(expected_return), 8))
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            frontier_points.append(
+                FrontierPoint(
+                    volatility=float(volatility),
+                    expected_return=float(expected_return),
+                    weights={code: float(weight) for code, weight in zip(constraints.asset_codes, result.x)},
+                )
+            )
+
+        return frontier_points
 
     def maximize_sharpe(
         self,
@@ -178,3 +245,14 @@ class EfficientFrontierOptimizer:
         if volatility <= 0:
             return 1e6
         return -((expected_return - risk_free_rate) / volatility)
+
+    def _risk_adjusted_utility(
+        self,
+        weights: np.ndarray,
+        expected_returns: pd.Series,
+        covariance: pd.DataFrame,
+        gamma: float,
+    ) -> float:
+        expected_return, volatility = portfolio_performance(weights, expected_returns, covariance)
+        variance = float(volatility) ** 2
+        return float(expected_return) - 0.5 * float(gamma) * variance

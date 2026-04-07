@@ -28,25 +28,39 @@ class PortfolioComponentService:
         stock_returns: pd.DataFrame,
     ) -> ComponentCandidateMapResult:
         available_codes = set(stock_returns.columns.astype(str).str.upper().tolist())
-        by_asset: dict[str, list[str]] = {}
+        by_asset: dict[str, list[StockInstrument]] = {}
         for instrument in instruments:
-            by_asset.setdefault(instrument.sector_code, []).append(instrument.ticker.upper())
+            normalized = StockInstrument(
+                ticker=instrument.ticker.upper(),
+                name=instrument.name,
+                sector_code=instrument.sector_code,
+                sector_name=instrument.sector_name,
+                market=instrument.market,
+                currency=instrument.currency,
+                base_weight=instrument.base_weight,
+            )
+            by_asset.setdefault(instrument.sector_code, []).append(normalized)
 
         shortages: list[str] = []
         candidate_map: dict[str, list[PortfolioComponentCandidate]] = {}
         for asset in assets:
-            registered_codes = sorted(set(by_asset.get(asset.code, [])))
-            if not registered_codes:
+            registered_instruments = by_asset.get(asset.code, [])
+            if not registered_instruments:
                 continue
 
-            available_tickers = [ticker for ticker in registered_codes if ticker in available_codes]
-            if len(available_tickers) < SECTOR_MINIMUM_INSTRUMENTS:
+            available_instruments = [
+                instrument
+                for instrument in registered_instruments
+                if instrument.ticker in available_codes
+            ]
+            registered_codes = sorted({instrument.ticker for instrument in registered_instruments})
+            if len(available_instruments) < SECTOR_MINIMUM_INSTRUMENTS:
                 shortages.append(
-                    f"{asset.name}({asset.code}) 가격 이력이 있는 후보 {len(available_tickers)}개 / 등록 종목 {len(registered_codes)}개"
+                    f"{asset.name}({asset.code}) 가격 이력이 있는 후보 {len(available_instruments)}개 / 등록 종목 {len(registered_codes)}개"
                 )
                 continue
 
-            candidates = self._build_candidates_for_asset(asset, available_tickers)
+            candidates = self._build_candidates_for_asset(asset, available_instruments)
             if not candidates:
                 shortages.append(
                     f"{asset.name}({asset.code})의 역할 '{asset.role_key}'에 맞는 구성 후보를 만들지 못했습니다."
@@ -66,15 +80,15 @@ class PortfolioComponentService:
         if component_returns.empty:
             raise RuntimeError(f"{candidate.asset_code} 자산군의 수익률 시계열을 만들지 못했습니다.")
 
-        if candidate.weighting_mode == "single":
-            series = component_returns[tickers[0]]
-        elif candidate.weighting_mode == "equal_weight":
-            component_returns = component_returns.dropna(how="any")
-            if component_returns.empty:
-                raise RuntimeError(f"{candidate.asset_code} 자산군의 바스켓 공통 수익률 구간이 없습니다.")
-            series = component_returns.mean(axis=1)
-        else:
-            raise RuntimeError(f"지원하지 않는 weighting_mode 입니다: {candidate.weighting_mode}")
+        aligned_returns = component_returns.dropna(how="any")
+        if aligned_returns.empty:
+            raise RuntimeError(f"{candidate.asset_code} 자산군의 바스켓 공통 수익률 구간이 없습니다.")
+
+        member_weights = self.resolve_member_weights(
+            stock_returns=aligned_returns,
+            candidate=candidate,
+        )
+        series = aligned_returns.mul(member_weights.reindex(aligned_returns.columns), axis=1).sum(axis=1)
 
         series = series.dropna().astype(float)
         if len(series) < MINIMUM_HISTORY_ROWS:
@@ -85,27 +99,53 @@ class PortfolioComponentService:
         self,
         component_weights: dict[str, float],
         selected_candidates: dict[str, PortfolioComponentCandidate],
+        stock_returns: pd.DataFrame,
     ) -> dict[str, float]:
         stock_weights: dict[str, float] = {}
         for asset_code, component_weight in component_weights.items():
             candidate = selected_candidates.get(asset_code)
             if candidate is None:
                 continue
-            member_tickers = list(candidate.member_tickers)
-            if not member_tickers:
-                continue
-
-            if candidate.weighting_mode == "single":
-                allocations = {member_tickers[0]: float(component_weight)}
-            elif candidate.weighting_mode == "equal_weight":
-                split = float(component_weight) / len(member_tickers)
-                allocations = {ticker: split for ticker in member_tickers}
-            else:
-                raise RuntimeError(f"지원하지 않는 weighting_mode 입니다: {candidate.weighting_mode}")
+            member_weights = self.resolve_member_weights(
+                stock_returns=stock_returns,
+                candidate=candidate,
+            )
+            allocations = {
+                ticker: float(component_weight) * float(weight)
+                for ticker, weight in member_weights.items()
+            }
 
             for ticker, weight in allocations.items():
                 stock_weights[ticker] = stock_weights.get(ticker, 0.0) + float(weight)
         return stock_weights
+
+    def resolve_member_weights(
+        self,
+        *,
+        stock_returns: pd.DataFrame,
+        candidate: PortfolioComponentCandidate,
+    ) -> pd.Series:
+        tickers = [ticker.upper() for ticker in candidate.member_tickers]
+        if not tickers:
+            return pd.Series(dtype=float)
+
+        if candidate.weighting_mode == "single":
+            return pd.Series({tickers[0]: 1.0}, dtype=float)
+
+        aligned_returns = stock_returns.reindex(columns=tickers).dropna(how="any")
+        if aligned_returns.empty:
+            raise RuntimeError(f"{candidate.asset_code} 자산군의 바스켓 공통 수익률 구간이 없습니다.")
+
+        if candidate.weighting_mode == "equal_weight":
+            return self._equal_weight_series(tickers)
+
+        if candidate.weighting_mode == "base_weight":
+            return self._base_weight_series(tickers, candidate)
+
+        if candidate.weighting_mode == "inverse_volatility":
+            return self._inverse_volatility_series(aligned_returns, candidate)
+
+        raise RuntimeError(f"지원하지 않는 weighting_mode 입니다: {candidate.weighting_mode}")
 
     def describe_members_by_asset(
         self,
@@ -151,7 +191,7 @@ class PortfolioComponentService:
     def _build_candidates_for_asset(
         self,
         asset: AssetClass,
-        available_tickers: list[str],
+        available_instruments: list[StockInstrument],
     ) -> list[PortfolioComponentCandidate]:
         if asset.selection_mode == "single_representative":
             return [
@@ -162,9 +202,14 @@ class PortfolioComponentService:
                     selection_mode=asset.selection_mode,
                     weighting_mode=asset.weighting_mode,
                     return_mode=asset.return_mode,
-                    member_tickers=(ticker,),
+                    member_tickers=(instrument.ticker.upper(),),
+                    member_base_weights=(
+                        {}
+                        if instrument.base_weight is None
+                        else {instrument.ticker.upper(): float(instrument.base_weight)}
+                    ),
                 )
-                for ticker in available_tickers
+                for instrument in available_instruments
             ]
 
         if asset.selection_mode == "all_members":
@@ -176,11 +221,55 @@ class PortfolioComponentService:
                     selection_mode=asset.selection_mode,
                     weighting_mode=asset.weighting_mode,
                     return_mode=asset.return_mode,
-                    member_tickers=tuple(available_tickers),
+                    member_tickers=tuple(instrument.ticker.upper() for instrument in available_instruments),
+                    member_base_weights={
+                        instrument.ticker.upper(): float(instrument.base_weight)
+                        for instrument in available_instruments
+                        if instrument.base_weight is not None
+                    },
                 )
             ]
 
         raise RuntimeError(f"지원하지 않는 selection_mode 입니다: {asset.selection_mode}")
+
+    def _equal_weight_series(self, tickers: list[str]) -> pd.Series:
+        if not tickers:
+            return pd.Series(dtype=float)
+        split = 1.0 / len(tickers)
+        return pd.Series({ticker: split for ticker in tickers}, dtype=float)
+
+    def _base_weight_series(
+        self,
+        tickers: list[str],
+        candidate: PortfolioComponentCandidate,
+    ) -> pd.Series:
+        weights = pd.Series(
+            {
+                ticker: float(candidate.member_base_weights.get(ticker, 0.0))
+                for ticker in tickers
+            },
+            dtype=float,
+        ).clip(lower=0.0)
+        total = float(weights.sum())
+        if total <= 0:
+            return self._equal_weight_series(tickers)
+        return (weights / total).astype(float)
+
+    def _inverse_volatility_series(
+        self,
+        aligned_returns: pd.DataFrame,
+        candidate: PortfolioComponentCandidate,
+    ) -> pd.Series:
+        volatility = aligned_returns.std(ddof=0).replace(0.0, pd.NA).dropna()
+        if volatility.empty:
+            return self._equal_weight_series(list(candidate.member_tickers))
+
+        inverse_vol = (1.0 / volatility).replace([float("inf"), float("-inf")], pd.NA).dropna()
+        if inverse_vol.empty:
+            return self._equal_weight_series(list(candidate.member_tickers))
+
+        normalized = (inverse_vol / float(inverse_vol.sum())).astype(float)
+        return normalized.reindex(list(candidate.member_tickers)).fillna(0.0).astype(float)
 
     def _resolve_component_market_cap(
         self,

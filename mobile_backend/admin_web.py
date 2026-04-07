@@ -438,7 +438,7 @@ def render_admin_page() -> HTMLResponse:
         <div class="role-panel-header">
           <div>
             <strong>자산군별 role 설정</strong>
-            <span>이 버전에서 각 자산군을 대표종목형으로 볼지, 동일비중 바스켓으로 볼지 정합니다.</span>
+            <span>이 버전에서 자산군별 후보 선택 방식, 바스켓 내부 가중 방식, 기대수익률 모드를 함께 정합니다.</span>
           </div>
           <button class="secondary" id="reset-asset-roles" type="button">기본값 복원</button>
         </div>
@@ -633,7 +633,7 @@ def render_admin_page() -> HTMLResponse:
       const help = card.querySelector('.asset-role-help');
       const template = findRoleTemplate(roleKey);
       help.textContent = template
-        ? `${template.name} · ${template.selection_mode} / ${template.weighting_mode}\n${template.description}`
+        ? `${template.name} · ${template.selection_mode} / ${template.weighting_mode} / ${template.return_mode}\n${template.description}`
         : '선택한 role 정보를 찾을 수 없습니다.';
     }
 
@@ -922,6 +922,7 @@ def render_admin_page() -> HTMLResponse:
           <td>${item.role_key}</td>
           <td>${item.selection_mode}</td>
           <td>${item.weighting_mode}</td>
+          <td>${item.return_mode}</td>
         </tr>
       `).join('');
       const rows = detail.instruments.map((item) => `
@@ -951,6 +952,7 @@ def render_admin_page() -> HTMLResponse:
                 <th>role key</th>
                 <th>selection</th>
                 <th>weighting</th>
+                <th>return</th>
               </tr>
             </thead>
             <tbody>${roleRows}</tbody>
