@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/portfolio_data.dart';
 import '../home/home_shell.dart';
@@ -156,6 +157,8 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
+                      PortfolioStateProvider.of(context)
+                          .setType(widget.investmentType);
                       Navigator.of(context).pushAndRemoveUntil(
                         PageRouteBuilder(
                           pageBuilder: (_, __, ___) =>

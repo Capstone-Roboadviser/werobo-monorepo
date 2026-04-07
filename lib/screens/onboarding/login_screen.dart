@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/portfolio_data.dart';
 import 'comparison_screen.dart';
@@ -39,7 +40,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _onSocialLogin(String provider) {
     // TODO: Implement actual auth for each provider
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) =>
             ComparisonScreen(investmentType: widget.investmentType),
@@ -195,7 +196,7 @@ class _TabButton extends StatelessWidget {
   }
 }
 
-class _SocialButton extends StatefulWidget {
+class _SocialButton extends StatelessWidget {
   final String label;
   final Widget icon;
   final Color backgroundColor;
@@ -213,50 +214,33 @@ class _SocialButton extends StatefulWidget {
   });
 
   @override
-  State<_SocialButton> createState() => _SocialButtonState();
-}
-
-class _SocialButtonState extends State<_SocialButton> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: Container(
+    return Pressable(
+      onTap: onTap,
+      child: Container(
         width: double.infinity,
         height: 52,
         decoration: BoxDecoration(
-          color: widget.backgroundColor,
+          color: backgroundColor,
           borderRadius: BorderRadius.circular(12),
-          border: widget.borderColor != null
-              ? Border.all(color: widget.borderColor!, width: 1)
+          border: borderColor != null
+              ? Border.all(color: borderColor!, width: 1)
               : null,
         ),
         child: Row(
           children: [
             const SizedBox(width: 16),
-            SizedBox(width: 24, height: 24, child: Center(child: widget.icon)),
+            SizedBox(width: 24, height: 24, child: Center(child: icon)),
             Expanded(
               child: Text(
-                widget.label,
+                label,
                 textAlign: TextAlign.center,
-                style: WeRoboTypography.button.copyWith(color: widget.textColor),
+                style: WeRoboTypography.button.copyWith(color: textColor),
               ),
             ),
             const SizedBox(width: 40),
           ],
         ),
-      ),
       ),
     );
   }

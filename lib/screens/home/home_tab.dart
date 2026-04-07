@@ -1,5 +1,7 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../app/portfolio_state.dart';
+import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/portfolio_data.dart';
 import '../onboarding/widgets/vestor_pie_chart.dart';
@@ -14,9 +16,6 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab>
     with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
-
-  // TODO: Get from user state
-  static const _type = InvestmentType.balanced;
 
   @override
   void initState() {
@@ -67,8 +66,9 @@ class _HomeTabState extends State<HomeTab>
 
   @override
   Widget build(BuildContext context) {
-    final categories = PortfolioData.categoriesFor(_type);
-    final (risk, returnRate) = PortfolioData.statsFor(_type);
+    final type = PortfolioStateProvider.of(context).type;
+    final categories = PortfolioData.categoriesFor(type);
+    final (risk, returnRate) = PortfolioData.statsFor(type);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -279,14 +279,27 @@ class _AssetTrendCard extends StatefulWidget {
 class _AssetTrendCardState extends State<_AssetTrendCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _drawCtrl;
+  late List<double> _cachedPoints;
 
   @override
   void initState() {
     super.initState();
+    _cachedPoints = _generatePoints();
     _drawCtrl = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     )..forward();
+  }
+
+  static List<double> _generatePoints() {
+    final rng = Random(55);
+    final pts = <double>[];
+    double val = 14200000;
+    for (int i = 0; i < 30; i++) {
+      val += (rng.nextDouble() - 0.38) * 180000;
+      pts.add(val);
+    }
+    return pts;
   }
 
   @override
@@ -310,7 +323,10 @@ class _AssetTrendCardState extends State<_AssetTrendCard>
         builder: (context, _) {
           return CustomPaint(
             size: Size.infinite,
-            painter: _TrendPainter(progress: _drawCtrl.value),
+            painter: _TrendPainter(
+              progress: _drawCtrl.value,
+              points: _cachedPoints,
+            ),
           );
         },
       ),
@@ -320,7 +336,8 @@ class _AssetTrendCardState extends State<_AssetTrendCard>
 
 class _TrendPainter extends CustomPainter {
   final double progress;
-  _TrendPainter({required this.progress});
+  final List<double> points;
+  _TrendPainter({required this.progress, required this.points});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -332,13 +349,7 @@ class _TrendPainter extends CustomPainter {
     final chartW = w - padH * 2;
     final chartH = h - padT - padB;
 
-    final rng = Random(55);
-    final pts = <double>[];
-    double val = 14200000;
-    for (int i = 0; i < 30; i++) {
-      val += (rng.nextDouble() - 0.38) * 180000;
-      pts.add(val);
-    }
+    final pts = points;
     final minY = pts.reduce(min);
     final maxY = pts.reduce(max);
     final rangeY = maxY - minY;
@@ -415,8 +426,8 @@ class _TrendPainter extends CustomPainter {
       old.progress != progress;
 }
 
-/// Activity row with press feedback (Emil: scale 0.97 on active)
-class _ActivityCard extends StatefulWidget {
+/// Activity row with press feedback
+class _ActivityCard extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
   final String title;
@@ -434,66 +445,50 @@ class _ActivityCard extends StatefulWidget {
   });
 
   @override
-  State<_ActivityCard> createState() => _ActivityCardState();
-}
-
-class _ActivityCardState extends State<_ActivityCard> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: WeRoboColors.card,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: widget.iconColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(widget.icon,
-                    size: 20, color: widget.iconColor),
+    return Pressable(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: WeRoboColors.card,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.title,
-                        style: WeRoboTypography.bodySmall.copyWith(
-                            color: WeRoboColors.textPrimary,
-                            fontWeight: FontWeight.w500)),
-                    Text(widget.date,
-                        style: WeRoboTypography.caption.copyWith(
-                            fontFamily: WeRoboFonts.english)),
-                  ],
-                ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: WeRoboTypography.bodySmall.copyWith(
+                          color: WeRoboColors.textPrimary,
+                          fontWeight: FontWeight.w500)),
+                  Text(date,
+                      style: WeRoboTypography.caption.copyWith(
+                          fontFamily: WeRoboFonts.english)),
+                ],
               ),
-              Text(
-                widget.value,
-                style: WeRoboTypography.bodySmall.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: widget.valueColor ?? WeRoboColors.textPrimary,
-                  fontFamily: WeRoboFonts.english,
-                ),
+            ),
+            Text(
+              value,
+              style: WeRoboTypography.bodySmall.copyWith(
+                fontWeight: FontWeight.w600,
+                color: valueColor ?? WeRoboColors.textPrimary,
+                fontFamily: WeRoboFonts.english,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
