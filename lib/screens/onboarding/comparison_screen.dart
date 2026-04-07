@@ -216,7 +216,7 @@ class _AnimatedStatChip extends StatelessWidget {
         const SizedBox(height: 4),
         TweenAnimationBuilder<double>(
           tween: Tween<double>(end: _parseValue(value)),
-          duration: const Duration(milliseconds: 600),
+          duration: const Duration(milliseconds: 400),
           curve: Curves.easeOutCubic,
           builder: (context, val, _) {
             return Text(
