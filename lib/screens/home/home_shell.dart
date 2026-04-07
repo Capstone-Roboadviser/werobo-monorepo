@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
+import '../../services/mobile_backend_api.dart';
 import 'home_tab.dart';
 import 'portfolio_tab.dart';
 import 'community_tab.dart';
@@ -15,6 +17,7 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _currentTab = 0;
+  bool _backtestFetched = false;
 
   static const _tabs = [
     HomeTab(),
@@ -22,6 +25,24 @@ class _HomeShellState extends State<HomeShell> {
     CommunityTab(),
     SettingsTab(),
   ];
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_backtestFetched) {
+      _backtestFetched = true;
+      _fetchBacktest();
+    }
+  }
+
+  Future<void> _fetchBacktest() async {
+    try {
+      final bt = await MobileBackendApi.instance
+          .fetchComparisonBacktest();
+      if (!mounted) return;
+      PortfolioStateProvider.of(context).setBacktest(bt);
+    } catch (_) {}
+  }
 
   @override
   Widget build(BuildContext context) {
