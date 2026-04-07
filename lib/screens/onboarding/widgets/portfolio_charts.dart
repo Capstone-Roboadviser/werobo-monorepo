@@ -1,106 +1,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
+import '../../../models/chart_data.dart';
 import '../../../models/portfolio_data.dart';
-
-// ── Data models matching API response shapes ──
-
-class ChartPoint {
-  final DateTime date;
-  final double value;
-  const ChartPoint({required this.date, required this.value});
-}
-
-class ChartLine {
-  final String key;
-  final String label;
-  final Color color;
-  final bool dashed;
-  final List<ChartPoint> points;
-  const ChartLine({
-    required this.key,
-    required this.label,
-    required this.color,
-    this.dashed = false,
-    required this.points,
-  });
-}
-
-// ── Mock data generators used as an optional fallback ──
-
-class _MockData {
-  static List<ChartPoint> _generate(
-      Random rng, int days, double start, double drift, double vol) {
-    final pts = <ChartPoint>[];
-    double val = start;
-    final baseDate = DateTime(2025, 12, 8);
-    for (int i = 0; i < days; i++) {
-      val += drift / days + (rng.nextDouble() - 0.5) * vol;
-      pts.add(ChartPoint(
-        date: baseDate.add(Duration(days: i)),
-        value: val,
-      ));
-    }
-    return pts;
-  }
-
-  static List<ChartPoint> volatilityHistory(InvestmentType type) {
-    final base = type == InvestmentType.safe
-        ? 0.08
-        : type == InvestmentType.balanced
-            ? 0.12
-            : 0.16;
-    final rng = Random(type.index * 7 + 1);
-    return _generate(rng, 120, base, -0.01, 0.008);
-  }
-
-  static List<ChartPoint> returnHistory(InvestmentType type) {
-    final base = type == InvestmentType.safe
-        ? 0.05
-        : type == InvestmentType.balanced
-            ? 0.08
-            : 0.11;
-    final rng = Random(type.index * 13 + 3);
-    return _generate(rng, 120, base, 0.02, 0.006);
-  }
-
-  static List<ChartLine> comparisonLines(InvestmentType type) {
-    final rng = Random(type.index * 5 + 10);
-    final label = type.label;
-    return [
-      ChartLine(
-        key: type.name,
-        label: label,
-        color: WeRoboColors.primary,
-        points: _generate(rng, 120, 0, 0.06, 0.012),
-      ),
-      ChartLine(
-        key: '${type.name}_expected',
-        label: '$label 기대수익',
-        color: WeRoboColors.primary,
-        dashed: true,
-        points: _generate(Random(99), 120, 0, 0.09, 0.002),
-      ),
-      ChartLine(
-        key: 'sp500',
-        label: 'S&P 500',
-        color: const Color(0xFFEF4444),
-        points: _generate(Random(42), 120, 0, -0.02, 0.018),
-      ),
-      ChartLine(
-        key: 'treasury',
-        label: '10년 국채',
-        color: const Color(0xFF78716C),
-        points: _generate(Random(77), 120, 0, 0.015, 0.005),
-      ),
-    ];
-  }
-
-  static List<DateTime> rebalanceDates = [
-    DateTime(2025, 12, 31),
-    DateTime(2026, 3, 31),
-  ];
-}
+import '../../../services/mock_chart_data.dart';
 
 // ── Main chart widget ──
 
@@ -268,8 +171,8 @@ class _VolReturnViewState extends State<_VolReturnView>
     final all = backendPoints ??
         (widget.useFallbackMock
             ? (_subTab == 0
-                ? _MockData.volatilityHistory(widget.type)
-                : _MockData.returnHistory(widget.type))
+                ? MockChartData.volatilityHistory(widget.type)
+                : MockChartData.returnHistory(widget.type))
             : const <ChartPoint>[]);
     if (all.isEmpty) {
       return const <ChartPoint>[];
@@ -277,6 +180,22 @@ class _VolReturnViewState extends State<_VolReturnView>
     final cutoff = DateTime.now().subtract(Duration(days: _rangeDays[_range]));
     final filtered = all.where((p) => p.date.isAfter(cutoff)).toList();
     return filtered.isNotEmpty ? filtered : all;
+  }
+
+  double _expectedVolatility() {
+    return widget.type == InvestmentType.safe
+        ? 0.084
+        : widget.type == InvestmentType.balanced
+            ? 0.108
+            : 0.137;
+  }
+
+  double _expectedReturn() {
+    return widget.type == InvestmentType.safe
+        ? 0.062
+        : widget.type == InvestmentType.balanced
+            ? 0.085
+            : 0.112;
   }
 
   @override
@@ -351,7 +270,7 @@ class _VolReturnViewState extends State<_VolReturnView>
                         onPanUpdate: (d) {
                           if (points.isEmpty) return;
                           final x = d.localPosition.dx - 36;
-                          final chartW = constraints.maxWidth - 36;
+                          final chartW = constraints.maxWidth - 36 - 12;
                           final idx = ((x / chartW) * (points.length - 1))
                               .round()
                               .clamp(0, points.length - 1);
@@ -375,6 +294,11 @@ class _VolReturnViewState extends State<_VolReturnView>
                                     : WeRoboColors.accent,
                                 touchIndex: _touchIndex,
                                 valueLabel: _subTab == 0 ? '변동성' : '성과',
+                                baselineValue: _subTab == 0
+                                    ? _expectedVolatility()
+                                    : _expectedReturn(),
+                                baselineLabel:
+                                    _subTab == 0 ? '기대 변동성' : '기대 수익률',
                               ),
                             );
                           },
@@ -469,11 +393,11 @@ class _ComparisonViewState extends State<_ComparisonView>
   Widget build(BuildContext context) {
     final lines = widget.comparisonLines ??
         (widget.useFallbackMock
-            ? _MockData.comparisonLines(widget.type)
+            ? MockChartData.comparisonLines(widget.type)
             : const <ChartLine>[]);
     final rebalanceDates = widget.rebalanceDates ??
         (widget.useFallbackMock
-            ? _MockData.rebalanceDates
+            ? MockChartData.rebalanceDates
             : const <DateTime>[]);
 
     return Padding(
@@ -492,7 +416,7 @@ class _ComparisonViewState extends State<_ComparisonView>
                         onPanUpdate: (d) {
                           if (lines.isEmpty || lines[0].points.isEmpty) return;
                           final x = d.localPosition.dx - 36;
-                          final chartW = constraints.maxWidth - 36;
+                          final chartW = constraints.maxWidth - 36 - 12;
                           final count = lines[0].points.length;
                           final idx = ((x / chartW) * (count - 1))
                               .round()
@@ -585,6 +509,8 @@ class _AreaChartPainter extends CustomPainter {
   final Color color;
   final int? touchIndex;
   final String valueLabel;
+  final double? baselineValue;
+  final String? baselineLabel;
 
   _AreaChartPainter({
     required this.points,
@@ -592,23 +518,52 @@ class _AreaChartPainter extends CustomPainter {
     required this.color,
     this.touchIndex,
     required this.valueLabel,
+    this.baselineValue,
+    this.baselineLabel,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
     const padL = 36.0;
+    const padR = 12.0;
     const padB = 18.0;
-    final w = size.width - padL;
+    final w = size.width - padL - padR;
     final h = size.height - padB;
 
     final values = points.map((p) => p.value).toList();
-    final minY = values.reduce(min);
-    final maxY = values.reduce(max);
+    var minY = values.reduce(min);
+    var maxY = values.reduce(max);
+    if (baselineValue != null) {
+      if (baselineValue! < minY) minY = baselineValue!;
+      if (baselineValue! > maxY) maxY = baselineValue!;
+    }
     final rangeY = (maxY - minY).clamp(0.001, double.infinity);
 
     // Grid
-    _drawGrid(canvas, size, padL, padB, h, minY, rangeY);
+    _drawGrid(canvas, size, padL, padR, padB, h, minY, rangeY);
+
+    if (baselineValue != null) {
+      final y = h - ((baselineValue! - minY) / rangeY) * h;
+      final dashPaint = Paint()
+        ..color = color.withValues(alpha: 0.5)
+        ..strokeWidth = 1;
+      for (double x = padL; x < size.width - padR; x += 8) {
+        canvas.drawLine(
+          Offset(x, y),
+          Offset((x + 4).clamp(0, size.width - padR), y),
+          dashPaint,
+        );
+      }
+      final labelStyle = TextStyle(
+        fontSize: 9,
+        color: color,
+        fontWeight: FontWeight.w600,
+        fontFamily: WeRoboFonts.english,
+      );
+      _drawText(
+          canvas, baselineLabel ?? '', Offset(padL + 4, y - 14), labelStyle);
+    }
 
     // Build path
     final drawCount = (points.length * progress).ceil().clamp(0, points.length);
@@ -682,8 +637,8 @@ class _AreaChartPainter extends CustomPainter {
     _drawDateLabels(canvas, size, padL, w, h, padB);
   }
 
-  void _drawGrid(Canvas canvas, Size size, double padL, double padB, double h,
-      double minY, double rangeY) {
+  void _drawGrid(Canvas canvas, Size size, double padL, double padR,
+      double padB, double h, double minY, double rangeY) {
     final gridPaint = Paint()
       ..color = WeRoboColors.lightGray.withValues(alpha: 0.3)
       ..strokeWidth = 0.5;
@@ -695,7 +650,7 @@ class _AreaChartPainter extends CustomPainter {
 
     for (int i = 0; i <= 4; i++) {
       final y = h - h * i / 4;
-      canvas.drawLine(Offset(padL, y), Offset(size.width, y), gridPaint);
+      canvas.drawLine(Offset(padL, y), Offset(size.width - padR, y), gridPaint);
       final val = minY + rangeY * i / 4;
       _drawText(canvas, '${(val * 100).toStringAsFixed(1)}%', Offset(0, y - 6),
           labelStyle);
@@ -781,8 +736,9 @@ class _MultiLineChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (lines.isEmpty) return;
     const padL = 36.0;
+    const padR = 12.0;
     const padB = 18.0;
-    final w = size.width - padL;
+    final w = size.width - padL - padR;
     final h = size.height - padB;
 
     // Y range across all lines
@@ -808,7 +764,7 @@ class _MultiLineChartPainter extends CustomPainter {
 
     for (int i = 0; i <= 4; i++) {
       final y = h - h * i / 4;
-      canvas.drawLine(Offset(padL, y), Offset(size.width, y), gridPaint);
+      canvas.drawLine(Offset(padL, y), Offset(size.width - padR, y), gridPaint);
       final val = minY + rangeY * i / 4;
       _drawText(canvas, '${(val * 100).toStringAsFixed(1)}%', Offset(0, y - 6),
           labelStyle);

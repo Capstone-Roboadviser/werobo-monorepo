@@ -83,7 +83,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
             // Page indicator
             Padding(
-              padding: const EdgeInsets.only(bottom: 24),
+              padding: const EdgeInsets.only(bottom: 28),
               child: PageIndicator(
                 count: _pageCount,
                 current: _currentPage,
@@ -237,7 +237,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
           const SizedBox(height: 8),
           Text(
             '최적의 포트폴리오를 찾아드립니다',
-            style: WeRoboTypography.body,
+            style: WeRoboTypography.bodySmall,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -252,7 +252,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
                   color: WeRoboColors.warning,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
                 child: _StatCard(
                   label: '수익률',
@@ -318,26 +318,20 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: WeRoboColors.lightGray, width: 1),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: WeRoboTypography.caption.copyWith(color: color),
-          ),
+          Text(label,
+              style: WeRoboTypography.caption.copyWith(
+                  color: WeRoboColors.textSecondary)),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: WeRoboTypography.heading3.copyWith(
-              color: WeRoboColors.textPrimary,
-            ),
-          ),
+          Text(value,
+              style: WeRoboTypography.number.copyWith(
+                  color: WeRoboColors.textPrimary)),
         ],
       ),
     );

@@ -23,7 +23,7 @@ class _SplashScreenState extends State<SplashScreen>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 800),
       vsync: this,
     );
 
@@ -43,7 +43,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller.forward();
 
-    _navigationTimer = Timer(const Duration(milliseconds: 2500), () {
+    _navigationTimer = Timer(const Duration(milliseconds: 2000), () {
       if (mounted) {
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(

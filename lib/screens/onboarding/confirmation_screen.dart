@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
+import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import '../../services/mobile_backend_api.dart';
+import '../home/home_shell.dart';
 import 'widgets/portfolio_charts.dart';
 import 'widgets/vestor_pie_chart.dart';
 
@@ -178,21 +181,21 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     }
 
     final detail = _details[_selectedSector!];
-    final cat = detail.category;
+    final category = detail.category;
 
     return Column(
       key: ValueKey('sector_$_selectedSector'),
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          cat.name,
+          category.name,
           style: WeRoboTypography.caption.copyWith(
             color: WeRoboColors.textPrimary,
             fontWeight: FontWeight.w600,
           ),
         ),
         Text(
-          '${cat.percentage.toInt()}%',
+          '${category.percentage.toInt()}%',
           style: WeRoboTypography.number.copyWith(
             color: WeRoboColors.textPrimary,
           ),
@@ -267,6 +270,19 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     );
   }
 
+  void _confirmPortfolio() {
+    PortfolioStateProvider.of(context).setType(_portfolio.investmentType);
+    Navigator.of(context).pushAndRemoveUntil(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const HomeShell(),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+      (_) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -304,9 +320,11 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Text(
-                      '포트폴리오 상세',
-                      style: WeRoboTypography.heading3,
+                    Expanded(
+                      child: Text(
+                        '포트폴리오 상세',
+                        style: WeRoboTypography.heading3,
+                      ),
                     ),
                   ],
                 ),
@@ -333,14 +351,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('투자 확정 완료! 홈 화면으로 이동합니다.'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
+                    onPressed: _confirmPortfolio,
                     child: const Text('투자 확정'),
                   ),
                 ),
