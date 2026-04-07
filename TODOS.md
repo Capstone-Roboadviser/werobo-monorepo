@@ -28,3 +28,13 @@ Each requires OAuth app registration and platform-specific setup (iOS entitlemen
 **Cons:** Requires touching most widget files. ~30 Semantics additions across the codebase.
 **Context:** Priority areas: (1) bottom nav items need `Semantics(label: '홈 탭')`, (2) chart widgets need `Semantics(label: '포트폴리오 비중 차트, 미국 가치주 20%...')`, (3) efficient frontier dot needs `Semantics(label: '위험도 조절 슬라이더')` with `onIncrease`/`onDecrease` for accessibility. CLAUDE.md already specifies 44px min touch targets and Semantics usage.
 **Depends on:** Nothing. Can be done independently.
+
+## Rebalancing History with Real Dates
+**What:** Compute actual rebalancing trigger dates based on portfolio drift thresholds and show before/after allocations in the rebalance tab.
+**Why:** The rebalance tab currently shows hardcoded dates and a static history list. Real rebalancing logic is a core robo-advisor feature that would impress capstone evaluators.
+**Pros:** Demonstrates understanding of portfolio rebalancing mechanics. Makes the rebalance tab functional.
+**Cons:** Requires drift calculation logic (compare current weights to target weights, trigger when drift exceeds threshold). Medium complexity.
+**Context:** rebalance_tab.dart (120 lines) has a placeholder design ready to receive real data. The Flask API (when built) could serve rebalancing events. Drift threshold: typically 5% relative deviation from target weight.
+**Effort:** M (human) -> S (CC+gstack)
+**Priority:** P2
+**Depends on:** Flask API backend.
