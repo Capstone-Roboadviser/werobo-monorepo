@@ -43,6 +43,16 @@ class WeRoboColors {
   static const Color chartYellow = Color(0xFFFBBF24);
   static const Color chartPurple = Color(0xFF8B5CF6);
 
+  // Social auth brand colors
+  static const Color kakaoYellow = Color(0xFFFEE500);
+  static const Color kakaoBrown = Color(0xFF3C1E1E);
+  static const Color naverGreen = Color(0xFF03C75A);
+
+  // Standard radii
+  static const double radiusS = 8;
+  static const double radiusM = 12;
+  static const double radiusL = 16;
+
   // Dot indicator
   static const Color dotActive = sky4;
   static const Color dotInactive = lightGray;

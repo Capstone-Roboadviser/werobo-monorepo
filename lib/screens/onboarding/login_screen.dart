@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import 'comparison_screen.dart';
@@ -44,7 +45,7 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _onSocialLogin(String provider) {
     // TODO: Implement actual auth for each provider
-    Navigator.of(context).pushReplacement(
+    Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => ComparisonScreen(
           recommendation: widget.recommendation,
@@ -124,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen>
                   borderColor: WeRoboColors.lightGray,
                   onTap: () => _onSocialLogin('google'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 _SocialButton(
                   label: '카카오로 ${_isLogin ? '로그인' : '회원가입'}',
                   icon: const Text('K',
@@ -132,11 +133,11 @@ class _LoginScreenState extends State<LoginScreen>
                           fontSize: 20,
                           fontWeight: FontWeight.w900,
                           color: Color(0xFF3C1E1E))),
-                  backgroundColor: const Color(0xFFFEE500),
-                  textColor: const Color(0xFF3C1E1E),
+                  backgroundColor: WeRoboColors.kakaoYellow,
+                  textColor: WeRoboColors.kakaoBrown,
                   onTap: () => _onSocialLogin('kakao'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 _SocialButton(
                   label: '네이버로 ${_isLogin ? '로그인' : '회원가입'}',
                   icon: const Text('N',
@@ -144,11 +145,11 @@ class _LoginScreenState extends State<LoginScreen>
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                           color: WeRoboColors.white)),
-                  backgroundColor: const Color(0xFF03C75A),
+                  backgroundColor: WeRoboColors.naverGreen,
                   textColor: WeRoboColors.white,
                   onTap: () => _onSocialLogin('naver'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 _SocialButton(
                   label: 'Apple로 ${_isLogin ? '로그인' : '회원가입'}',
                   icon: const Icon(Icons.apple,
@@ -222,7 +223,7 @@ class _SocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Pressable(
       onTap: onTap,
       child: Container(
         width: double.infinity,
