@@ -1,0 +1,72 @@
+[
+  {
+    "code": "us_value",
+    "name": "미국 가치주",
+    "category": "value_equity",
+    "description": "현금흐름과 밸류에이션 안정성이 상대적으로 높은 미국 가치주 자산군입니다.",
+    "color": "#2A9D8F",
+    "min_weight": 0.00,
+    "max_weight": 0.30,
+    "role_key": "single_representative"
+  },
+  {
+    "code": "us_growth",
+    "name": "미국 성장주",
+    "category": "growth_equity",
+    "description": "실적 성장과 장기 혁신 기대가 높은 미국 성장주 자산군입니다.",
+    "color": "#7B6ED6",
+    "min_weight": 0.00,
+    "max_weight": 0.30,
+    "role_key": "single_representative"
+  },
+  {
+    "code": "new_growth",
+    "name": "신성장주",
+    "category": "thematic_growth",
+    "description": "신성장 테마 후보 종목 중 대표 종목을 선택해 성장 모멘텀을 반영하는 자산군입니다.",
+    "color": "#2D6A8E",
+    "min_weight": 0.05,
+    "max_weight": 0.05,
+    "role_key": "single_representative"
+  },
+  {
+    "code": "short_term_bond",
+    "name": "단기 채권",
+    "category": "short_duration_bond",
+    "description": "만기가 짧은 채권 중심으로 방어적 성격을 가지며, 배당이 반영된 총수익 가격을 기준으로 평가하는 자산군입니다.",
+    "color": "#5B7C99",
+    "min_weight": 0.05,
+    "max_weight": 0.30,
+    "role_key": "single_representative"
+  },
+  {
+    "code": "cash_equivalents",
+    "name": "현금성자산",
+    "category": "cash_equivalent",
+    "description": "단기 현금성 상품과 초단기 채권으로 구성되는 저변동 자산군입니다.",
+    "color": "#6C757D",
+    "min_weight": 0.00,
+    "max_weight": 0.30,
+    "role_key": "single_representative"
+  },
+  {
+    "code": "gold",
+    "name": "금",
+    "category": "precious_metal",
+    "description": "금 가격에 연동되어 인플레이션과 리스크 오프 구간의 보완 역할을 기대하는 자산군입니다.",
+    "color": "#E9C46A",
+    "min_weight": 0.00,
+    "max_weight": 0.30,
+    "role_key": "single_representative"
+  },
+  {
+    "code": "infra_bond",
+    "name": "인프라 채권",
+    "category": "infrastructure_bond",
+    "description": "장기 인프라 프로젝트 및 관련 채권 성격을 반영하는 보완형 자산군입니다.",
+    "color": "#A67C52",
+    "min_weight": 0.00,
+    "max_weight": 0.30,
+    "role_key": "single_representative"
+  }
+]

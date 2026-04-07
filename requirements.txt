@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+numpy
+pandas
+scipy
+yfinance
+psycopg[binary]
+

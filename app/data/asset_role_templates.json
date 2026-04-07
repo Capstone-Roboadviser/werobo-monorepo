@@ -1,0 +1,18 @@
+[
+  {
+    "key": "single_representative",
+    "name": "대표 종목 1개",
+    "description": "후보 종목 중 대표 종목 1개를 선택해 포트폴리오 구성에 반영합니다.",
+    "selection_mode": "single_representative",
+    "weighting_mode": "single",
+    "return_mode": "historical_mean"
+  },
+  {
+    "key": "equal_weight_basket",
+    "name": "동일비중 바스켓",
+    "description": "후보 종목 전체를 동일비중 바스켓으로 묶어 하나의 포트폴리오 컴포넌트로 사용합니다.",
+    "selection_mode": "all_members",
+    "weighting_mode": "equal_weight",
+    "return_mode": "historical_mean"
+  }
+]
