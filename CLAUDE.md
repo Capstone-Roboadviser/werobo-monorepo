@@ -107,6 +107,10 @@ WeRobo is a robo-advisor mobile app built with Flutter. It helps users find opti
 - Test with dynamic text scaling
 - Use `Semantics` widget for screen reader labels
 
+## gstack
+- Use `/browse` skill from gstack for **all web browsing**. Never use `mcp__Claude_in_Chrome__*` tools.
+- Available skills: `/office-hours`, `/plan-ceo-review`, `/plan-eng-review`, `/plan-design-review`, `/design-consultation`, `/design-shotgun`, `/design-html`, `/review`, `/ship`, `/land-and-deploy`, `/canary`, `/benchmark`, `/browse`, `/connect-chrome`, `/qa`, `/qa-only`, `/design-review`, `/setup-browser-cookies`, `/setup-deploy`, `/retro`, `/investigate`, `/document-release`, `/codex`, `/cso`, `/autoplan`, `/plan-devex-review`, `/devex-review`, `/careful`, `/freeze`, `/guard`, `/unfreeze`, `/gstack-upgrade`, `/learn`
+
 ## Quality Checklist
 - [ ] No `print()` — use `dart:developer` log
 - [ ] `const` constructors where possible
