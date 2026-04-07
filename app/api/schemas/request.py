@@ -2,7 +2,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from app.core.config import TARGET_VOLATILITY_MAX, TARGET_VOLATILITY_MIN, TARGET_VOLATILITY_STEP
 from app.domain.enums import InvestmentHorizon, PriceRefreshMode, RiskProfile, SimulationDataSource
-from app.domain.models import StockInstrument, UserProfile
+from app.domain.models import ManagedUniverseAssetRoleAssignment, StockInstrument, UserProfile
 
 
 class PortfolioSimulationRequest(BaseModel):
@@ -59,24 +59,49 @@ class ManagedUniverseItemRequest(BaseModel):
         )
 
 
+class ManagedUniverseAssetRoleRequest(BaseModel):
+    asset_code: str = Field(..., description="자산군 코드")
+    role_key: str = Field(..., description="적용할 role 키")
+
+    def to_domain(self) -> ManagedUniverseAssetRoleAssignment:
+        return ManagedUniverseAssetRoleAssignment(
+            asset_code=self.asset_code.strip(),
+            role_key=self.role_key.strip(),
+        )
+
+
 class ManagedUniverseVersionCreateRequest(BaseModel):
     version_name: str = Field(..., description="관리자 유니버스 버전명")
     notes: str | None = Field(default=None, description="버전 메모")
     activate: bool = Field(default=True, description="생성 후 즉시 활성화 여부")
+    asset_roles: list[ManagedUniverseAssetRoleRequest] = Field(
+        default_factory=list,
+        description="자산군별 role 지정. 비워두면 현재 기본 role 구성을 사용합니다.",
+    )
     instruments: list[ManagedUniverseItemRequest] = Field(..., min_length=1, description="종목 유니버스 목록")
 
     def to_domain_instruments(self) -> list[StockInstrument]:
         return [item.to_domain() for item in self.instruments]
+
+    def to_domain_asset_roles(self) -> list[ManagedUniverseAssetRoleAssignment]:
+        return [item.to_domain() for item in self.asset_roles]
 
 
 class ManagedUniverseVersionUpdateRequest(BaseModel):
     version_name: str = Field(..., description="수정할 관리자 유니버스 버전명")
     notes: str | None = Field(default=None, description="버전 메모")
     activate: bool = Field(default=False, description="수정 후 활성화 여부. false면 현재 active 상태를 유지합니다.")
+    asset_roles: list[ManagedUniverseAssetRoleRequest] = Field(
+        default_factory=list,
+        description="자산군별 role 지정. 비워두면 현재 기본 role 구성을 사용합니다.",
+    )
     instruments: list[ManagedUniverseItemRequest] = Field(..., min_length=1, description="수정된 종목 유니버스 목록")
 
     def to_domain_instruments(self) -> list[StockInstrument]:
         return [item.to_domain() for item in self.instruments]
+
+    def to_domain_asset_roles(self) -> list[ManagedUniverseAssetRoleAssignment]:
+        return [item.to_domain() for item in self.asset_roles]
 
 
 class VolatilityHistoryRequest(BaseModel):

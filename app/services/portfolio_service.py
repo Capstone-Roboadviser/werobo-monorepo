@@ -102,7 +102,9 @@ class PortfolioSimulationService:
         self.constraint_engine = ConstraintEngine()
         self.optimizer = EfficientFrontierOptimizer()
 
-    def list_assets(self) -> list[AssetClass]:
+    def list_assets(self, *, version_id: int | None = None) -> list[AssetClass]:
+        if version_id is not None:
+            return self.managed_universe_service.get_assets_for_version(version_id)
         return StaticDataRepository().load_asset_universe()
 
     def list_stocks(self, data_source: SimulationDataSource = SimulationDataSource.MANAGED_UNIVERSE):
@@ -145,6 +147,7 @@ class PortfolioSimulationService:
                 sector_checks=sector_checks,
             )
 
+        assets = self.list_assets(version_id=active_version.version_id)
         instruments = self.managed_universe_service.get_active_instruments()
         sector_checks = self._build_sector_checks(assets, instruments)
         issues: list[str] = []
@@ -278,7 +281,7 @@ class PortfolioSimulationService:
         return ManagedUniverseReadiness(
             ready=True,
             summary=(
-                "시뮬레이션 준비 완료 · 섹터별 후보군에서 대표 종목 1개씩을 선택해 "
+                "시뮬레이션 준비 완료 · 자산군별 역할 정의에 맞춰 후보를 조립해 "
                 f"Efficient Frontier를 계산할 수 있습니다. 현재 유효 최적화 후보는 {optimized_returns.shape[1]}개입니다."
             ),
             issues=[],
@@ -418,11 +421,17 @@ class PortfolioSimulationService:
         if data_source == SimulationDataSource.ASSET_ASSUMPTIONS:
             raise RuntimeError("시점 기준 비교 백테스트는 종목 유니버스 데이터 소스에서만 지원합니다.")
 
+        assets = self.list_assets()
+        if data_source == SimulationDataSource.MANAGED_UNIVERSE:
+            active_version = self.managed_universe_service.get_active_version()
+            if active_version is not None:
+                assets = self.list_assets(version_id=active_version.version_id)
         representative_context = self._select_sector_representatives(
             instruments=instruments,
             prices=prices,
             combination_prefix=combination_prefix,
             use_asset_min_weights=True,
+            assets=assets,
         )
         return self._build_profile_weight_map(
             frontier_points=representative_context.frontier_points,
@@ -600,6 +609,7 @@ class PortfolioSimulationService:
         if active_version is None:
             return None if allow_fallback else None
 
+        assets = self.list_assets(version_id=active_version.version_id)
         instruments = self.managed_universe_service.get_active_instruments()
         if not instruments:
             raise RuntimeError("활성 관리자 유니버스에 등록된 종목이 없습니다. /admin 에서 종목을 추가한 뒤 다시 시도해주세요.")
@@ -614,13 +624,14 @@ class PortfolioSimulationService:
             )
 
         representative_context = self._select_sector_representatives(
+            assets=assets,
             instruments=instruments,
             prices=prices,
             combination_prefix=active_version.version_name,
             use_asset_min_weights=True,
         )
         return EngineContext(
-            assets=self.list_assets(),
+            assets=assets,
             instruments=representative_context.selected_instruments,
             expected_returns=representative_context.expected_returns,
             covariance=representative_context.covariance,
@@ -638,16 +649,18 @@ class PortfolioSimulationService:
         source: SimulationDataSource = SimulationDataSource.STOCK_COMBINATION_DEMO,
         label: str = "개별 종목 대표 유니버스",
     ) -> EngineContext:
+        assets = self.list_assets()
         instruments = self._load_demo_instruments()
         prices = StockDataRepository().load_stock_prices(str(DEMO_STOCK_PRICES_PATH))
         representative_context = self._select_sector_representatives(
+            assets=assets,
             instruments=instruments,
             prices=prices,
             combination_prefix="demo-stock-universe",
             use_asset_min_weights=True,
         )
         return EngineContext(
-            assets=self.list_assets(),
+            assets=assets,
             instruments=representative_context.selected_instruments,
             expected_returns=representative_context.expected_returns,
             covariance=representative_context.covariance,
@@ -731,6 +744,7 @@ class PortfolioSimulationService:
     def _select_sector_representatives(
         self,
         *,
+        assets: list[AssetClass] | None = None,
         instruments: list[StockInstrument],
         prices: pd.DataFrame,
         combination_prefix: str,
@@ -740,7 +754,7 @@ class PortfolioSimulationService:
         if stock_returns.empty:
             raise RuntimeError("가격 이력으로부터 유효 수익률을 생성하지 못했습니다.")
 
-        assets = self.list_assets()
+        assets = assets or self.list_assets()
         candidate_map = self._build_sector_candidate_map(assets, instruments, stock_returns)
         active_sector_codes = list(candidate_map.keys())
         combinations = self._build_representative_combinations(candidate_map)

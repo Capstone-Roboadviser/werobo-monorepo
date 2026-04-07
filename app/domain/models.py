@@ -112,6 +112,12 @@ class ManagedUniverseVersion:
 
 
 @dataclass(frozen=True)
+class ManagedUniverseAssetRoleAssignment:
+    asset_code: str
+    role_key: str
+
+
+@dataclass(frozen=True)
 class ManagedPriceStats:
     total_rows: int
     ticker_count: int

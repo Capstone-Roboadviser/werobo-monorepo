@@ -10,6 +10,7 @@ from app.domain.models import (
     ManagedPriceRefreshJob,
     ManagedPriceRefreshJobItem,
     ManagedUniversePriceWindow,
+    ManagedUniverseAssetRoleAssignment,
     ManagedPriceStats,
     ManagedUniverseVersion,
     StockInstrument,
@@ -68,6 +69,17 @@ class ManagedUniverseRepository:
                 )
                 cursor.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS universe_asset_roles (
+                        version_id BIGINT NOT NULL REFERENCES universe_versions(id) ON DELETE CASCADE,
+                        asset_code TEXT NOT NULL,
+                        role_key TEXT NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        PRIMARY KEY (version_id, asset_code)
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
                     CREATE TABLE IF NOT EXISTS price_history (
                         date DATE NOT NULL,
                         ticker TEXT NOT NULL,
@@ -121,6 +133,7 @@ class ManagedUniverseRepository:
                     """
                 )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_items_version_sector ON universe_items(version_id, sector_code)")
+                cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_asset_roles_version ON universe_asset_roles(version_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_history_ticker_date ON price_history(ticker, date)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_refresh_jobs_version_created_at ON refresh_jobs(version_id, created_at DESC)")
             connection.commit()
@@ -183,6 +196,7 @@ class ManagedUniverseRepository:
         version_name: str,
         source_type: str,
         instruments: list[StockInstrument],
+        asset_role_assignments: list[ManagedUniverseAssetRoleAssignment] | None = None,
         notes: str | None = None,
         activate: bool = False,
     ) -> ManagedUniverseVersion:
@@ -221,6 +235,11 @@ class ManagedUniverseRepository:
                         )
                         for item in instruments
                     ],
+                )
+                self._insert_asset_role_assignments(
+                    cursor,
+                    version_id=version_id,
+                    asset_role_assignments=asset_role_assignments,
                 )
                 if activate:
                     cursor.execute("UPDATE universe_versions SET is_active = FALSE")
@@ -281,6 +300,7 @@ class ManagedUniverseRepository:
         version_id: int,
         version_name: str,
         instruments: list[StockInstrument],
+        asset_role_assignments: list[ManagedUniverseAssetRoleAssignment] | None = None,
         notes: str | None = None,
         activate: bool = False,
     ) -> ManagedUniverseVersion:
@@ -308,6 +328,7 @@ class ManagedUniverseRepository:
                 )
                 cursor.execute("DELETE FROM universe_price_windows WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM universe_items WHERE version_id = %s", (version_id,))
+                cursor.execute("DELETE FROM universe_asset_roles WHERE version_id = %s", (version_id,))
                 cursor.executemany(
                     """
                     INSERT INTO universe_items (
@@ -328,6 +349,11 @@ class ManagedUniverseRepository:
                         )
                         for item in instruments
                     ],
+                )
+                self._insert_asset_role_assignments(
+                    cursor,
+                    version_id=version_id,
+                    asset_role_assignments=asset_role_assignments,
                 )
             connection.commit()
 
@@ -381,6 +407,27 @@ class ManagedUniverseRepository:
             )
             for row in rows
         ]
+
+    def get_asset_role_assignments_for_version(self, version_id: int) -> dict[str, str]:
+        if not self.is_configured():
+            return {}
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT asset_code, role_key
+                    FROM universe_asset_roles
+                    WHERE version_id = %s
+                    ORDER BY asset_code
+                    """,
+                    (version_id,),
+                )
+                rows = cursor.fetchall()
+        return {
+            str(row["asset_code"]): str(row["role_key"])
+            for row in rows
+        }
 
     def upsert_prices(self, prices: pd.DataFrame, *, source: str = "unknown") -> int:
         self._ensure_ready()
@@ -865,3 +912,28 @@ class ManagedUniverseRepository:
             with connection.cursor() as cursor:
                 cursor.execute("DELETE FROM universe_price_windows WHERE version_id = %s", (version_id,))
             connection.commit()
+
+    def _insert_asset_role_assignments(
+        self,
+        cursor,
+        *,
+        version_id: int,
+        asset_role_assignments: list[ManagedUniverseAssetRoleAssignment] | None,
+    ) -> None:
+        if not asset_role_assignments:
+            return
+
+        cursor.executemany(
+            """
+            INSERT INTO universe_asset_roles (version_id, asset_code, role_key)
+            VALUES (%s, %s, %s)
+            """,
+            [
+                (
+                    version_id,
+                    item.asset_code,
+                    item.role_key,
+                )
+                for item in asset_role_assignments
+            ],
+        )

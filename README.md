@@ -18,6 +18,7 @@
 - 포트폴리오 변동성 추이 API
 - 포트폴리오 유형별 성과 비교 API
 - 프로젝트 내부에 포함된 계산 코어와 모바일 응답 adapter
+- 가벼운 관리자 웹에서 종목 검색/등록과 자산군별 role 지정
 
 중요:
 
@@ -43,9 +44,23 @@ robo_mobile_backend/
   railway.json
 ```
 
+## 문서
+
+- [모바일 API 명세](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/docs/MOBILE_API_SPEC.md)
+- [관리자 운영 문서](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/docs/ADMIN_OPERATIONS.md)
+- [아키텍처 개요](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/docs/ARCHITECTURE.md)
+
 ## 주요 엔드포인트
 
 - `GET /health`
+- `GET /admin`
+- `GET /admin/api/universe/status`
+- `GET /admin/api/universe/asset-role-config`
+- `GET /admin/api/universe/versions`
+- `POST /admin/api/universe/versions`
+- `POST /admin/api/universe/versions/{version_id}/activate`
+- `POST /admin/api/prices/refresh`
+- `GET /admin/api/universe/readiness`
 - `POST /api/v1/profile/resolve`
 - `POST /api/v1/portfolios/recommendation`
 - `POST /api/v1/portfolios/volatility-history`
@@ -65,6 +80,7 @@ uvicorn mobile_backend.main:app --reload
 
 - API 문서: `http://127.0.0.1:8000/docs`
 - 헬스체크: `http://127.0.0.1:8000/health`
+- 관리자 웹: `http://127.0.0.1:8000/admin`
 
 ## 계산 코어 동작 방식
 

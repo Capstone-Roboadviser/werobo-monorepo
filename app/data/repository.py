@@ -25,35 +25,42 @@ class StaticDataRepository:
             self._asset_role_templates = {item.key: item for item in templates}
         return self._asset_role_templates
 
-    def load_asset_universe(self) -> list[AssetClass]:
+    def load_asset_universe(self, role_overrides: dict[str, str] | None = None) -> list[AssetClass]:
+        if role_overrides:
+            return self._build_asset_universe(role_overrides=role_overrides)
+
         if self._asset_universe is None:
-            role_templates = self.load_asset_role_templates()
-            payload = json.loads(ASSET_UNIVERSE_PATH.read_text())
-            assets: list[AssetClass] = []
-            for item in payload:
-                role_key = str(item.get("role_key", "single_representative"))
-                role = role_templates.get(role_key)
-                if role is None:
-                    raise RuntimeError(f"자산군 '{item.get('code', 'unknown')}'의 role_key '{role_key}'를 찾을 수 없습니다.")
-                assets.append(
-                    AssetClass(
-                        code=item["code"],
-                        name=item["name"],
-                        category=item["category"],
-                        description=item["description"],
-                        color=item["color"],
-                        min_weight=float(item["min_weight"]),
-                        max_weight=float(item["max_weight"]),
-                        role_key=role.key,
-                        role_name=role.name,
-                        role_description=role.description,
-                        selection_mode=role.selection_mode,
-                        weighting_mode=role.weighting_mode,
-                        return_mode=role.return_mode,
-                    )
-                )
-            self._asset_universe = assets
+            self._asset_universe = self._build_asset_universe()
         return self._asset_universe
+
+    def _build_asset_universe(self, role_overrides: dict[str, str] | None = None) -> list[AssetClass]:
+        role_templates = self.load_asset_role_templates()
+        payload = json.loads(ASSET_UNIVERSE_PATH.read_text())
+        assets: list[AssetClass] = []
+        for item in payload:
+            asset_code = str(item["code"])
+            role_key = str(role_overrides.get(asset_code, item.get("role_key", "single_representative"))) if role_overrides else str(item.get("role_key", "single_representative"))
+            role = role_templates.get(role_key)
+            if role is None:
+                raise RuntimeError(f"자산군 '{item.get('code', 'unknown')}'의 role_key '{role_key}'를 찾을 수 없습니다.")
+            assets.append(
+                AssetClass(
+                    code=asset_code,
+                    name=item["name"],
+                    category=item["category"],
+                    description=item["description"],
+                    color=item["color"],
+                    min_weight=float(item["min_weight"]),
+                    max_weight=float(item["max_weight"]),
+                    role_key=role.key,
+                    role_name=role.name,
+                    role_description=role.description,
+                    selection_mode=role.selection_mode,
+                    weighting_mode=role.weighting_mode,
+                    return_mode=role.return_mode,
+                )
+            )
+        return assets
 
     def load_market_assumptions(self) -> MarketAssumptions:
         if self._market_assumptions is None:

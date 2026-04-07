@@ -1,94 +1,155 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthResponse(BaseModel):
-    status: str
-    app: str
-    version: str
+    status: str = Field(..., description="서버 상태", examples=["ok"])
+    app: str = Field(..., description="애플리케이션 이름", examples=["Robo Mobile Backend"])
+    version: str = Field(..., description="배포된 백엔드 버전", examples=["0.1.0"])
+
+
+class ErrorResponse(BaseModel):
+    detail: str = Field(..., description="오류 상세 메시지", examples=["propensity_score 또는 risk_profile 중 하나는 반드시 제공해야 합니다."])
 
 
 class ResolvedProfileItemResponse(BaseModel):
-    code: str
-    label: str
-    propensity_score: float | None = None
-    target_volatility: float
-    investment_horizon: str
+    code: str = Field(..., description="판정된 위험 유형 코드", examples=["balanced"])
+    label: str = Field(..., description="위험 유형 표시 이름", examples=["균형형"])
+    propensity_score: float | None = Field(default=None, description="앱이 전달한 투자성향 점수", examples=[58.0])
+    target_volatility: float = Field(..., description="투자기간을 반영해 계산한 목표 변동성", examples=[0.12])
+    investment_horizon: str = Field(..., description="투자 기간", examples=["medium"])
 
 
 class ProfileResolutionResponse(BaseModel):
-    resolved_profile: ResolvedProfileItemResponse
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "resolved_profile": {
+                    "code": "balanced",
+                    "label": "균형형",
+                    "propensity_score": 58.0,
+                    "target_volatility": 0.12,
+                    "investment_horizon": "medium",
+                }
+            }
+        }
+    )
+
+    resolved_profile: ResolvedProfileItemResponse = Field(..., description="판정 결과")
 
 
 class SectorAllocationResponse(BaseModel):
-    asset_code: str
-    asset_name: str
-    weight: float
-    risk_contribution: float
+    asset_code: str = Field(..., description="자산군 코드", examples=["us_growth"])
+    asset_name: str = Field(..., description="자산군 이름", examples=["미국 성장주"])
+    weight: float = Field(..., description="포트폴리오 내 자산군 비중", examples=[0.24])
+    risk_contribution: float = Field(..., description="전체 변동성 대비 위험기여도", examples=[0.31])
 
 
 class StockAllocationResponse(BaseModel):
-    ticker: str
-    name: str
-    sector_code: str
-    sector_name: str
-    weight: float
+    ticker: str = Field(..., description="종목 티커", examples=["QQQ"])
+    name: str = Field(..., description="종목명", examples=["Invesco QQQ Trust"])
+    sector_code: str = Field(..., description="소속 자산군 코드", examples=["us_growth"])
+    sector_name: str = Field(..., description="소속 자산군 이름", examples=["미국 성장주"])
+    weight: float = Field(..., description="포트폴리오 내 개별 종목 비중", examples=[0.12])
 
 
 class PortfolioRecommendationItemResponse(BaseModel):
-    code: str
-    label: str
-    portfolio_id: str
-    target_volatility: float
-    expected_return: float
-    volatility: float
-    sharpe_ratio: float
-    sector_allocations: list[SectorAllocationResponse] = Field(default_factory=list)
-    stock_allocations: list[StockAllocationResponse] = Field(default_factory=list)
+    code: str = Field(..., description="포트폴리오 위험 유형 코드", examples=["conservative"])
+    label: str = Field(..., description="포트폴리오 유형 이름", examples=["안정형"])
+    portfolio_id: str = Field(..., description="내부 포트폴리오 식별자", examples=["stocks-balanced-medium-0.12"])
+    target_volatility: float = Field(..., description="해당 유형의 목표 변동성", examples=[0.08])
+    expected_return: float = Field(..., description="연 기대수익률", examples=[0.0742])
+    volatility: float = Field(..., description="연 변동성", examples=[0.0815])
+    sharpe_ratio: float = Field(..., description="샤프 비율", examples=[0.66])
+    sector_allocations: list[SectorAllocationResponse] = Field(default_factory=list, description="자산군별 비중과 위험기여도")
+    stock_allocations: list[StockAllocationResponse] = Field(default_factory=list, description="종목별 비중")
 
 
 class RecommendationResponse(BaseModel):
-    resolved_profile: ResolvedProfileItemResponse
-    recommended_portfolio_code: str
-    data_source: str
-    portfolios: list[PortfolioRecommendationItemResponse] = Field(default_factory=list)
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "resolved_profile": {
+                    "code": "balanced",
+                    "label": "균형형",
+                    "propensity_score": 58.0,
+                    "target_volatility": 0.12,
+                    "investment_horizon": "medium",
+                },
+                "recommended_portfolio_code": "balanced",
+                "data_source": "managed_universe",
+                "portfolios": [
+                    {
+                        "code": "conservative",
+                        "label": "안정형",
+                        "portfolio_id": "stocks-conservative-medium-0.08",
+                        "target_volatility": 0.08,
+                        "expected_return": 0.0742,
+                        "volatility": 0.0815,
+                        "sharpe_ratio": 0.66,
+                        "sector_allocations": [
+                            {
+                                "asset_code": "short_term_bond",
+                                "asset_name": "단기 채권",
+                                "weight": 0.29,
+                                "risk_contribution": 0.18,
+                            }
+                        ],
+                        "stock_allocations": [
+                            {
+                                "ticker": "SHY",
+                                "name": "iShares 1-3 Year Treasury Bond ETF",
+                                "sector_code": "short_term_bond",
+                                "sector_name": "단기 채권",
+                                "weight": 0.29,
+                            }
+                        ],
+                    }
+                ],
+            }
+        }
+    )
+
+    resolved_profile: ResolvedProfileItemResponse = Field(..., description="사용자 판정 결과")
+    recommended_portfolio_code: str = Field(..., description="사용자에게 추천할 포트폴리오 유형 코드", examples=["balanced"])
+    data_source: str = Field(..., description="계산에 사용한 데이터 소스", examples=["managed_universe"])
+    portfolios: list[PortfolioRecommendationItemResponse] = Field(default_factory=list, description="안정형/균형형/성장형 3개 대표 포트폴리오")
 
 
 class VolatilityPointResponse(BaseModel):
-    date: str
-    volatility: float
+    date: str = Field(..., description="관측일", examples=["2025-01-31"])
+    volatility: float = Field(..., description="연환산 롤링 변동성", examples=[0.1123])
 
 
 class VolatilityHistoryResponse(BaseModel):
-    portfolio_code: str
-    portfolio_label: str
-    rolling_window: int
-    earliest_data_date: str
-    latest_data_date: str
-    points: list[VolatilityPointResponse] = Field(default_factory=list)
+    portfolio_code: str = Field(..., description="조회 대상 포트폴리오 코드", examples=["balanced"])
+    portfolio_label: str = Field(..., description="조회 대상 포트폴리오 이름", examples=["균형형"])
+    rolling_window: int = Field(..., description="롤링 변동성 계산 윈도우", examples=[20])
+    earliest_data_date: str = Field(..., description="사용한 데이터의 시작일", examples=["2020-01-02"])
+    latest_data_date: str = Field(..., description="사용한 데이터의 종료일", examples=["2026-03-31"])
+    points: list[VolatilityPointResponse] = Field(default_factory=list, description="날짜별 변동성 추이")
 
 
 class ComparisonLinePointResponse(BaseModel):
-    date: str
-    return_pct: float
+    date: str = Field(..., description="백테스트 기준일", examples=["2025-01-31"])
+    return_pct: float = Field(..., description="누적 수익률", examples=[0.0834])
 
 
 class ComparisonLineResponse(BaseModel):
-    key: str
-    label: str
-    color: str
-    style: str
-    points: list[ComparisonLinePointResponse] = Field(default_factory=list)
+    key: str = Field(..., description="라인 식별 키", examples=["balanced"])
+    label: str = Field(..., description="라인 표시명", examples=["균형형"])
+    color: str = Field(..., description="차트 색상", examples=["#2A9D8F"])
+    style: str = Field(..., description="차트 렌더링 스타일", examples=["solid"])
+    points: list[ComparisonLinePointResponse] = Field(default_factory=list, description="시계열 포인트")
 
 
 class ComparisonBacktestResponse(BaseModel):
-    train_start_date: str
-    train_end_date: str
-    test_start_date: str
-    start_date: str
-    end_date: str
-    split_ratio: float
-    rebalance_dates: list[str] = Field(default_factory=list)
-    lines: list[ComparisonLineResponse] = Field(default_factory=list)
-
+    train_start_date: str = Field(..., description="학습 구간 시작일", examples=["2020-01-02"])
+    train_end_date: str = Field(..., description="학습 구간 종료일", examples=["2023-12-29"])
+    test_start_date: str = Field(..., description="테스트 구간 시작일", examples=["2024-01-02"])
+    start_date: str = Field(..., description="전체 비교 시작일", examples=["2020-01-02"])
+    end_date: str = Field(..., description="전체 비교 종료일", examples=["2026-03-31"])
+    split_ratio: float = Field(..., description="학습/테스트 분할 비율", examples=[0.7])
+    rebalance_dates: list[str] = Field(default_factory=list, description="리밸런싱 발생일 목록")
+    lines: list[ComparisonLineResponse] = Field(default_factory=list, description="안정형/균형형/성장형 및 벤치마크 비교 라인")

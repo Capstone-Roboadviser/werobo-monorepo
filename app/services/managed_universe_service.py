@@ -3,8 +3,17 @@ from __future__ import annotations
 import pandas as pd
 
 from app.data.managed_universe_repository import ManagedUniverseRepository
+from app.data.repository import StaticDataRepository
 from app.data.stock_repository import StockDataRepository
-from app.domain.models import ManagedPriceStats, ManagedUniversePriceWindow, ManagedUniverseVersion, StockInstrument
+from app.domain.models import (
+    AssetClass,
+    AssetRoleTemplate,
+    ManagedPriceStats,
+    ManagedUniverseAssetRoleAssignment,
+    ManagedUniversePriceWindow,
+    ManagedUniverseVersion,
+    StockInstrument,
+)
 
 
 class ManagedUniverseService:
@@ -17,6 +26,7 @@ class ManagedUniverseService:
     ) -> None:
         self.repository = repository or ManagedUniverseRepository()
         self.stock_repository = stock_repository or StockDataRepository()
+        self.static_repository = StaticDataRepository()
 
     def initialize_storage(self) -> None:
         self.repository.initialize()
@@ -29,6 +39,23 @@ class ManagedUniverseService:
 
     def get_active_version(self) -> ManagedUniverseVersion | None:
         return self.repository.get_active_version()
+
+    def list_assets(self) -> list[AssetClass]:
+        return self.static_repository.load_asset_universe()
+
+    def list_asset_role_templates(self) -> list[AssetRoleTemplate]:
+        return list(self.static_repository.load_asset_role_templates().values())
+
+    def get_assets_for_version(self, version_id: int) -> list[AssetClass]:
+        return self.static_repository.load_asset_universe(
+            role_overrides=self.repository.get_asset_role_assignments_for_version(version_id),
+        )
+
+    def get_active_assets(self) -> list[AssetClass]:
+        active_version = self.get_active_version()
+        if active_version is None:
+            return self.list_assets()
+        return self.get_assets_for_version(active_version.version_id)
 
     def get_active_instruments(self) -> list[StockInstrument]:
         return self.repository.get_active_instruments()
@@ -100,10 +127,12 @@ class ManagedUniverseService:
         *,
         version_name: str,
         instruments: list[StockInstrument],
+        asset_roles: list[ManagedUniverseAssetRoleAssignment] | None = None,
         notes: str | None = None,
         activate: bool = False,
     ) -> ManagedUniverseVersion:
         self.initialize_storage()
+        resolved_asset_roles = self._resolve_asset_roles(asset_roles)
         validated = self.stock_repository.parse_stock_universe_frame(
             pd.DataFrame(
                 [
@@ -124,6 +153,7 @@ class ManagedUniverseService:
             version_name=version_name,
             source_type="admin_input",
             instruments=validated,
+            asset_role_assignments=resolved_asset_roles,
             notes=notes,
             activate=activate,
         )
@@ -144,10 +174,12 @@ class ManagedUniverseService:
         version_id: int,
         version_name: str,
         instruments: list[StockInstrument],
+        asset_roles: list[ManagedUniverseAssetRoleAssignment] | None = None,
         notes: str | None = None,
         activate: bool = False,
     ) -> ManagedUniverseVersion:
         self.initialize_storage()
+        resolved_asset_roles = self._resolve_asset_roles(asset_roles)
         validated = self.stock_repository.parse_stock_universe_frame(
             pd.DataFrame(
                 [
@@ -168,6 +200,7 @@ class ManagedUniverseService:
             version_id=version_id,
             version_name=version_name,
             instruments=validated,
+            asset_role_assignments=resolved_asset_roles,
             notes=notes,
             activate=activate,
         )
@@ -175,3 +208,32 @@ class ManagedUniverseService:
     def delete_version(self, version_id: int) -> None:
         self.initialize_storage()
         self.repository.delete_universe_version(version_id)
+
+    def _resolve_asset_roles(
+        self,
+        asset_roles: list[ManagedUniverseAssetRoleAssignment] | None = None,
+    ) -> list[ManagedUniverseAssetRoleAssignment]:
+        assets = self.list_assets()
+        templates = self.static_repository.load_asset_role_templates()
+        asset_codes = {asset.code for asset in assets}
+        default_role_map = {asset.code: asset.role_key for asset in assets}
+        provided_role_map: dict[str, str] = {}
+
+        for item in asset_roles or []:
+            asset_code = item.asset_code.strip()
+            role_key = item.role_key.strip()
+            if asset_code in provided_role_map:
+                raise RuntimeError(f"자산군 '{asset_code}'의 role이 중복으로 전달되었습니다.")
+            if asset_code not in asset_codes:
+                raise RuntimeError(f"지원하지 않는 자산군 코드입니다: {asset_code}")
+            if role_key not in templates:
+                raise RuntimeError(f"지원하지 않는 role_key 입니다: {role_key}")
+            provided_role_map[asset_code] = role_key
+
+        return [
+            ManagedUniverseAssetRoleAssignment(
+                asset_code=asset.code,
+                role_key=provided_role_map.get(asset.code, default_role_map[asset.code]),
+            )
+            for asset in assets
+        ]
