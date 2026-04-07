@@ -80,17 +80,30 @@ class LegacyFastapiDemoAdapter:
         )
         return self.portfolio_service._prepare_context(base_profile)
 
-    def _build_portfolio_snapshot(
+    def _build_context_bundle(
         self,
         *,
-        risk_profile: RiskProfile,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
-    ) -> dict[str, object]:
+    ):
         context = self._build_context(
             investment_horizon=investment_horizon,
             data_source=data_source,
         )
+        instrument_by_ticker = {
+            instrument.ticker.upper(): instrument for instrument in context.instruments
+        }
+        return context, instrument_by_ticker
+
+    def _build_portfolio_snapshot_from_context(
+        self,
+        *,
+        context,
+        instrument_by_ticker,
+        risk_profile: RiskProfile,
+        investment_horizon: InvestmentHorizon,
+        data_source: SimulationDataSource,
+    ) -> dict[str, object]:
         legacy_user_profile = self._build_legacy_user_profile(
             risk_profile=risk_profile,
             investment_horizon=investment_horizon,
@@ -126,9 +139,6 @@ class LegacyFastapiDemoAdapter:
             instruments=context.instruments,
         )
 
-        instrument_by_ticker = {
-            instrument.ticker.upper(): instrument for instrument in context.instruments
-        }
         stock_allocations = []
         for ticker, weight in sorted(point.weights.items(), key=lambda item: item[1], reverse=True):
             instrument = instrument_by_ticker.get(str(ticker).upper())
@@ -170,6 +180,25 @@ class LegacyFastapiDemoAdapter:
             "stock_weights": {str(k).upper(): float(v) for k, v in point.weights.items()},
         }
 
+    def _build_portfolio_snapshot(
+        self,
+        *,
+        risk_profile: RiskProfile,
+        investment_horizon: InvestmentHorizon,
+        data_source: SimulationDataSource,
+    ) -> dict[str, object]:
+        context, instrument_by_ticker = self._build_context_bundle(
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+        )
+        return self._build_portfolio_snapshot_from_context(
+            context=context,
+            instrument_by_ticker=instrument_by_ticker,
+            risk_profile=risk_profile,
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+        )
+
     def build_recommendation(
         self,
         *,
@@ -178,8 +207,16 @@ class LegacyFastapiDemoAdapter:
         data_source: SimulationDataSource,
         propensity_score: float | None,
     ) -> dict[str, object]:
+        # Recommendation cards share the same universe/context. Only the target
+        # volatility selection changes per risk profile, so reuse the context once.
+        context, instrument_by_ticker = self._build_context_bundle(
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+        )
         portfolios = [
-            self._build_portfolio_snapshot(
+            self._build_portfolio_snapshot_from_context(
+                context=context,
+                instrument_by_ticker=instrument_by_ticker,
                 risk_profile=profile,
                 investment_horizon=investment_horizon,
                 data_source=data_source,
@@ -225,7 +262,13 @@ class LegacyFastapiDemoAdapter:
         data_source: SimulationDataSource,
         rolling_window: int,
     ) -> dict[str, object]:
-        snapshot = self._build_portfolio_snapshot(
+        context, instrument_by_ticker = self._build_context_bundle(
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+        )
+        snapshot = self._build_portfolio_snapshot_from_context(
+            context=context,
+            instrument_by_ticker=instrument_by_ticker,
             risk_profile=risk_profile,
             investment_horizon=investment_horizon,
             data_source=data_source,
