@@ -14,5 +14,13 @@
     "selection_mode": "all_members",
     "weighting_mode": "equal_weight",
     "return_mode": "historical_mean"
+  },
+  {
+    "key": "equal_weight_dividend_basket",
+    "name": "배당 가산 동일비중 바스켓",
+    "description": "후보 종목 전체를 동일비중 바스켓으로 묶고, 배당 지급 주기를 추정해 연환산 배당수익률을 기대수익률에 가산합니다.",
+    "selection_mode": "all_members",
+    "weighting_mode": "equal_weight",
+    "return_mode": "historical_mean_plus_dividend_yield"
   }
 ]

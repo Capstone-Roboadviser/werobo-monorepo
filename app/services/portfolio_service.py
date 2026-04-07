@@ -53,6 +53,7 @@ from app.engine.math import portfolio_metrics_from_weights, risk_contributions
 from app.engine.optimizer import EfficientFrontierOptimizer
 from app.engine.returns import AssumptionReturnModel, BlackLittermanReturnModel, ExpectedReturnModel
 from app.services.explanation_service import ExplanationService
+from app.services.dividend_yield_service import DividendYieldService
 from app.services.managed_universe_service import ManagedUniverseService
 from app.services.mapping_service import ProfileMappingService
 from app.services.portfolio_component_service import ComponentCandidateMapResult, PortfolioComponentService
@@ -98,6 +99,7 @@ class PortfolioSimulationService:
         )
         self.managed_universe_service = ManagedUniverseService()
         self.component_service = PortfolioComponentService()
+        self.dividend_yield_service = DividendYieldService()
         self.covariance_model = ShrinkageCovarianceModel()
         self.constraint_engine = ConstraintEngine()
         self.optimizer = EfficientFrontierOptimizer()
@@ -1028,7 +1030,35 @@ class PortfolioSimulationService:
                 prior_weights=prior_weights,
             )
         )
-        return expected_returns.astype(float)
+        dividend_overlay = self._build_component_dividend_return_overlay(selected_candidates)
+        return expected_returns.add(dividend_overlay.reindex(asset_codes).fillna(0.0), fill_value=0.0).astype(float)
+
+    def _build_component_dividend_return_overlay(
+        self,
+        selected_candidates: dict[str, PortfolioComponentCandidate],
+    ) -> pd.Series:
+        overlays: dict[str, float] = {}
+        for asset_code, candidate in selected_candidates.items():
+            if candidate.return_mode != "historical_mean_plus_dividend_yield":
+                overlays[asset_code] = 0.0
+                continue
+
+            member_tickers = list(candidate.member_tickers)
+            if not member_tickers:
+                overlays[asset_code] = 0.0
+                continue
+
+            member_yields = [
+                self.dividend_yield_service.get_annual_yield(ticker)
+                for ticker in member_tickers
+            ]
+            if candidate.weighting_mode == "single":
+                overlays[asset_code] = float(member_yields[0]) if member_yields else 0.0
+            elif candidate.weighting_mode == "equal_weight":
+                overlays[asset_code] = float(sum(member_yields) / len(member_yields)) if member_yields else 0.0
+            else:
+                overlays[asset_code] = 0.0
+        return pd.Series(overlays, dtype=float)
 
     def _build_universe_selection(
         self,

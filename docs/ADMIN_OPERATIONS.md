@@ -58,6 +58,10 @@
   - 후보 종목 중 대표 1개를 선택
 - `equal_weight_basket`
   - 후보 종목 전체를 동일비중 바스켓으로 사용
+- `equal_weight_dividend_basket`
+  - 후보 종목 전체를 동일비중 바스켓으로 사용
+  - 배당 지급 이력이 있는 종목은 최근 지급 주기를 추정해 연환산 배당수익률을 계산
+  - 계산된 배당수익률을 바스켓 기대수익률에 동일비중으로 가산
 
 현재 구현 기준으로 role은 버전별 snapshot으로 저장됩니다.
 
@@ -105,6 +109,10 @@
   {
     "asset_code": "gold",
     "role_key": "equal_weight_basket"
+  },
+  {
+    "asset_code": "infra_bond",
+    "role_key": "equal_weight_dividend_basket"
   }
 ]
 ```
@@ -129,6 +137,7 @@
 
 - 종목이 없는 빈 유니버스는 저장할 수 없습니다.
 - role 미지정 자산군은 기본 카탈로그의 기본 role을 따릅니다.
+- `equal_weight_dividend_basket`은 배당 지급 이력과 최근 지급 주기를 추정할 수 있는 종목에서 가장 잘 동작합니다.
 
 ## 2. 가격 데이터 갱신
 
