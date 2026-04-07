@@ -48,14 +48,39 @@ class WeRoboColors {
   static const Color kakaoBrown = Color(0xFF3C1E1E);
   static const Color naverGreen = Color(0xFF03C75A);
 
-  // Standard radii
-  static const double radiusS = 8;
-  static const double radiusM = 12;
-  static const double radiusL = 16;
+  // Standard radii (from DESIGN.md)
+  static const double radiusS = 6;
+  static const double radiusM = 10;
+  static const double radiusL = 12;
+  static const double radiusXL = 16;
+  static const double radiusFull = 9999;
 
   // Dot indicator
   static const Color dotActive = sky4;
   static const Color dotInactive = lightGray;
+}
+
+/// Spacing scale — base unit 4px, all multiples of 4.
+class WeRoboSpacing {
+  WeRoboSpacing._();
+
+  static const double xxs = 2;
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 16;
+  static const double xl = 20;
+  static const double xxl = 24;
+  static const double xxxl = 28;
+  static const double xxxxl = 32;
+
+  /// Standard horizontal screen padding.
+  static const EdgeInsets screenH =
+      EdgeInsets.symmetric(horizontal: xxl);
+
+  /// Bottom button area: 24px sides, 32px bottom clearance.
+  static const EdgeInsets bottomButton =
+      EdgeInsets.fromLTRB(xxl, 0, xxl, xxxxl);
 }
 
 /// Font families from Figma:
@@ -152,17 +177,122 @@ class WeRoboTypography {
   );
 }
 
+/// Brightness-sensitive colors — access via WeRoboThemeColors.of(context).
+class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
+  final Color background;
+  final Color surface;
+  final Color card;
+  final Color border;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textTertiary;
+  final Color accent;
+
+  const WeRoboThemeColors({
+    required this.background,
+    required this.surface,
+    required this.card,
+    required this.border,
+    required this.textPrimary,
+    required this.textSecondary,
+    required this.textTertiary,
+    required this.accent,
+  });
+
+  static const light = WeRoboThemeColors(
+    background: Color(0xFFF5F5F5),
+    surface: Color(0xFFFFFFFF),
+    card: Color(0xFFF0F0F0),
+    border: Color(0xFFD3D3D3),
+    textPrimary: Color(0xFF000000),
+    textSecondary: Color(0xFF6B6B6B),
+    textTertiary: Color(0xFFC0C0C0),
+    accent: Color(0xFF059669),
+  );
+
+  static const dark = WeRoboThemeColors(
+    background: Color(0xFF0F0F0F),
+    surface: Color(0xFF1A1A1A),
+    card: Color(0xFF252525),
+    border: Color(0xFF333333),
+    textPrimary: Color(0xFFF0F0F0),
+    textSecondary: Color(0xFF999999),
+    textTertiary: Color(0xFF555555),
+    accent: Color(0xFF34D399),
+  );
+
+  static WeRoboThemeColors of(BuildContext context) =>
+      Theme.of(context).extension<WeRoboThemeColors>()!;
+
+  @override
+  WeRoboThemeColors copyWith({
+    Color? background,
+    Color? surface,
+    Color? card,
+    Color? border,
+    Color? textPrimary,
+    Color? textSecondary,
+    Color? textTertiary,
+    Color? accent,
+  }) =>
+      WeRoboThemeColors(
+        background: background ?? this.background,
+        surface: surface ?? this.surface,
+        card: card ?? this.card,
+        border: border ?? this.border,
+        textPrimary: textPrimary ?? this.textPrimary,
+        textSecondary: textSecondary ?? this.textSecondary,
+        textTertiary: textTertiary ?? this.textTertiary,
+        accent: accent ?? this.accent,
+      );
+
+  @override
+  WeRoboThemeColors lerp(WeRoboThemeColors? other, double t) {
+    if (other == null) return this;
+    return WeRoboThemeColors(
+      background: Color.lerp(background, other.background, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      card: Color.lerp(card, other.card, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
+      textSecondary:
+          Color.lerp(textSecondary, other.textSecondary, t)!,
+      textTertiary:
+          Color.lerp(textTertiary, other.textTertiary, t)!,
+      accent: Color.lerp(accent, other.accent, t)!,
+    );
+  }
+}
+
+/// Resolves baked-in light-mode colors to current brightness.
+extension ThemedTextStyle on TextStyle {
+  TextStyle themed(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    if (color == WeRoboColors.textPrimary) {
+      return copyWith(color: tc.textPrimary);
+    }
+    if (color == WeRoboColors.textSecondary) {
+      return copyWith(color: tc.textSecondary);
+    }
+    if (color == WeRoboColors.textTertiary) {
+      return copyWith(color: tc.textTertiary);
+    }
+    return this;
+  }
+}
+
 class WeRoboTheme {
   WeRoboTheme._();
 
   static ThemeData get light {
     return ThemeData(
       useMaterial3: true,
-      scaffoldBackgroundColor: WeRoboColors.background,
+      brightness: Brightness.light,
+      scaffoldBackgroundColor: WeRoboThemeColors.light.background,
       colorScheme: const ColorScheme.light(
         primary: WeRoboColors.primary,
         secondary: WeRoboColors.accent,
-        surface: WeRoboColors.surface,
+        surface: Color(0xFFFFFFFF),
         error: WeRoboColors.error,
       ),
       textTheme: const TextTheme(
@@ -179,7 +309,7 @@ class WeRoboTheme {
           foregroundColor: WeRoboColors.white,
           minimumSize: const Size(double.infinity, 52),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
           ),
           textStyle: WeRoboTypography.button,
           elevation: 0,
@@ -190,7 +320,7 @@ class WeRoboTheme {
           foregroundColor: WeRoboColors.primary,
           minimumSize: const Size(double.infinity, 52),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
           ),
           side: const BorderSide(
             color: WeRoboColors.primary,
@@ -199,6 +329,61 @@ class WeRoboTheme {
           textStyle: WeRoboTypography.button,
         ),
       ),
+      extensions: const [WeRoboThemeColors.light],
+    );
+  }
+
+  static ThemeData get dark {
+    return ThemeData(
+      useMaterial3: true,
+      brightness: Brightness.dark,
+      scaffoldBackgroundColor: WeRoboThemeColors.dark.background,
+      colorScheme: const ColorScheme.dark(
+        primary: WeRoboColors.primary,
+        secondary: Color(0xFF34D399),
+        surface: Color(0xFF1A1A1A),
+        error: WeRoboColors.error,
+      ),
+      textTheme: TextTheme(
+        headlineLarge: WeRoboTypography.heading1.copyWith(
+            color: WeRoboThemeColors.dark.textPrimary),
+        headlineMedium: WeRoboTypography.heading2.copyWith(
+            color: WeRoboThemeColors.dark.textPrimary),
+        headlineSmall: WeRoboTypography.heading3.copyWith(
+            color: WeRoboThemeColors.dark.textPrimary),
+        bodyLarge: WeRoboTypography.body.copyWith(
+            color: WeRoboThemeColors.dark.textSecondary),
+        bodyMedium: WeRoboTypography.bodySmall.copyWith(
+            color: WeRoboThemeColors.dark.textSecondary),
+        labelLarge: WeRoboTypography.button,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: WeRoboColors.primary,
+          foregroundColor: WeRoboColors.white,
+          minimumSize: const Size(double.infinity, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
+          ),
+          textStyle: WeRoboTypography.button,
+          elevation: 0,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: WeRoboColors.primary,
+          minimumSize: const Size(double.infinity, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
+          ),
+          side: const BorderSide(
+            color: WeRoboColors.primary,
+            width: 1.5,
+          ),
+          textStyle: WeRoboTypography.button,
+        ),
+      ),
+      extensions: const [WeRoboThemeColors.dark],
     );
   }
 }

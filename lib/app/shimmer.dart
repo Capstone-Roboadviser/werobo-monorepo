@@ -40,6 +40,7 @@ class _ShimmerBoxState extends State<ShimmerBox>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
@@ -48,7 +49,7 @@ class _ShimmerBoxState extends State<ShimmerBox>
           width: widget.width,
           height: widget.height,
           decoration: BoxDecoration(
-            color: WeRoboColors.textPrimary.withValues(alpha: opacity),
+            color: tc.textPrimary.withValues(alpha: opacity),
             borderRadius: BorderRadius.circular(widget.borderRadius),
           ),
         );

@@ -6,6 +6,7 @@ class RebalanceTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -13,10 +14,11 @@ class RebalanceTab extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 20),
-            Text('리밸런싱', style: WeRoboTypography.heading2),
+            Text('리밸런싱',
+                style: WeRoboTypography.heading2.themed(context)),
             const SizedBox(height: 8),
             Text('포트폴리오를 최적 상태로 유지합니다',
-                style: WeRoboTypography.bodySmall),
+                style: WeRoboTypography.bodySmall.themed(context)),
             const SizedBox(height: 24),
 
             // Next rebalance card
@@ -25,7 +27,7 @@ class RebalanceTab extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: WeRoboColors.primary.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -36,17 +38,18 @@ class RebalanceTab extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text('2026-07-01',
                       style: WeRoboTypography.heading3.copyWith(
-                          color: WeRoboColors.textPrimary)),
+                          color: tc.textPrimary)),
                   const SizedBox(height: 4),
                   Text('87일 남음',
                       style: WeRoboTypography.bodySmall.copyWith(
-                          color: WeRoboColors.textSecondary)),
+                          color: tc.textSecondary)),
                 ],
               ),
             ),
             const SizedBox(height: 20),
 
-            Text('리밸런싱 기록', style: WeRoboTypography.heading3),
+            Text('리밸런싱 기록',
+                style: WeRoboTypography.heading3.themed(context)),
             const SizedBox(height: 12),
 
             _RebalanceRecord(
@@ -75,11 +78,12 @@ class _RebalanceRecord extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: WeRoboColors.card,
+        color: tc.card,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -88,11 +92,11 @@ class _RebalanceRecord extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: WeRoboColors.accent.withValues(alpha: 0.1),
+              color: tc.accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.check_rounded,
-                size: 20, color: WeRoboColors.accent),
+            child: Icon(Icons.check_rounded,
+                size: 20, color: tc.accent),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -101,16 +105,17 @@ class _RebalanceRecord extends StatelessWidget {
               children: [
                 Text(date,
                     style: WeRoboTypography.bodySmall.copyWith(
-                        color: WeRoboColors.textPrimary,
+                        color: tc.textPrimary,
                         fontWeight: FontWeight.w500,
                         fontFamily: WeRoboFonts.english)),
-                Text(status, style: WeRoboTypography.caption),
+                Text(status,
+                    style: WeRoboTypography.caption.themed(context)),
               ],
             ),
           ),
           Text(delta,
               style: WeRoboTypography.bodySmall.copyWith(
-                  color: WeRoboColors.accent,
+                  color: tc.accent,
                   fontWeight: FontWeight.w600,
                   fontFamily: WeRoboFonts.english)),
         ],

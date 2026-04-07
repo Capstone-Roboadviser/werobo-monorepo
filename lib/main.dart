@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app/portfolio_state.dart';
 import 'app/theme.dart';
+import 'app/theme_state.dart';
 import 'screens/onboarding/splash_screen.dart';
 
 void main() {
@@ -16,10 +17,12 @@ class WeRoboApp extends StatefulWidget {
 
 class _WeRoboAppState extends State<WeRoboApp> {
   final _portfolioState = PortfolioState();
+  final _themeNotifier = ThemeNotifier();
 
   @override
   void dispose() {
     _portfolioState.dispose();
+    _themeNotifier.dispose();
     super.dispose();
   }
 
@@ -27,11 +30,19 @@ class _WeRoboAppState extends State<WeRoboApp> {
   Widget build(BuildContext context) {
     return PortfolioStateProvider(
       state: _portfolioState,
-      child: MaterialApp(
-        title: 'WeRobo',
-        debugShowCheckedModeBanner: false,
-        theme: WeRoboTheme.light,
-        home: const SplashScreen(),
+      child: ThemeStateProvider(
+        notifier: _themeNotifier,
+        child: ListenableBuilder(
+          listenable: _themeNotifier,
+          builder: (context, _) => MaterialApp(
+            title: 'WeRobo',
+            debugShowCheckedModeBanner: false,
+            theme: WeRoboTheme.light,
+            darkTheme: WeRoboTheme.dark,
+            themeMode: _themeNotifier.mode,
+            home: const SplashScreen(),
+          ),
+        ),
       ),
     );
   }

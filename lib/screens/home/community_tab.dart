@@ -13,7 +13,8 @@ class CommunityTab extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
             child: Row(
               children: [
-                Text('커뮤니티', style: WeRoboTypography.heading2),
+                Text('커뮤니티',
+                    style: WeRoboTypography.heading2.themed(context)),
                 const Spacer(),
                 GestureDetector(
                   onTap: () {},
@@ -124,20 +125,21 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
-        color: isActive ? WeRoboColors.primary : WeRoboColors.card,
+        color: isActive ? WeRoboColors.primary : tc.card,
         borderRadius: BorderRadius.circular(20),
         border: isActive
             ? null
-            : Border.all(color: WeRoboColors.lightGray, width: 0.5),
+            : Border.all(color: tc.border, width: 0.5),
       ),
       child: Text(
         label,
         style: WeRoboTypography.caption.copyWith(
           fontWeight: FontWeight.w600,
-          color: isActive ? WeRoboColors.white : WeRoboColors.textSecondary,
+          color: isActive ? WeRoboColors.white : tc.textSecondary,
         ),
       ),
     );
@@ -172,6 +174,7 @@ class _PostCardState extends State<_PostCard> {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
@@ -184,7 +187,7 @@ class _PostCardState extends State<_PostCard> {
           margin: const EdgeInsets.only(bottom: 10),
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: WeRoboColors.card,
+            color: tc.card,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -207,7 +210,9 @@ class _PostCardState extends State<_PostCard> {
                             color: widget.tagColor)),
                   ),
                   const Spacer(),
-                  Text(widget.time, style: WeRoboTypography.caption),
+                  Text(widget.time,
+                      style: WeRoboTypography.caption
+                          .themed(context)),
                 ],
               ),
               const SizedBox(height: 10),
@@ -216,7 +221,7 @@ class _PostCardState extends State<_PostCard> {
               Text(
                 widget.title,
                 style: WeRoboTypography.bodySmall.copyWith(
-                  color: WeRoboColors.textPrimary,
+                  color: tc.textPrimary,
                   fontWeight: FontWeight.w500,
                   height: 1.4,
                 ),
@@ -230,19 +235,21 @@ class _PostCardState extends State<_PostCard> {
                 children: [
                   Text(widget.author,
                       style: WeRoboTypography.caption.copyWith(
-                          color: WeRoboColors.textSecondary)),
+                          color: tc.textSecondary)),
                   const Spacer(),
                   Icon(Icons.favorite_border_rounded,
-                      size: 14, color: WeRoboColors.textTertiary),
+                      size: 14, color: tc.textTertiary),
                   const SizedBox(width: 3),
                   Text('${widget.likes}',
-                      style: WeRoboTypography.caption),
+                      style: WeRoboTypography.caption
+                          .themed(context)),
                   const SizedBox(width: 12),
                   Icon(Icons.chat_bubble_outline_rounded,
-                      size: 14, color: WeRoboColors.textTertiary),
+                      size: 14, color: tc.textTertiary),
                   const SizedBox(width: 3),
                   Text('${widget.comments}',
-                      style: WeRoboTypography.caption),
+                      style: WeRoboTypography.caption
+                          .themed(context)),
                 ],
               ),
             ],

@@ -80,6 +80,7 @@ class _VestorPieChartState extends State<VestorPieChart>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final selected =
         _selectedIndex != null ? widget.categories[_selectedIndex!] : null;
 
@@ -125,21 +126,22 @@ class _VestorPieChartState extends State<VestorPieChart>
                                           style: WeRoboTypography.bodySmall
                                               .copyWith(
                                             fontWeight: FontWeight.w500,
-                                            color: WeRoboColors.textSecondary,
+                                            color: tc.textSecondary,
                                           ),
                                         ),
                                         const SizedBox(width: 4),
                                         Icon(
                                           Icons.info_outline_rounded,
                                           size: 16,
-                                          color: WeRoboColors.textTertiary,
+                                          color: tc.textTertiary,
                                         ),
                                       ],
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
                                       '${selected.percentage.toInt()}%',
-                                      style: WeRoboTypography.number,
+                                      style: WeRoboTypography.number
+                                          .themed(context),
                                     ),
                                   ],
                                 )
@@ -147,7 +149,7 @@ class _VestorPieChartState extends State<VestorPieChart>
                                   key: const ValueKey('default'),
                                   '포트폴리오\n비중',
                                   style: WeRoboTypography.heading3.copyWith(
-                                    color: WeRoboColors.textPrimary,
+                                    color: tc.textPrimary,
                                   ),
                                   textAlign: TextAlign.center,
                                 ),
