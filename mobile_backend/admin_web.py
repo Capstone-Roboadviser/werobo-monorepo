@@ -419,8 +419,9 @@ def render_admin_page() -> HTMLResponse:
     </div>
 
     <section class="card" style="margin-top: 20px;">
-      <h2>새 유니버스 버전 생성</h2>
-      <p class="helper">종목명 검색 또는 티커 자동채움으로 종목을 등록하고 새 버전을 만들 수 있습니다.</p>
+      <h2 id="version-form-title">새 유니버스 버전 생성</h2>
+      <p class="helper" id="version-form-helper">종목명 검색 또는 티커 자동채움으로 종목을 등록하고 새 버전을 만들 수 있습니다.</p>
+      <div id="form-mode-banner" class="notice" style="display:none"></div>
       <div class="row">
         <div class="field">
           <label for="version-name">버전명</label>
@@ -432,7 +433,7 @@ def render_admin_page() -> HTMLResponse:
         </div>
       </div>
       <div class="field full">
-        <label><input id="version-activate" type="checkbox" checked /> 생성 후 즉시 active로 전환</label>
+        <label><input id="version-activate" type="checkbox" checked /> 저장 후 active로 전환</label>
       </div>
       <div class="role-panel">
         <div class="role-panel-header">
@@ -461,7 +462,8 @@ def render_admin_page() -> HTMLResponse:
       </table>
       <div class="actions">
         <button class="secondary" id="add-row">행 추가</button>
-        <button id="create-version">버전 생성</button>
+        <button id="submit-version">버전 생성</button>
+        <button class="ghost" id="cancel-edit" type="button" style="display:none">수정 취소</button>
       </div>
       <div id="create-result" class="notice" style="display:none"></div>
       <div id="create-error" class="error" style="display:none"></div>
@@ -513,6 +515,7 @@ def render_admin_page() -> HTMLResponse:
     const $$ = (selector) => Array.from(document.querySelectorAll(selector));
     let assetCatalog = [];
     let assetRoleTemplates = [];
+    let editingVersionId = null;
     let isRefreshingPrices = false;
     let refreshLoadingTimer = null;
     let refreshLoadingStartedAt = null;
@@ -581,6 +584,35 @@ def render_admin_page() -> HTMLResponse:
 
     function defaultAssetRoleMap() {
       return Object.fromEntries(assetCatalog.map((asset) => [asset.code, asset.role_key]));
+    }
+
+    function defaultSeedRows() {
+      return [
+        {
+          ticker: 'QQQ',
+          name: 'Invesco QQQ Trust',
+          sector_code: 'us_growth',
+          sector_name: '미국 성장주',
+          market: 'NASDAQ',
+          currency: 'USD',
+        },
+        {
+          ticker: 'SHY',
+          name: 'iShares 1-3 Year Treasury Bond ETF',
+          sector_code: 'short_term_bond',
+          sector_name: '단기 채권',
+          market: 'NASDAQ',
+          currency: 'USD',
+        },
+      ];
+    }
+
+    function collectCurrentAssetRoleMap() {
+      const entries = $$('#asset-role-config [data-role-select]').map((select) => [
+        select.getAttribute('data-role-select'),
+        select.value,
+      ]);
+      return Object.fromEntries(entries);
     }
 
     function findAssetByCode(assetCode) {
@@ -682,6 +714,54 @@ def render_admin_page() -> HTMLResponse:
           role_key: select ? select.value : asset.role_key,
         };
       });
+    }
+
+    function clearInstrumentRows() {
+      $('#instrument-body').innerHTML = '';
+    }
+
+    function seedDefaultInstrumentRows() {
+      clearInstrumentRows();
+      defaultSeedRows().forEach((item) => addInstrumentRow(item));
+    }
+
+    function enterCreateMode() {
+      editingVersionId = null;
+      $('#version-form-title').textContent = '새 유니버스 버전 생성';
+      $('#version-form-helper').textContent = '종목명 검색 또는 티커 자동채움으로 종목을 등록하고 새 버전을 만들 수 있습니다.';
+      $('#submit-version').textContent = '버전 생성';
+      $('#cancel-edit').style.display = 'none';
+      hideMessage('#form-mode-banner');
+      $('#version-name').value = '';
+      $('#version-notes').value = '';
+      $('#version-activate').checked = true;
+      renderAssetRoleSelectors(defaultAssetRoleMap());
+      seedDefaultInstrumentRows();
+    }
+
+    function enterEditMode(detail) {
+      editingVersionId = detail.version_id;
+      $('#version-form-title').textContent = '유니버스 버전 수정';
+      $('#version-form-helper').textContent = '기존 버전의 종목 구성과 자산군별 role을 수정한 뒤 다시 저장할 수 있습니다.';
+      $('#submit-version').textContent = '버전 수정';
+      $('#cancel-edit').style.display = 'inline-flex';
+      showMessage(
+        '#form-mode-banner',
+        `현재 ID ${detail.version_id} · ${detail.version_name} 수정 중입니다.\n저장하면 이 버전의 종목 구성과 자산군 role 스냅샷이 교체됩니다.`,
+      );
+      $('#version-name').value = detail.version_name || '';
+      $('#version-notes').value = detail.notes || '';
+      $('#version-activate').checked = Boolean(detail.is_active);
+      const selectedRoleMap = Object.fromEntries(
+        (detail.asset_roles || []).map((item) => [item.asset_code, item.role_key]),
+      );
+      renderAssetRoleSelectors(selectedRoleMap);
+      clearInstrumentRows();
+      (detail.instruments || []).forEach((item) => addInstrumentRow(item));
+      if (!(detail.instruments || []).length) {
+        addInstrumentRow();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function findDuplicateTicker(ticker, currentRow = null) {
@@ -901,11 +981,13 @@ def render_admin_page() -> HTMLResponse:
           </div>
           <div class="actions">
             <button class="secondary detail-btn">상세</button>
+            <button class="ghost edit-btn">수정</button>
             <button class="secondary activate-btn">활성화</button>
             <button class="danger delete-btn">삭제</button>
           </div>
         `;
         wrap.querySelector('.detail-btn').addEventListener('click', () => loadVersionDetail(version.version_id));
+        wrap.querySelector('.edit-btn').addEventListener('click', () => startEditVersion(version.version_id));
         wrap.querySelector('.activate-btn').addEventListener('click', () => activateVersion(version.version_id));
         wrap.querySelector('.delete-btn').addEventListener('click', () => deleteVersion(version.version_id));
         host.appendChild(wrap);
@@ -1004,16 +1086,28 @@ def render_admin_page() -> HTMLResponse:
     }
 
     async function loadAssetRoleConfig() {
+      const currentRoleMap = collectCurrentAssetRoleMap();
       const config = await requestJson('/admin/api/universe/asset-role-config');
       assetCatalog = config.assets || [];
       assetRoleTemplates = config.role_templates || [];
-      renderAssetRoleSelectors(defaultAssetRoleMap());
+      const selectedMap = editingVersionId && Object.keys(currentRoleMap).length
+        ? currentRoleMap
+        : defaultAssetRoleMap();
+      renderAssetRoleSelectors(selectedMap);
       syncAllInstrumentAssetSelections();
     }
 
     async function loadVersionDetail(versionId) {
       const detail = await requestJson(`/admin/api/universe/versions/${versionId}`);
       renderVersionDetail(detail);
+    }
+
+    async function startEditVersion(versionId) {
+      hideMessage('#create-result');
+      hideMessage('#create-error');
+      const detail = await requestJson(`/admin/api/universe/versions/${versionId}`);
+      renderVersionDetail(detail);
+      enterEditMode(detail);
     }
 
     async function loadReadiness() {
@@ -1035,7 +1129,7 @@ def render_admin_page() -> HTMLResponse:
       await reloadAll();
     }
 
-    async function createVersion() {
+    async function submitVersionForm() {
       hideMessage('#create-result');
       hideMessage('#create-error');
       const instruments = collectInstruments();
@@ -1055,12 +1149,24 @@ def render_admin_page() -> HTMLResponse:
         return;
       }
       try {
-        const result = await requestJson('/admin/api/universe/versions', {
-          method: 'POST',
+        const isEditMode = editingVersionId !== null;
+        const url = isEditMode
+          ? `/admin/api/universe/versions/${editingVersionId}`
+          : '/admin/api/universe/versions';
+        const method = isEditMode ? 'PUT' : 'POST';
+        const result = await requestJson(url, {
+          method,
           body: JSON.stringify(payload),
         });
-        showMessage('#create-result', `버전 생성 완료: ${result.version_name} (ID ${result.version_id})`);
+        showMessage(
+          '#create-result',
+          isEditMode
+            ? `버전 수정 완료: ${result.version_name} (ID ${result.version_id})`
+            : `버전 생성 완료: ${result.version_name} (ID ${result.version_id})`,
+        );
+        enterCreateMode();
         await reloadAll();
+        await loadVersionDetail(result.version_id);
       } catch (error) {
         showMessage('#create-error', error.message, true);
       }
@@ -1096,28 +1202,14 @@ def render_admin_page() -> HTMLResponse:
     $('#reload-all').addEventListener('click', reloadAll);
     $('#add-row').addEventListener('click', () => addInstrumentRow());
     $('#reset-asset-roles').addEventListener('click', () => {
+      if (editingVersionId !== null) return;
       renderAssetRoleSelectors(defaultAssetRoleMap());
     });
-    $('#create-version').addEventListener('click', createVersion);
+    $('#submit-version').addEventListener('click', submitVersionForm);
+    $('#cancel-edit').addEventListener('click', enterCreateMode);
     $('#refresh-prices').addEventListener('click', refreshPrices);
     $('#load-readiness').addEventListener('click', loadReadiness);
-
-    addInstrumentRow({
-      ticker: 'QQQ',
-      name: 'Invesco QQQ Trust',
-      sector_code: 'us_growth',
-      sector_name: '미국 성장주',
-      market: 'NASDAQ',
-      currency: 'USD',
-    });
-    addInstrumentRow({
-      ticker: 'SHY',
-      name: 'iShares 1-3 Year Treasury Bond ETF',
-      sector_code: 'short_term_bond',
-      sector_name: '단기 채권',
-      market: 'NASDAQ',
-      currency: 'USD',
-    });
+    seedDefaultInstrumentRows();
     reloadAll().catch((error) => {
       showMessage('#status-detail', error.message, true);
       showMessage('#version-list', error.message, true);

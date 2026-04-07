@@ -1,6 +1,10 @@
 from fastapi import APIRouter, HTTPException, Query
 
-from app.api.schemas.request import ManagedUniverseVersionCreateRequest, PriceRefreshRequest
+from app.api.schemas.request import (
+    ManagedUniverseVersionCreateRequest,
+    ManagedUniverseVersionUpdateRequest,
+    PriceRefreshRequest,
+)
 from app.api.schemas.response import (
     AssetClassResponse,
     AssetRoleTemplateResponse,
@@ -169,6 +173,34 @@ def create_universe_version(payload: ManagedUniverseVersionCreateRequest) -> Man
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _version_response(version)
+
+
+@router.put(
+    "/universe/versions/{version_id}",
+    response_model=ManagedUniverseVersionResponse,
+    summary="유니버스 버전 수정",
+    description="기존 유니버스 버전의 종목 구성과 자산군별 role 설정을 수정합니다.",
+    responses={**COMMON_ADMIN_404, **COMMON_ADMIN_422},
+)
+def update_universe_version(
+    version_id: int,
+    payload: ManagedUniverseVersionUpdateRequest,
+) -> ManagedUniverseVersionResponse:
+    try:
+        version = managed_universe_service.get_version(version_id)
+        if version is None:
+            raise HTTPException(status_code=404, detail=f"유니버스 버전 {version_id}를 찾을 수 없습니다.")
+        updated = managed_universe_service.update_version(
+            version_id=version_id,
+            version_name=payload.version_name,
+            notes=payload.notes,
+            activate=payload.activate,
+            asset_roles=payload.to_domain_asset_roles(),
+            instruments=payload.to_domain_instruments(),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return _version_response(updated)
 
 
 @router.delete(
