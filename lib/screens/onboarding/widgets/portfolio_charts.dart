@@ -26,7 +26,7 @@ class ChartLine {
   });
 }
 
-// ── Mock data generators (replace with real API calls later) ──
+// ── Mock data generators used as an optional fallback ──
 
 class _MockData {
   static List<ChartPoint> _generate(
@@ -106,14 +106,28 @@ class _MockData {
 
 class PortfolioCharts extends StatefulWidget {
   final InvestmentType type;
-  const PortfolioCharts({super.key, required this.type});
+  final List<ChartPoint>? volatilityPoints;
+  final List<ChartPoint>? performancePoints;
+  final List<ChartLine>? comparisonLines;
+  final List<DateTime>? rebalanceDates;
+  final bool useFallbackMock;
+
+  const PortfolioCharts({
+    super.key,
+    required this.type,
+    this.volatilityPoints,
+    this.performancePoints,
+    this.comparisonLines,
+    this.rebalanceDates,
+    this.useFallbackMock = true,
+  });
 
   @override
   State<PortfolioCharts> createState() => _PortfolioChartsState();
 }
 
 class _PortfolioChartsState extends State<PortfolioCharts> {
-  int _topTab = 0; // 0=변동성/수익률, 1=포트폴리오 비교
+  int _topTab = 0; // 0=변동성/성과, 1=포트폴리오 비교
 
   @override
   Widget build(BuildContext context) {
@@ -131,7 +145,7 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
             child: Row(
               children: [
                 _ToggleTab(
-                  label: '변동성/수익률 추이',
+                  label: '변동성/성과 추이',
                   isActive: _topTab == 0,
                   onTap: () => setState(() => _topTab = 0),
                 ),
@@ -150,9 +164,19 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
             duration: const Duration(milliseconds: 250),
             child: _topTab == 0
                 ? _VolReturnView(
-                    key: const ValueKey('volret'), type: widget.type)
+                    key: const ValueKey('volret'),
+                    type: widget.type,
+                    volatilityPoints: widget.volatilityPoints,
+                    performancePoints: widget.performancePoints,
+                    useFallbackMock: widget.useFallbackMock,
+                  )
                 : _ComparisonView(
-                    key: const ValueKey('comp'), type: widget.type),
+                    key: const ValueKey('comp'),
+                    type: widget.type,
+                    comparisonLines: widget.comparisonLines,
+                    rebalanceDates: widget.rebalanceDates,
+                    useFallbackMock: widget.useFallbackMock,
+                  ),
           ),
         ),
       ],
@@ -193,11 +217,21 @@ class _ToggleTab extends StatelessWidget {
   }
 }
 
-// ── View 1: 변동성/수익률 추이 ──
+// ── View 1: 변동성/성과 추이 ──
 
 class _VolReturnView extends StatefulWidget {
   final InvestmentType type;
-  const _VolReturnView({super.key, required this.type});
+  final List<ChartPoint>? volatilityPoints;
+  final List<ChartPoint>? performancePoints;
+  final bool useFallbackMock;
+
+  const _VolReturnView({
+    super.key,
+    required this.type,
+    this.volatilityPoints,
+    this.performancePoints,
+    required this.useFallbackMock,
+  });
 
   @override
   State<_VolReturnView> createState() => _VolReturnViewState();
@@ -205,7 +239,7 @@ class _VolReturnView extends StatefulWidget {
 
 class _VolReturnViewState extends State<_VolReturnView>
     with SingleTickerProviderStateMixin {
-  int _subTab = 0; // 0=변동성, 1=기대수익률
+  int _subTab = 0; // 0=변동성, 1=성과
   int _range = 4; // index into _ranges
   int? _touchIndex;
   late AnimationController _drawCtrl;
@@ -229,12 +263,20 @@ class _VolReturnViewState extends State<_VolReturnView>
   }
 
   List<ChartPoint> get _points {
-    final all = _subTab == 0
-        ? _MockData.volatilityHistory(widget.type)
-        : _MockData.returnHistory(widget.type);
-    final cutoff =
-        DateTime.now().subtract(Duration(days: _rangeDays[_range]));
-    return all.where((p) => p.date.isAfter(cutoff)).toList();
+    final backendPoints =
+        _subTab == 0 ? widget.volatilityPoints : widget.performancePoints;
+    final all = backendPoints ??
+        (widget.useFallbackMock
+            ? (_subTab == 0
+                ? _MockData.volatilityHistory(widget.type)
+                : _MockData.returnHistory(widget.type))
+            : const <ChartPoint>[]);
+    if (all.isEmpty) {
+      return const <ChartPoint>[];
+    }
+    final cutoff = DateTime.now().subtract(Duration(days: _rangeDays[_range]));
+    final filtered = all.where((p) => p.date.isAfter(cutoff)).toList();
+    return filtered.isNotEmpty ? filtered : all;
   }
 
   @override
@@ -245,7 +287,7 @@ class _VolReturnViewState extends State<_VolReturnView>
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          // Sub-toggle: 변동성 / 기대수익률
+          // Sub-toggle: 변동성 / 성과
           Row(
             children: [
               _SubTab(
@@ -257,7 +299,7 @@ class _VolReturnViewState extends State<_VolReturnView>
                   }),
               const SizedBox(width: 8),
               _SubTab(
-                  label: '기대수익률',
+                  label: '성과',
                   active: _subTab == 1,
                   onTap: () {
                     setState(() => _subTab = 1);
@@ -275,9 +317,8 @@ class _VolReturnViewState extends State<_VolReturnView>
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: active
-                            ? WeRoboColors.primary
-                            : Colors.transparent,
+                        color:
+                            active ? WeRoboColors.primary : Colors.transparent,
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(
@@ -300,41 +341,47 @@ class _VolReturnViewState extends State<_VolReturnView>
 
           // Chart
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return GestureDetector(
-                  onPanUpdate: (d) {
-                    if (points.isEmpty) return;
-                    final x = d.localPosition.dx - 36;
-                    final chartW = constraints.maxWidth - 36;
-                    final idx = ((x / chartW) * (points.length - 1))
-                        .round()
-                        .clamp(0, points.length - 1);
-                    setState(() => _touchIndex = idx);
-                  },
-                  onPanEnd: (_) => setState(() => _touchIndex = null),
-                  onTapUp: (_) => setState(() => _touchIndex = null),
-                  child: AnimatedBuilder(
-                    animation: _drawCtrl,
-                    builder: (context, _) {
-                      return CustomPaint(
-                        size: Size(constraints.maxWidth,
-                            constraints.maxHeight),
-                        painter: _AreaChartPainter(
-                          points: points,
-                          progress: _drawCtrl.value,
-                          color: _subTab == 0
-                              ? WeRoboColors.primary
-                              : WeRoboColors.accent,
-                          touchIndex: _touchIndex,
-                          valueLabel: _subTab == 0 ? '변동성' : '수익률',
+            child: points.isEmpty
+                ? const _EmptyChartState(
+                    message: '아직 차트 데이터를 준비하는 중입니다.',
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      return GestureDetector(
+                        onPanUpdate: (d) {
+                          if (points.isEmpty) return;
+                          final x = d.localPosition.dx - 36;
+                          final chartW = constraints.maxWidth - 36;
+                          final idx = ((x / chartW) * (points.length - 1))
+                              .round()
+                              .clamp(0, points.length - 1);
+                          setState(() => _touchIndex = idx);
+                        },
+                        onPanEnd: (_) => setState(() => _touchIndex = null),
+                        onTapUp: (_) => setState(() => _touchIndex = null),
+                        child: AnimatedBuilder(
+                          animation: _drawCtrl,
+                          builder: (context, _) {
+                            return CustomPaint(
+                              size: Size(
+                                constraints.maxWidth,
+                                constraints.maxHeight,
+                              ),
+                              painter: _AreaChartPainter(
+                                points: points,
+                                progress: _drawCtrl.value,
+                                color: _subTab == 0
+                                    ? WeRoboColors.primary
+                                    : WeRoboColors.accent,
+                                touchIndex: _touchIndex,
+                                valueLabel: _subTab == 0 ? '변동성' : '성과',
+                              ),
+                            );
+                          },
                         ),
                       );
                     },
                   ),
-                );
-              },
-            ),
           ),
           const SizedBox(height: 4),
         ],
@@ -382,7 +429,17 @@ class _SubTab extends StatelessWidget {
 
 class _ComparisonView extends StatefulWidget {
   final InvestmentType type;
-  const _ComparisonView({super.key, required this.type});
+  final List<ChartLine>? comparisonLines;
+  final List<DateTime>? rebalanceDates;
+  final bool useFallbackMock;
+
+  const _ComparisonView({
+    super.key,
+    required this.type,
+    this.comparisonLines,
+    this.rebalanceDates,
+    required this.useFallbackMock,
+  });
 
   @override
   State<_ComparisonView> createState() => _ComparisonViewState();
@@ -410,7 +467,14 @@ class _ComparisonViewState extends State<_ComparisonView>
 
   @override
   Widget build(BuildContext context) {
-    final lines = _MockData.comparisonLines(widget.type);
+    final lines = widget.comparisonLines ??
+        (widget.useFallbackMock
+            ? _MockData.comparisonLines(widget.type)
+            : const <ChartLine>[]);
+    final rebalanceDates = widget.rebalanceDates ??
+        (widget.useFallbackMock
+            ? _MockData.rebalanceDates
+            : const <DateTime>[]);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -418,39 +482,45 @@ class _ComparisonViewState extends State<_ComparisonView>
         children: [
           // Chart
           Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return GestureDetector(
-                  onPanUpdate: (d) {
-                    if (lines.isEmpty || lines[0].points.isEmpty) return;
-                    final x = d.localPosition.dx - 36;
-                    final chartW = constraints.maxWidth - 36;
-                    final count = lines[0].points.length;
-                    final idx = ((x / chartW) * (count - 1))
-                        .round()
-                        .clamp(0, count - 1);
-                    setState(() => _touchIndex = idx);
-                  },
-                  onPanEnd: (_) => setState(() => _touchIndex = null),
-                  onTapUp: (_) => setState(() => _touchIndex = null),
-                  child: AnimatedBuilder(
-                    animation: _drawCtrl,
-                    builder: (context, _) {
-                      return CustomPaint(
-                        size: Size(constraints.maxWidth,
-                            constraints.maxHeight),
-                        painter: _MultiLineChartPainter(
-                          lines: lines,
-                          progress: _drawCtrl.value,
-                          rebalanceDates: _MockData.rebalanceDates,
-                          touchIndex: _touchIndex,
+            child: lines.isEmpty
+                ? const _EmptyChartState(
+                    message: '비교 백테스트 데이터가 아직 없습니다.',
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      return GestureDetector(
+                        onPanUpdate: (d) {
+                          if (lines.isEmpty || lines[0].points.isEmpty) return;
+                          final x = d.localPosition.dx - 36;
+                          final chartW = constraints.maxWidth - 36;
+                          final count = lines[0].points.length;
+                          final idx = ((x / chartW) * (count - 1))
+                              .round()
+                              .clamp(0, count - 1);
+                          setState(() => _touchIndex = idx);
+                        },
+                        onPanEnd: (_) => setState(() => _touchIndex = null),
+                        onTapUp: (_) => setState(() => _touchIndex = null),
+                        child: AnimatedBuilder(
+                          animation: _drawCtrl,
+                          builder: (context, _) {
+                            return CustomPaint(
+                              size: Size(
+                                constraints.maxWidth,
+                                constraints.maxHeight,
+                              ),
+                              painter: _MultiLineChartPainter(
+                                lines: lines,
+                                progress: _drawCtrl.value,
+                                rebalanceDates: rebalanceDates,
+                                touchIndex: _touchIndex,
+                              ),
+                            );
+                          },
                         ),
                       );
                     },
                   ),
-                );
-              },
-            ),
           ),
           const SizedBox(height: 8),
           // Legend
@@ -485,6 +555,23 @@ class _ComparisonViewState extends State<_ComparisonView>
           ),
           const SizedBox(height: 4),
         ],
+      ),
+    );
+  }
+}
+
+class _EmptyChartState extends StatelessWidget {
+  final String message;
+
+  const _EmptyChartState({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        message,
+        style: WeRoboTypography.bodySmall,
+        textAlign: TextAlign.center,
       ),
     );
   }
@@ -554,8 +641,7 @@ class _AreaChartPainter extends CustomPainter {
       colors: [color.withValues(alpha: 0.25), color.withValues(alpha: 0.0)],
     );
     final areaPaint = Paint()
-      ..shader = gradient
-          .createShader(Rect.fromLTWH(padL, 0, w, h));
+      ..shader = gradient.createShader(Rect.fromLTWH(padL, 0, w, h));
     canvas.drawPath(areaPath, areaPaint);
 
     // Line
@@ -580,26 +666,24 @@ class _AreaChartPainter extends CustomPainter {
       canvas.drawLine(Offset(tx, 0), Offset(tx, h), crossPaint);
 
       // Dot
-      canvas.drawCircle(
-          Offset(tx, ty), 5, Paint()..color = color);
-      canvas.drawCircle(
-          Offset(tx, ty), 3, Paint()..color = WeRoboColors.white);
+      canvas.drawCircle(Offset(tx, ty), 5, Paint()..color = color);
+      canvas.drawCircle(Offset(tx, ty), 3, Paint()..color = WeRoboColors.white);
 
       // Tooltip
       final date = points[ti].date;
       final dateStr =
           '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
       final valStr = '${(values[ti] * 100).toStringAsFixed(1)}%';
-      _drawTooltip(canvas, Offset(tx, ty - 28), '$dateStr\n$valueLabel: $valStr',
-          size.width);
+      _drawTooltip(canvas, Offset(tx, ty - 28),
+          '$dateStr\n$valueLabel: $valStr', size.width);
     }
 
     // X-axis date labels
     _drawDateLabels(canvas, size, padL, w, h, padB);
   }
 
-  void _drawGrid(Canvas canvas, Size size, double padL, double padB,
-      double h, double minY, double rangeY) {
+  void _drawGrid(Canvas canvas, Size size, double padL, double padB, double h,
+      double minY, double rangeY) {
     final gridPaint = Paint()
       ..color = WeRoboColors.lightGray.withValues(alpha: 0.3)
       ..strokeWidth = 0.5;
@@ -611,16 +695,15 @@ class _AreaChartPainter extends CustomPainter {
 
     for (int i = 0; i <= 4; i++) {
       final y = h - h * i / 4;
-      canvas.drawLine(
-          Offset(padL, y), Offset(size.width, y), gridPaint);
+      canvas.drawLine(Offset(padL, y), Offset(size.width, y), gridPaint);
       final val = minY + rangeY * i / 4;
-      _drawText(canvas, '${(val * 100).toStringAsFixed(1)}%',
-          Offset(0, y - 6), labelStyle);
+      _drawText(canvas, '${(val * 100).toStringAsFixed(1)}%', Offset(0, y - 6),
+          labelStyle);
     }
   }
 
-  void _drawDateLabels(Canvas canvas, Size size, double padL, double w,
-      double h, double padB) {
+  void _drawDateLabels(
+      Canvas canvas, Size size, double padL, double w, double h, double padB) {
     if (points.length < 2) return;
     final style = TextStyle(
       fontSize: 8,
@@ -630,15 +713,13 @@ class _AreaChartPainter extends CustomPainter {
     for (int i = 0; i < 5; i++) {
       final idx = (points.length - 1) * i ~/ 4;
       final d = points[idx].date;
-      final label =
-          '${d.year}-${d.month.toString().padLeft(2, '0')}';
+      final label = '${d.year}-${d.month.toString().padLeft(2, '0')}';
       final x = padL + w * idx / (points.length - 1);
       _drawText(canvas, label, Offset(x - 16, h + 4), style);
     }
   }
 
-  void _drawTooltip(
-      Canvas canvas, Offset pos, String text, double maxW) {
+  void _drawTooltip(Canvas canvas, Offset pos, String text, double maxW) {
     final style = TextStyle(
       fontSize: 10,
       color: WeRoboColors.textPrimary,
@@ -655,7 +736,7 @@ class _AreaChartPainter extends CustomPainter {
     final y = pos.dy - tp.height - 8;
 
     final rect = RRect.fromLTRBR(
-      x, y, x + tp.width + 16, y + tp.height + 8, const Radius.circular(6));
+        x, y, x + tp.width + 16, y + tp.height + 8, const Radius.circular(6));
     canvas.drawRRect(
         rect,
         Paint()
@@ -670,8 +751,7 @@ class _AreaChartPainter extends CustomPainter {
     tp.paint(canvas, Offset(x + 8, y + 4));
   }
 
-  void _drawText(
-      Canvas canvas, String text, Offset offset, TextStyle style) {
+  void _drawText(Canvas canvas, String text, Offset offset, TextStyle style) {
     final tp = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
@@ -730,16 +810,15 @@ class _MultiLineChartPainter extends CustomPainter {
       final y = h - h * i / 4;
       canvas.drawLine(Offset(padL, y), Offset(size.width, y), gridPaint);
       final val = minY + rangeY * i / 4;
-      _drawText(canvas, '${(val * 100).toStringAsFixed(1)}%',
-          Offset(0, y - 6), labelStyle);
+      _drawText(canvas, '${(val * 100).toStringAsFixed(1)}%', Offset(0, y - 6),
+          labelStyle);
     }
 
     // Rebalance vertical dashed lines
     if (lines.isNotEmpty && lines[0].points.length > 1) {
       final firstDate = lines[0].points.first.date;
       final lastDate = lines[0].points.last.date;
-      final totalDays =
-          lastDate.difference(firstDate).inDays.clamp(1, 99999);
+      final totalDays = lastDate.difference(firstDate).inDays.clamp(1, 99999);
 
       for (final rd in rebalanceDates) {
         final dayOff = rd.difference(firstDate).inDays;
@@ -760,8 +839,7 @@ class _MultiLineChartPainter extends CustomPainter {
     for (final line in lines) {
       final pts = line.points;
       final count = pts.length;
-      final drawCount =
-          (count * progress).ceil().clamp(0, count);
+      final drawCount = (count * progress).ceil().clamp(0, count);
       if (drawCount < 2) continue;
 
       final path = Path();
@@ -801,16 +879,19 @@ class _MultiLineChartPainter extends CustomPainter {
       final pts = lines[0].points;
       if (touchIndex! < pts.length) {
         final tx = padL + w * touchIndex! / (pts.length - 1);
-        canvas.drawLine(Offset(tx, 0), Offset(tx, h),
-            Paint()..color = WeRoboColors.lightGray..strokeWidth = 1);
+        canvas.drawLine(
+            Offset(tx, 0),
+            Offset(tx, h),
+            Paint()
+              ..color = WeRoboColors.lightGray
+              ..strokeWidth = 1);
 
         // Dots for each line
         for (final line in lines) {
           if (touchIndex! < line.points.length) {
             final val = line.points[touchIndex!].value;
             final ty = h - ((val - minY) / rangeY) * h;
-            canvas.drawCircle(
-                Offset(tx, ty), 4, Paint()..color = line.color);
+            canvas.drawCircle(Offset(tx, ty), 4, Paint()..color = line.color);
             canvas.drawCircle(
                 Offset(tx, ty), 2, Paint()..color = WeRoboColors.white);
           }
@@ -842,16 +923,14 @@ class _MultiLineChartPainter extends CustomPainter {
       for (int i = 0; i < 5; i++) {
         final idx = (pts.length - 1) * i ~/ 4;
         final d = pts[idx].date;
-        final label =
-            '${d.year}-${d.month.toString().padLeft(2, '0')}';
+        final label = '${d.year}-${d.month.toString().padLeft(2, '0')}';
         final x = padL + w * idx / (pts.length - 1);
         _drawText(canvas, label, Offset(x - 16, h + 4), dateStyle);
       }
     }
   }
 
-  void _drawTooltip(
-      Canvas canvas, Offset pos, String text, double maxW) {
+  void _drawTooltip(Canvas canvas, Offset pos, String text, double maxW) {
     final style = TextStyle(
       fontSize: 10,
       color: WeRoboColors.textPrimary,
@@ -866,11 +945,9 @@ class _MultiLineChartPainter extends CustomPainter {
     var x = pos.dx - tp.width / 2 - 8;
     x = x.clamp(0, maxW - tp.width - 16);
 
-    final rect = RRect.fromLTRBR(
-        x, pos.dy, x + tp.width + 16, pos.dy + tp.height + 8,
-        const Radius.circular(6));
-    canvas.drawRRect(
-        rect, Paint()..color = WeRoboColors.white);
+    final rect = RRect.fromLTRBR(x, pos.dy, x + tp.width + 16,
+        pos.dy + tp.height + 8, const Radius.circular(6));
+    canvas.drawRRect(rect, Paint()..color = WeRoboColors.white);
     canvas.drawRRect(
         rect,
         Paint()
@@ -880,8 +957,7 @@ class _MultiLineChartPainter extends CustomPainter {
     tp.paint(canvas, Offset(x + 8, pos.dy + 4));
   }
 
-  void _drawText(
-      Canvas canvas, String text, Offset offset, TextStyle style) {
+  void _drawText(Canvas canvas, String text, Offset offset, TextStyle style) {
     final tp = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
