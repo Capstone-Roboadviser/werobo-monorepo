@@ -1,12 +1,15 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
+import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import 'login_screen.dart';
 import 'widgets/vestor_pie_chart.dart';
 
-class PortfolioResultScreen extends StatelessWidget {
+class PortfolioResultScreen extends StatefulWidget {
   final MobileRecommendationResponse recommendation;
   final String selectedPortfolioCode;
 
@@ -17,9 +20,47 @@ class PortfolioResultScreen extends StatelessWidget {
   });
 
   @override
+  State<PortfolioResultScreen> createState() => _PortfolioResultScreenState();
+}
+
+class _PortfolioResultScreenState extends State<PortfolioResultScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _staggerCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _staggerCtrl = AnimationController(
+      duration: const Duration(milliseconds: 700),
+      vsync: this,
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _staggerCtrl.dispose();
+    super.dispose();
+  }
+
+  Widget _stagger(int index, Widget child) {
+    final start = (index * 0.1).clamp(0.0, 0.5);
+    final end = (start + 0.5).clamp(0.0, 1.0);
+    final fade = CurvedAnimation(
+      parent: _staggerCtrl,
+      curve: Interval(start, end, curve: Curves.easeOut),
+    );
+    final slide = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
+        .animate(fade);
+    return SlideTransition(
+      position: slide,
+      child: FadeTransition(opacity: fade, child: child),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final portfolio =
-        recommendation.portfolioByCodeOrRecommended(selectedPortfolioCode);
+    final portfolio = widget.recommendation
+        .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
     final categories = portfolio.toCategories();
 
     return Scaffold(
@@ -33,17 +74,26 @@ class PortfolioResultScreen extends StatelessWidget {
                 child: Column(
                   children: [
                     const SizedBox(height: 20),
-                    _ResultTypeCard(
-                      recommendation: recommendation,
-                      portfolio: portfolio,
+                    _stagger(
+                      0,
+                      _ResultTypeCard(
+                        recommendation: widget.recommendation,
+                        portfolio: portfolio,
+                      ),
                     ),
                     const SizedBox(height: 20),
                     Expanded(
-                      child: VestorPieChart(categories: categories),
+                      child: _stagger(
+                        1,
+                        VestorPieChart(categories: categories),
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    _BlurredTickerSection(
-                      holdings: portfolio.topTickerHoldings(),
+                    _stagger(
+                      2,
+                      _BlurredTickerSection(
+                        holdings: portfolio.topTickerHoldings(),
+                      ),
                     ),
                     const SizedBox(height: 16),
                   ],
@@ -52,23 +102,32 @@ class PortfolioResultScreen extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pushReplacement(
-                      PageRouteBuilder(
-                        pageBuilder: (_, __, ___) => LoginScreen(
-                          recommendation: recommendation,
-                          selectedPortfolioCode: portfolio.code,
-                        ),
-                        transitionsBuilder: (_, anim, __, child) =>
-                            FadeTransition(opacity: anim, child: child),
-                        transitionDuration: const Duration(milliseconds: 400),
+              child: Pressable(
+                onTap: () {
+                  Navigator.of(context).pushReplacement(
+                    PageRouteBuilder(
+                      pageBuilder: (_, __, ___) => LoginScreen(
+                        recommendation: widget.recommendation,
+                        selectedPortfolioCode: portfolio.code,
                       ),
-                    );
-                  },
-                  child: const Text('투자 시작하기'),
+                      transitionsBuilder: (_, anim, __, child) =>
+                          FadeTransition(opacity: anim, child: child),
+                      transitionDuration: const Duration(milliseconds: 400),
+                    ),
+                  );
+                },
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: WeRoboColors.primary,
+                      foregroundColor: WeRoboColors.white,
+                      disabledBackgroundColor: WeRoboColors.primary,
+                      disabledForegroundColor: WeRoboColors.white,
+                    ),
+                    child: const Text('투자 시작하기'),
+                  ),
                 ),
               ),
             ),
@@ -95,7 +154,7 @@ class _ResultTypeCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
       decoration: BoxDecoration(
         color: WeRoboColors.card,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,13 +217,13 @@ class _BlurredTickerSection extends StatelessWidget {
 
     return Container(
       width: double.infinity,
-      height: 120,
+      height: 140,
       decoration: BoxDecoration(
         color: WeRoboColors.card,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
         child: Stack(
           children: [
             Padding(
@@ -183,7 +242,7 @@ class _BlurredTickerSection extends StatelessWidget {
             ),
             Positioned.fill(
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
+                borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
                   child: Container(
@@ -192,13 +251,20 @@ class _BlurredTickerSection extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text('블러처리',
-                              style: WeRoboTypography.heading3
-                                  .copyWith(color: WeRoboColors.textPrimary)),
+                          Text(
+                            '블러처리',
+                            style: WeRoboTypography.bodySmall.copyWith(
+                              color: WeRoboColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           const SizedBox(height: 4),
-                          Text('(로그인/회원가입 후 자세히 공개)',
-                              style: WeRoboTypography.bodySmall
-                                  .copyWith(color: WeRoboColors.textSecondary)),
+                          Text(
+                            '(로그인/회원가입 후 자세히 공개)',
+                            style: WeRoboTypography.caption.copyWith(
+                              color: WeRoboColors.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                     ),
