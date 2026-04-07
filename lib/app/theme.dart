@@ -33,13 +33,13 @@ class WeRoboColors {
   static const Color textTertiary = silver;
 
   // Status
-  static const Color accent = Color(0xFF34D399);
+  static const Color accent = Color(0xFF059669);
   static const Color warning = Color(0xFFFBBF24);
   static const Color error = Color(0xFFEF4444);
 
   // Chart colors
   static const Color chartBlue = sky4;
-  static const Color chartGreen = Color(0xFF34D399);
+  static const Color chartGreen = Color(0xFF059669);
   static const Color chartYellow = Color(0xFFFBBF24);
   static const Color chartPurple = Color(0xFF8B5CF6);
 
