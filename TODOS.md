@@ -20,3 +20,11 @@ Each requires OAuth app registration and platform-specific setup (iOS entitlemen
 **Cons:** Adds ~200KB to the app bundle.
 **Context:** The font family is declared in `lib/app/theme.dart:73` as `static const String number = 'GoogleSansFlex'` and used in `WeRoboTypography.number`. Download from Google Fonts or extract from the Figma file.
 **Depends on:** Nothing. Can be done independently.
+
+## Accessibility: Semantics Widgets
+**What:** Add `Semantics` widgets to all interactive elements and data displays for screen reader support.
+**Why:** The app has zero screen reader support. Charts, buttons, navigation items, and data displays are invisible to VoiceOver/TalkBack.
+**Pros:** Makes the app usable for visually impaired users. Shows accessibility awareness to capstone evaluators.
+**Cons:** Requires touching most widget files. ~30 Semantics additions across the codebase.
+**Context:** Priority areas: (1) bottom nav items need `Semantics(label: '홈 탭')`, (2) chart widgets need `Semantics(label: '포트폴리오 비중 차트, 미국 가치주 20%...')`, (3) efficient frontier dot needs `Semantics(label: '위험도 조절 슬라이더')` with `onIncrease`/`onDecrease` for accessibility. CLAUDE.md already specifies 44px min touch targets and Semantics usage.
+**Depends on:** Nothing. Can be done independently.

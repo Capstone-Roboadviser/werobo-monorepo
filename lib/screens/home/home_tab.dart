@@ -16,6 +16,7 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab>
     with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
+  bool _showWelcome = true;
 
   @override
   void initState() {
@@ -79,8 +80,16 @@ class _HomeTabState extends State<HomeTab>
           children: [
             const SizedBox(height: 24),
 
+            // Welcome banner (first visit only)
+            if (_showWelcome)
+              _stagger(0, _WelcomeBanner(
+                type: type,
+                onDismiss: () => setState(() => _showWelcome = false),
+              )),
+            if (_showWelcome) const SizedBox(height: 16),
+
             // Hero: asset value
-            _stagger(0, _AssetHero()),
+            _stagger(_showWelcome ? 1 : 0, _AssetHero()),
             const SizedBox(height: 28),
 
             // Quick stats
@@ -162,6 +171,64 @@ class _HomeTabState extends State<HomeTab>
   }
 }
 
+/// Welcome banner shown on first visit after onboarding
+class _WelcomeBanner extends StatelessWidget {
+  final InvestmentType type;
+  final VoidCallback onDismiss;
+
+  const _WelcomeBanner({required this.type, required this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            WeRoboColors.primary,
+            WeRoboColors.primary.withValues(alpha: 0.85),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${type.label} 포트폴리오가 설정되었습니다!',
+                  style: WeRoboTypography.bodySmall.copyWith(
+                    color: WeRoboColors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '투자 여정을 시작해 보세요',
+                  style: WeRoboTypography.caption.copyWith(
+                    color: WeRoboColors.white.withValues(alpha: 0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: onDismiss,
+            child: Icon(
+              Icons.close_rounded,
+              size: 18,
+              color: WeRoboColors.white.withValues(alpha: 0.7),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Hero section — large asset number with animated count-up
 class _AssetHero extends StatelessWidget {
   @override
@@ -196,21 +263,42 @@ class _AssetHero extends StatelessWidget {
             );
           },
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: WeRoboColors.accent.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(8),
           ),
-          child: Text(
-            '+3.2% 지난 달 대비',
-            style: TextStyle(
-              fontFamily: WeRoboFonts.english,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: WeRoboColors.accent,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.trending_up_rounded,
+                size: 18,
+                color: WeRoboColors.accent,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '+3.2%',
+                style: TextStyle(
+                  fontFamily: WeRoboFonts.english,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  color: WeRoboColors.accent,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text(
+                '지난 달 대비',
+                style: TextStyle(
+                  fontFamily: WeRoboFonts.body,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
+                  color: WeRoboColors.textSecondary,
+                ),
+              ),
+            ],
           ),
         ),
       ],
