@@ -91,6 +91,8 @@ class RepresentativeCombinationContext:
 
 class PortfolioSimulationService:
     SHORT_HISTORY_DISPLAY_ROWS = MINIMUM_HISTORY_ROWS * 3
+    FIXED_TOTAL_WEIGHTING_MODE = "equal_weight_fixed_total_5pct"
+    FIXED_TOTAL_WEIGHT = 0.05
 
     def __init__(self, return_model: ExpectedReturnModel | None = None) -> None:
         self.mapping_service = ProfileMappingService()
@@ -1009,7 +1011,7 @@ class PortfolioSimulationService:
         use_asset_min_weights: bool,
     ):
         asset_codes = list(stock_returns.columns)
-        self._validate_stock_weight_floor_feasibility(
+        lower_bounds, upper_bounds = self._build_stock_weight_bounds(
             stock_codes=asset_codes,
             selected_candidates=selected_candidates,
             assets=assets,
@@ -1033,48 +1035,68 @@ class PortfolioSimulationService:
 
         return self.constraint_engine.build_for_codes(
             asset_codes,
-            lower_bounds=np.full(len(asset_codes), float(STOCK_MIN_WEIGHT), dtype=float),
-            upper_bounds=np.full(len(asset_codes), float(STOCK_MAX_WEIGHT), dtype=float),
+            lower_bounds=lower_bounds,
+            upper_bounds=upper_bounds,
             extra_constraints=extra_constraints,
         )
 
-    def _validate_stock_weight_floor_feasibility(
+    def _build_stock_weight_bounds(
         self,
         *,
         stock_codes: list[str],
         selected_candidates: dict[str, PortfolioComponentCandidate],
         assets: list[AssetClass],
-    ) -> None:
+    ) -> tuple[np.ndarray, np.ndarray]:
         if not stock_codes:
-            return
-
-        minimum_total_weight = len(stock_codes) * float(STOCK_MIN_WEIGHT)
-        if minimum_total_weight > 1 + 1e-9:
-            raise RuntimeError(
-                "선택된 종목 수가 너무 많아 모든 종목에 최소 1%를 줄 수 없습니다. "
-                f"현재 종목 수 {len(stock_codes)}개, 필요한 최소 비중 합 {minimum_total_weight:.2%}입니다."
+            return (
+                np.array([], dtype=float),
+                np.array([], dtype=float),
             )
 
+        lower_bounds = np.full(len(stock_codes), float(STOCK_MIN_WEIGHT), dtype=float)
+        upper_bounds = np.full(len(stock_codes), float(STOCK_MAX_WEIGHT), dtype=float)
         asset_by_code = {asset.code: asset for asset in assets}
+        stock_index = {code.upper(): index for index, code in enumerate(stock_codes)}
         stock_code_set = {code.upper() for code in stock_codes}
         for asset_code, candidate in selected_candidates.items():
-            asset = asset_by_code.get(asset_code)
-            if asset is None:
-                continue
-            member_count = sum(
-                1
+            member_indices = [
+                stock_index[ticker.upper()]
                 for ticker in candidate.member_tickers
                 if ticker.upper() in stock_code_set
-            )
+            ]
+            member_count = len(member_indices)
             if member_count == 0:
                 continue
+
+            if candidate.weighting_mode == self.FIXED_TOTAL_WEIGHTING_MODE:
+                fixed_stock_weight = float(self.FIXED_TOTAL_WEIGHT) / float(member_count)
+                if fixed_stock_weight > float(STOCK_MAX_WEIGHT) + 1e-9:
+                    raise RuntimeError(
+                        f"{candidate.asset_name} 자산군은 종목 {member_count}개를 동일비중으로 나누면 "
+                        f"종목당 {fixed_stock_weight:.2%}가 되어 종목 최대 비중 {float(STOCK_MAX_WEIGHT):.2%}를 초과합니다."
+                    )
+                for index in member_indices:
+                    lower_bounds[index] = fixed_stock_weight
+                    upper_bounds[index] = fixed_stock_weight
+                continue
+
+            asset = asset_by_code.get(asset_code)
             minimum_sector_weight = member_count * float(STOCK_MIN_WEIGHT)
-            if minimum_sector_weight > float(asset.max_weight) + 1e-9:
+            asset_max_weight = float(asset.max_weight) if asset is not None else 1.0
+            if minimum_sector_weight > asset_max_weight + 1e-9:
                 raise RuntimeError(
-                    f"{asset.name} 자산군은 현재 후보 {member_count}개라 최소 비중만 합쳐도 "
-                    f"{minimum_sector_weight:.2%}인데, 자산군 최대 비중은 {float(asset.max_weight):.2%}입니다. "
+                    f"{candidate.asset_name} 자산군은 현재 후보 {member_count}개라 최소 비중만 합쳐도 "
+                    f"{minimum_sector_weight:.2%}인데, 자산군 최대 비중은 {asset_max_weight:.2%}입니다. "
                     "후보 종목 수를 줄이거나 자산군 최대 비중을 조정해주세요."
                 )
+
+        minimum_total_weight = float(lower_bounds.sum())
+        if minimum_total_weight > 1 + 1e-9:
+            raise RuntimeError(
+                "선택된 종목 수와 고정 비중 role 때문에 전체 최소 비중 합이 100%를 초과합니다. "
+                f"현재 필요한 최소 비중 합 {minimum_total_weight:.2%}입니다."
+            )
+        return lower_bounds, upper_bounds
 
     def _build_sector_weight_constraints(
         self,
@@ -1098,6 +1120,9 @@ class PortfolioSimulationService:
                 dtype=int,
             )
             if indices.size == 0:
+                continue
+
+            if candidate.weighting_mode == self.FIXED_TOTAL_WEIGHTING_MODE:
                 continue
 
             asset = asset_by_code.get(asset_code)
