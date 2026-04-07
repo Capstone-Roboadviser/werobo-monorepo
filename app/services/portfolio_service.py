@@ -562,13 +562,7 @@ class PortfolioSimulationService:
 
     def _prepare_context(self, user_profile: UserProfile) -> EngineContext:
         if user_profile.data_source == SimulationDataSource.MANAGED_UNIVERSE:
-            managed_context = self._prepare_managed_universe_context(allow_fallback=True)
-            if managed_context is not None:
-                return managed_context
-            return self._prepare_demo_stock_universe_context(
-                source=SimulationDataSource.STOCK_COMBINATION_DEMO,
-                label="관리자 유니버스 미설정 - 데모 종목 사용",
-            )
+            return self._prepare_managed_universe_context()
         if user_profile.data_source == SimulationDataSource.STOCK_COMBINATION_DEMO:
             return self._prepare_demo_stock_universe_context()
         return self._prepare_assumption_context()
@@ -622,10 +616,12 @@ class PortfolioSimulationService:
             data_source_label="자산군 가정값",
         )
 
-    def _prepare_managed_universe_context(self, allow_fallback: bool = False) -> EngineContext | None:
+    def _prepare_managed_universe_context(self) -> EngineContext:
         active_version = self.managed_universe_service.get_active_version()
         if active_version is None:
-            return None if allow_fallback else None
+            raise RuntimeError(
+                "활성 관리자 유니버스가 없습니다. /admin 에서 유니버스 버전을 active로 전환한 뒤 다시 시도해주세요."
+            )
 
         assets = self.list_assets(version_id=active_version.version_id)
         instruments = self.managed_universe_service.get_active_instruments()
