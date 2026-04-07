@@ -1,106 +1,9 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
+import '../../../models/chart_data.dart';
 import '../../../models/portfolio_data.dart';
-
-// ── Data models matching API response shapes ──
-
-class ChartPoint {
-  final DateTime date;
-  final double value;
-  const ChartPoint({required this.date, required this.value});
-}
-
-class ChartLine {
-  final String key;
-  final String label;
-  final Color color;
-  final bool dashed;
-  final List<ChartPoint> points;
-  const ChartLine({
-    required this.key,
-    required this.label,
-    required this.color,
-    this.dashed = false,
-    required this.points,
-  });
-}
-
-// ── Mock data generators (replace with real API calls later) ──
-
-class _MockData {
-  static List<ChartPoint> _generate(
-      Random rng, int days, double start, double drift, double vol) {
-    final pts = <ChartPoint>[];
-    double val = start;
-    final baseDate = DateTime(2025, 12, 8);
-    for (int i = 0; i < days; i++) {
-      val += drift / days + (rng.nextDouble() - 0.5) * vol;
-      pts.add(ChartPoint(
-        date: baseDate.add(Duration(days: i)),
-        value: val,
-      ));
-    }
-    return pts;
-  }
-
-  static List<ChartPoint> volatilityHistory(InvestmentType type) {
-    final base = type == InvestmentType.safe
-        ? 0.08
-        : type == InvestmentType.balanced
-            ? 0.12
-            : 0.16;
-    final rng = Random(type.index * 7 + 1);
-    return _generate(rng, 120, base, -0.01, 0.008);
-  }
-
-  static List<ChartPoint> returnHistory(InvestmentType type) {
-    final base = type == InvestmentType.safe
-        ? 0.05
-        : type == InvestmentType.balanced
-            ? 0.08
-            : 0.11;
-    final rng = Random(type.index * 13 + 3);
-    return _generate(rng, 120, base, 0.02, 0.006);
-  }
-
-  static List<ChartLine> comparisonLines(InvestmentType type) {
-    final rng = Random(type.index * 5 + 10);
-    final label = type.label;
-    return [
-      ChartLine(
-        key: type.name,
-        label: label,
-        color: WeRoboColors.primary,
-        points: _generate(rng, 120, 0, 0.06, 0.012),
-      ),
-      ChartLine(
-        key: '${type.name}_expected',
-        label: '$label 기대수익',
-        color: WeRoboColors.primary,
-        dashed: true,
-        points: _generate(Random(99), 120, 0, 0.09, 0.002),
-      ),
-      ChartLine(
-        key: 'sp500',
-        label: 'S&P 500',
-        color: const Color(0xFFEF4444),
-        points: _generate(Random(42), 120, 0, -0.02, 0.018),
-      ),
-      ChartLine(
-        key: 'treasury',
-        label: '10년 국채',
-        color: const Color(0xFF78716C),
-        points: _generate(Random(77), 120, 0, 0.015, 0.005),
-      ),
-    ];
-  }
-
-  static List<DateTime> rebalanceDates = [
-    DateTime(2025, 12, 31),
-    DateTime(2026, 3, 31),
-  ];
-}
+import '../../../services/mock_chart_data.dart';
 
 // ── Main chart widget ──
 
@@ -230,8 +133,8 @@ class _VolReturnViewState extends State<_VolReturnView>
 
   List<ChartPoint> get _points {
     final all = _subTab == 0
-        ? _MockData.volatilityHistory(widget.type)
-        : _MockData.returnHistory(widget.type);
+        ? MockChartData.volatilityHistory(widget.type)
+        : MockChartData.returnHistory(widget.type);
     final cutoff =
         DateTime.now().subtract(Duration(days: _rangeDays[_range]));
     return all.where((p) => p.date.isAfter(cutoff)).toList();
@@ -432,7 +335,7 @@ class _ComparisonViewState extends State<_ComparisonView>
 
   @override
   Widget build(BuildContext context) {
-    final lines = _MockData.comparisonLines(widget.type);
+    final lines = MockChartData.comparisonLines(widget.type);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -464,7 +367,7 @@ class _ComparisonViewState extends State<_ComparisonView>
                         painter: _MultiLineChartPainter(
                           lines: lines,
                           progress: _drawCtrl.value,
-                          rebalanceDates: _MockData.rebalanceDates,
+                          rebalanceDates: MockChartData.rebalanceDates,
                           touchIndex: _touchIndex,
                         ),
                       );
