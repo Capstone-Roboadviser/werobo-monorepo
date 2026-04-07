@@ -442,6 +442,48 @@ class MobileVolatilityHistoryResponse {
   }
 }
 
+class MobileReturnPoint {
+  final DateTime date;
+  final double expectedReturn;
+
+  const MobileReturnPoint({
+    required this.date,
+    required this.expectedReturn,
+  });
+
+  factory MobileReturnPoint.fromJson(Map<String, dynamic> json) {
+    return MobileReturnPoint(
+      date: _parseDate(json['date']),
+      expectedReturn: _asDouble(json['expected_return']),
+    );
+  }
+}
+
+class MobileReturnHistoryResponse {
+  final DateTime earliestDataDate;
+  final DateTime latestDataDate;
+  final List<MobileReturnPoint> points;
+
+  const MobileReturnHistoryResponse({
+    required this.earliestDataDate,
+    required this.latestDataDate,
+    required this.points,
+  });
+
+  factory MobileReturnHistoryResponse.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return MobileReturnHistoryResponse(
+      earliestDataDate: _parseDate(json['earliest_data_date']),
+      latestDataDate: _parseDate(json['latest_data_date']),
+      points: (json['points'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileReturnPoint.fromJson)
+          .toList(),
+    );
+  }
+}
+
 class MobileComparisonLinePoint {
   final DateTime date;
   final double returnPct;

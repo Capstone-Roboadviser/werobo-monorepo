@@ -10,6 +10,18 @@ enum InvestmentType {
   final String description;
   const InvestmentType(this.label, this.description);
 
+  /// API-side risk profile code.
+  String get riskCode {
+    switch (this) {
+      case InvestmentType.safe:
+        return 'conservative';
+      case InvestmentType.balanced:
+        return 'balanced';
+      case InvestmentType.growth:
+        return 'growth';
+    }
+  }
+
   static InvestmentType fromDotT(double dotT) {
     if (dotT < 0.33) return InvestmentType.safe;
     if (dotT < 0.66) return InvestmentType.balanced;

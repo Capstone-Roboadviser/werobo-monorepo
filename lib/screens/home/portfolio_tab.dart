@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
-import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
-import '../../models/rebalance_data.dart';
 import '../../services/mobile_backend_api.dart';
 import '../onboarding/widgets/portfolio_charts.dart';
 import '../onboarding/widgets/vestor_pie_chart.dart';
@@ -19,65 +17,87 @@ class PortfolioTab extends StatefulWidget {
 class _PortfolioTabState extends State<PortfolioTab> {
   int _viewTab = 0; // 0 = 비중, 1 = 성과 추이
   int? _selectedSector;
-  int? _expandedEvent;
 
-  bool _isLoadingCharts = true;
-  String? _chartError;
-  List<ChartLine>? _comparisonLines;
-  List<DateTime>? _rebalanceDates;
+  // Card 2 API data (volatility-history + return-history)
+  bool _isLoadingHistory = false;
+  InvestmentType? _loadedHistoryType;
+  List<ChartPoint>? _volatilityPoints;
+  List<ChartPoint>? _performancePoints;
 
   @override
-  void initState() {
-    super.initState();
-    _loadChartData();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final type = PortfolioStateProvider.of(context).type;
+    if (_loadedHistoryType != type) {
+      _fetchHistoryForType(type);
+    }
   }
 
-  Future<void> _loadChartData() async {
+  Future<void> _fetchHistoryForType(InvestmentType type) async {
+    if (_isLoadingHistory) return;
     setState(() {
-      _isLoadingCharts = true;
-      _chartError = null;
+      _isLoadingHistory = true;
+      _loadedHistoryType = type;
     });
 
-    try {
-      final backtest =
-          await MobileBackendApi.instance.fetchComparisonBacktest();
-      if (!mounted) return;
+    final state = PortfolioStateProvider.of(context);
+    final rec = state.recommendation;
+    final portfolio = rec?.portfolioByCode(type.riskCode);
+    final horizon =
+        rec?.resolvedProfile.investmentHorizon ?? 'medium';
 
-      setState(() {
-        _isLoadingCharts = false;
-        _rebalanceDates = backtest.rebalanceDates;
-        _comparisonLines = backtest.lines
-            .map((line) => ChartLine(
-                  key: line.key,
-                  label: line.label,
-                  color: parseBackendHexColor(line.color),
-                  dashed: line.style != 'solid',
-                  points: line.points
-                      .map((p) => ChartPoint(date: p.date, value: p.returnPct))
-                      .toList(),
-                ))
-            .toList();
-      });
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _isLoadingCharts = false;
-        _chartError = error is MobileBackendException
-            ? error.message
-            : '차트 데이터를 불러오지 못했어요.';
-      });
-    }
+    List<ChartPoint>? volPoints;
+    List<ChartPoint>? retPoints;
+
+    try {
+      final volResponse = await MobileBackendApi.instance
+          .fetchVolatilityHistory(
+        riskProfile: portfolio?.code ?? type.riskCode,
+        investmentHorizon: horizon,
+      );
+      volPoints = volResponse.points
+          .map((p) => ChartPoint(
+                date: p.date,
+                value: p.volatility,
+              ))
+          .toList();
+    } catch (_) {}
+
+    try {
+      final retResponse = await MobileBackendApi.instance
+          .fetchReturnHistory(
+        riskProfile: portfolio?.code ?? type.riskCode,
+        investmentHorizon: horizon,
+      );
+      retPoints = retResponse.points
+          .map((p) => ChartPoint(
+                date: p.date,
+                value: p.expectedReturn,
+              ))
+          .toList();
+    } catch (_) {}
+
+    if (!mounted) return;
+    setState(() {
+      _isLoadingHistory = false;
+      _volatilityPoints = volPoints;
+      _performancePoints = retPoints;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final type = PortfolioStateProvider.of(context).type;
-    final categories = PortfolioData.categoriesFor(type);
-    final details = PortfolioData.detailsFor(type);
-    final rebalanceEvents = MockRebalanceData.eventsFor(type);
-
-    final lines = _comparisonLines;
+    final portfolioState = PortfolioStateProvider.of(context);
+    final type = portfolioState.type;
+    final categories = portfolioState.categories;
+    final details = portfolioState.categoryDetails;
+    final lines = portfolioState.comparisonLines;
+    final rebalanceDates = portfolioState.rebalanceDates;
+    final pastDates = rebalanceDates
+        .where((d) => d.isBefore(DateTime.now()))
+        .toList()
+      ..sort((a, b) => b.compareTo(a));
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -87,7 +107,19 @@ class _PortfolioTabState extends State<PortfolioTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 20),
-            Text('내 포트폴리오', style: WeRoboTypography.heading2.themed(context)),
+            Text('내 포트폴리오',
+                style: WeRoboTypography.heading2.themed(context)),
+            const SizedBox(height: 12),
+
+            // Portfolio type selector
+            _PortfolioTypeSelector(
+              currentType: type,
+              onTypeChanged: (t) {
+                PortfolioStateProvider.of(context).setType(t);
+                setState(() => _selectedSector = null);
+                _fetchHistoryForType(t);
+              },
+            ),
             const SizedBox(height: 16),
 
             // View toggle
@@ -116,10 +148,10 @@ class _PortfolioTabState extends State<PortfolioTab> {
 
             // Content
             AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
+              duration: const Duration(milliseconds: 300),
               child: _viewTab == 0
                   ? _AllocationView(
-                      key: const ValueKey('alloc'),
+                      key: ValueKey('alloc_${type.name}'),
                       categories: categories,
                       details: details,
                       selectedSector: _selectedSector,
@@ -127,34 +159,29 @@ class _PortfolioTabState extends State<PortfolioTab> {
                           setState(() => _selectedSector = idx),
                     )
                   : _TrendView(
-                      key: const ValueKey('trend'),
+                      key: ValueKey('trend_${type.name}'),
                       type: type,
-                      isLoading: _isLoadingCharts,
-                      chartError: _chartError,
+                      volatilityPoints: _volatilityPoints,
+                      performancePoints: _performancePoints,
                       comparisonLines: lines,
-                      rebalanceDates: _rebalanceDates,
-                      onRetry: _loadChartData,
+                      rebalanceDates: rebalanceDates,
+                      isLoading: _isLoadingHistory,
                     ),
             ),
             const SizedBox(height: 28),
 
             // Next rebalance card
-            _NextRebalanceCard(),
+            _NextRebalanceCard(rebalanceDates: rebalanceDates),
             const SizedBox(height: 20),
 
-            // Rebalancing history
-            Text('리밸런싱 기록', style: WeRoboTypography.heading3.themed(context)),
-            const SizedBox(height: 12),
-            ...rebalanceEvents.asMap().entries.map((entry) {
-              final i = entry.key;
-              final event = entry.value;
-              return _RebalanceEventCard(
-                event: event,
-                isExpanded: _expandedEvent == i,
-                onTap: () => setState(
-                    () => _expandedEvent = _expandedEvent == i ? null : i),
-              );
-            }),
+            // Rebalancing history from API
+            if (pastDates.isNotEmpty) ...[
+              Text('리밸런싱 기록',
+                  style: WeRoboTypography.heading3.themed(context)),
+              const SizedBox(height: 12),
+              ...pastDates
+                  .map((date) => _RebalanceDateCard(date: date)),
+            ],
             const SizedBox(height: 32),
           ],
         ),
@@ -186,7 +213,9 @@ class _ToggleChip extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isActive ? WeRoboColors.primary : Colors.transparent,
+            color: isActive
+                ? WeRoboColors.primary
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
@@ -194,7 +223,9 @@ class _ToggleChip extends StatelessWidget {
             textAlign: TextAlign.center,
             style: WeRoboTypography.caption.copyWith(
               fontWeight: FontWeight.w600,
-              color: isActive ? WeRoboColors.white : tc.textTertiary,
+              color: isActive
+                  ? WeRoboColors.white
+                  : tc.textTertiary,
             ),
           ),
         ),
@@ -222,6 +253,17 @@ class _AllocationView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    if (categories.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 60),
+        child: Center(
+          child: Text(
+            '포트폴리오 데이터를 불러오는 중...',
+            style: WeRoboTypography.bodySmall.themed(context),
+          ),
+        ),
+      );
+    }
     return Column(
       children: [
         Center(
@@ -258,15 +300,20 @@ class _AllocationView extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
                         Text(d.category.name,
                             style: WeRoboTypography.bodySmall
-                                .copyWith(color: tc.textPrimary)),
+                                .copyWith(
+                                    color: tc.textPrimary)),
                         if (d.tickers.isNotEmpty)
                           Text(
-                            d.tickers.map((t) => t.symbol).join(', '),
-                            style: WeRoboTypography.caption.themed(context),
+                            d.tickers
+                                .map((t) => t.symbol)
+                                .join(', '),
+                            style: WeRoboTypography.caption
+                                .themed(context),
                           ),
                       ],
                     ),
@@ -287,11 +334,13 @@ class _AllocationView extends StatelessWidget {
 
   Widget _buildCenter(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    if (selectedSector == null || selectedSector! >= details.length) {
+    if (selectedSector == null ||
+        selectedSector! >= details.length) {
       return Text(
         key: const ValueKey('default'),
         '포트폴리오\n비중',
-        style: WeRoboTypography.heading3.copyWith(color: tc.textPrimary),
+        style: WeRoboTypography.heading3
+            .copyWith(color: tc.textPrimary),
         textAlign: TextAlign.center,
       );
     }
@@ -310,11 +359,13 @@ class _AllocationView extends StatelessWidget {
         ),
         Text(
           '${detail.category.percentage.toInt()}%',
-          style: WeRoboTypography.number.copyWith(color: tc.textPrimary),
+          style: WeRoboTypography.number
+              .copyWith(color: tc.textPrimary),
         ),
         const SizedBox(height: 4),
         ...detail.tickers.take(3).map((t) => Text(
-              '${t.symbol} ${t.percentage.toStringAsFixed(1)}%',
+              '${t.symbol} '
+              '${t.percentage.toStringAsFixed(1)}%',
               style: TextStyle(
                 fontFamily: WeRoboFonts.english,
                 fontSize: 10,
@@ -328,33 +379,38 @@ class _AllocationView extends StatelessWidget {
   }
 }
 
-// ── Trend view (line chart with benchmarks) ──
+// ── Trend view (card 2 + card 7 API data) ──
 
 class _TrendView extends StatelessWidget {
   final InvestmentType type;
+  final List<ChartPoint>? volatilityPoints;
+  final List<ChartPoint>? performancePoints;
+  final List<ChartLine> comparisonLines;
+  final List<DateTime> rebalanceDates;
   final bool isLoading;
-  final String? chartError;
-  final List<ChartLine>? comparisonLines;
-  final List<DateTime>? rebalanceDates;
-  final VoidCallback onRetry;
 
   const _TrendView({
     super.key,
     required this.type,
-    required this.isLoading,
-    this.chartError,
-    this.comparisonLines,
-    this.rebalanceDates,
-    required this.onRetry,
+    this.volatilityPoints,
+    this.performancePoints,
+    required this.comparisonLines,
+    required this.rebalanceDates,
+    this.isLoading = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
+    if (isLoading &&
+        volatilityPoints == null &&
+        performancePoints == null &&
+        comparisonLines.isEmpty) {
       return const SizedBox(
         height: 400,
         child: Center(
-          child: CircularProgressIndicator(color: WeRoboColors.primary),
+          child: CircularProgressIndicator(
+            color: WeRoboColors.primary,
+          ),
         ),
       );
     }
@@ -363,20 +419,41 @@ class _TrendView extends StatelessWidget {
       height: 400,
       child: PortfolioCharts(
         type: type,
-        comparisonLines: comparisonLines,
-        rebalanceDates: rebalanceDates,
-        useFallbackMock: true,
+        volatilityPoints: volatilityPoints,
+        performancePoints: performancePoints,
+        comparisonLines:
+            comparisonLines.isNotEmpty ? comparisonLines : null,
+        rebalanceDates:
+            rebalanceDates.isNotEmpty ? rebalanceDates : null,
+        useFallbackMock: false,
       ),
     );
   }
 }
 
-// ── Next rebalance card ──
+// ── Next rebalance card (derived from API dates) ──
 
 class _NextRebalanceCard extends StatelessWidget {
+  final List<DateTime> rebalanceDates;
+
+  const _NextRebalanceCard({required this.rebalanceDates});
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final now = DateTime.now();
+    final futureDates = rebalanceDates
+        .where((d) => d.isAfter(now))
+        .toList()
+      ..sort();
+    if (futureDates.isEmpty) return const SizedBox.shrink();
+
+    final next = futureDates.first;
+    final daysLeft = next.difference(now).inDays;
+    final dateStr =
+        '${next.year}-${next.month.toString().padLeft(2, '0')}'
+        '-${next.day.toString().padLeft(2, '0')}';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -390,7 +467,8 @@ class _NextRebalanceCard extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: WeRoboColors.primary.withValues(alpha: 0.15),
+              color:
+                  WeRoboColors.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(10),
             ),
             child: const Icon(Icons.event_rounded,
@@ -404,7 +482,7 @@ class _NextRebalanceCard extends StatelessWidget {
                 Text('다음 리밸런싱',
                     style: WeRoboTypography.caption
                         .copyWith(color: WeRoboColors.primary)),
-                Text('2026-07-01',
+                Text(dateStr,
                     style: WeRoboTypography.bodySmall.copyWith(
                         color: tc.textPrimary,
                         fontWeight: FontWeight.w600,
@@ -413,14 +491,17 @@ class _NextRebalanceCard extends StatelessWidget {
             ),
           ),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: WeRoboColors.primary.withValues(alpha: 0.15),
+              color:
+                  WeRoboColors.primary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Text('87일',
+            child: Text('$daysLeft일',
                 style: WeRoboTypography.caption.copyWith(
-                    color: WeRoboColors.primary, fontWeight: FontWeight.w600)),
+                    color: WeRoboColors.primary,
+                    fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -428,217 +509,112 @@ class _NextRebalanceCard extends StatelessWidget {
   }
 }
 
-// ── Rebalance event card ──
+// ── Rebalance date card (from API backtest data) ──
 
-class _RebalanceEventCard extends StatelessWidget {
-  final RebalanceEvent event;
-  final bool isExpanded;
-  final VoidCallback onTap;
+class _RebalanceDateCard extends StatelessWidget {
+  final DateTime date;
 
-  const _RebalanceEventCard({
-    required this.event,
-    required this.isExpanded,
-    required this.onTap,
-  });
+  const _RebalanceDateCard({required this.date});
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final dateStr =
-        '${event.date.year}-${event.date.month.toString().padLeft(2, '0')}-${event.date.day.toString().padLeft(2, '0')}';
+        '${date.year}-${date.month.toString().padLeft(2, '0')}'
+        '-${date.day.toString().padLeft(2, '0')}';
 
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: tc.card,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          children: [
-            // Header row (always visible)
-            Row(
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tc.card,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: tc.accent.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.check_rounded,
+                size: 20, color: tc.accent),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: tc.accent.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(Icons.check_rounded, size: 20, color: tc.accent),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(dateStr,
-                          style: WeRoboTypography.bodySmall.copyWith(
-                              color: tc.textPrimary,
-                              fontWeight: FontWeight.w500,
-                              fontFamily: WeRoboFonts.english)),
-                      Text(event.status,
-                          style: WeRoboTypography.caption.themed(context)),
-                    ],
-                  ),
-                ),
-                Icon(
-                  isExpanded
-                      ? Icons.expand_less_rounded
-                      : Icons.expand_more_rounded,
-                  size: 20,
-                  color: tc.textTertiary,
-                ),
+                Text(dateStr,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                        color: tc.textPrimary,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: WeRoboFonts.english)),
+                Text('리밸런싱 완료',
+                    style: WeRoboTypography.caption
+                        .themed(context)),
               ],
             ),
-
-            // Expanded detail
-            AnimatedCrossFade(
-              firstChild: const SizedBox.shrink(),
-              secondChild: _buildDetail(context),
-              crossFadeState: isExpanded
-                  ? CrossFadeState.showSecond
-                  : CrossFadeState.showFirst,
-              duration: const Duration(milliseconds: 250),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDetail(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Padding(
-      padding: const EdgeInsets.only(top: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Before/after stacked bars
-          _AllocationBar(
-              label: '변경 전', changes: event.changes, useBefore: true),
-          const SizedBox(height: 6),
-          _AllocationBar(
-              label: '변경 후', changes: event.changes, useBefore: false),
-          const SizedBox(height: 14),
-
-          // Per-sector change rows
-          ...event.changes.map((change) {
-            final isPositive = change.delta >= 0;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 6),
-              child: Row(
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: change.color,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(change.sectorName,
-                        style: WeRoboTypography.caption
-                            .copyWith(color: tc.textPrimary)),
-                  ),
-                  Text(
-                    '${change.beforePct.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      fontFamily: WeRoboFonts.english,
-                      fontSize: 11,
-                      color: tc.textSecondary,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Icon(Icons.arrow_forward_rounded,
-                        size: 12, color: tc.textTertiary),
-                  ),
-                  Text(
-                    '${change.afterPct.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      fontFamily: WeRoboFonts.english,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: tc.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: (isPositive ? tc.accent : WeRoboColors.warning)
-                          .withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      '${isPositive ? '+' : ''}${change.delta.toStringAsFixed(1)}%',
-                      style: TextStyle(
-                        fontFamily: WeRoboFonts.english,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: isPositive ? tc.accent : WeRoboColors.warning,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
+          ),
         ],
       ),
     );
   }
 }
 
-// ── Horizontal stacked allocation bar ──
+// ── Portfolio type selector ──
 
-class _AllocationBar extends StatelessWidget {
-  final String label;
-  final List<AllocationChange> changes;
-  final bool useBefore;
+class _PortfolioTypeSelector extends StatelessWidget {
+  final InvestmentType currentType;
+  final ValueChanged<InvestmentType> onTypeChanged;
 
-  const _AllocationBar({
-    required this.label,
-    required this.changes,
-    required this.useBefore,
+  const _PortfolioTypeSelector({
+    required this.currentType,
+    required this.onTypeChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label,
-            style: WeRoboTypography.caption.copyWith(color: tc.textSecondary)),
-        const SizedBox(height: 4),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: SizedBox(
-            height: 16,
-            child: Row(
-              children: changes.map((change) {
-                final pct = useBefore ? change.beforePct : change.afterPct;
-                return Flexible(
-                  flex: (pct * 10).round().clamp(1, 1000),
-                  child: Container(
-                    color:
-                        change.color.withValues(alpha: useBefore ? 0.5 : 1.0),
+    return Container(
+      decoration: BoxDecoration(
+        color: tc.card,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      padding: const EdgeInsets.all(3),
+      child: Row(
+        children: InvestmentType.values.map((t) {
+          final active = currentType == t;
+          return Expanded(
+            child: GestureDetector(
+              onTap: () => onTypeChanged(t),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: active
+                      ? WeRoboColors.primary
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  t.label,
+                  textAlign: TextAlign.center,
+                  style: WeRoboTypography.caption.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: active
+                        ? WeRoboColors.white
+                        : tc.textTertiary,
                   ),
-                );
-              }).toList(),
+                ),
+              ),
             ),
-          ),
-        ),
-      ],
+          );
+        }).toList(),
+      ),
     );
   }
 }

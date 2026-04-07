@@ -387,7 +387,7 @@ class _ComparisonViewState extends State<_ComparisonView>
 
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
   static const _rangeDays = [7, 90, 365, 1825, 99999];
-  static const _benchmarkKeys = {'sp500', 'treasury', 'promised_return'};
+  static const _benchmarkKeys = {'sp500', 'treasury'};
 
   @override
   void initState() {
@@ -405,11 +405,22 @@ class _ComparisonViewState extends State<_ComparisonView>
     super.dispose();
   }
 
+  static List<ChartLine> _allMockComparisonLines() {
+    final seen = <String>{};
+    final result = <ChartLine>[];
+    for (final t in InvestmentType.values) {
+      for (final line in MockChartData.comparisonLines(t)) {
+        if (seen.add(line.key)) result.add(line);
+      }
+    }
+    return result;
+  }
+
   List<ChartLine> _filterByType(List<ChartLine> rawLines) {
-    final typeName = _selectedType.name;
+    final code = _selectedType.riskCode;
     return rawLines.where((line) {
-      return line.key == typeName ||
-          line.key == '${typeName}_expected' ||
+      return line.key == code ||
+          line.key == '${code}_expected' ||
           _benchmarkKeys.contains(line.key);
     }).toList();
   }
@@ -435,7 +446,7 @@ class _ComparisonViewState extends State<_ComparisonView>
     final tc = WeRoboThemeColors.of(context);
     final allLines = widget.comparisonLines ??
         (widget.useFallbackMock
-            ? MockChartData.comparisonLines(widget.type)
+            ? _allMockComparisonLines()
             : const <ChartLine>[]);
     final typedLines =
         allLines.isEmpty ? allLines : _filterByType(allLines);

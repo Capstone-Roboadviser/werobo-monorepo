@@ -5,7 +5,6 @@ import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
 import '../../models/portfolio_data.dart';
-import '../../services/mock_chart_data.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -150,22 +149,43 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     with SingleTickerProviderStateMixin {
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
   static const _rangeDays = [7, 90, 365, 1825, 99999];
+  static const _baseInvestment = 10000000.0;
 
   late AnimationController _drawCtrl;
-  late List<ChartPoint> _allValue;
-  late List<ChartPoint> _allCost;
   int _range = 4; // 전체
   int? _touchIndex;
+
+  List<ChartPoint> get _allValue {
+    return PortfolioStateProvider.of(context)
+        .portfolioValuePoints(baseInvestment: _baseInvestment);
+  }
+
+  /// Flat cost basis at base investment (deposits tracked by API
+  /// when available; for now base investment is the floor).
+  List<ChartPoint> _costBasisFor(List<ChartPoint> valuePts) {
+    if (valuePts.isEmpty) return const [];
+    return [
+      ChartPoint(date: valuePts.first.date, value: _baseInvestment),
+      ChartPoint(date: valuePts.last.date, value: _baseInvestment),
+    ];
+  }
 
   @override
   void initState() {
     super.initState();
-    _allValue = MockChartData.portfolioValue(widget.type);
-    _allCost = MockChartData.costBasis(widget.type);
     _drawCtrl = AnimationController(
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     )..forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _PortfolioHeroChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.type != widget.type) {
+      _touchIndex = null;
+      _drawCtrl.forward(from: 0);
+    }
   }
 
   @override
@@ -195,8 +215,9 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final valuePts = _filterByRange(_allValue);
-    final costPts = _filterByRange(_allCost);
+    final allValue = _allValue;
+    final valuePts = _filterByRange(allValue);
+    final costPts = _costBasisFor(valuePts);
 
     // Compute hero stats from filtered data
     final currentValue =
