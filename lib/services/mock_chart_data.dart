@@ -1,4 +1,7 @@
 import 'dart:math';
+
+import 'package:flutter/material.dart';
+
 import '../app/theme.dart';
 import '../models/chart_data.dart';
 import '../models/portfolio_data.dart';
