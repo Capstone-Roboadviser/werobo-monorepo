@@ -12,12 +12,9 @@ double _asDouble(Object? value) {
 
 double _normalizeComparisonReturn(Object? value) {
   final parsed = _asDouble(value);
-  // The comparison-backtest payload is intended to be a ratio (0.0834 = 8.34%),
-  // but some backend builds return percentage points (8.34). Normalize for charts.
-  if (parsed.abs() > 5) {
-    return parsed / 100;
-  }
-  return parsed;
+  // API returns percentage points (12.32 = 12.32%).
+  // Charts expect decimal ratios (0.1232 = 12.32%).
+  return parsed / 100;
 }
 
 DateTime _parseDate(Object? value) {
