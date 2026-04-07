@@ -11,6 +11,7 @@ class VestorPieChart extends StatefulWidget {
   final double selectedRingWidth;
   final ValueChanged<int?>? onSectorSelected;
   final int? initialSelected;
+
   /// Custom center content builder. If null, uses default name+percentage.
   final Widget Function(int? selectedIndex)? centerBuilder;
 
@@ -67,8 +68,8 @@ class _VestorPieChartState extends State<VestorPieChart>
     var angle = atan2(tapOffset.dy, tapOffset.dx) + pi / 2;
     if (angle < 0) angle += 2 * pi;
 
-    final total = widget.categories.fold<double>(
-        0, (sum, c) => sum + c.percentage);
+    final total =
+        widget.categories.fold<double>(0, (sum, c) => sum + c.percentage);
     double cumulative = 0;
     for (int i = 0; i < widget.categories.length; i++) {
       cumulative += widget.categories[i].percentage;
@@ -79,9 +80,8 @@ class _VestorPieChartState extends State<VestorPieChart>
 
   @override
   Widget build(BuildContext context) {
-    final selected = _selectedIndex != null
-        ? widget.categories[_selectedIndex!]
-        : null;
+    final selected =
+        _selectedIndex != null ? widget.categories[_selectedIndex!] : null;
 
     return Center(
       child: GestureDetector(
@@ -125,8 +125,7 @@ class _VestorPieChartState extends State<VestorPieChart>
                                           style: WeRoboTypography.bodySmall
                                               .copyWith(
                                             fontWeight: FontWeight.w500,
-                                            color:
-                                                WeRoboColors.textSecondary,
+                                            color: WeRoboColors.textSecondary,
                                           ),
                                         ),
                                         const SizedBox(width: 4),
@@ -182,12 +181,10 @@ class _VestorPieChartPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final baseRingRadius = size.width / 2 - ringWidth / 2;
-    final selectedRingRadius =
-        size.width / 2 - selectedRingWidth / 2 + 3;
+    final selectedRingRadius = size.width / 2 - selectedRingWidth / 2 + 3;
     const gapRadians = 0.03;
 
-    final total =
-        categories.fold<double>(0, (sum, c) => sum + c.percentage);
+    final total = categories.fold<double>(0, (sum, c) => sum + c.percentage);
     double startAngle = -pi / 2;
 
     for (int i = 0; i < categories.length; i++) {
@@ -217,9 +214,8 @@ class _VestorPieChartPainter extends CustomPainter {
           paint,
         );
       } else {
-        paint.color = hasSelection
-            ? cat.color.withValues(alpha: 0.6)
-            : cat.color;
+        paint.color =
+            hasSelection ? cat.color.withValues(alpha: 0.6) : cat.color;
         paint.strokeWidth = ringWidth;
         canvas.drawArc(
           Rect.fromCircle(center: center, radius: baseRingRadius),

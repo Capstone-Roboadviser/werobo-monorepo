@@ -1,13 +1,19 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import 'confirmation_screen.dart';
 
 class ComparisonScreen extends StatefulWidget {
-  final InvestmentType investmentType;
+  final MobileRecommendationResponse recommendation;
+  final String selectedPortfolioCode;
 
-  const ComparisonScreen({super.key, required this.investmentType});
+  const ComparisonScreen({
+    super.key,
+    required this.recommendation,
+    required this.selectedPortfolioCode,
+  });
 
   @override
   State<ComparisonScreen> createState() => _ComparisonScreenState();
@@ -15,14 +21,14 @@ class ComparisonScreen extends StatefulWidget {
 
 class _ComparisonScreenState extends State<ComparisonScreen>
     with TickerProviderStateMixin {
-  late InvestmentType _selected;
+  late String _selectedCode;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
 
   @override
   void initState() {
     super.initState();
-    _selected = widget.investmentType;
+    _selectedCode = widget.selectedPortfolioCode;
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -41,8 +47,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   @override
   Widget build(BuildContext context) {
-    final categories = PortfolioData.categoriesFor(_selected);
-    final (risk, returnRate) = PortfolioData.statsFor(_selected);
+    final portfolios = widget.recommendation.portfolios;
+    final selected =
+        widget.recommendation.portfolioByCodeOrRecommended(_selectedCode);
+    final categories = selected.toCategories();
+    final risk = selected.volatilityLabel;
+    final returnRate = selected.expectedReturnLabel;
 
     return Scaffold(
       backgroundColor: WeRoboColors.surface,
@@ -70,28 +80,30 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                 ),
               ),
               const SizedBox(height: 4),
-              Text('투자 성향에 맞는 포트폴리오를 선택하세요',
+              Text('${widget.recommendation.resolvedProfile.label} 성향과 비교해 보세요',
                   style: WeRoboTypography.bodySmall),
               const SizedBox(height: 20),
 
-              // 3 type selector chips
+              // Portfolio selector chips
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Row(
-                  children: InvestmentType.values.map((type) {
-                    final isSelected = type == _selected;
+                  children: portfolios.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final portfolio = entry.value;
+                    final isSelected = portfolio.code == _selectedCode;
                     return Expanded(
                       child: Padding(
                         padding: EdgeInsets.only(
-                          left: type == InvestmentType.safe ? 0 : 6,
-                          right: type == InvestmentType.growth ? 0 : 6,
+                          left: index == 0 ? 0 : 6,
+                          right: index == portfolios.length - 1 ? 0 : 6,
                         ),
                         child: GestureDetector(
-                          onTap: () => setState(() => _selected = type),
+                          onTap: () =>
+                              setState(() => _selectedCode = portfolio.code),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 250),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 12),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? WeRoboColors.primary
@@ -100,11 +112,10 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                               border: isSelected
                                   ? null
                                   : Border.all(
-                                      color: WeRoboColors.lightGray,
-                                      width: 1),
+                                      color: WeRoboColors.lightGray, width: 1),
                             ),
                             child: Text(
-                              type.label,
+                              portfolio.label,
                               textAlign: TextAlign.center,
                               style: WeRoboTypography.bodySmall.copyWith(
                                 fontWeight: FontWeight.w600,
@@ -150,7 +161,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
               // Animated donut chart
               _AnimatedDonut(
                 categories: categories,
-                label: _selected.label,
+                label: selected.label,
               ),
               const SizedBox(height: 20),
 
@@ -159,7 +170,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   child: _SectorList(
-                    key: ValueKey(_selected),
+                    key: ValueKey(_selectedCode),
                     categories: categories,
                   ),
                 ),
@@ -173,14 +184,13 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                     onPressed: () {
                       Navigator.of(context).push(
                         PageRouteBuilder(
-                          pageBuilder: (_, __, ___) =>
-                              ConfirmationScreen(
-                                  investmentType: _selected),
+                          pageBuilder: (_, __, ___) => ConfirmationScreen(
+                            recommendation: widget.recommendation,
+                            selectedPortfolioCode: _selectedCode,
+                          ),
                           transitionsBuilder: (_, anim, __, child) =>
-                              FadeTransition(
-                                  opacity: anim, child: child),
-                          transitionDuration:
-                              const Duration(milliseconds: 400),
+                              FadeTransition(opacity: anim, child: child),
+                          transitionDuration: const Duration(milliseconds: 400),
                         ),
                       );
                     },
@@ -260,15 +270,13 @@ class _AnimatedStatChipState extends State<_AnimatedStatChip>
       child: Column(
         children: [
           Text(widget.label,
-              style: WeRoboTypography.caption.copyWith(
-                  color: WeRoboColors.textSecondary)),
+              style: WeRoboTypography.caption.copyWith(color: widget.color)),
           const SizedBox(height: 4),
           AnimatedBuilder(
             animation: _controller,
             builder: (context, _) {
               final t = Curves.easeOutCubic.transform(_controller.value);
-              final val = _previousValue +
-                  (_currentValue - _previousValue) * t;
+              final val = _previousValue + (_currentValue - _previousValue) * t;
               return Text(
                 '${val.toStringAsFixed(1)}%',
                 style: WeRoboTypography.number.copyWith(
@@ -312,8 +320,7 @@ class _AnimatedDonutState extends State<_AnimatedDonut>
       duration: const Duration(milliseconds: 500),
       vsync: this,
     );
-    _newPercentages =
-        widget.categories.map((c) => c.percentage).toList();
+    _newPercentages = widget.categories.map((c) => c.percentage).toList();
     _oldPercentages = List.from(_newPercentages);
   }
 
@@ -322,8 +329,7 @@ class _AnimatedDonutState extends State<_AnimatedDonut>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.categories != widget.categories) {
       _oldPercentages = List.from(_newPercentages);
-      _newPercentages =
-          widget.categories.map((c) => c.percentage).toList();
+      _newPercentages = widget.categories.map((c) => c.percentage).toList();
       // Pad shorter list if category count differs
       while (_oldPercentages.length < _newPercentages.length) {
         _oldPercentages.add(0);
@@ -346,12 +352,11 @@ class _AnimatedDonutState extends State<_AnimatedDonut>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
-        final t =
-            Curves.easeInOut.transform(_controller.value);
+        final t = Curves.easeInOut.transform(_controller.value);
         final interpolated = <double>[];
         for (int i = 0; i < _newPercentages.length; i++) {
-          interpolated.add(
-              _oldPercentages[i] + (_newPercentages[i] - _oldPercentages[i]) * t);
+          interpolated.add(_oldPercentages[i] +
+              (_newPercentages[i] - _oldPercentages[i]) * t);
         }
 
         return SizedBox(
@@ -463,8 +468,8 @@ class _SectorList extends StatelessWidget {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(cat.name,
-                          style: WeRoboTypography.bodySmall.copyWith(
-                              color: WeRoboColors.textPrimary)),
+                          style: WeRoboTypography.bodySmall
+                              .copyWith(color: WeRoboColors.textPrimary)),
                     ),
                     Text(
                       '${cat.percentage.toInt()}%',
