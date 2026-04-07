@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../app/theme_state.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final themeNotifier = ThemeStateProvider.of(context);
+    final isDark = themeNotifier.mode == ThemeMode.dark;
+
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -13,8 +18,42 @@ class SettingsTab extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 20),
-            Text('설정', style: WeRoboTypography.heading2),
+            Text('설정',
+                style: WeRoboTypography.heading2.themed(context)),
             const SizedBox(height: 24),
+
+            // Dark mode toggle
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  vertical: 16, horizontal: 16),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(
+                    color: tc.border.withValues(alpha: 0.4),
+                    width: 0.5,
+                  ),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(isDark
+                      ? Icons.dark_mode_rounded
+                      : Icons.light_mode_rounded,
+                      size: 22, color: tc.textSecondary),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text('다크 모드',
+                        style: WeRoboTypography.body.copyWith(
+                            color: tc.textPrimary)),
+                  ),
+                  Switch.adaptive(
+                    value: isDark,
+                    activeTrackColor: WeRoboColors.primary,
+                    onChanged: (_) => themeNotifier.toggle(),
+                  ),
+                ],
+              ),
+            ),
 
             _SettingsItem(
               icon: Icons.person_outline_rounded,
@@ -45,7 +84,7 @@ class SettingsTab extends StatelessWidget {
             Center(
               child: Text(
                 'WeRobo v1.0.0',
-                style: WeRoboTypography.caption,
+                style: WeRoboTypography.caption.themed(context),
               ),
             ),
             const SizedBox(height: 16),
@@ -76,6 +115,7 @@ class _SettingsItemState extends State<_SettingsItem> {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
       onTapUp: (_) {
@@ -85,7 +125,7 @@ class _SettingsItemState extends State<_SettingsItem> {
       onTapCancel: () => setState(() => _pressed = false),
       behavior: HitTestBehavior.opaque,
       child: AnimatedScale(
-        scale: _pressed ? 0.98 : 1.0,
+        scale: _pressed ? 0.97 : 1.0,
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: Container(
@@ -93,22 +133,22 @@ class _SettingsItemState extends State<_SettingsItem> {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: WeRoboColors.lightGray.withValues(alpha: 0.4),
+              color: tc.border.withValues(alpha: 0.4),
               width: 0.5,
             ),
           ),
         ),
         child: Row(
           children: [
-            Icon(widget.icon, size: 22, color: WeRoboColors.textSecondary),
+            Icon(widget.icon, size: 22, color: tc.textSecondary),
             const SizedBox(width: 14),
             Expanded(
               child: Text(widget.label,
                   style: WeRoboTypography.body.copyWith(
-                      color: WeRoboColors.textPrimary)),
+                      color: tc.textPrimary)),
             ),
             Icon(Icons.chevron_right_rounded,
-                size: 20, color: WeRoboColors.textTertiary),
+                size: 20, color: tc.textTertiary),
           ],
         ),
       ),

@@ -60,13 +60,14 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: WeRoboColors.surface,
+      backgroundColor: tc.surface,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Column(
               children: [
                 const Spacer(flex: 2),
@@ -81,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen>
                 const SizedBox(height: 12),
                 Text(
                   '당신만의 포트폴리오를 시작하세요',
-                  style: WeRoboTypography.body,
+                  style: WeRoboTypography.body.themed(context),
                   textAlign: TextAlign.center,
                 ),
 
@@ -90,7 +91,7 @@ class _LoginScreenState extends State<LoginScreen>
                 // Login/Signup toggle
                 Container(
                   decoration: BoxDecoration(
-                    color: WeRoboColors.card,
+                    color: tc.card,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   padding: const EdgeInsets.all(4),
@@ -121,8 +122,8 @@ class _LoginScreenState extends State<LoginScreen>
                   label: 'Google로 ${_isLogin ? '로그인' : '회원가입'}',
                   icon: const _GoogleIcon(),
                   backgroundColor: WeRoboColors.white,
-                  textColor: WeRoboColors.textPrimary,
-                  borderColor: WeRoboColors.lightGray,
+                  textColor: tc.textPrimary,
+                  borderColor: tc.border,
                   onTap: () => _onSocialLogin('google'),
                 ),
                 const SizedBox(height: 16),
@@ -182,6 +183,7 @@ class _TabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -196,7 +198,7 @@ class _TabButton extends StatelessWidget {
           textAlign: TextAlign.center,
           style: WeRoboTypography.bodySmall.copyWith(
             fontWeight: FontWeight.w600,
-            color: isActive ? WeRoboColors.white : WeRoboColors.textTertiary,
+            color: isActive ? WeRoboColors.white : tc.textTertiary,
           ),
         ),
       ),

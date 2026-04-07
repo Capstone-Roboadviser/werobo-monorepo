@@ -73,6 +73,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final type = PortfolioStateProvider.of(context).type;
     final categories = PortfolioData.categoriesFor(type);
     final details = PortfolioData.detailsFor(type);
@@ -91,13 +92,14 @@ class _PortfolioTabState extends State<PortfolioTab> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 20),
-            Text('내 포트폴리오', style: WeRoboTypography.heading2),
+            Text('내 포트폴리오',
+                style: WeRoboTypography.heading2.themed(context)),
             const SizedBox(height: 16),
 
             // View toggle
             Container(
               decoration: BoxDecoration(
-                color: WeRoboColors.card,
+                color: tc.card,
                 borderRadius: BorderRadius.circular(10),
               ),
               padding: const EdgeInsets.all(3),
@@ -147,7 +149,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
             const SizedBox(height: 20),
 
             // Rebalancing history
-            Text('리밸런싱 기록', style: WeRoboTypography.heading3),
+            Text('리밸런싱 기록',
+                style: WeRoboTypography.heading3.themed(context)),
             const SizedBox(height: 12),
             ...rebalanceEvents.asMap().entries.map((entry) {
               final i = entry.key;
@@ -182,6 +185,7 @@ class _ToggleChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -198,7 +202,7 @@ class _ToggleChip extends StatelessWidget {
             style: WeRoboTypography.caption.copyWith(
               fontWeight: FontWeight.w600,
               color:
-                  isActive ? WeRoboColors.white : WeRoboColors.textTertiary,
+                  isActive ? WeRoboColors.white : tc.textTertiary,
             ),
           ),
         ),
@@ -225,6 +229,7 @@ class _AllocationView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Column(
       children: [
         Center(
@@ -236,7 +241,7 @@ class _AllocationView extends StatelessWidget {
             onSectorSelected: onSectorSelected,
             centerBuilder: (_) => AnimatedSwitcher(
               duration: const Duration(milliseconds: 250),
-              child: _buildCenter(),
+              child: _buildCenter(context),
             ),
           ),
         ),
@@ -245,7 +250,7 @@ class _AllocationView extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 8),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: WeRoboColors.card,
+                color: tc.card,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -265,13 +270,14 @@ class _AllocationView extends StatelessWidget {
                       children: [
                         Text(d.category.name,
                             style: WeRoboTypography.bodySmall.copyWith(
-                                color: WeRoboColors.textPrimary)),
+                                color: tc.textPrimary)),
                         if (d.tickers.isNotEmpty)
                           Text(
                             d.tickers
                                 .map((t) => t.symbol)
                                 .join(', '),
-                            style: WeRoboTypography.caption,
+                            style: WeRoboTypography.caption
+                                .themed(context),
                           ),
                       ],
                     ),
@@ -280,7 +286,7 @@ class _AllocationView extends StatelessWidget {
                     '${d.category.percentage.toInt()}%',
                     style: WeRoboTypography.bodySmall.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: WeRoboColors.textPrimary,
+                      color: tc.textPrimary,
                     ),
                   ),
                 ],
@@ -290,13 +296,14 @@ class _AllocationView extends StatelessWidget {
     );
   }
 
-  Widget _buildCenter() {
+  Widget _buildCenter(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     if (selectedSector == null || selectedSector! >= details.length) {
       return Text(
         key: const ValueKey('default'),
         '포트폴리오\n비중',
         style: WeRoboTypography.heading3
-            .copyWith(color: WeRoboColors.textPrimary),
+            .copyWith(color: tc.textPrimary),
         textAlign: TextAlign.center,
       );
     }
@@ -309,14 +316,14 @@ class _AllocationView extends StatelessWidget {
         Text(
           detail.category.name,
           style: WeRoboTypography.caption.copyWith(
-            color: WeRoboColors.textPrimary,
+            color: tc.textPrimary,
             fontWeight: FontWeight.w600,
           ),
         ),
         Text(
           '${detail.category.percentage.toInt()}%',
           style: WeRoboTypography.number
-              .copyWith(color: WeRoboColors.textPrimary),
+              .copyWith(color: tc.textPrimary),
         ),
         const SizedBox(height: 4),
         ...detail.tickers.take(3).map((t) => Text(
@@ -325,7 +332,7 @@ class _AllocationView extends StatelessWidget {
                 fontFamily: WeRoboFonts.english,
                 fontSize: 10,
                 fontWeight: FontWeight.w500,
-                color: WeRoboColors.textSecondary,
+                color: tc.textSecondary,
                 height: 1.3,
               ),
             )),
@@ -382,6 +389,7 @@ class _TrendView extends StatelessWidget {
 class _NextRebalanceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -411,7 +419,7 @@ class _NextRebalanceCard extends StatelessWidget {
                         .copyWith(color: WeRoboColors.primary)),
                 Text('2026-07-01',
                     style: WeRoboTypography.bodySmall.copyWith(
-                        color: WeRoboColors.textPrimary,
+                        color: tc.textPrimary,
                         fontWeight: FontWeight.w600,
                         fontFamily: WeRoboFonts.english)),
               ],
@@ -450,6 +458,7 @@ class _RebalanceEventCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final dateStr =
         '${event.date.year}-${event.date.month.toString().padLeft(2, '0')}-${event.date.day.toString().padLeft(2, '0')}';
 
@@ -460,7 +469,7 @@ class _RebalanceEventCard extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: WeRoboColors.card,
+          color: tc.card,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -472,11 +481,11 @@ class _RebalanceEventCard extends StatelessWidget {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: WeRoboColors.accent.withValues(alpha: 0.1),
+                    color: tc.accent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(Icons.check_rounded,
-                      size: 20, color: WeRoboColors.accent),
+                  child: Icon(Icons.check_rounded,
+                      size: 20, color: tc.accent),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -485,11 +494,12 @@ class _RebalanceEventCard extends StatelessWidget {
                     children: [
                       Text(dateStr,
                           style: WeRoboTypography.bodySmall.copyWith(
-                              color: WeRoboColors.textPrimary,
+                              color: tc.textPrimary,
                               fontWeight: FontWeight.w500,
                               fontFamily: WeRoboFonts.english)),
                       Text(event.status,
-                          style: WeRoboTypography.caption),
+                          style: WeRoboTypography.caption
+                              .themed(context)),
                     ],
                   ),
                 ),
@@ -498,7 +508,7 @@ class _RebalanceEventCard extends StatelessWidget {
                       ? Icons.expand_less_rounded
                       : Icons.expand_more_rounded,
                   size: 20,
-                  color: WeRoboColors.textTertiary,
+                  color: tc.textTertiary,
                 ),
               ],
             ),
@@ -506,7 +516,7 @@ class _RebalanceEventCard extends StatelessWidget {
             // Expanded detail
             AnimatedCrossFade(
               firstChild: const SizedBox.shrink(),
-              secondChild: _buildDetail(),
+              secondChild: _buildDetail(context),
               crossFadeState: isExpanded
                   ? CrossFadeState.showSecond
                   : CrossFadeState.showFirst,
@@ -518,7 +528,8 @@ class _RebalanceEventCard extends StatelessWidget {
     );
   }
 
-  Widget _buildDetail() {
+  Widget _buildDetail(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Padding(
       padding: const EdgeInsets.only(top: 14),
       child: Column(
@@ -555,20 +566,20 @@ class _RebalanceEventCard extends StatelessWidget {
                   Expanded(
                     child: Text(change.sectorName,
                         style: WeRoboTypography.caption.copyWith(
-                            color: WeRoboColors.textPrimary)),
+                            color: tc.textPrimary)),
                   ),
                   Text(
                     '${change.beforePct.toStringAsFixed(1)}%',
                     style: TextStyle(
                       fontFamily: WeRoboFonts.english,
                       fontSize: 11,
-                      color: WeRoboColors.textSecondary,
+                      color: tc.textSecondary,
                     ),
                   ),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 6),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: Icon(Icons.arrow_forward_rounded,
-                        size: 12, color: WeRoboColors.textTertiary),
+                        size: 12, color: tc.textTertiary),
                   ),
                   Text(
                     '${change.afterPct.toStringAsFixed(1)}%',
@@ -576,7 +587,7 @@ class _RebalanceEventCard extends StatelessWidget {
                       fontFamily: WeRoboFonts.english,
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: WeRoboColors.textPrimary,
+                      color: tc.textPrimary,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -585,7 +596,7 @@ class _RebalanceEventCard extends StatelessWidget {
                         horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: (isPositive
-                              ? WeRoboColors.accent
+                              ? tc.accent
                               : WeRoboColors.warning)
                           .withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(4),
@@ -597,7 +608,7 @@ class _RebalanceEventCard extends StatelessWidget {
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
                         color: isPositive
-                            ? WeRoboColors.accent
+                            ? tc.accent
                             : WeRoboColors.warning,
                       ),
                     ),
@@ -627,12 +638,13 @@ class _AllocationBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
             style: WeRoboTypography.caption
-                .copyWith(color: WeRoboColors.textSecondary)),
+                .copyWith(color: tc.textSecondary)),
         const SizedBox(height: 4),
         ClipRRect(
           borderRadius: BorderRadius.circular(4),

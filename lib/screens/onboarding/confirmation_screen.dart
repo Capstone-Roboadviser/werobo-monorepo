@@ -170,12 +170,13 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   }
 
   Widget _buildPieCenter() {
+    final tc = WeRoboThemeColors.of(context);
     if (_selectedSector == null) {
       return Text(
         key: const ValueKey('default'),
         '포트폴리오\n비중',
         style:
-            WeRoboTypography.heading3.copyWith(color: WeRoboColors.textPrimary),
+            WeRoboTypography.heading3.copyWith(color: tc.textPrimary),
         textAlign: TextAlign.center,
       );
     }
@@ -190,14 +191,14 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
         Text(
           category.name,
           style: WeRoboTypography.caption.copyWith(
-            color: WeRoboColors.textPrimary,
+            color: tc.textPrimary,
             fontWeight: FontWeight.w600,
           ),
         ),
         Text(
           '${category.percentage.toInt()}%',
           style: WeRoboTypography.number.copyWith(
-            color: WeRoboColors.textPrimary,
+            color: tc.textPrimary,
           ),
         ),
         const SizedBox(height: 4),
@@ -210,7 +211,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     fontFamily: WeRoboFonts.english,
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
-                    color: WeRoboColors.textSecondary,
+                    color: tc.textSecondary,
                     height: 1.3,
                   ),
                 ),
@@ -221,6 +222,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   }
 
   Widget _buildChartsSection() {
+    final tc = WeRoboThemeColors.of(context);
     if (_isLoadingCharts) {
       return const Center(
         child: CircularProgressIndicator(color: WeRoboColors.primary),
@@ -251,7 +253,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
               child: Text(
                 _chartError!,
                 style: WeRoboTypography.bodySmall.copyWith(
-                  color: WeRoboColors.textPrimary,
+                  color: tc.textPrimary,
                 ),
               ),
             ),
@@ -285,8 +287,9 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: WeRoboColors.surface,
+      backgroundColor: tc.surface,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -298,10 +301,10 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                   children: [
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(
+                      icon: Icon(
                         Icons.arrow_back_ios_rounded,
                         size: 20,
-                        color: WeRoboColors.textPrimary,
+                        color: tc.textPrimary,
                       ),
                     ),
                     Container(
@@ -323,7 +326,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     Expanded(
                       child: Text(
                         '포트폴리오 상세',
-                        style: WeRoboTypography.heading3,
+                        style: WeRoboTypography.heading3.themed(context),
                       ),
                     ),
                   ],
@@ -383,13 +386,13 @@ class _ChartErrorState extends StatelessWidget {
           children: [
             Text(
               '차트 데이터를 불러오지 못했어요',
-              style: WeRoboTypography.heading3,
+              style: WeRoboTypography.heading3.themed(context),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               message,
-              style: WeRoboTypography.bodySmall,
+              style: WeRoboTypography.bodySmall.themed(context),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),

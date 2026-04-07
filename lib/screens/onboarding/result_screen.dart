@@ -59,12 +59,13 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final portfolio = widget.recommendation
         .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
     final categories = portfolio.toCategories();
 
     return Scaffold(
-      backgroundColor: WeRoboColors.surface,
+      backgroundColor: tc.surface,
       body: SafeArea(
         child: Column(
           children: [
@@ -149,26 +150,27 @@ class _ResultTypeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
       decoration: BoxDecoration(
-        color: WeRoboColors.card,
-        borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
+        color: tc.card,
+        borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             '당신에겐 ${portfolio.label} 포트폴리오가 잘 맞아요',
-            style: WeRoboTypography.heading3,
+            style: WeRoboTypography.heading3.themed(context),
           ),
           const SizedBox(height: 6),
           Text(
             '${recommendation.resolvedProfile.label} 성향과 목표 변동성 '
             '${formatRatioPercent(recommendation.resolvedProfile.targetVolatility)}를 반영했어요.',
             style: WeRoboTypography.bodySmall.copyWith(
-              color: WeRoboColors.textSecondary,
+              color: tc.textSecondary,
             ),
           ),
           const SizedBox(height: 14),
@@ -178,7 +180,7 @@ class _ResultTypeCard extends StatelessWidget {
                 child: _StatCard(
                   label: '예상 수익률',
                   value: portfolio.expectedReturnLabel,
-                  color: WeRoboColors.accent,
+                  color: tc.accent,
                 ),
               ),
               const SizedBox(width: 10),
@@ -204,6 +206,7 @@ class _BlurredTickerSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final preview = holdings.isEmpty
         ? const [
             TickerHolding(
@@ -219,11 +222,11 @@ class _BlurredTickerSection extends StatelessWidget {
       width: double.infinity,
       height: 140,
       decoration: BoxDecoration(
-        color: WeRoboColors.card,
-        borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
+        color: tc.card,
+        borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
+        borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
         child: Stack(
           children: [
             Padding(
@@ -234,6 +237,7 @@ class _BlurredTickerSection extends StatelessWidget {
                 children: [
                   for (final holding in preview)
                     _holdingRow(
+                      context,
                       holding.symbol,
                       '${holding.percentage.toStringAsFixed(1)}%',
                     ),
@@ -242,7 +246,7 @@ class _BlurredTickerSection extends StatelessWidget {
             ),
             Positioned.fill(
               child: ClipRRect(
-                borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
+                borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
                   child: Container(
@@ -254,7 +258,7 @@ class _BlurredTickerSection extends StatelessWidget {
                           Text(
                             '블러처리',
                             style: WeRoboTypography.bodySmall.copyWith(
-                              color: WeRoboColors.textPrimary,
+                              color: tc.textPrimary,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -262,7 +266,7 @@ class _BlurredTickerSection extends StatelessWidget {
                           Text(
                             '(로그인/회원가입 후 자세히 공개)',
                             style: WeRoboTypography.caption.copyWith(
-                              color: WeRoboColors.textSecondary,
+                              color: tc.textSecondary,
                             ),
                           ),
                         ],
@@ -278,14 +282,16 @@ class _BlurredTickerSection extends StatelessWidget {
     );
   }
 
-  static Widget _holdingRow(String ticker, String pct) {
+  static Widget _holdingRow(BuildContext context, String ticker, String pct) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          Text(ticker, style: WeRoboTypography.bodySmall),
+          Text(ticker,
+              style: WeRoboTypography.bodySmall.themed(context)),
           const Spacer(),
-          Text(pct, style: WeRoboTypography.bodySmall),
+          Text(pct,
+              style: WeRoboTypography.bodySmall.themed(context)),
         ],
       ),
     );
@@ -305,6 +311,7 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -323,7 +330,7 @@ class _StatCard extends StatelessWidget {
             value,
             style: WeRoboTypography.heading3.copyWith(
               fontFamily: WeRoboFonts.english,
-              color: WeRoboColors.textPrimary,
+              color: tc.textPrimary,
             ),
           ),
         ],

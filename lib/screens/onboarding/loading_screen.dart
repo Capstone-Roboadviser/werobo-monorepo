@@ -204,10 +204,11 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final hasError = _errorMessage != null;
 
     return Scaffold(
-      backgroundColor: WeRoboColors.surface,
+      backgroundColor: tc.surface,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -244,7 +245,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
             Text(
               hasError ? '추천 포트폴리오를 불러오지 못했어요' : '최적 포트폴리오를 찾는 중...',
               style: WeRoboTypography.body.copyWith(
-                color: WeRoboColors.textSecondary,
+                color: tc.textSecondary,
               ),
               textAlign: TextAlign.center,
             ),
@@ -253,7 +254,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Text(
                 hasError ? _errorMessage! : '잠시만 기다려 주세요',
-                style: WeRoboTypography.caption,
+                style: WeRoboTypography.caption.themed(context),
                 textAlign: TextAlign.center,
               ),
             ),
