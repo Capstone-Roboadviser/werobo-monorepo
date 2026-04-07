@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/portfolio_data.dart';
 import 'login_screen.dart';
@@ -16,7 +17,6 @@ class PortfolioResultScreen extends StatefulWidget {
 class _PortfolioResultScreenState extends State<PortfolioResultScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
-  bool _buttonPressed = false;
 
   @override
   void initState() {
@@ -78,11 +78,8 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
-              child: GestureDetector(
-                onTapDown: (_) =>
-                    setState(() => _buttonPressed = true),
-                onTapUp: (_) {
-                  setState(() => _buttonPressed = false);
+              child: Pressable(
+                onTap: () {
                   Navigator.of(context).pushReplacement(
                     PageRouteBuilder(
                       pageBuilder: (_, __, ___) =>
@@ -94,24 +91,17 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
                     ),
                   );
                 },
-                onTapCancel: () =>
-                    setState(() => _buttonPressed = false),
-                child: AnimatedScale(
-                  scale: _buttonPressed ? 0.97 : 1.0,
-                  duration: const Duration(milliseconds: 120),
-                  curve: Curves.easeOut,
-                  child: SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: null,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: WeRoboColors.primary,
-                        foregroundColor: WeRoboColors.white,
-                        disabledBackgroundColor: WeRoboColors.primary,
-                        disabledForegroundColor: WeRoboColors.white,
-                      ),
-                      child: const Text('투자 시작하기'),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: WeRoboColors.primary,
+                      foregroundColor: WeRoboColors.white,
+                      disabledBackgroundColor: WeRoboColors.primary,
+                      disabledForegroundColor: WeRoboColors.white,
                     ),
+                    child: const Text('투자 시작하기'),
                   ),
                 ),
               ),

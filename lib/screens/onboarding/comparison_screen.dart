@@ -52,10 +52,22 @@ class _ComparisonScreenState extends State<ComparisonScreen>
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-                child: Text('포트폴리오 비교',
-                    style: WeRoboTypography.heading2,
-                    textAlign: TextAlign.center),
+                padding: const EdgeInsets.fromLTRB(8, 12, 24, 0),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.arrow_back_ios_rounded,
+                          size: 20, color: WeRoboColors.textPrimary),
+                    ),
+                    Expanded(
+                      child: Text('포트폴리오 비교',
+                          style: WeRoboTypography.heading2,
+                          textAlign: TextAlign.center),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
               ),
               const SizedBox(height: 4),
               Text('투자 성향에 맞는 포트폴리오를 선택하세요',
@@ -184,8 +196,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   }
 }
 
-/// Rolling number stat chip — digits animate like a digital clock
-class _AnimatedStatChip extends StatelessWidget {
+/// Rolling number stat chip with smooth old→new animation
+class _AnimatedStatChip extends StatefulWidget {
   final String label;
   final String value;
   final Color color;
@@ -196,8 +208,45 @@ class _AnimatedStatChip extends StatelessWidget {
     required this.color,
   });
 
-  double _parseValue(String v) {
+  @override
+  State<_AnimatedStatChip> createState() => _AnimatedStatChipState();
+}
+
+class _AnimatedStatChipState extends State<_AnimatedStatChip>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  double _previousValue = 0;
+  double _currentValue = 0;
+
+  static double _parseValue(String v) {
     return double.tryParse(v.replaceAll('%', '')) ?? 0;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _currentValue = _parseValue(widget.value);
+    _previousValue = _currentValue;
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 400),
+      vsync: this,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _AnimatedStatChip oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _previousValue = _currentValue;
+      _currentValue = _parseValue(widget.value);
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
@@ -209,27 +258,28 @@ class _AnimatedStatChip extends StatelessWidget {
         border: Border.all(color: WeRoboColors.lightGray, width: 1),
       ),
       child: Column(
-      children: [
-        Text(label,
-            style: WeRoboTypography.caption.copyWith(
-                color: WeRoboColors.textSecondary)),
-        const SizedBox(height: 4),
-        TweenAnimationBuilder<double>(
-          tween: Tween<double>(end: _parseValue(value)),
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeOutCubic,
-          builder: (context, val, _) {
-            return Text(
-              '${val.toStringAsFixed(1)}%',
-              style: WeRoboTypography.number.copyWith(
-                color: WeRoboColors.textPrimary,
-                fontFamily: WeRoboFonts.english,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            );
-          },
-        ),
-      ],
+        children: [
+          Text(widget.label,
+              style: WeRoboTypography.caption.copyWith(
+                  color: WeRoboColors.textSecondary)),
+          const SizedBox(height: 4),
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              final t = Curves.easeOutCubic.transform(_controller.value);
+              final val = _previousValue +
+                  (_currentValue - _previousValue) * t;
+              return Text(
+                '${val.toStringAsFixed(1)}%',
+                style: WeRoboTypography.number.copyWith(
+                  color: WeRoboColors.textPrimary,
+                  fontFamily: WeRoboFonts.english,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -378,7 +428,13 @@ class _SmoothDonutPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SmoothDonutPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _SmoothDonutPainter oldDelegate) {
+    if (percentages.length != oldDelegate.percentages.length) return true;
+    for (int i = 0; i < percentages.length; i++) {
+      if (percentages[i] != oldDelegate.percentages[i]) return true;
+    }
+    return false;
+  }
 }
 
 /// Sector breakdown list (fades in/out on portfolio switch)

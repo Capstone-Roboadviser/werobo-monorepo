@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import 'home_tab.dart';
 import 'portfolio_tab.dart';
@@ -81,7 +82,7 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
-class _NavItem extends StatefulWidget {
+class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isActive;
@@ -95,61 +96,43 @@ class _NavItem extends StatefulWidget {
   });
 
   @override
-  State<_NavItem> createState() => _NavItemState();
-}
-
-class _NavItemState extends State<_NavItem> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
     final color =
-        widget.isActive ? WeRoboColors.primary : WeRoboColors.textTertiary;
+        isActive ? WeRoboColors.primary : WeRoboColors.textTertiary;
 
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedScale(
-        scale: _pressed ? 0.90 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: SizedBox(
-          width: 64,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: widget.isActive
-                      ? WeRoboColors.primary.withValues(alpha: 0.1)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 22, color: color),
+    return Pressable(
+      onTap: onTap,
+      scale: 0.90,
+      duration: const Duration(milliseconds: 100),
+      child: SizedBox(
+        width: 64,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: isActive
+                    ? WeRoboColors.primary.withValues(alpha: 0.1)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(12),
               ),
-              const SizedBox(height: 2),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight:
-                      widget.isActive ? FontWeight.w600 : FontWeight.w400,
-                  color: color,
-                ),
+              child: Icon(icon, size: 22, color: color),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight:
+                    isActive ? FontWeight.w600 : FontWeight.w400,
+                color: color,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
-
-  IconData get icon => widget.icon;
 }
