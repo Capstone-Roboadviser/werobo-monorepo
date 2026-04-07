@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.services.managed_universe_service import ManagedUniverseService
 from mobile_backend.api.router import api_router
@@ -13,6 +14,14 @@ app = FastAPI(
         {"name": "system", "description": "시스템 상태 확인용 엔드포인트"},
         {"name": "mobile", "description": "모바일 앱이 직접 호출할 포트폴리오 API"},
     ],
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 app.include_router(api_router)
