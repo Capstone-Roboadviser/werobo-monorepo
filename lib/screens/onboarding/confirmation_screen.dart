@@ -73,7 +73,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     });
 
     MobileVolatilityHistoryResponse? volatilityHistory;
-    MobileReturnHistoryResponse? returnHistory;
     MobileComparisonBacktestResponse? comparisonBacktest;
     final errors = <String>[];
 
@@ -81,18 +80,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     try {
       volatilityHistory =
           await MobileBackendApi.instance.fetchVolatilityHistory(
-        riskProfile: _portfolio.code,
-        investmentHorizon:
-            widget.recommendation.resolvedProfile.investmentHorizon,
-      );
-    } catch (error) {
-      errors.add(_friendlyError(error));
-    }
-
-    // Card 2: return-history
-    try {
-      returnHistory =
-          await MobileBackendApi.instance.fetchReturnHistory(
         riskProfile: _portfolio.code,
         investmentHorizon:
             widget.recommendation.resolvedProfile.investmentHorizon,
@@ -123,17 +110,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
               (point) => ChartPoint(
                 date: point.date,
                 value: point.volatility,
-              ),
-            )
-            .toList();
-      }
-
-      if (returnHistory != null) {
-        _performancePoints = returnHistory.points
-            .map(
-              (point) => ChartPoint(
-                date: point.date,
-                value: point.expectedReturn,
               ),
             )
             .toList();
