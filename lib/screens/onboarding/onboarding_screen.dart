@@ -83,7 +83,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
             // Page indicator
             Padding(
-              padding: const EdgeInsets.only(bottom: 24),
+              padding: const EdgeInsets.only(bottom: 28),
               child: PageIndicator(
                 count: _pageCount,
                 current: _currentPage,
@@ -238,7 +238,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
           const SizedBox(height: 8),
           Text(
             '최적의 포트폴리오를 찾아드립니다',
-            style: WeRoboTypography.body,
+            style: WeRoboTypography.bodySmall,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -253,7 +253,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
                   color: WeRoboColors.warning,
                 ),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 16),
               Expanded(
                 child: _StatCard(
                   label: '수익률',

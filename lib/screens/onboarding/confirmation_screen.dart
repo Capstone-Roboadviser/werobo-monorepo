@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../models/portfolio_data.dart';
+import '../home/home_shell.dart';
 import 'widgets/portfolio_charts.dart';
 import 'widgets/vestor_pie_chart.dart';
 
@@ -83,7 +84,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                 '${t.symbol} ${t.percentage.toStringAsFixed(1)}%',
                 style: TextStyle(
                   fontFamily: WeRoboFonts.english,
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: FontWeight.w500,
                   color: WeRoboColors.textSecondary,
                   height: 1.3,
@@ -155,12 +156,17 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content:
-                              Text('투자 확정 완료! 홈 화면으로 이동합니다.'),
-                          behavior: SnackBarBehavior.floating,
+                      Navigator.of(context).pushAndRemoveUntil(
+                        PageRouteBuilder(
+                          pageBuilder: (_, __, ___) =>
+                              const HomeShell(),
+                          transitionsBuilder: (_, anim, __, child) =>
+                              FadeTransition(
+                                  opacity: anim, child: child),
+                          transitionDuration:
+                              const Duration(milliseconds: 400),
                         ),
+                        (_) => false,
                       );
                     },
                     child: const Text('투자 확정'),

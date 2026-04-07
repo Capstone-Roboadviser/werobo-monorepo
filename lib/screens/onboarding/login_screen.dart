@@ -117,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen>
                   borderColor: WeRoboColors.lightGray,
                   onTap: () => _onSocialLogin('google'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 _SocialButton(
                   label: '카카오로 ${_isLogin ? '로그인' : '회원가입'}',
                   icon: const Text('K',
@@ -125,11 +125,11 @@ class _LoginScreenState extends State<LoginScreen>
                           fontSize: 20,
                           fontWeight: FontWeight.w900,
                           color: Color(0xFF3C1E1E))),
-                  backgroundColor: const Color(0xFFFEE500),
-                  textColor: const Color(0xFF3C1E1E),
+                  backgroundColor: WeRoboColors.kakaoYellow,
+                  textColor: WeRoboColors.kakaoBrown,
                   onTap: () => _onSocialLogin('kakao'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 _SocialButton(
                   label: '네이버로 ${_isLogin ? '로그인' : '회원가입'}',
                   icon: const Text('N',
@@ -137,11 +137,11 @@ class _LoginScreenState extends State<LoginScreen>
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                           color: WeRoboColors.white)),
-                  backgroundColor: const Color(0xFF03C75A),
+                  backgroundColor: WeRoboColors.naverGreen,
                   textColor: WeRoboColors.white,
                   onTap: () => _onSocialLogin('naver'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 _SocialButton(
                   label: 'Apple로 ${_isLogin ? '로그인' : '회원가입'}',
                   icon: const Icon(Icons.apple, color: WeRoboColors.white, size: 22),
@@ -195,7 +195,7 @@ class _TabButton extends StatelessWidget {
   }
 }
 
-class _SocialButton extends StatelessWidget {
+class _SocialButton extends StatefulWidget {
   final String label;
   final Widget icon;
   final Color backgroundColor;
@@ -213,33 +213,50 @@ class _SocialButton extends StatelessWidget {
   });
 
   @override
+  State<_SocialButton> createState() => _SocialButtonState();
+}
+
+class _SocialButtonState extends State<_SocialButton> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
-      child: Container(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        widget.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? 0.97 : 1.0,
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        child: Container(
         width: double.infinity,
         height: 52,
         decoration: BoxDecoration(
-          color: backgroundColor,
+          color: widget.backgroundColor,
           borderRadius: BorderRadius.circular(12),
-          border: borderColor != null
-              ? Border.all(color: borderColor!, width: 1)
+          border: widget.borderColor != null
+              ? Border.all(color: widget.borderColor!, width: 1)
               : null,
         ),
         child: Row(
           children: [
             const SizedBox(width: 16),
-            SizedBox(width: 24, height: 24, child: Center(child: icon)),
+            SizedBox(width: 24, height: 24, child: Center(child: widget.icon)),
             Expanded(
               child: Text(
-                label,
+                widget.label,
                 textAlign: TextAlign.center,
-                style: WeRoboTypography.button.copyWith(color: textColor),
+                style: WeRoboTypography.button.copyWith(color: widget.textColor),
               ),
             ),
             const SizedBox(width: 40),
           ],
         ),
+      ),
       ),
     );
   }

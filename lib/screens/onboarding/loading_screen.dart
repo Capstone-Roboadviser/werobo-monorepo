@@ -23,7 +23,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     super.initState();
 
     _progressController = AnimationController(
-      duration: const Duration(milliseconds: 3000),
+      duration: const Duration(milliseconds: 2500),
       vsync: this,
     );
 
