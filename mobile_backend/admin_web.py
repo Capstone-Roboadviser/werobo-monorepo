@@ -495,8 +495,8 @@ def render_admin_page() -> HTMLResponse:
           <div class="search-results" hidden></div>
         </div>
       </td>
-      <td><input data-field="sector_code" placeholder="us_growth" /></td>
-      <td><input data-field="sector_name" placeholder="미국 성장주" /></td>
+      <td><select data-field="sector_code"></select></td>
+      <td><input data-field="sector_name" placeholder="미국 성장주" readonly /></td>
       <td><input data-field="market" placeholder="NASDAQ" /></td>
       <td><input data-field="currency" placeholder="USD" value="USD" /></td>
       <td><input data-field="base_weight" placeholder="선택" /></td>
@@ -529,6 +529,48 @@ def render_admin_page() -> HTMLResponse:
 
     function defaultAssetRoleMap() {
       return Object.fromEntries(assetCatalog.map((asset) => [asset.code, asset.role_key]));
+    }
+
+    function findAssetByCode(assetCode) {
+      return assetCatalog.find((asset) => asset.code === assetCode) || null;
+    }
+
+    function buildAssetSelectOptions(selectedCode = '') {
+      if (!assetCatalog.length) {
+        return '<option value="">자산군 불러오는 중</option>';
+      }
+
+      const fallbackCode = selectedCode || assetCatalog[0]?.code || '';
+      return assetCatalog.map((asset) => `
+        <option value="${asset.code}" ${asset.code === fallbackCode ? 'selected' : ''}>
+          ${asset.name} (${asset.code})
+        </option>
+      `).join('');
+    }
+
+    function syncRowAssetSelection(row, preferredCode = '', preferredName = '') {
+      const sectorCodeSelect = row.querySelector('select[data-field="sector_code"]');
+      const sectorNameInput = row.querySelector('[data-field="sector_name"]');
+      if (!sectorCodeSelect || !sectorNameInput) return;
+
+      const currentCode = preferredCode || sectorCodeSelect.value || sectorCodeSelect.dataset.selectedCode || '';
+      sectorCodeSelect.innerHTML = buildAssetSelectOptions(currentCode);
+      const resolvedCode = sectorCodeSelect.value || currentCode;
+      const asset = findAssetByCode(resolvedCode);
+      sectorNameInput.value = asset ? asset.name : preferredName || '';
+      sectorCodeSelect.dataset.selectedCode = resolvedCode;
+    }
+
+    function syncAllInstrumentAssetSelections() {
+      $$('#instrument-body tr').forEach((row) => {
+        const sectorCodeSelect = row.querySelector('select[data-field="sector_code"]');
+        const sectorNameInput = row.querySelector('[data-field="sector_name"]');
+        syncRowAssetSelection(
+          row,
+          sectorCodeSelect?.value || sectorCodeSelect?.dataset.selectedCode || '',
+          sectorNameInput?.value || '',
+        );
+      });
     }
 
     function findRoleTemplate(roleKey) {
@@ -709,6 +751,14 @@ def render_admin_page() -> HTMLResponse:
           input.value = seed[key];
         }
       });
+      const sectorCodeSelect = row.querySelector('select[data-field="sector_code"]');
+      if (sectorCodeSelect) {
+        sectorCodeSelect.dataset.selectedCode = seed.sector_code || '';
+        syncRowAssetSelection(row, seed.sector_code || '', seed.sector_name || '');
+        sectorCodeSelect.addEventListener('change', () => {
+          syncRowAssetSelection(row, sectorCodeSelect.value);
+        });
+      }
       row.querySelector('.row-remove').addEventListener('click', () => {
         row.remove();
       });
@@ -737,9 +787,9 @@ def render_admin_page() -> HTMLResponse:
     function collectInstruments() {
       return $$('#instrument-body tr').map((row) => {
         const payload = {};
-        row.querySelectorAll('input[data-field]').forEach((input) => {
-          const key = input.dataset.field;
-          const raw = input.value.trim();
+        row.querySelectorAll('input[data-field], select[data-field]').forEach((field) => {
+          const key = field.dataset.field;
+          const raw = (field.value || '').trim();
           payload[key] = raw;
         });
         if (payload.base_weight === '') {
@@ -904,6 +954,7 @@ def render_admin_page() -> HTMLResponse:
       assetCatalog = config.assets || [];
       assetRoleTemplates = config.role_templates || [];
       renderAssetRoleSelectors(defaultAssetRoleMap());
+      syncAllInstrumentAssetSelections();
     }
 
     async function loadVersionDetail(versionId) {
