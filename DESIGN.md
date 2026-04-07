@@ -63,6 +63,84 @@ Sky blue (#20A7DB) as primary communicates trust and stability, common in Korean
 - **Portfolio comparison:** 3-chip type selector with animated donut chart and rolling number stats. Users can compare before committing.
 - **Pie chart sectors:** Tap a sector to see constituent ETF tickers in the center. Builds trust through transparency.
 
+## Spacing Scale
+Base unit: 4px. All spacing values are multiples of 4.
+
+| Token | Value | Usage |
+|-------|-------|-------|
+| 2xs | 2px | Icon-to-label gaps, tight inline spacing |
+| xs | 4px | Within-component micro spacing |
+| sm | 8px | Between related elements (label to input, icon to text) |
+| md | 12px | Between list items, card internal padding |
+| lg | 16px | Between related sections, standard padding |
+| xl | 20px | Section top padding from header |
+| 2xl | 24px | Horizontal screen padding, between major sections |
+| 3xl | 28px | Between major dashboard sections |
+| 4xl | 32px | Bottom padding before safe area |
+
+**Border radius scale:**
+| Token | Value | Usage |
+|-------|-------|-------|
+| sm | 6px | Badges, small chips, delta indicators |
+| md | 10px | Icon containers, nav item backgrounds |
+| lg | 12px | Cards, buttons, containers, inputs |
+| xl | 16px | Large hero cards |
+| full | 9999px | Circular elements, dot indicators |
+
+## Responsive Strategy
+This is a mobile-only Flutter app. "Responsive" means handling different phone sizes.
+
+**Design targets:**
+- Primary: iPhone 17 Pro (390x844 logical points)
+- Small: iPhone SE 3rd gen (375x667)
+- Large: iPhone 17 Pro Max (430x932)
+
+**Approach:**
+- Fixed horizontal padding (24px) on all screen sizes
+- Charts and pie charts size themselves relative to available width, not fixed pixel sizes
+- Text does not scale with device size (NotoSansKR is readable at 12px minimum)
+- Bottom nav and button heights are fixed (52px buttons, 44px+ touch targets)
+- `SingleChildScrollView` handles overflow on small devices
+- No landscape mode required for capstone demo
+
+**Safe area handling:**
+- `SafeArea` on all screens for notch and home indicator
+- Bottom buttons padded with `EdgeInsets.fromLTRB(24, 0, 24, 32)` to clear home indicator
+
+## Dark Mode Strategy
+Not currently implemented. When added:
+
+**Surface hierarchy (dark):**
+| Token | Light | Dark |
+|-------|-------|------|
+| background | #F5F5F5 | #0F0F0F |
+| surface | #FFFFFF | #1A1A1A |
+| card | #F0F0F0 | #252525 |
+| border | #D3D3D3 | #333333 |
+
+**Color adjustments:**
+- Primary sky blue (#20A7DB) works on dark backgrounds without change
+- Accent green (#059669) lightens to #34D399 for dark mode readability
+- Warning yellow (#FBBF24) stays unchanged
+- Error red (#EF4444) stays unchanged
+- Text primary: #000000 -> #F0F0F0
+- Text secondary: #6B6B6B -> #999999
+- Text tertiary: #C0C0C0 -> #555555
+
+**Chart adjustments:**
+- Grid lines: lighter alpha on dark (0.15 instead of 0.3)
+- Area fill gradients: reduce alpha by 30%
+- Tooltip backgrounds: card color instead of white
+
+**Implementation:** Use `WeRoboColors` with a `Brightness` parameter or a `ThemeExtension`. All color references already go through `WeRoboColors.*`, so the migration is mechanical.
+
+## Decisions Log
+| Date | Decision | Rationale |
+|------|----------|-----------|
+| 2026-04-08 | Initial design system created | Created by /design-consultation based on Figma specs and CLAUDE.md tokens |
+| 2026-04-08 | Accent green darkened #34D399 -> #059669 | WCAG AA contrast ratio (4.5:1 on white) |
+| 2026-04-08 | Added spacing scale, responsive strategy, dark mode plan | Complete the design system for implementation consistency |
+
 ## What This Design Is NOT
 - Not a trading app (no real-time tickers, no buy/sell buttons, no red/green candles)
 - Not a gamified finance app (no streaks, no achievements, no social pressure)
