@@ -25,18 +25,19 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: WeRoboColors.surface,
+      backgroundColor: tc.surface,
       body: IndexedStack(
         index: _currentTab,
         children: _tabs,
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: WeRoboColors.surface,
+          color: tc.surface,
           border: Border(
             top: BorderSide(
-              color: WeRoboColors.lightGray.withValues(alpha: 0.5),
+              color: tc.border.withValues(alpha: 0.5),
               width: 0.5,
             ),
           ),
@@ -97,8 +98,9 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final color =
-        isActive ? WeRoboColors.primary : WeRoboColors.textTertiary;
+        isActive ? WeRoboColors.primary : tc.textTertiary;
 
     return Pressable(
       onTap: onTap,

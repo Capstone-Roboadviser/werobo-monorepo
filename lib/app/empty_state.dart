@@ -39,13 +39,13 @@ class EmptyState extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               title,
-              style: WeRoboTypography.heading3,
+              style: WeRoboTypography.heading3.themed(context),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               subtitle,
-              style: WeRoboTypography.bodySmall,
+              style: WeRoboTypography.bodySmall.themed(context),
               textAlign: TextAlign.center,
             ),
             if (actionLabel != null) ...[
@@ -78,6 +78,7 @@ class ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -98,7 +99,7 @@ class ErrorState extends StatelessWidget {
             Text(
               message,
               style: WeRoboTypography.bodySmall.copyWith(
-                color: WeRoboColors.textPrimary,
+                color: tc.textPrimary,
               ),
               textAlign: TextAlign.center,
             ),

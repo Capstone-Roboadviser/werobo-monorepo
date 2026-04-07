@@ -34,6 +34,7 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Column(
       children: [
         // Top toggle
@@ -41,7 +42,7 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Container(
             decoration: BoxDecoration(
-              color: WeRoboColors.card,
+              color: tc.card,
               borderRadius: BorderRadius.circular(10),
             ),
             padding: const EdgeInsets.all(3),
@@ -96,6 +97,7 @@ class _ToggleTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -111,7 +113,7 @@ class _ToggleTab extends StatelessWidget {
             textAlign: TextAlign.center,
             style: WeRoboTypography.caption.copyWith(
               fontWeight: FontWeight.w600,
-              color: isActive ? WeRoboColors.white : WeRoboColors.textTertiary,
+              color: isActive ? WeRoboColors.white : tc.textTertiary,
             ),
           ),
         ),
@@ -200,6 +202,7 @@ class _VolReturnViewState extends State<_VolReturnView>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final points = _points;
 
     return Padding(
@@ -247,7 +250,7 @@ class _VolReturnViewState extends State<_VolReturnView>
                           fontWeight: FontWeight.w600,
                           color: active
                               ? WeRoboColors.white
-                              : WeRoboColors.textTertiary,
+                              : tc.textTertiary,
                         ),
                       ),
                     ),
@@ -291,7 +294,7 @@ class _VolReturnViewState extends State<_VolReturnView>
                                 progress: _drawCtrl.value,
                                 color: _subTab == 0
                                     ? WeRoboColors.primary
-                                    : WeRoboColors.accent,
+                                    : tc.accent,
                                 touchIndex: _touchIndex,
                                 valueLabel: _subTab == 0 ? '변동성' : '성과',
                                 baselineValue: _subTab == 0
@@ -299,6 +302,11 @@ class _VolReturnViewState extends State<_VolReturnView>
                                     : _expectedReturn(),
                                 baselineLabel:
                                     _subTab == 0 ? '기대 변동성' : '기대 수익률',
+                                gridColor: tc.border,
+                                textTertiaryColor: tc.textTertiary,
+                                textPrimaryColor: tc.textPrimary,
+                                tooltipBackground: tc.surface,
+                                tooltipBorder: tc.border,
                               ),
                             );
                           },
@@ -323,6 +331,7 @@ class _SubTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -333,7 +342,7 @@ class _SubTab extends StatelessWidget {
               : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: active ? WeRoboColors.primary : WeRoboColors.lightGray,
+            color: active ? WeRoboColors.primary : tc.border,
             width: 1,
           ),
         ),
@@ -341,7 +350,7 @@ class _SubTab extends StatelessWidget {
           label,
           style: WeRoboTypography.caption.copyWith(
             fontWeight: FontWeight.w600,
-            color: active ? WeRoboColors.primary : WeRoboColors.textTertiary,
+            color: active ? WeRoboColors.primary : tc.textTertiary,
           ),
         ),
       ),
@@ -374,13 +383,16 @@ class _ComparisonViewState extends State<_ComparisonView>
   late AnimationController _drawCtrl;
   int? _touchIndex;
   int _range = 4; // index into _ranges
+  late InvestmentType _selectedType;
 
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
   static const _rangeDays = [7, 90, 365, 1825, 99999];
+  static const _benchmarkKeys = {'sp500', 'treasury', 'promised_return'};
 
   @override
   void initState() {
     super.initState();
+    _selectedType = widget.type;
     _drawCtrl = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
@@ -391,6 +403,15 @@ class _ComparisonViewState extends State<_ComparisonView>
   void dispose() {
     _drawCtrl.dispose();
     super.dispose();
+  }
+
+  List<ChartLine> _filterByType(List<ChartLine> rawLines) {
+    final typeName = _selectedType.name;
+    return rawLines.where((line) {
+      return line.key == typeName ||
+          line.key == '${typeName}_expected' ||
+          _benchmarkKeys.contains(line.key);
+    }).toList();
   }
 
   List<ChartLine> _filterByRange(List<ChartLine> rawLines) {
@@ -411,11 +432,15 @@ class _ComparisonViewState extends State<_ComparisonView>
 
   @override
   Widget build(BuildContext context) {
-    final rawLines = widget.comparisonLines ??
+    final tc = WeRoboThemeColors.of(context);
+    final allLines = widget.comparisonLines ??
         (widget.useFallbackMock
             ? MockChartData.comparisonLines(widget.type)
             : const <ChartLine>[]);
-    final lines = rawLines.isEmpty ? rawLines : _filterByRange(rawLines);
+    final typedLines =
+        allLines.isEmpty ? allLines : _filterByType(allLines);
+    final lines =
+        typedLines.isEmpty ? typedLines : _filterByRange(typedLines);
     final rebalanceDates = widget.rebalanceDates ??
         (widget.useFallbackMock
             ? MockChartData.rebalanceDates
@@ -425,6 +450,48 @@ class _ComparisonViewState extends State<_ComparisonView>
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
+          // Portfolio type selector
+          Row(
+            children: InvestmentType.values.map((t) {
+              final active = _selectedType == t;
+              return Padding(
+                padding: const EdgeInsets.only(right: 6),
+                child: GestureDetector(
+                  onTap: () {
+                    setState(() => _selectedType = t);
+                    _drawCtrl.forward(from: 0);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: active
+                          ? WeRoboColors.primary
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: active
+                            ? WeRoboColors.primary
+                            : tc.border,
+                        width: 1,
+                      ),
+                    ),
+                    child: Text(
+                      t.label,
+                      style: WeRoboTypography.caption.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: active
+                            ? WeRoboColors.white
+                            : tc.textTertiary,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
           // Time range chips
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
@@ -453,7 +520,7 @@ class _ComparisonViewState extends State<_ComparisonView>
                         fontWeight: FontWeight.w600,
                         color: active
                             ? WeRoboColors.white
-                            : WeRoboColors.textTertiary,
+                            : tc.textTertiary,
                       ),
                     ),
                   ),
@@ -496,6 +563,11 @@ class _ComparisonViewState extends State<_ComparisonView>
                                 progress: _drawCtrl.value,
                                 rebalanceDates: rebalanceDates,
                                 touchIndex: _touchIndex,
+                                gridColor: tc.border,
+                                textTertiaryColor: tc.textTertiary,
+                                textPrimaryColor: tc.textPrimary,
+                                tooltipBackground: tc.surface,
+                                tooltipBorder: tc.border,
                               ),
                             );
                           },
@@ -529,7 +601,7 @@ class _ComparisonViewState extends State<_ComparisonView>
                   Text(l.label,
                       style: TextStyle(
                         fontSize: 10,
-                        color: WeRoboColors.textSecondary,
+                        color: tc.textSecondary,
                       )),
                 ],
               );
@@ -552,7 +624,7 @@ class _EmptyChartState extends StatelessWidget {
     return Center(
       child: Text(
         message,
-        style: WeRoboTypography.bodySmall,
+        style: WeRoboTypography.bodySmall.themed(context),
         textAlign: TextAlign.center,
       ),
     );
@@ -569,6 +641,11 @@ class _AreaChartPainter extends CustomPainter {
   final String valueLabel;
   final double? baselineValue;
   final String? baselineLabel;
+  final Color gridColor;
+  final Color textTertiaryColor;
+  final Color textPrimaryColor;
+  final Color tooltipBackground;
+  final Color tooltipBorder;
 
   _AreaChartPainter({
     required this.points,
@@ -578,6 +655,11 @@ class _AreaChartPainter extends CustomPainter {
     required this.valueLabel,
     this.baselineValue,
     this.baselineLabel,
+    required this.gridColor,
+    required this.textTertiaryColor,
+    required this.textPrimaryColor,
+    required this.tooltipBackground,
+    required this.tooltipBorder,
   });
 
   @override
@@ -674,13 +756,13 @@ class _AreaChartPainter extends CustomPainter {
 
       // Vertical line
       final crossPaint = Paint()
-        ..color = WeRoboColors.lightGray
+        ..color = gridColor
         ..strokeWidth = 1;
       canvas.drawLine(Offset(tx, 0), Offset(tx, h), crossPaint);
 
       // Dot
       canvas.drawCircle(Offset(tx, ty), 5, Paint()..color = color);
-      canvas.drawCircle(Offset(tx, ty), 3, Paint()..color = WeRoboColors.white);
+      canvas.drawCircle(Offset(tx, ty), 3, Paint()..color = tooltipBackground);
 
       // Tooltip
       final date = points[ti].date;
@@ -698,11 +780,11 @@ class _AreaChartPainter extends CustomPainter {
   void _drawGrid(Canvas canvas, Size size, double padL, double padR,
       double padB, double h, double minY, double rangeY) {
     final gridPaint = Paint()
-      ..color = WeRoboColors.lightGray.withValues(alpha: 0.3)
+      ..color = gridColor.withValues(alpha: 0.3)
       ..strokeWidth = 0.5;
     final labelStyle = TextStyle(
       fontSize: 9,
-      color: WeRoboColors.textTertiary,
+      color: textTertiaryColor,
       fontFamily: WeRoboFonts.english,
     );
 
@@ -720,7 +802,7 @@ class _AreaChartPainter extends CustomPainter {
     if (points.length < 2) return;
     final style = TextStyle(
       fontSize: 8,
-      color: WeRoboColors.textTertiary,
+      color: textTertiaryColor,
       fontFamily: WeRoboFonts.english,
     );
     for (int i = 0; i < 5; i++) {
@@ -735,7 +817,7 @@ class _AreaChartPainter extends CustomPainter {
   void _drawTooltip(Canvas canvas, Offset pos, String text, double maxW) {
     final style = TextStyle(
       fontSize: 10,
-      color: WeRoboColors.textPrimary,
+      color: textPrimaryColor,
       fontFamily: WeRoboFonts.english,
       height: 1.4,
     );
@@ -753,12 +835,12 @@ class _AreaChartPainter extends CustomPainter {
     canvas.drawRRect(
         rect,
         Paint()
-          ..color = WeRoboColors.white
+          ..color = tooltipBackground
           ..style = PaintingStyle.fill);
     canvas.drawRRect(
         rect,
         Paint()
-          ..color = WeRoboColors.lightGray
+          ..color = tooltipBorder
           ..style = PaintingStyle.stroke
           ..strokeWidth = 0.5);
     tp.paint(canvas, Offset(x + 8, y + 4));
@@ -782,12 +864,22 @@ class _MultiLineChartPainter extends CustomPainter {
   final double progress;
   final List<DateTime> rebalanceDates;
   final int? touchIndex;
+  final Color gridColor;
+  final Color textTertiaryColor;
+  final Color textPrimaryColor;
+  final Color tooltipBackground;
+  final Color tooltipBorder;
 
   _MultiLineChartPainter({
     required this.lines,
     required this.progress,
     required this.rebalanceDates,
     this.touchIndex,
+    required this.gridColor,
+    required this.textTertiaryColor,
+    required this.textPrimaryColor,
+    required this.tooltipBackground,
+    required this.tooltipBorder,
   });
 
   @override
@@ -812,11 +904,11 @@ class _MultiLineChartPainter extends CustomPainter {
 
     // Grid
     final gridPaint = Paint()
-      ..color = WeRoboColors.lightGray.withValues(alpha: 0.3)
+      ..color = gridColor.withValues(alpha: 0.3)
       ..strokeWidth = 0.5;
     final labelStyle = TextStyle(
       fontSize: 9,
-      color: WeRoboColors.textTertiary,
+      color: textTertiaryColor,
       fontFamily: WeRoboFonts.english,
     );
 
@@ -897,7 +989,7 @@ class _MultiLineChartPainter extends CustomPainter {
             Offset(tx, 0),
             Offset(tx, h),
             Paint()
-              ..color = WeRoboColors.lightGray
+              ..color = gridColor
               ..strokeWidth = 1);
 
         // Dots for each line
@@ -907,7 +999,7 @@ class _MultiLineChartPainter extends CustomPainter {
             final ty = h - ((val - minY) / rangeY) * h;
             canvas.drawCircle(Offset(tx, ty), 4, Paint()..color = line.color);
             canvas.drawCircle(
-                Offset(tx, ty), 2, Paint()..color = WeRoboColors.white);
+                Offset(tx, ty), 2, Paint()..color = tooltipBackground);
           }
         }
 
@@ -931,7 +1023,7 @@ class _MultiLineChartPainter extends CustomPainter {
       final pts = lines[0].points;
       final dateStyle = TextStyle(
         fontSize: 8,
-        color: WeRoboColors.textTertiary,
+        color: textTertiaryColor,
         fontFamily: WeRoboFonts.english,
       );
       for (int i = 0; i < 5; i++) {
@@ -947,7 +1039,7 @@ class _MultiLineChartPainter extends CustomPainter {
   void _drawTooltip(Canvas canvas, Offset pos, String text, double maxW) {
     final style = TextStyle(
       fontSize: 10,
-      color: WeRoboColors.textPrimary,
+      color: textPrimaryColor,
       fontFamily: WeRoboFonts.english,
       height: 1.4,
     );
@@ -961,11 +1053,11 @@ class _MultiLineChartPainter extends CustomPainter {
 
     final rect = RRect.fromLTRBR(x, pos.dy, x + tp.width + 16,
         pos.dy + tp.height + 8, const Radius.circular(6));
-    canvas.drawRRect(rect, Paint()..color = WeRoboColors.white);
+    canvas.drawRRect(rect, Paint()..color = tooltipBackground);
     canvas.drawRRect(
         rect,
         Paint()
-          ..color = WeRoboColors.lightGray
+          ..color = tooltipBorder
           ..style = PaintingStyle.stroke
           ..strokeWidth = 0.5);
     tp.paint(canvas, Offset(x + 8, pos.dy + 4));

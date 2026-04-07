@@ -47,6 +47,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final portfolios = widget.recommendation.portfolios;
     final selected =
         widget.recommendation.portfolioByCodeOrRecommended(_selectedCode);
@@ -55,7 +56,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     final returnRate = selected.expectedReturnLabel;
 
     return Scaffold(
-      backgroundColor: WeRoboColors.surface,
+      backgroundColor: tc.surface,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -67,12 +68,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                   children: [
                     IconButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.arrow_back_ios_rounded,
-                          size: 20, color: WeRoboColors.textPrimary),
+                      icon: Icon(Icons.arrow_back_ios_rounded,
+                          size: 20, color: tc.textPrimary),
                     ),
                     Expanded(
                       child: Text('포트폴리오 비교',
-                          style: WeRoboTypography.heading2,
+                          style: WeRoboTypography.heading2.themed(context),
                           textAlign: TextAlign.center),
                     ),
                     const SizedBox(width: 48),
@@ -81,7 +82,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
               ),
               const SizedBox(height: 4),
               Text('${widget.recommendation.resolvedProfile.label} 성향과 비교해 보세요',
-                  style: WeRoboTypography.bodySmall),
+                  style: WeRoboTypography.bodySmall.themed(context)),
               const SizedBox(height: 20),
 
               // Portfolio selector chips
@@ -107,12 +108,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? WeRoboColors.primary
-                                  : WeRoboColors.card,
+                                  : tc.card,
                               borderRadius: BorderRadius.circular(12),
                               border: isSelected
                                   ? null
                                   : Border.all(
-                                      color: WeRoboColors.lightGray, width: 1),
+                                      color: tc.border, width: 1),
                             ),
                             child: Text(
                               portfolio.label,
@@ -121,7 +122,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                                 fontWeight: FontWeight.w600,
                                 color: isSelected
                                     ? WeRoboColors.white
-                                    : WeRoboColors.textSecondary,
+                                    : tc.textSecondary,
                               ),
                             ),
                           ),
@@ -150,7 +151,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                       child: _AnimatedStatChip(
                         label: '수익률',
                         value: returnRate,
-                        color: WeRoboColors.accent,
+                        color: tc.accent,
                       ),
                     ),
                   ],
@@ -261,11 +262,12 @@ class _AnimatedStatChipState extends State<_AnimatedStatChip>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: WeRoboColors.lightGray, width: 1),
+        border: Border.all(color: tc.border, width: 1),
       ),
       child: Column(
         children: [
@@ -280,7 +282,7 @@ class _AnimatedStatChipState extends State<_AnimatedStatChip>
               return Text(
                 '${val.toStringAsFixed(1)}%',
                 style: WeRoboTypography.number.copyWith(
-                  color: WeRoboColors.textPrimary,
+                  color: tc.textPrimary,
                   fontFamily: WeRoboFonts.english,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
@@ -349,6 +351,7 @@ class _AnimatedDonutState extends State<_AnimatedDonut>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
@@ -374,7 +377,7 @@ class _AnimatedDonutState extends State<_AnimatedDonut>
                   widget.label,
                   key: ValueKey(widget.label),
                   style: WeRoboTypography.heading3.copyWith(
-                    color: WeRoboColors.textPrimary,
+                    color: tc.textPrimary,
                   ),
                 ),
               ),
@@ -450,6 +453,7 @@ class _SectorList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       children: categories
@@ -469,13 +473,13 @@ class _SectorList extends StatelessWidget {
                     Expanded(
                       child: Text(cat.name,
                           style: WeRoboTypography.bodySmall
-                              .copyWith(color: WeRoboColors.textPrimary)),
+                              .copyWith(color: tc.textPrimary)),
                     ),
                     Text(
                       '${cat.percentage.toInt()}%',
                       style: WeRoboTypography.bodySmall.copyWith(
                         fontWeight: FontWeight.w600,
-                        color: WeRoboColors.textPrimary,
+                        color: tc.textPrimary,
                       ),
                     ),
                   ],

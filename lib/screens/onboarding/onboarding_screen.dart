@@ -52,8 +52,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: WeRoboColors.surface,
+      backgroundColor: tc.surface,
       body: SafeArea(
         child: Column(
           children: [
@@ -117,20 +118,20 @@ class _ServiceDescriptionPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Spacer(flex: 1),
           Text(
             'AI가 찾아주는\n최적의 포트폴리오',
-            style: WeRoboTypography.heading2,
+            style: WeRoboTypography.heading2.themed(context),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 12),
           Text(
             '글로벌 자산에 분산 투자하여\n안정적인 수익을 추구합니다',
-            style: WeRoboTypography.bodySmall,
+            style: WeRoboTypography.bodySmall.themed(context),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
@@ -179,6 +180,7 @@ class _LegendItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Column(
       children: [
         Container(
@@ -190,12 +192,12 @@ class _LegendItem extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(label, style: WeRoboTypography.caption),
+        Text(label, style: WeRoboTypography.caption.themed(context)),
         Text(
           value,
           style: WeRoboTypography.bodySmall.copyWith(
             fontWeight: FontWeight.w600,
-            color: WeRoboColors.textPrimary,
+            color: tc.textPrimary,
           ),
         ),
       ],
@@ -229,21 +231,22 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           const Spacer(flex: 1),
           Text(
             '이피션트 프론티어',
-            style: WeRoboTypography.heading2,
+            style: WeRoboTypography.heading2.themed(context),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
             '최적의 포트폴리오를 찾아드립니다',
-            style: WeRoboTypography.bodySmall,
+            style: WeRoboTypography.bodySmall.themed(context),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -263,7 +266,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
                 child: _StatCard(
                   label: '수익률',
                   value: '${_returnRate.toStringAsFixed(1)}%',
-                  color: WeRoboColors.accent,
+                  color: tc.accent,
                 ),
               ),
             ],
@@ -296,7 +299,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
                   child: Text(
                     '점을 드래그하여 원하는 포트폴리오를 선택하세요.',
                     style: WeRoboTypography.caption.copyWith(
-                      color: WeRoboColors.textSecondary,
+                      color: tc.textSecondary,
                     ),
                   ),
                 ),
@@ -323,21 +326,22 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: WeRoboColors.lightGray, width: 1),
+        border: Border.all(color: tc.border, width: 1),
       ),
       child: Column(
         children: [
           Text(label,
               style: WeRoboTypography.caption.copyWith(
-                  color: WeRoboColors.textSecondary)),
+                  color: tc.textSecondary)),
           const SizedBox(height: 4),
           Text(value,
               style: WeRoboTypography.number.copyWith(
-                  color: WeRoboColors.textPrimary)),
+                  color: tc.textPrimary)),
         ],
       ),
     );

@@ -74,6 +74,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
@@ -119,6 +120,8 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                       dotProgress: _dotAnimation.value,
                       dotT: _dotT,
                       isDragging: _isDragging,
+                      gridColor: tc.border,
+                      textTertiaryColor: tc.textTertiary,
                     ),
                   ),
                 ),
@@ -136,12 +139,16 @@ class _FrontierPainter extends CustomPainter {
   final double dotProgress;
   final double dotT;
   final bool isDragging;
+  final Color gridColor;
+  final Color textTertiaryColor;
 
   _FrontierPainter({
     required this.curveProgress,
     required this.dotProgress,
     required this.dotT,
     required this.isDragging,
+    required this.gridColor,
+    required this.textTertiaryColor,
   });
 
   Offset _tToPoint(double t, double w, double h) {
@@ -158,7 +165,7 @@ class _FrontierPainter extends CustomPainter {
 
     // Grid lines
     final gridPaint = Paint()
-      ..color = WeRoboColors.dotInactive.withValues(alpha: 0.3)
+      ..color = gridColor.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.5;
 
@@ -173,7 +180,7 @@ class _FrontierPainter extends CustomPainter {
 
     // Axis labels — 위험도 on Y-axis (left), 수익률 on X-axis (bottom-right)
     final labelStyle = TextStyle(
-      color: WeRoboColors.textTertiary,
+      color: textTertiaryColor,
       fontSize: 10,
     );
 
@@ -228,7 +235,7 @@ class _FrontierPainter extends CustomPainter {
         final x = w * 0.2 + rng.nextDouble() * w * 0.6;
         final y = h * 0.2 + rng.nextDouble() * h * 0.6;
         scatterPaint.color =
-            WeRoboColors.textTertiary.withValues(alpha: 0.3 * dotProgress);
+            textTertiaryColor.withValues(alpha: 0.3 * dotProgress);
         canvas.drawCircle(Offset(x, y), 3 * dotProgress, scatterPaint);
       }
 

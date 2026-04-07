@@ -83,6 +83,62 @@ class MockChartData {
     DateTime(2026, 3, 31),
   ];
 
+  /// Portfolio value history for the home chart.
+  /// Returns ~600 daily points (~20 months) of ₩-denominated values.
+  static List<ChartPoint> portfolioValue(InvestmentType type) {
+    final base = type == InvestmentType.safe
+        ? 10000000.0
+        : type == InvestmentType.balanced
+            ? 10000000.0
+            : 10000000.0;
+    final drift = type == InvestmentType.safe
+        ? 4200000.0
+        : type == InvestmentType.balanced
+            ? 5826400.0
+            : 7500000.0;
+    final vol = type == InvestmentType.safe
+        ? 120000.0
+        : type == InvestmentType.balanced
+            ? 180000.0
+            : 260000.0;
+    final rng = Random(type.index * 31 + 7);
+    final days = 600;
+    final pts = <ChartPoint>[];
+    double val = base;
+    final startDate = DateTime(2024, 8, 15);
+    for (int i = 0; i < days; i++) {
+      val += drift / days + (rng.nextDouble() - 0.42) * vol;
+      val = val.clamp(base * 0.85, double.infinity);
+      pts.add(ChartPoint(
+        date: startDate.add(Duration(days: i)),
+        value: val,
+      ));
+    }
+    return pts;
+  }
+
+  /// Cost basis (cumulative deposits) for the home chart.
+  /// Step function: starts at base, adds ₩500,000 every ~90 days.
+  static List<ChartPoint> costBasis(InvestmentType type) {
+    const days = 600;
+    const depositInterval = 90;
+    const depositAmount = 500000.0;
+    const base = 10000000.0;
+    final startDate = DateTime(2024, 8, 15);
+    final pts = <ChartPoint>[];
+    double cumulative = base;
+    for (int i = 0; i < days; i++) {
+      if (i > 0 && i % depositInterval == 0) {
+        cumulative += depositAmount;
+      }
+      pts.add(ChartPoint(
+        date: startDate.add(Duration(days: i)),
+        value: cumulative,
+      ));
+    }
+    return pts;
+  }
+
   /// Flat dashed line at the promised return rate for benchmarking.
   static ChartLine promisedReturnLine(InvestmentType type) {
     final rate = type == InvestmentType.safe
