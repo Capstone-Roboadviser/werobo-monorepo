@@ -319,26 +319,20 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: WeRoboColors.lightGray, width: 1),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: WeRoboTypography.caption.copyWith(color: color),
-          ),
+          Text(label,
+              style: WeRoboTypography.caption.copyWith(
+                  color: WeRoboColors.textSecondary)),
           const SizedBox(height: 4),
-          Text(
-            value,
-            style: WeRoboTypography.heading3.copyWith(
-              color: WeRoboColors.textPrimary,
-            ),
-          ),
+          Text(value,
+              style: WeRoboTypography.number.copyWith(
+                  color: WeRoboColors.textPrimary)),
         ],
       ),
     );
