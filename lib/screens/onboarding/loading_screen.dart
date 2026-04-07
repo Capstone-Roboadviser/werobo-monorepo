@@ -2,6 +2,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
+import '../../models/portfolio_data.dart';
 import '../../services/mobile_backend_api.dart';
 import 'result_screen.dart';
 
@@ -30,7 +31,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     super.initState();
 
     _progressController = AnimationController(
-      duration: const Duration(milliseconds: 2500),
+      duration: const Duration(milliseconds: 4000),
       vsync: this,
     );
 
@@ -93,18 +94,74 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         return;
       }
 
+      // Fall back to hardcoded portfolio data so the demo always works
+      final fallback = _buildFallbackRecommendation();
       _requestFinished = true;
       setState(() {
-        _errorMessage = _friendlyError(error);
+        _recommendation = fallback;
       });
+      _tryProceed();
     }
   }
 
-  String _friendlyError(Object error) {
-    if (error is MobileBackendException) {
-      return error.message;
+  MobileRecommendationResponse _buildFallbackRecommendation() {
+    final type = InvestmentType.fromDotT(widget.dotT);
+    final categories = PortfolioData.categoriesFor(type);
+    final details = PortfolioData.detailsFor(type);
+    final (risk, returnRate) = PortfolioData.statsFor(type);
+
+    final riskVal = double.parse(risk.replaceAll('%', '')) / 100;
+    final returnVal = double.parse(returnRate.replaceAll('%', '')) / 100;
+
+    MobilePortfolioRecommendation buildPortfolio(InvestmentType t) {
+      final cats = PortfolioData.categoriesFor(t);
+      final dets = PortfolioData.detailsFor(t);
+      final (r, ret) = PortfolioData.statsFor(t);
+      return MobilePortfolioRecommendation(
+        code: t.name,
+        label: t.label,
+        portfolioId: 'fallback-${t.name}',
+        targetVolatility: double.parse(r.replaceAll('%', '')) / 100,
+        expectedReturn: double.parse(ret.replaceAll('%', '')) / 100,
+        volatility: double.parse(r.replaceAll('%', '')) / 100,
+        sharpeRatio: 0,
+        sectorAllocations: [
+          for (final cat in cats)
+            MobileSectorAllocation(
+              assetCode: cat.name,
+              assetName: cat.name,
+              weight: cat.percentage / 100,
+              riskContribution: 0,
+            ),
+        ],
+        stockAllocations: [
+          for (final detail in dets)
+            for (final ticker in detail.tickers)
+              MobileStockAllocation(
+                ticker: ticker.symbol,
+                name: ticker.name,
+                sectorCode: detail.category.name,
+                sectorName: detail.category.name,
+                weight: ticker.percentage / 100,
+              ),
+        ],
+      );
     }
-    return '포트폴리오 데이터를 불러오지 못했어요.';
+
+    return MobileRecommendationResponse(
+      resolvedProfile: MobileResolvedProfile(
+        code: type.name,
+        label: type.label,
+        propensityScore: widget.dotT * 100,
+        targetVolatility: riskVal,
+        investmentHorizon: 'medium',
+      ),
+      recommendedPortfolioCode: type.name,
+      dataSource: 'fallback',
+      portfolios: [
+        for (final t in InvestmentType.values) buildPortfolio(t),
+      ],
+    );
   }
 
   void _tryProceed() {
