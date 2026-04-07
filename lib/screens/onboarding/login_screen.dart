@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
-import '../../models/portfolio_data.dart';
+import '../../models/mobile_backend_models.dart';
 import 'comparison_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  final InvestmentType investmentType;
+  final MobileRecommendationResponse recommendation;
+  final String selectedPortfolioCode;
 
-  const LoginScreen({super.key, required this.investmentType});
+  const LoginScreen({
+    super.key,
+    required this.recommendation,
+    required this.selectedPortfolioCode,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -42,8 +47,10 @@ class _LoginScreenState extends State<LoginScreen>
     // TODO: Implement actual auth for each provider
     Navigator.of(context).push(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) =>
-            ComparisonScreen(investmentType: widget.investmentType),
+        pageBuilder: (_, __, ___) => ComparisonScreen(
+          recommendation: widget.recommendation,
+          selectedPortfolioCode: widget.selectedPortfolioCode,
+        ),
         transitionsBuilder: (_, anim, __, child) =>
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 400),
@@ -145,7 +152,8 @@ class _LoginScreenState extends State<LoginScreen>
                 const SizedBox(height: 16),
                 _SocialButton(
                   label: 'Apple로 ${_isLogin ? '로그인' : '회원가입'}',
-                  icon: const Icon(Icons.apple, color: WeRoboColors.white, size: 22),
+                  icon: const Icon(Icons.apple,
+                      color: WeRoboColors.white, size: 22),
                   backgroundColor: WeRoboColors.black,
                   textColor: WeRoboColors.white,
                   onTap: () => _onSocialLogin('apple'),

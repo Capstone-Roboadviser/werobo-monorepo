@@ -1,14 +1,23 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
+
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
+import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import 'login_screen.dart';
 import 'widgets/vestor_pie_chart.dart';
 
 class PortfolioResultScreen extends StatefulWidget {
-  final double dotT;
-  const PortfolioResultScreen({super.key, required this.dotT});
+  final MobileRecommendationResponse recommendation;
+  final String selectedPortfolioCode;
+
+  const PortfolioResultScreen({
+    super.key,
+    required this.recommendation,
+    required this.selectedPortfolioCode,
+  });
 
   @override
   State<PortfolioResultScreen> createState() => _PortfolioResultScreenState();
@@ -33,24 +42,26 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
     super.dispose();
   }
 
-  Widget _stagger(int i, Widget child) {
-    final start = (i * 0.1).clamp(0.0, 0.5);
+  Widget _stagger(int index, Widget child) {
+    final start = (index * 0.1).clamp(0.0, 0.5);
     final end = (start + 0.5).clamp(0.0, 1.0);
     final fade = CurvedAnimation(
-        parent: _staggerCtrl,
-        curve: Interval(start, end, curve: Curves.easeOut));
-    final slide = Tween<Offset>(
-            begin: const Offset(0, 0.05), end: Offset.zero)
+      parent: _staggerCtrl,
+      curve: Interval(start, end, curve: Curves.easeOut),
+    );
+    final slide = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
         .animate(fade);
     return SlideTransition(
-        position: slide,
-        child: FadeTransition(opacity: fade, child: child));
+      position: slide,
+      child: FadeTransition(opacity: fade, child: child),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final type = InvestmentType.fromDotT(widget.dotT);
-    final categories = PortfolioData.categoriesFor(type);
+    final portfolio = widget.recommendation
+        .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
+    final categories = portfolio.toCategories();
 
     return Scaffold(
       backgroundColor: WeRoboColors.surface,
@@ -63,14 +74,27 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
                 child: Column(
                   children: [
                     const SizedBox(height: 20),
-                    _stagger(0, _ResultTypeCard(type: type)),
+                    _stagger(
+                      0,
+                      _ResultTypeCard(
+                        recommendation: widget.recommendation,
+                        portfolio: portfolio,
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     Expanded(
-                      child: _stagger(1,
-                          VestorPieChart(categories: categories)),
+                      child: _stagger(
+                        1,
+                        VestorPieChart(categories: categories),
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    _stagger(2, const _BlurredTickerSection()),
+                    _stagger(
+                      2,
+                      _BlurredTickerSection(
+                        holdings: portfolio.topTickerHoldings(),
+                      ),
+                    ),
                     const SizedBox(height: 16),
                   ],
                 ),
@@ -82,12 +106,13 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
                 onTap: () {
                   Navigator.of(context).pushReplacement(
                     PageRouteBuilder(
-                      pageBuilder: (_, __, ___) =>
-                          LoginScreen(investmentType: type),
+                      pageBuilder: (_, __, ___) => LoginScreen(
+                        recommendation: widget.recommendation,
+                        selectedPortfolioCode: portfolio.code,
+                      ),
                       transitionsBuilder: (_, anim, __, child) =>
                           FadeTransition(opacity: anim, child: child),
-                      transitionDuration:
-                          const Duration(milliseconds: 400),
+                      transitionDuration: const Duration(milliseconds: 400),
                     ),
                   );
                 },
@@ -114,8 +139,13 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
 }
 
 class _ResultTypeCard extends StatelessWidget {
-  final InvestmentType type;
-  const _ResultTypeCard({required this.type});
+  final MobileRecommendationResponse recommendation;
+  final MobilePortfolioRecommendation portfolio;
+
+  const _ResultTypeCard({
+    required this.recommendation,
+    required this.portfolio,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -127,15 +157,40 @@ class _ResultTypeCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('투자 성향 결과',
-              style: WeRoboTypography.heading3,
-              textAlign: TextAlign.center),
+          Text(
+            '당신에겐 ${portfolio.label} 포트폴리오가 잘 맞아요',
+            style: WeRoboTypography.heading3,
+          ),
           const SizedBox(height: 6),
-          Text('(${type.description})',
-              style: WeRoboTypography.bodySmall
-                  .copyWith(color: WeRoboColors.textSecondary),
-              textAlign: TextAlign.center),
+          Text(
+            '${recommendation.resolvedProfile.label} 성향과 목표 변동성 '
+            '${formatRatioPercent(recommendation.resolvedProfile.targetVolatility)}를 반영했어요.',
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: WeRoboColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _StatCard(
+                  label: '예상 수익률',
+                  value: portfolio.expectedReturnLabel,
+                  color: WeRoboColors.accent,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatCard(
+                  label: '변동성',
+                  value: portfolio.volatilityLabel,
+                  color: WeRoboColors.warning,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -143,10 +198,23 @@ class _ResultTypeCard extends StatelessWidget {
 }
 
 class _BlurredTickerSection extends StatelessWidget {
-  const _BlurredTickerSection();
+  final List<TickerHolding> holdings;
+
+  const _BlurredTickerSection({required this.holdings});
 
   @override
   Widget build(BuildContext context) {
+    final preview = holdings.isEmpty
+        ? const [
+            TickerHolding(
+                symbol: 'ETF', name: 'Portfolio Holding', percentage: 0),
+            TickerHolding(
+                symbol: 'BOND', name: 'Portfolio Holding', percentage: 0),
+            TickerHolding(
+                symbol: 'GLD', name: 'Portfolio Holding', percentage: 0),
+          ]
+        : holdings;
+
     return Container(
       width: double.infinity,
       height: 140,
@@ -164,17 +232,17 @@ class _BlurredTickerSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _fakeRow('VTV', '8.5%'),
-                  _fakeRow('QQQ', '6.8%'),
-                  _fakeRow('GLD', '8.0%'),
-                  _fakeRow('SHV', '12.0%'),
+                  for (final holding in preview)
+                    _holdingRow(
+                      holding.symbol,
+                      '${holding.percentage.toStringAsFixed(1)}%',
+                    ),
                 ],
               ),
             ),
             Positioned.fill(
               child: ClipRRect(
-                borderRadius:
-                    BorderRadius.circular(WeRoboColors.radiusM),
+                borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
                 child: BackdropFilter(
                   filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
                   child: Container(
@@ -183,15 +251,20 @@ class _BlurredTickerSection extends StatelessWidget {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text('블러처리',
-                              style: WeRoboTypography.bodySmall
-                                  .copyWith(
-                                      color: WeRoboColors.textPrimary,
-                                      fontWeight: FontWeight.w600)),
+                          Text(
+                            '블러처리',
+                            style: WeRoboTypography.bodySmall.copyWith(
+                              color: WeRoboColors.textPrimary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                           const SizedBox(height: 4),
-                          Text('(로그인/회원가입 후 자세히 공개)',
-                              style: WeRoboTypography.caption.copyWith(
-                                  color: WeRoboColors.textSecondary)),
+                          Text(
+                            '(로그인/회원가입 후 자세히 공개)',
+                            style: WeRoboTypography.caption.copyWith(
+                              color: WeRoboColors.textSecondary,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -205,7 +278,7 @@ class _BlurredTickerSection extends StatelessWidget {
     );
   }
 
-  static Widget _fakeRow(String ticker, String pct) {
+  static Widget _holdingRow(String ticker, String pct) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
@@ -213,6 +286,46 @@ class _BlurredTickerSection extends StatelessWidget {
           Text(ticker, style: WeRoboTypography.bodySmall),
           const Spacer(),
           Text(pct, style: WeRoboTypography.bodySmall),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _StatCard({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: WeRoboTypography.caption.copyWith(color: color),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: WeRoboTypography.heading3.copyWith(
+              fontFamily: WeRoboFonts.english,
+              color: WeRoboColors.textPrimary,
+            ),
+          ),
         ],
       ),
     );
