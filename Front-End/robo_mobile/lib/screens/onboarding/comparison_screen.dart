@@ -47,6 +47,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   String _portfolioSummary(String code) {
     switch (code) {
+      case 'lower_return':
+        return '선택한 포트폴리오보다 수익률이 낮아요.\n'
+            '더 안정적인 자산 배분을 보여줘요.';
+      case 'higher_return':
+        return '선택한 포트폴리오보다 수익률이 높아요.\n'
+            '더 적극적인 자산 배분을 보여줘요.';
       case 'conservative':
         return '채권 중심으로 변동이 적어요.\n'
             '은행 예금보다 높은 수익을 기대할 수 있어요.';
@@ -67,7 +73,6 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     final selected =
         widget.recommendation.portfolioByCodeOrRecommended(_selectedCode);
     final categories = selected.toCategories();
-    final risk = selected.volatilityLabel;
     final returnRate = selected.expectedReturnLabel;
 
     return Scaffold(
@@ -96,11 +101,11 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                 ),
               ),
               const SizedBox(height: 4),
-              Text('${widget.recommendation.resolvedProfile.label} 성향과 비교해 보세요',
+              Text('비슷한 수익률의 포트폴리오와 비교해 보세요',
                   style: WeRoboTypography.bodySmall.themed(context)),
               const SizedBox(height: 20),
 
-              // Portfolio selector chips
+              // Variant selector cards
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Row(
@@ -112,19 +117,24 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                       child: Padding(
                         padding: EdgeInsets.only(
                           left: index == 0 ? 0 : 6,
-                          right: index == portfolios.length - 1 ? 0 : 6,
+                          right: index == portfolios.length - 1
+                              ? 0
+                              : 6,
                         ),
                         child: GestureDetector(
-                          onTap: () =>
-                              setState(() => _selectedCode = portfolio.code),
+                          onTap: () => setState(
+                              () => _selectedCode = portfolio.code),
                           child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 250),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            duration:
+                                const Duration(milliseconds: 250),
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 12),
                             decoration: BoxDecoration(
                               color: isSelected
                                   ? WeRoboColors.primary
                                   : tc.card,
-                              borderRadius: BorderRadius.circular(12),
+                              borderRadius:
+                                  BorderRadius.circular(12),
                               border: isSelected
                                   ? null
                                   : Border.all(
@@ -133,7 +143,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                             child: Text(
                               portfolio.label,
                               textAlign: TextAlign.center,
-                              style: WeRoboTypography.bodySmall.copyWith(
+                              style:
+                                  WeRoboTypography.bodySmall.copyWith(
                                 fontWeight: FontWeight.w600,
                                 color: isSelected
                                     ? WeRoboColors.white
@@ -149,27 +160,13 @@ class _ComparisonScreenState extends State<ComparisonScreen>
               ),
               const SizedBox(height: 20),
 
-              // Stats with rolling number animation
+              // Return stat only (risk removed)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _AnimatedStatChip(
-                        label: '위험도',
-                        value: risk,
-                        color: WeRoboColors.warning,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _AnimatedStatChip(
-                        label: '수익률',
-                        value: returnRate,
-                        color: tc.accent,
-                      ),
-                    ),
-                  ],
+                child: _AnimatedStatChip(
+                  label: '수익률',
+                  value: returnRate,
+                  color: tc.accent,
                 ),
               ),
               const SizedBox(height: 12),
@@ -222,13 +219,16 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                     onPressed: () {
                       Navigator.of(context).push(
                         PageRouteBuilder(
-                          pageBuilder: (_, __, ___) => ConfirmationScreen(
+                          pageBuilder: (_, __, ___) =>
+                              ConfirmationScreen(
                             recommendation: widget.recommendation,
                             selectedPortfolioCode: _selectedCode,
                           ),
-                          transitionsBuilder: (_, anim, __, child) =>
-                              FadeTransition(opacity: anim, child: child),
-                          transitionDuration: const Duration(milliseconds: 400),
+                          transitionsBuilder:
+                              (_, anim, __, child) => FadeTransition(
+                                  opacity: anim, child: child),
+                          transitionDuration:
+                              const Duration(milliseconds: 400),
                         ),
                       );
                     },
