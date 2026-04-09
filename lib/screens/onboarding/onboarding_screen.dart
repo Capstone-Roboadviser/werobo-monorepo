@@ -239,13 +239,14 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         children: [
           const Spacer(flex: 1),
           Text(
-            '이피션트 프론티어',
+            '나에게 맞는 투자 찾기',
             style: WeRoboTypography.heading2.themed(context),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
           Text(
-            '최적의 포트폴리오를 찾아드립니다',
+            '이 곡선은 같은 위험도에서 가장 높은\n'
+            '수익을 내는 조합을 보여줍니다',
             style: WeRoboTypography.bodySmall.themed(context),
             textAlign: TextAlign.center,
           ),
@@ -297,7 +298,8 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '점을 드래그하여 원하는 포트폴리오를 선택하세요.',
+                    '점을 움직여 나에게 맞는 위치를 찾아보세요.\n'
+                    '오른쪽으로 갈수록 수익이 높지만 위험도 커져요.',
                     style: WeRoboTypography.caption.copyWith(
                       color: tc.textSecondary,
                     ),
