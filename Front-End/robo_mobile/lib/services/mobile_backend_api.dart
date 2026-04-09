@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 import '../models/mobile_backend_models.dart';
 
@@ -36,8 +37,7 @@ class MobileBackendApi {
     'stock_combination_demo',
   ];
 
-  final HttpClient _client = HttpClient()
-    ..connectionTimeout = const Duration(seconds: 20);
+  final http.Client _client = http.Client();
 
   Future<MobileRecommendationResponse> fetchRecommendation({
     required double propensityScore,
@@ -190,14 +190,16 @@ class MobileBackendApi {
     required T Function(Map<String, dynamic> json) parser,
     required Duration timeout,
   }) async {
-    final request = await _client
-        .postUrl(Uri.parse('$baseUrl/api/v1$path'))
+    final response = await _client
+        .post(
+          Uri.parse('$baseUrl/api/v1$path'),
+          headers: const <String, String>{
+            'Content-Type': 'application/json',
+          },
+          body: jsonEncode(body),
+        )
         .timeout(timeout);
-    request.headers.contentType = ContentType.json;
-    request.write(jsonEncode(body));
-
-    final response = await request.close().timeout(timeout);
-    final responseBody = await response.transform(utf8.decoder).join();
+    final responseBody = response.body;
     final decoded = responseBody.isEmpty
         ? const <String, dynamic>{}
         : jsonDecode(responseBody);
