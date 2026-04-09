@@ -53,10 +53,13 @@ WeRobo is a robo-advisor mobile app built with Flutter. It helps users find opti
 - 하늘색4 / primary: `#20A7DB`
 - 하늘색5 / primaryDark: `#1C96C5`
 
-**부 색상 (Neutrals):**
-- 화이트: `#FFFFFF`
-- 라이트 그레이: `#D3D3D3`
-- 실버: `#C0C0C0`
+**부 색상 (Cool-tinted Neutrals):**
+- 화이트: `#FFFFFF` (surface)
+- 카드: `#EFF1F3` (cool-tinted)
+- 보더: `#CDD1D6` (cool-tinted)
+- 배경: `#F6F7F8`
+- 텍스트 보조: `#6B6B6B`
+- 텍스트 3차: `#8E8E8E` (WCAG AA 4.6:1)
 - 블랙: `#000000`
 
 ### Fonts (from Figma)
