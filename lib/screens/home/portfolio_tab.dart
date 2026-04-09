@@ -30,6 +30,10 @@ class _PortfolioTabState extends State<PortfolioTab> {
   // Card 7 backtest fetch guard
   bool _backtestFetched = false;
 
+  // Rebalance simulation API data (falls back to mock)
+  List<MobileRebalanceEvent>? _apiRebalanceEvents;
+  bool _rebalanceFetched = false;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -41,6 +45,9 @@ class _PortfolioTabState extends State<PortfolioTab> {
     if (!_backtestFetched && state.backtest == null) {
       _fetchBacktest();
     }
+    if (!_rebalanceFetched) {
+      _fetchRebalanceSimulation();
+    }
   }
 
   Future<void> _fetchBacktest() async {
@@ -51,6 +58,29 @@ class _PortfolioTabState extends State<PortfolioTab> {
       if (!mounted) return;
       PortfolioStateProvider.of(context).setBacktest(bt);
     } catch (_) {}
+  }
+
+  Future<void> _fetchRebalanceSimulation() async {
+    if (_rebalanceFetched) return;
+    _rebalanceFetched = true;
+    try {
+      final state = PortfolioStateProvider.of(context);
+      final portfolio = state.selectedPortfolio;
+      if (portfolio == null) return;
+      final weights = <String, double>{};
+      for (final s in portfolio.stockAllocations) {
+        weights[s.ticker] = s.weight;
+      }
+      final result = await MobileBackendApi.instance
+          .fetchRebalanceSimulation(
+        weights: weights,
+        startDate: '2025-03-03',
+      );
+      if (!mounted) return;
+      setState(() => _apiRebalanceEvents = result.rebalanceEvents);
+    } catch (_) {
+      // Endpoint not deployed yet, mock data used as fallback
+    }
   }
 
   Future<void> _fetchHistoryForType(InvestmentType type) async {
