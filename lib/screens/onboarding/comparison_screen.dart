@@ -45,6 +45,21 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     super.dispose();
   }
 
+  String _portfolioSummary(String code) {
+    switch (code) {
+      case 'conservative':
+        return '채권 중심으로 변동이 적어요.\n'
+            '은행 예금보다 높은 수익을 기대할 수 있어요.';
+      case 'growth':
+        return '주식 비중이 높아 수익 가능성이 커요.\n'
+            '단기적으로 변동이 클 수 있지만 장기 성장을 추구해요.';
+      case 'balanced':
+      default:
+        return '주식과 채권을 균형 있게 배분해요.\n'
+            '적당한 수익과 안정성을 동시에 추구해요.';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
@@ -155,6 +170,28 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Plain-language summary
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: WeRoboColors.primary
+                        .withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    _portfolioSummary(_selectedCode),
+                    style: WeRoboTypography.caption.copyWith(
+                      color: tc.textSecondary,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
