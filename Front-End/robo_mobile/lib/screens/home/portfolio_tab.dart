@@ -7,8 +7,8 @@ import '../../models/portfolio_data.dart';
 import '../../models/mock_earnings_data.dart';
 import '../../models/rebalance_data.dart';
 import '../../services/mobile_backend_api.dart';
-import '../onboarding/widgets/portfolio_charts.dart';
-import '../onboarding/widgets/vestor_pie_chart.dart';
+import 'volatility_screen.dart';
+import 'widgets/chart_painters.dart';
 
 class PortfolioTab extends StatefulWidget {
   const PortfolioTab({super.key});
@@ -18,16 +18,14 @@ class PortfolioTab extends StatefulWidget {
 }
 
 class _PortfolioTabState extends State<PortfolioTab> {
-  int _viewTab = 0; // 0 = 비중, 1 = 성과 추이
-  int? _selectedSector;
   int? _expandedEvent;
 
-  // Card 2 API data (volatility-history)
+  // Volatility API data (passed to volatility screen)
   bool _isLoadingHistory = false;
   InvestmentType? _loadedHistoryType;
   List<ChartPoint>? _volatilityPoints;
 
-  // Card 7 backtest fetch guard
+  // Backtest fetch guard
   bool _backtestFetched = false;
 
   // Rebalance simulation API data (falls back to mock)
@@ -78,9 +76,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
       );
       if (!mounted) return;
       setState(() => _apiRebalanceEvents = result.rebalanceEvents);
-    } catch (_) {
-      // Endpoint not deployed yet, mock data used as fallback
-    }
+    } catch (_) {}
   }
 
   Future<void> _fetchHistoryForType(InvestmentType type) async {
@@ -120,15 +116,19 @@ class _PortfolioTabState extends State<PortfolioTab> {
     });
   }
 
-  /// Extract performance points from comparison-backtest data
-  /// for the selected portfolio type.
-  List<ChartPoint>? _performancePoints() {
-    final state = PortfolioStateProvider.of(context);
-    final code = state.type.riskCode;
-    for (final line in state.comparisonLines) {
-      if (line.key == code) return line.points;
-    }
-    return null;
+  void _navigateToVolatility() {
+    final type = PortfolioStateProvider.of(context).type;
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => VolatilityScreen(
+          type: type,
+          volatilityPoints: _volatilityPoints,
+        ),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+    );
   }
 
   @override
@@ -136,8 +136,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
     final tc = WeRoboThemeColors.of(context);
     final portfolioState = PortfolioStateProvider.of(context);
     final type = portfolioState.type;
-    final categories = portfolioState.categories;
-    final details = portfolioState.categoryDetails;
     final lines = portfolioState.comparisonLines;
     final rebalanceDates = portfolioState.rebalanceDates;
     final rebalanceEvents = MockRebalanceData.eventsFor(type);
@@ -151,7 +149,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
           children: [
             const SizedBox(height: 20),
             Text('내 포트폴리오',
-                style: WeRoboTypography.heading2.themed(context)),
+                style:
+                    WeRoboTypography.heading2.themed(context)),
             const SizedBox(height: 12),
 
             // Portfolio type selector
@@ -159,7 +158,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
               currentType: type,
               onTypeChanged: (t) {
                 PortfolioStateProvider.of(context).setType(t);
-                setState(() => _selectedSector = null);
                 _fetchHistoryForType(t);
               },
             ),
@@ -171,56 +169,26 @@ class _PortfolioTabState extends State<PortfolioTab> {
             ),
             const SizedBox(height: 16),
 
-            // View toggle
-            Container(
-              decoration: BoxDecoration(
-                color: tc.card,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              padding: const EdgeInsets.all(3),
-              child: Row(
-                children: [
-                  _ToggleChip(
-                    label: '비중',
-                    isActive: _viewTab == 0,
-                    onTap: () => setState(() => _viewTab = 0),
-                  ),
-                  _ToggleChip(
-                    label: '성과 추이',
-                    isActive: _viewTab == 1,
-                    onTap: () => setState(() => _viewTab = 1),
-                  ),
-                ],
-              ),
+            // Comparison chart (replaces old toggle + pie/trend)
+            _ComparisonChartSection(
+              type: type,
+              comparisonLines:
+                  lines.isNotEmpty ? lines : null,
+              rebalanceDates: rebalanceDates.isNotEmpty
+                  ? rebalanceDates
+                  : null,
             ),
             const SizedBox(height: 16),
 
-            // Content
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: _viewTab == 0
-                  ? _AllocationView(
-                      key: ValueKey('alloc_${type.name}'),
-                      categories: categories,
-                      details: details,
-                      selectedSector: _selectedSector,
-                      onSectorSelected: (idx) =>
-                          setState(() => _selectedSector = idx),
-                    )
-                  : _TrendView(
-                      key: ValueKey('trend_${type.name}'),
-                      type: type,
-                      volatilityPoints: _volatilityPoints,
-                      performancePoints: _performancePoints(),
-                      comparisonLines: lines,
-                      rebalanceDates: rebalanceDates,
-                      isLoading: _isLoadingHistory,
-                    ),
+            // Volatility page navigation
+            _VolatilityNavButton(
+              onTap: _navigateToVolatility,
             ),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
 
             // Next rebalance card
-            _NextRebalanceCard(rebalanceDates: rebalanceDates),
+            _NextRebalanceCard(
+                rebalanceDates: rebalanceDates),
             const SizedBox(height: 20),
 
             // Return contribution analysis
@@ -274,7 +242,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
 
             // Rebalancing history
             Text('리밸런싱 기록',
-                style: WeRoboTypography.heading3.themed(context)),
+                style:
+                    WeRoboTypography.heading3.themed(context)),
             const SizedBox(height: 12),
             ...rebalanceEvents.asMap().entries.map((entry) {
               final i = entry.key;
@@ -295,6 +264,318 @@ class _PortfolioTabState extends State<PortfolioTab> {
   }
 }
 
+// ── Comparison chart section ──
+
+class _ComparisonChartSection extends StatefulWidget {
+  final InvestmentType type;
+  final List<ChartLine>? comparisonLines;
+  final List<DateTime>? rebalanceDates;
+
+  const _ComparisonChartSection({
+    required this.type,
+    this.comparisonLines,
+    this.rebalanceDates,
+  });
+
+  @override
+  State<_ComparisonChartSection> createState() =>
+      _ComparisonChartSectionState();
+}
+
+class _ComparisonChartSectionState
+    extends State<_ComparisonChartSection>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _drawCtrl;
+  int? _touchIndex;
+  int _range = 4;
+
+  static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
+  static const _rangeDays = [7, 90, 365, 1825, 99999];
+
+  @override
+  void initState() {
+    super.initState();
+    _drawCtrl = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..forward();
+  }
+
+  @override
+  void didUpdateWidget(covariant _ComparisonChartSection old) {
+    super.didUpdateWidget(old);
+    if (old.type != widget.type) {
+      _drawCtrl.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _drawCtrl.dispose();
+    super.dispose();
+  }
+
+  List<ChartLine> _buildDisplayLines(
+      List<ChartLine> rawLines) {
+    final code = widget.type.riskCode;
+    final result = <ChartLine>[];
+
+    // 1. Portfolio line (포폴선) — blue solid
+    for (final line in rawLines) {
+      if (line.key == code) {
+        result.add(ChartLine(
+          key: line.key,
+          label: line.label,
+          color: WeRoboColors.primary,
+          dashed: false,
+          points: line.points,
+        ));
+        break;
+      }
+    }
+
+    // 2. Market line (시장선) — grey solid
+    for (final line in rawLines) {
+      if (line.key == 'sp500') {
+        result.add(ChartLine(
+          key: 'sp500',
+          label: 'S&P 500',
+          color: const Color(0xFF999999),
+          dashed: false,
+          points: line.points,
+        ));
+        break;
+      }
+    }
+
+    // 3. Bond line (채권) — dark grey dotted
+    for (final line in rawLines) {
+      if (line.key == 'treasury') {
+        result.add(ChartLine(
+          key: 'treasury',
+          label: '10년 국채',
+          color: const Color(0xFF666666),
+          dashed: true,
+          points: line.points,
+        ));
+        break;
+      }
+    }
+
+    return result;
+  }
+
+  List<ChartLine> _filterByRange(List<ChartLine> rawLines) {
+    final cutoff = DateTime.now()
+        .subtract(Duration(days: _rangeDays[_range]));
+    return rawLines.map((line) {
+      final filtered = line.points
+          .where((p) => p.date.isAfter(cutoff))
+          .toList();
+      return ChartLine(
+        key: line.key,
+        label: line.label,
+        color: line.color,
+        dashed: line.dashed,
+        points: filtered.isNotEmpty ? filtered : line.points,
+      );
+    }).toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final allLines =
+        widget.comparisonLines ?? const <ChartLine>[];
+    final displayLines = allLines.isEmpty
+        ? allLines
+        : _buildDisplayLines(allLines);
+    final lines = displayLines.isEmpty
+        ? displayLines
+        : _filterByRange(displayLines);
+    final rebalanceDates =
+        widget.rebalanceDates ?? const <DateTime>[];
+
+    return Column(
+      children: [
+        // Time range chips
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: List.generate(_rangeLabels.length, (i) {
+            final active = _range == i;
+            return Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: GestureDetector(
+                onTap: () {
+                  setState(() => _range = i);
+                  _drawCtrl.forward(from: 0);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: active
+                        ? WeRoboColors.primary
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    _rangeLabels[i],
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: active
+                          ? WeRoboColors.white
+                          : tc.textTertiary,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 8),
+        // Chart
+        SizedBox(
+          height: 320,
+          child: lines.isEmpty
+              ? const EmptyChartState(
+                  message: '비교 백테스트 데이터가 아직 없습니다.',
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    return GestureDetector(
+                      onPanUpdate: (d) {
+                        if (lines.isEmpty ||
+                            lines[0].points.isEmpty) {
+                          return;
+                        }
+                        final x = d.localPosition.dx - 36;
+                        final chartW =
+                            constraints.maxWidth - 36 - 12;
+                        final count = lines[0].points.length;
+                        final idx =
+                            ((x / chartW) * (count - 1))
+                                .round()
+                                .clamp(0, count - 1);
+                        setState(() => _touchIndex = idx);
+                      },
+                      onPanEnd: (_) =>
+                          setState(() => _touchIndex = null),
+                      onTapUp: (_) =>
+                          setState(() => _touchIndex = null),
+                      child: AnimatedBuilder(
+                        animation: _drawCtrl,
+                        builder: (context, _) {
+                          return CustomPaint(
+                            size: Size(
+                              constraints.maxWidth,
+                              constraints.maxHeight,
+                            ),
+                            painter: MultiLineChartPainter(
+                              lines: lines,
+                              progress: _drawCtrl.value,
+                              rebalanceDates: rebalanceDates,
+                              touchIndex: _touchIndex,
+                              gridColor: tc.border,
+                              textTertiaryColor:
+                                  tc.textTertiary,
+                              textPrimaryColor:
+                                  tc.textPrimary,
+                              tooltipBackground: tc.surface,
+                              tooltipBorder: tc.border,
+                            ),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                ),
+        ),
+        const SizedBox(height: 8),
+        // Legend
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          alignment: WrapAlignment.center,
+          children: lines.map((l) {
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 12,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: l.color,
+                    borderRadius: BorderRadius.circular(1),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(l.label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: tc.textSecondary,
+                    )),
+              ],
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Volatility navigation button ──
+
+class _VolatilityNavButton extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _VolatilityNavButton({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: tc.card,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: WeRoboColors.primary
+                    .withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.show_chart_rounded,
+                  size: 18, color: WeRoboColors.primary),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '포트폴리오 변동성',
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                size: 20, color: tc.textTertiary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ── Portfolio stats card ──
 
 class _PortfolioStatsCard extends StatelessWidget {
@@ -302,8 +583,6 @@ class _PortfolioStatsCard extends StatelessWidget {
 
   const _PortfolioStatsCard({required this.portfolio});
 
-  // Market-relative risk score: 0-100 scale
-  // max_market_vol = 0.20 (20% annualized, aggressive equity)
   static const double _maxMarketVol = 0.20;
 
   int _riskScore(double volatility) =>
@@ -421,246 +700,6 @@ class _StatItem extends StatelessWidget {
   }
 }
 
-// ── Toggle chip ──
-
-class _ToggleChip extends StatelessWidget {
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _ToggleChip({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: isActive
-                ? WeRoboColors.primary
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: WeRoboTypography.caption.copyWith(
-              fontWeight: FontWeight.w600,
-              color: isActive
-                  ? WeRoboColors.white
-                  : tc.textTertiary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Allocation view (pie + sector list) ──
-
-class _AllocationView extends StatelessWidget {
-  final List<PortfolioCategory> categories;
-  final List<PortfolioCategoryDetail> details;
-  final int? selectedSector;
-  final ValueChanged<int?> onSectorSelected;
-
-  const _AllocationView({
-    super.key,
-    required this.categories,
-    required this.details,
-    required this.selectedSector,
-    required this.onSectorSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    if (categories.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 60),
-        child: Center(
-          child: Text(
-            '포트폴리오 데이터를 불러오는 중...',
-            style: WeRoboTypography.bodySmall.themed(context),
-          ),
-        ),
-      );
-    }
-    return Column(
-      children: [
-        Center(
-          child: VestorPieChart(
-            categories: categories,
-            size: 220,
-            ringWidth: 26,
-            selectedRingWidth: 32,
-            onSectorSelected: onSectorSelected,
-            centerBuilder: (_) => AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: _buildCenter(context),
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
-        ...details.map((d) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: tc.card,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: d.category.color,
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        Text(d.category.name,
-                            style: WeRoboTypography.bodySmall
-                                .copyWith(
-                                    color: tc.textPrimary)),
-                        if (d.tickers.isNotEmpty)
-                          Text(
-                            d.tickers
-                                .map((t) => t.symbol)
-                                .join(', '),
-                            style: WeRoboTypography.caption
-                                .themed(context),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    '${d.category.percentage.toInt()}%',
-                    style: WeRoboTypography.bodySmall.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: tc.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-            )),
-      ],
-    );
-  }
-
-  Widget _buildCenter(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    if (selectedSector == null ||
-        selectedSector! >= details.length) {
-      return Text(
-        key: const ValueKey('default'),
-        '포트폴리오\n비중',
-        style: WeRoboTypography.heading3
-            .copyWith(color: tc.textPrimary),
-        textAlign: TextAlign.center,
-      );
-    }
-
-    final detail = details[selectedSector!];
-    return Column(
-      key: ValueKey('sector_$selectedSector'),
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          detail.category.name,
-          style: WeRoboTypography.caption.copyWith(
-            color: tc.textPrimary,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        Text(
-          '${detail.category.percentage.toInt()}%',
-          style: WeRoboTypography.number
-              .copyWith(color: tc.textPrimary),
-        ),
-        const SizedBox(height: 4),
-        ...detail.tickers.take(3).map((t) => Text(
-              '${t.symbol} '
-              '${t.percentage.toStringAsFixed(1)}%',
-              style: TextStyle(
-                fontFamily: WeRoboFonts.english,
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: tc.textSecondary,
-                height: 1.3,
-              ),
-            )),
-      ],
-    );
-  }
-}
-
-// ── Trend view (card 2 + card 7 API data) ──
-
-class _TrendView extends StatelessWidget {
-  final InvestmentType type;
-  final List<ChartPoint>? volatilityPoints;
-  final List<ChartPoint>? performancePoints;
-  final List<ChartLine> comparisonLines;
-  final List<DateTime> rebalanceDates;
-  final bool isLoading;
-
-  const _TrendView({
-    super.key,
-    required this.type,
-    this.volatilityPoints,
-    this.performancePoints,
-    required this.comparisonLines,
-    required this.rebalanceDates,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    if (isLoading &&
-        volatilityPoints == null &&
-        comparisonLines.isEmpty) {
-      return const SizedBox(
-        height: 400,
-        child: Center(
-          child: CircularProgressIndicator(
-            color: WeRoboColors.primary,
-          ),
-        ),
-      );
-    }
-
-    return SizedBox(
-      height: 400,
-      child: PortfolioCharts(
-        type: type,
-        volatilityPoints: volatilityPoints,
-        performancePoints: performancePoints,
-        comparisonLines:
-            comparisonLines.isNotEmpty ? comparisonLines : null,
-        rebalanceDates:
-            rebalanceDates.isNotEmpty ? rebalanceDates : null,
-        useFallbackMock: false,
-      ),
-    );
-  }
-}
-
 // ── Next rebalance card (derived from API dates) ──
 
 class _NextRebalanceCard extends StatelessWidget {
@@ -750,8 +789,8 @@ class _ContributionSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final summary = MockEarningsData.summaryFor(riskCode);
-    final commentary = MockEarningsData.commentaryFor(riskCode);
-    final totalPct = MockEarningsData.totalReturnPctFor(riskCode);
+    final commentary =
+        MockEarningsData.commentaryFor(riskCode);
     final sorted = [...summary]
       ..sort((a, b) => b.earnings.compareTo(a.earnings));
 
@@ -759,9 +798,9 @@ class _ContributionSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('수익 기여 분석',
-            style: WeRoboTypography.heading3.themed(context)),
+            style:
+                WeRoboTypography.heading3.themed(context)),
         const SizedBox(height: 8),
-        // Commentary
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(12),
@@ -778,7 +817,6 @@ class _ContributionSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        // Per-asset bars
         ...sorted.map((a) {
           final isPositive = a.earnings >= 0;
           final color =
@@ -840,9 +878,10 @@ class _ContributionSection extends StatelessWidget {
                     child: SizedBox(
                       height: 6,
                       child: LinearProgressIndicator(
-                        value: barFraction.clamp(0.0, 1.0),
-                        backgroundColor:
-                            tc.border.withValues(alpha: 0.2),
+                        value:
+                            barFraction.clamp(0.0, 1.0),
+                        backgroundColor: tc.border
+                            .withValues(alpha: 0.2),
                         valueColor:
                             AlwaysStoppedAnimation(color),
                       ),
@@ -982,7 +1021,8 @@ class _RebalanceEventCard extends StatelessWidget {
                     height: 8,
                     decoration: BoxDecoration(
                       color: change.color,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius:
+                          BorderRadius.circular(2),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1003,8 +1043,10 @@ class _RebalanceEventCard extends StatelessWidget {
                   Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 6),
-                    child: Icon(Icons.arrow_forward_rounded,
-                        size: 12, color: tc.textTertiary),
+                    child: Icon(
+                        Icons.arrow_forward_rounded,
+                        size: 12,
+                        color: tc.textTertiary),
                   ),
                   Text(
                     '${change.afterPct.toStringAsFixed(1)}%',
@@ -1024,7 +1066,8 @@ class _RebalanceEventCard extends StatelessWidget {
                               ? tc.accent
                               : WeRoboColors.warning)
                           .withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius:
+                          BorderRadius.circular(4),
                     ),
                     child: Text(
                       '${isPositive ? '+' : ''}'
@@ -1078,8 +1121,9 @@ class _AllocationBar extends StatelessWidget {
             height: 16,
             child: Row(
               children: changes.map((change) {
-                final pct =
-                    useBefore ? change.beforePct : change.afterPct;
+                final pct = useBefore
+                    ? change.beforePct
+                    : change.afterPct;
                 return Flexible(
                   flex: (pct * 10).round().clamp(1, 1000),
                   child: Container(
