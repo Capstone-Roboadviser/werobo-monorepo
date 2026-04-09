@@ -39,10 +39,12 @@ class MockRebalanceData {
     switch (type) {
       case InvestmentType.safe:
         return _safeEvents;
-      case InvestmentType.balanced:
-        return _balancedEvents;
       case InvestmentType.growth:
         return _growthEvents;
+      case InvestmentType.balanced:
+      case InvestmentType.lowerReturn:
+      case InvestmentType.higherReturn:
+        return _balancedEvents;
     }
   }
 

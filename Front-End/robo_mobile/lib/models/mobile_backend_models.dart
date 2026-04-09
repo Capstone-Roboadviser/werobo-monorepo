@@ -43,6 +43,10 @@ InvestmentType investmentTypeFromRiskCode(String code) {
       return InvestmentType.safe;
     case 'growth':
       return InvestmentType.growth;
+    case 'lower_return':
+      return InvestmentType.lowerReturn;
+    case 'higher_return':
+      return InvestmentType.higherReturn;
     case 'balanced':
     default:
       return InvestmentType.balanced;
@@ -193,6 +197,7 @@ class MobilePortfolioRecommendation {
   final double sharpeRatio;
   final List<MobileSectorAllocation> sectorAllocations;
   final List<MobileStockAllocation> stockAllocations;
+  final Map<String, double> stockWeights;
 
   const MobilePortfolioRecommendation({
     required this.code,
@@ -204,9 +209,12 @@ class MobilePortfolioRecommendation {
     required this.sharpeRatio,
     required this.sectorAllocations,
     required this.stockAllocations,
+    this.stockWeights = const {},
   });
 
   factory MobilePortfolioRecommendation.fromJson(Map<String, dynamic> json) {
+    final rawWeights =
+        json['stock_weights'] as Map<String, dynamic>? ?? const {};
     return MobilePortfolioRecommendation(
       code: json['code']?.toString() ?? '',
       label: json['label']?.toString() ?? '',
@@ -225,6 +233,8 @@ class MobilePortfolioRecommendation {
               .whereType<Map<String, dynamic>>()
               .map(MobileStockAllocation.fromJson)
               .toList(),
+      stockWeights:
+          rawWeights.map((k, v) => MapEntry(k, _asDouble(v))),
     );
   }
 

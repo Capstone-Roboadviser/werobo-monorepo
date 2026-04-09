@@ -50,7 +50,14 @@ class MobilePortfolioService:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
         rolling_window: int,
+        weights: dict[str, float] | None = None,
     ) -> dict[str, object]:
+        if weights is not None:
+            return self.calculation_adapter.get_volatility_history_from_weights(
+                weights=weights,
+                data_source=data_source,
+                rolling_window=rolling_window,
+            )
         resolved_profile = self.profile_service.resolve_risk_profile(
             propensity_score=propensity_score,
             explicit_profile=explicit_profile,
