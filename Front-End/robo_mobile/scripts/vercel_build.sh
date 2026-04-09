@@ -14,8 +14,4 @@ if [ ! -x "${FLUTTER_BIN}" ]; then
 fi
 
 export PATH="${FLUTTER_DIR}/bin:${PATH}"
-
-flutter --version
-flutter config --enable-web
-flutter pub get
-flutter build web --release
+exec bash scripts/build_web.sh
