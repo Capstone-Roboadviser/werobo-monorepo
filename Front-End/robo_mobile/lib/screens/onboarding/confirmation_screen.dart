@@ -6,7 +6,7 @@ import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import '../../services/mobile_backend_api.dart';
-import '../home/home_shell.dart';
+import 'welcome_screen.dart';
 import 'widgets/portfolio_charts.dart';
 import 'widgets/vestor_pie_chart.dart';
 
@@ -276,7 +276,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     }
     Navigator.of(context).pushAndRemoveUntil(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const HomeShell(),
+        pageBuilder: (_, __, ___) => const WelcomeScreen(),
         transitionsBuilder: (_, anim, __, child) =>
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 400),
