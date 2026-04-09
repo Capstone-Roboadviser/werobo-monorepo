@@ -1,0 +1,87 @@
+{
+  "seed": 7,
+  "years": 4,
+  "annual_returns": {
+    "us_value": 0.078,
+    "us_growth": 0.096,
+    "new_growth": 0.118,
+    "short_term_bond": 0.036,
+    "cash_equivalents": 0.026,
+    "gold": 0.061,
+    "infra_bond": 0.049
+  },
+  "annual_volatilities": {
+    "us_value": 0.170,
+    "us_growth": 0.208,
+    "new_growth": 0.242,
+    "short_term_bond": 0.045,
+    "cash_equivalents": 0.012,
+    "gold": 0.168,
+    "infra_bond": 0.092
+  },
+  "correlations": {
+    "us_value": {
+      "us_value": 1.00,
+      "us_growth": 0.72,
+      "new_growth": 0.62,
+      "short_term_bond": 0.10,
+      "cash_equivalents": 0.05,
+      "gold": 0.08,
+      "infra_bond": 0.22
+    },
+    "us_growth": {
+      "us_value": 0.72,
+      "us_growth": 1.00,
+      "new_growth": 0.78,
+      "short_term_bond": 0.08,
+      "cash_equivalents": 0.03,
+      "gold": 0.05,
+      "infra_bond": 0.18
+    },
+    "new_growth": {
+      "us_value": 0.62,
+      "us_growth": 0.78,
+      "new_growth": 1.00,
+      "short_term_bond": 0.06,
+      "cash_equivalents": 0.02,
+      "gold": 0.03,
+      "infra_bond": 0.15
+    },
+    "short_term_bond": {
+      "us_value": 0.10,
+      "us_growth": 0.08,
+      "new_growth": 0.06,
+      "short_term_bond": 1.00,
+      "cash_equivalents": 0.45,
+      "gold": 0.02,
+      "infra_bond": 0.55
+    },
+    "cash_equivalents": {
+      "us_value": 0.05,
+      "us_growth": 0.03,
+      "new_growth": 0.02,
+      "short_term_bond": 0.45,
+      "cash_equivalents": 1.00,
+      "gold": -0.02,
+      "infra_bond": 0.25
+    },
+    "gold": {
+      "us_value": 0.08,
+      "us_growth": 0.05,
+      "new_growth": 0.03,
+      "short_term_bond": 0.02,
+      "cash_equivalents": -0.02,
+      "gold": 1.00,
+      "infra_bond": 0.15
+    },
+    "infra_bond": {
+      "us_value": 0.22,
+      "us_growth": 0.18,
+      "new_growth": 0.15,
+      "short_term_bond": 0.55,
+      "cash_equivalents": 0.25,
+      "gold": 0.15,
+      "infra_bond": 1.00
+    }
+  }
+}

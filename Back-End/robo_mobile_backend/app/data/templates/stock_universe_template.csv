@@ -1,0 +1,14 @@
+ticker,name,sector_code,sector_name,market,currency,base_weight
+JPM,JPMorgan Chase & Co,us_value,미국 가치주,USA,USD,0.50
+BRK-B,Berkshire Hathaway Inc Class B,us_value,미국 가치주,USA,USD,0.50
+MSFT,Microsoft Corp,us_growth,미국 성장주,USA,USD,0.50
+AAPL,Apple Inc,us_growth,미국 성장주,USA,USD,0.50
+QQQ,Invesco QQQ Trust,new_growth,신성장주,USA,USD,0.34
+NVDA,NVIDIA Corp,new_growth,신성장주,USA,USD,0.33
+META,Meta Platforms Inc,new_growth,신성장주,USA,USD,0.33
+SHY,iShares 1-3 Year Treasury Bond ETF,short_term_bond,단기 채권,USA,USD,0.50
+BND,Vanguard Total Bond Market ETF,short_term_bond,단기 채권,USA,USD,0.50
+BIL,SPDR Bloomberg 1-3 Month T-Bill ETF,cash_equivalents,현금성자산,USA,USD,0.50
+SHV,iShares Short Treasury Bond ETF,cash_equivalents,현금성자산,USA,USD,0.50
+GLD,SPDR Gold Shares,gold,금,USA,USD,1.00
+BAB,Invesco Taxable Municipal Bond ETF,infra_bond,인프라 채권,USA,USD,1.00

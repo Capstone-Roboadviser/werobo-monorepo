@@ -1,0 +1,33 @@
+ticker,name,sector_code,sector_name,market,currency,base_weight
+BND1,Short-Term Bond 1,short_term_bond,단기 채권,USA,USD,0.25
+BND2,Short-Term Bond 2,short_term_bond,단기 채권,USA,USD,0.25
+BND3,Short-Term Bond 3,short_term_bond,단기 채권,USA,USD,0.25
+BND4,Short-Term Bond 4,short_term_bond,단기 채권,USA,USD,0.25
+RAS1,Gold 1,gold,금,USA,USD,0.50
+RAS2,Gold 2,gold,금,USA,USD,0.50
+RAS3,Infra Bond 1,infra_bond,인프라 채권,USA,USD,0.50
+RAS4,Infra Bond 2,infra_bond,인프라 채권,USA,USD,0.50
+ETF1,New Growth 1,new_growth,신성장주,USA,USD,0.125
+ETF2,New Growth 2,new_growth,신성장주,USA,USD,0.125
+ETF3,New Growth 3,new_growth,신성장주,USA,USD,0.125
+ETF4,New Growth 4,new_growth,신성장주,USA,USD,0.125
+THC1,US Growth 1,us_growth,미국 성장주,USA,USD,0.25
+THC2,US Growth 2,us_growth,미국 성장주,USA,USD,0.25
+THC3,US Growth 3,us_growth,미국 성장주,USA,USD,0.25
+THC4,US Growth 4,us_growth,미국 성장주,USA,USD,0.25
+AIS1,New Growth 5,new_growth,신성장주,USA,USD,0.125
+AIS2,New Growth 6,new_growth,신성장주,USA,USD,0.125
+AIS3,New Growth 7,new_growth,신성장주,USA,USD,0.125
+AIS4,New Growth 8,new_growth,신성장주,USA,USD,0.125
+FIN1,US Value 1,us_value,미국 가치주,USA,USD,0.125
+FIN2,US Value 2,us_value,미국 가치주,USA,USD,0.125
+FIN3,US Value 3,us_value,미국 가치주,USA,USD,0.125
+FIN4,US Value 4,us_value,미국 가치주,USA,USD,0.125
+ENG1,Cash Equivalent 1,cash_equivalents,현금성자산,USA,USD,0.25
+ENG2,Cash Equivalent 2,cash_equivalents,현금성자산,USA,USD,0.25
+ENG3,Cash Equivalent 3,cash_equivalents,현금성자산,USA,USD,0.25
+ENG4,Cash Equivalent 4,cash_equivalents,현금성자산,USA,USD,0.25
+CNS1,US Value 5,us_value,미국 가치주,USA,USD,0.125
+CNS2,US Value 6,us_value,미국 가치주,USA,USD,0.125
+CNS3,US Value 7,us_value,미국 가치주,USA,USD,0.125
+CNS4,US Value 8,us_value,미국 가치주,USA,USD,0.125
