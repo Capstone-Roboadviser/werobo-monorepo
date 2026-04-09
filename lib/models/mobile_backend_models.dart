@@ -567,6 +567,202 @@ class MobileComparisonBacktestResponse {
   }
 }
 
+// ── Earnings History ──
+
+class MobileEarningsPoint {
+  final DateTime date;
+  final double totalEarnings;
+  final double totalReturnPct;
+  final Map<String, double> assetEarnings;
+
+  const MobileEarningsPoint({
+    required this.date,
+    required this.totalEarnings,
+    required this.totalReturnPct,
+    required this.assetEarnings,
+  });
+
+  factory MobileEarningsPoint.fromJson(Map<String, dynamic> json) {
+    final raw = json['asset_earnings'] as Map<String, dynamic>? ?? {};
+    return MobileEarningsPoint(
+      date: _parseDate(json['date']),
+      totalEarnings: _asDouble(json['total_earnings']),
+      totalReturnPct: _asDouble(json['total_return_pct']),
+      assetEarnings: raw.map((k, v) => MapEntry(k, _asDouble(v))),
+    );
+  }
+}
+
+class MobileAssetEarningSummary {
+  final String assetCode;
+  final String assetName;
+  final double weight;
+  final double earnings;
+  final double returnPct;
+
+  const MobileAssetEarningSummary({
+    required this.assetCode,
+    required this.assetName,
+    required this.weight,
+    required this.earnings,
+    required this.returnPct,
+  });
+
+  factory MobileAssetEarningSummary.fromJson(Map<String, dynamic> json) {
+    return MobileAssetEarningSummary(
+      assetCode: json['asset_code']?.toString() ?? '',
+      assetName: json['asset_name']?.toString() ?? '',
+      weight: _asDouble(json['weight']),
+      earnings: _asDouble(json['earnings']),
+      returnPct: _asDouble(json['return_pct']),
+    );
+  }
+}
+
+class MobileEarningsHistoryResponse {
+  final List<MobileEarningsPoint> points;
+  final double investmentAmount;
+  final String startDate;
+  final String endDate;
+  final double totalReturnPct;
+  final double totalEarnings;
+  final List<MobileAssetEarningSummary> assetSummary;
+
+  const MobileEarningsHistoryResponse({
+    required this.points,
+    required this.investmentAmount,
+    required this.startDate,
+    required this.endDate,
+    required this.totalReturnPct,
+    required this.totalEarnings,
+    required this.assetSummary,
+  });
+
+  factory MobileEarningsHistoryResponse.fromJson(Map<String, dynamic> json) {
+    return MobileEarningsHistoryResponse(
+      points: (json['points'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileEarningsPoint.fromJson)
+          .toList(),
+      investmentAmount: _asDouble(json['investment_amount']),
+      startDate: json['start_date']?.toString() ?? '',
+      endDate: json['end_date']?.toString() ?? '',
+      totalReturnPct: _asDouble(json['total_return_pct']),
+      totalEarnings: _asDouble(json['total_earnings']),
+      assetSummary: (json['asset_summary'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileAssetEarningSummary.fromJson)
+          .toList(),
+    );
+  }
+}
+
+// ── Rebalance Simulation ──
+
+class MobileRebalanceTimePoint {
+  final DateTime date;
+  final double totalValue;
+  final Map<String, double> assetValues;
+
+  const MobileRebalanceTimePoint({
+    required this.date,
+    required this.totalValue,
+    required this.assetValues,
+  });
+
+  factory MobileRebalanceTimePoint.fromJson(Map<String, dynamic> json) {
+    final raw = json['asset_values'] as Map<String, dynamic>? ?? {};
+    return MobileRebalanceTimePoint(
+      date: _parseDate(json['date']),
+      totalValue: _asDouble(json['total_value']),
+      assetValues: raw.map((k, v) => MapEntry(k, _asDouble(v))),
+    );
+  }
+}
+
+class MobileRebalanceEvent {
+  final DateTime date;
+  final double totalValue;
+  final Map<String, double> preWeights;
+  final Map<String, double> postWeights;
+  final Map<String, double> trades;
+
+  const MobileRebalanceEvent({
+    required this.date,
+    required this.totalValue,
+    required this.preWeights,
+    required this.postWeights,
+    required this.trades,
+  });
+
+  factory MobileRebalanceEvent.fromJson(Map<String, dynamic> json) {
+    final pre = json['pre_weights'] as Map<String, dynamic>? ?? {};
+    final post = json['post_weights'] as Map<String, dynamic>? ?? {};
+    final tr = json['trades'] as Map<String, dynamic>? ?? {};
+    return MobileRebalanceEvent(
+      date: _parseDate(json['date']),
+      totalValue: _asDouble(json['total_value']),
+      preWeights: pre.map((k, v) => MapEntry(k, _asDouble(v))),
+      postWeights: post.map((k, v) => MapEntry(k, _asDouble(v))),
+      trades: tr.map((k, v) => MapEntry(k, _asDouble(v))),
+    );
+  }
+}
+
+class MobileRebalanceSimulationResponse {
+  final String startDate;
+  final String endDate;
+  final double investmentAmount;
+  final Map<String, double> targetWeights;
+  final Map<String, String> sectorNames;
+  final List<MobileRebalanceTimePoint> timeSeries;
+  final List<MobileRebalanceEvent> rebalanceEvents;
+  final double finalValue;
+  final double totalReturnPct;
+  final double noRebalanceFinalValue;
+  final double noRebalanceReturnPct;
+
+  const MobileRebalanceSimulationResponse({
+    required this.startDate,
+    required this.endDate,
+    required this.investmentAmount,
+    required this.targetWeights,
+    required this.sectorNames,
+    required this.timeSeries,
+    required this.rebalanceEvents,
+    required this.finalValue,
+    required this.totalReturnPct,
+    required this.noRebalanceFinalValue,
+    required this.noRebalanceReturnPct,
+  });
+
+  factory MobileRebalanceSimulationResponse.fromJson(
+      Map<String, dynamic> json) {
+    final tw = json['target_weights'] as Map<String, dynamic>? ?? {};
+    final sn = json['sector_names'] as Map<String, dynamic>? ?? {};
+    return MobileRebalanceSimulationResponse(
+      startDate: json['start_date']?.toString() ?? '',
+      endDate: json['end_date']?.toString() ?? '',
+      investmentAmount: _asDouble(json['investment_amount']),
+      targetWeights: tw.map((k, v) => MapEntry(k, _asDouble(v))),
+      sectorNames: sn.map((k, v) => MapEntry(k, v?.toString() ?? '')),
+      timeSeries: (json['time_series'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileRebalanceTimePoint.fromJson)
+          .toList(),
+      rebalanceEvents:
+          (json['rebalance_events'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(MobileRebalanceEvent.fromJson)
+              .toList(),
+      finalValue: _asDouble(json['final_value']),
+      totalReturnPct: _asDouble(json['total_return_pct']),
+      noRebalanceFinalValue: _asDouble(json['no_rebalance_final_value']),
+      noRebalanceReturnPct: _asDouble(json['no_rebalance_return_pct']),
+    );
+  }
+}
+
 class _GroupedSector {
   final String code;
   final String name;
