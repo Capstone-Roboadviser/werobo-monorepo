@@ -27,6 +27,15 @@ class RecommendationRequest(ProfileResolutionRequest):
 
 class VolatilityHistoryRequest(ProfileResolutionRequest):
     rolling_window: int = Field(default=20, ge=5, le=60, description="롤링 변동성 계산 윈도우")
+    weights: dict[str, float] | None = Field(default=None, description="직접 지정한 종목별 비중 (제공 시 risk_profile 대신 사용)")
+
+    @model_validator(mode="after")
+    def validate_profile_input(self) -> "VolatilityHistoryRequest":
+        if self.weights is not None:
+            return self
+        if self.propensity_score is None and self.risk_profile is None:
+            raise ValueError("weights, propensity_score, 또는 risk_profile 중 하나는 반드시 제공해야 합니다.")
+        return self
 
 
 class ComparisonBacktestRequest(BaseModel):

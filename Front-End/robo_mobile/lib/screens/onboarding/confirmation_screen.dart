@@ -78,11 +78,13 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
 
     // Card 2: volatility-history
     try {
+      final isVariant = _portfolio.investmentType.isVariant;
       volatilityHistory =
           await MobileBackendApi.instance.fetchVolatilityHistory(
-        riskProfile: _portfolio.code,
+        riskProfile: isVariant ? null : _portfolio.code,
         investmentHorizon:
             widget.recommendation.resolvedProfile.investmentHorizon,
+        weights: isVariant ? _portfolio.stockWeights : null,
       );
     } catch (error) {
       errors.add(_friendlyError(error));
