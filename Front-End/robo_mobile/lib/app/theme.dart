@@ -395,7 +395,7 @@ class WeRoboTheme {
       useMaterial3: true,
       brightness: Brightness.light,
       scaffoldBackgroundColor: WeRoboThemeColors.light.background,
-      colorScheme: const ColorScheme.light(
+      colorScheme: ColorScheme.light(
         primary: WeRoboColors.primary,
         secondary: WeRoboColors.accent,
         surface: WeRoboThemeColors.light.surface,
@@ -444,9 +444,9 @@ class WeRoboTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       scaffoldBackgroundColor: WeRoboThemeColors.dark.background,
-      colorScheme: const ColorScheme.dark(
+      colorScheme: ColorScheme.dark(
         primary: WeRoboColors.primary,
-        secondary: Color(0xFF34D399),
+        secondary: const Color(0xFF34D399),
         surface: WeRoboThemeColors.dark.surface,
         error: WeRoboColors.error,
       ),
