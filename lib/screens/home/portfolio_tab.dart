@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
+import '../../models/mock_earnings_data.dart';
 import '../../models/rebalance_data.dart';
 import '../../services/mobile_backend_api.dart';
 import '../onboarding/widgets/portfolio_charts.dart';
@@ -190,6 +191,12 @@ class _PortfolioTabState extends State<PortfolioTab> {
 
             // Next rebalance card
             _NextRebalanceCard(rebalanceDates: rebalanceDates),
+            const SizedBox(height: 20),
+
+            // Return contribution analysis
+            _ContributionSection(
+              riskCode: type.riskCode,
+            ),
             const SizedBox(height: 20),
 
             // Auto-rebalancing explanation
@@ -699,6 +706,136 @@ class _NextRebalanceCard extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+// ── Contribution analysis section ──
+
+class _ContributionSection extends StatelessWidget {
+  final String riskCode;
+
+  const _ContributionSection({required this.riskCode});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final summary = MockEarningsData.summaryFor(riskCode);
+    final commentary = MockEarningsData.commentaryFor(riskCode);
+    final totalPct = MockEarningsData.totalReturnPctFor(riskCode);
+    final sorted = [...summary]
+      ..sort((a, b) => b.earnings.compareTo(a.earnings));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('수익 기여 분석',
+            style: WeRoboTypography.heading3.themed(context)),
+        const SizedBox(height: 8),
+        // Commentary
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: tc.accent.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            commentary,
+            style: WeRoboTypography.caption.copyWith(
+              color: tc.textSecondary,
+              height: 1.5,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Per-asset bars
+        ...sorted.map((a) {
+          final isPositive = a.earnings >= 0;
+          final color =
+              isPositive ? tc.accent : WeRoboColors.error;
+          final maxEarnings = sorted.first.earnings.abs();
+          final barFraction = maxEarnings > 0
+              ? (a.earnings.abs() / maxEarnings)
+              : 0.0;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: tc.card,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          a.assetName,
+                          style: WeRoboTypography.caption
+                              .copyWith(
+                                  color: tc.textPrimary,
+                                  fontWeight:
+                                      FontWeight.w500),
+                        ),
+                      ),
+                      Text(
+                        '${isPositive ? '+' : ''}'
+                        '${a.returnPct.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontFamily: WeRoboFonts.english,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${isPositive ? '+' : ''}'
+                        '₩${_formatAmount(a.earnings)}',
+                        style: TextStyle(
+                          fontFamily: WeRoboFonts.english,
+                          fontSize: 11,
+                          color: tc.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: SizedBox(
+                      height: 6,
+                      child: LinearProgressIndicator(
+                        value: barFraction.clamp(0.0, 1.0),
+                        backgroundColor:
+                            tc.border.withValues(alpha: 0.2),
+                        valueColor:
+                            AlwaysStoppedAnimation(color),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  static String _formatAmount(double amount) {
+    final abs = amount.abs().round();
+    final str = abs.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < str.length; i++) {
+      if (i > 0 && (str.length - i) % 3 == 0) buf.write(',');
+      buf.write(str[i]);
+    }
+    return buf.toString();
   }
 }
 

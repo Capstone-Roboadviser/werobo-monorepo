@@ -91,6 +91,42 @@ class MobileBackendApi {
     );
   }
 
+  Future<MobileEarningsHistoryResponse> fetchEarningsHistory({
+    required Map<String, double> weights,
+    required String startDate,
+    double investmentAmount = 100000000,
+  }) {
+    return _postWithFallback(
+      path: '/portfolio/earnings-history',
+      bodyForDataSource: (dataSource) => <String, dynamic>{
+        'weights': weights,
+        'start_date': startDate,
+        'investment_amount': investmentAmount,
+        'data_source': dataSource,
+      },
+      parser: MobileEarningsHistoryResponse.fromJson,
+      timeout: const Duration(seconds: 30),
+    );
+  }
+
+  Future<MobileRebalanceSimulationResponse> fetchRebalanceSimulation({
+    required Map<String, double> weights,
+    required String startDate,
+    double investmentAmount = 100000000,
+  }) {
+    return _postWithFallback(
+      path: '/portfolio/rebalance-simulation',
+      bodyForDataSource: (dataSource) => <String, dynamic>{
+        'weights': weights,
+        'start_date': startDate,
+        'investment_amount': investmentAmount,
+        'data_source': dataSource,
+      },
+      parser: MobileRebalanceSimulationResponse.fromJson,
+      timeout: const Duration(seconds: 30),
+    );
+  }
+
   Future<MobileComparisonBacktestResponse> fetchComparisonBacktest() {
     return _postWithFallback(
       path: '/portfolios/comparison-backtest',
