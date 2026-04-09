@@ -167,31 +167,16 @@ class _ResultTypeCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${recommendation.resolvedProfile.label} 성향과 목표 변동성 '
-            '${formatRatioPercent(recommendation.resolvedProfile.targetVolatility)}를 반영했어요.',
+            '${recommendation.resolvedProfile.label} 성향을 반영했어요.',
             style: WeRoboTypography.bodySmall.copyWith(
               color: tc.textSecondary,
             ),
           ),
           const SizedBox(height: 14),
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: '예상 수익률',
-                  value: portfolio.expectedReturnLabel,
-                  color: tc.accent,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _StatCard(
-                  label: '변동성',
-                  value: portfolio.volatilityLabel,
-                  color: WeRoboColors.warning,
-                ),
-              ),
-            ],
+          _StatCard(
+            label: '예상 수익률',
+            value: portfolio.expectedReturnLabel,
+            color: tc.accent,
           ),
         ],
       ),
