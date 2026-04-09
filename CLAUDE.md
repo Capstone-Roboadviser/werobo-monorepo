@@ -49,3 +49,9 @@ Key routing rules:
 - Architecture review → invoke plan-eng-review
 - Save progress, checkpoint, resume → invoke checkpoint
 - Code quality, health check → invoke health
+
+## Health Stack
+
+- lint-flutter: cd Front-End/robo_mobile && flutter analyze
+- test-flutter: cd Front-End/robo_mobile && flutter test
+- test-python: cd Back-End/robo_mobile_backend && pytest
