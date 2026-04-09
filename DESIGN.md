@@ -45,11 +45,27 @@ Sky blue (#20A7DB) as primary communicates trust and stability, common in Korean
 5. **Data animation.** Charts draw progressively (800-1200ms). Rolling numbers animate between values. Donut sectors interpolate smoothly on type switch.
 6. **No parallax, no bounce, no spring.** These feel wrong for a finance app. Use easeOut and easeInOut curves only.
 
+## Plain-Language Design Principle
+Every data point has two layers: the number and the explanation. Beginners see the explanation first, experts see the number first. Both are always present.
+
+**Examples implemented:**
+- Efficient frontier: "이 곡선은 같은 위험도에서 가장 높은 수익을 내는 조합을 보여줍니다"
+- Risk indicator: Market-relative 0-100 scale with 낮음/보통/높음 label (not raw volatility %)
+- Portfolio comparison: Per-type plain summaries ("채권 중심으로 변동이 적어요")
+- Contribution analysis: "미국 가치주이(가) +7.8%로 가장 큰 수익 기여를 했어요"
+- Rebalancing: "자산 비중이 목표에서 10% 이상 벗어나면 자동으로 조정"
+
+**Rule:** If a user needs a finance degree to understand a screen, add a caption. If a number has no context, add a comparison (e.g., "은행 예금 이자보다 높은 수익").
+
 ## Component Vocabulary
 - **Cards:** 12px radius, #F0F0F0 background, no border. Content-first.
 - **Buttons:** 52px height, 12px radius, full-width primary. Outline variant for secondary actions.
-- **Charts:** CustomPaint only. No charting libraries. Touch crosshairs for exploration. Gradient area fills for trend visualization.
-- **Navigation:** Bottom tab bar with 4 items. Active = primary color with tinted background. Pill-style page indicators for onboarding.
+- **Charts:** CustomPaint only. No charting libraries. Touch crosshairs for exploration. Gradient area fills for trend visualization. Comparison chart simplified to 2 lines (portfolio + benchmark) with toggle.
+- **Stats card:** 3-column layout with dividers. Supports optional subtitle per stat (used for risk label).
+- **Contribution bars:** Per-asset horizontal progress bars with signed % and ₩ amount. Sorted by earnings descending.
+- **Expandable rebalance cards:** Tap to expand with before/after allocation bars and per-sector delta badges. Uses `AnimatedCrossFade`.
+- **Explanation cards:** Light primary tint background (6% alpha), icon + heading + body text. Used for auto-rebalancing explanation.
+- **Navigation:** Bottom tab bar with 4 items (홈/포트폴리오/커뮤니티/설정). Active = primary color with tinted background. Pill-style page indicators for onboarding.
 
 ## Layout Principles
 - 24px horizontal padding on all screens
@@ -59,9 +75,14 @@ Sky blue (#20A7DB) as primary communicates trust and stability, common in Korean
 - SingleChildScrollView with BouncingScrollPhysics for scrollable content
 
 ## Interaction Patterns
-- **Efficient frontier:** The signature interaction. User drags a dot along a curve to choose risk/return balance. Risk/return stats update in real-time. Page swipe is disabled during drag to prevent conflict.
-- **Portfolio comparison:** 3-chip type selector with animated donut chart and rolling number stats. Users can compare before committing.
+- **Efficient frontier:** The signature interaction. User drags a dot along a curve to choose risk/return balance. Risk/return stats update in real-time. Page swipe is disabled during drag to prevent conflict. Plain-language caption explains the curve.
+- **Portfolio comparison:** 3-chip type selector with animated donut chart and rolling number stats. Each type has a plain-language summary. Users can compare before committing.
 - **Pie chart sectors:** Tap a sector to see constituent ETF tickers in the center. Builds trust through transparency.
+- **Comparison chart toggle:** 2-line chart (selected portfolio + 7-asset benchmark). Benchmark line toggles on/off via a "벤치마크" button. Replaces the old 8-line chart.
+- **Contribution analysis:** Per-asset return bars sorted by earnings. Each bar shows signed % and ₩ amount. Top contributor gets a plain-language commentary sentence.
+- **Market-relative risk:** 0-100 scale derived from `portfolio_vol / 0.20 * 100`. Color-coded: green (0-33 낮음), yellow (34-66 보통), red (67-100 높음).
+- **Auto-rebalancing toggle:** Settings tab toggle (cosmetic for demo). Paired with explanation card in portfolio tab explaining the 10% drift rule.
+- **Preview mode:** "로그인 없이 둘러보기" on login screen bypasses auth for demo purposes.
 
 ## Spacing Scale
 Base unit: 4px. All spacing values are multiples of 4.
@@ -108,7 +129,7 @@ This is a mobile-only Flutter app. "Responsive" means handling different phone s
 - Bottom buttons padded with `EdgeInsets.fromLTRB(24, 0, 24, 32)` to clear home indicator
 
 ## Dark Mode Strategy
-Not currently implemented. When added:
+Implemented via `WeRoboThemeColors` extension with light/dark variants.
 
 **Surface hierarchy (dark):**
 | Token | Light | Dark |
@@ -132,7 +153,7 @@ Not currently implemented. When added:
 - Area fill gradients: reduce alpha by 30%
 - Tooltip backgrounds: card color instead of white
 
-**Implementation:** Use `WeRoboColors` with a `Brightness` parameter or a `ThemeExtension`. All color references already go through `WeRoboColors.*`, so the migration is mechanical.
+**Implementation:** `WeRoboThemeColors` ThemeExtension with `.of(context)` accessor. All widgets use `tc.textPrimary`, `tc.card`, etc. for brightness-aware colors. Static `WeRoboColors.*` for brand constants that don't change.
 
 ## Decisions Log
 | Date | Decision | Rationale |
@@ -140,6 +161,33 @@ Not currently implemented. When added:
 | 2026-04-08 | Initial design system created | Created by /design-consultation based on Figma specs and CLAUDE.md tokens |
 | 2026-04-08 | Accent green darkened #34D399 -> #059669 | WCAG AA contrast ratio (4.5:1 on white) |
 | 2026-04-08 | Added spacing scale, responsive strategy, dark mode plan | Complete the design system for implementation consistency |
+| 2026-04-09 | Competitive research: stay the course | Benchmarked against Toss, Robinhood, Wealthfront, Betterment, Kakao Pay. Current direction is category-literate. Efficient frontier is the true differentiator. |
+| 2026-04-09 | Plain-language design principle adopted | User testing revealed "too complex" feedback. Every data point now has two layers: number + explanation. |
+| 2026-04-09 | Chart simplified to 2 lines + toggle | Meeting requirement. Old 8-line chart replaced with portfolio + 7-asset avg benchmark. Toggle to show/hide benchmark. |
+| 2026-04-09 | Market-relative risk scale (0-100) | Meeting requirement. Raw volatility replaced with intuitive 0-100 scale with Korean labels. |
+| 2026-04-09 | Contribution analysis added | Meeting requirement. Per-asset return bars with plain-language commentary. |
+| 2026-04-09 | Auto-rebalancing UI (toggle + explanation) | Meeting requirement. 10% drift rule explained in portfolio tab. Settings toggle for demo. |
+| 2026-04-09 | Preview mode added | "로그인 없이 둘러보기" link on login screen for pre-auth browsing. |
+
+## Competitive Positioning
+Researched 2026-04-09. Key competitors: Toss Invest, Robinhood, Wealthfront, Betterment, Kakao Pay Securities.
+
+**Category convergence:** Nearly every investment app uses white/dark + one blue accent + sans-serif. WeRobo's sky blue + Noto Sans is category-literate but not distinctive.
+
+**Where WeRobo fits:**
+- Closest to Betterment/Wealthfront (robo-advisor, beginner-friendly, portfolio-first)
+- NOT competing with Toss/Robinhood (active trading, real-time tickers)
+- Differentiated by efficient frontier visualization (no competitor offers this as a core UX)
+
+**What competitors do well that we should note:**
+- Toss: language simplification, beginner-first terminology, investment-as-simple-as-money-transfer
+- Robinhood: color restraint (black/white/neutrals + one bold accent), elevated typography
+- Wealthfront: mobile-centric, gets users to first portfolio in minimal steps
+- Betterment: all-in-one net worth dashboard, trust through simplicity
+
+**WeRobo's design edge:** The efficient frontier interaction. No competitor lets users physically explore the risk/return tradeoff. This is our signature moment, and the design should amplify it.
+
+**Decision:** Stay the current course. Sky blue + clean fintech is the right baseline for a Korean robo-advisor capstone. The efficient frontier interaction is the differentiator, not the color palette.
 
 ## What This Design Is NOT
 - Not a trading app (no real-time tickers, no buy/sell buttons, no red/green candles)
