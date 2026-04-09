@@ -160,6 +160,17 @@ class _LoginScreenState extends State<LoginScreen>
                   onTap: () => _onSocialLogin('apple'),
                 ),
 
+                const SizedBox(height: 24),
+                GestureDetector(
+                  onTap: () => _onSocialLogin('preview'),
+                  child: Text(
+                    '로그인 없이 둘러보기',
+                    style: WeRoboTypography.caption.copyWith(
+                      color: tc.textSecondary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                ),
                 const Spacer(flex: 3),
               ],
             ),

@@ -384,10 +384,15 @@ class _ComparisonViewState extends State<_ComparisonView>
   int? _touchIndex;
   int _range = 4; // index into _ranges
   late InvestmentType _selectedType;
+  bool _showBenchmark = true;
 
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
   static const _rangeDays = [7, 90, 365, 1825, 99999];
-  static const _benchmarkKeys = {'sp500', 'treasury'};
+  static const _portfolioKeys = {
+    'conservative',
+    'balanced',
+    'growth',
+  };
 
   @override
   void initState() {
@@ -416,13 +421,57 @@ class _ComparisonViewState extends State<_ComparisonView>
     return result;
   }
 
+  /// Build a 7-asset simple-average benchmark line from all
+  /// portfolio lines (approximation until backend provides it).
+  ChartLine? _buildBenchmarkLine(List<ChartLine> rawLines) {
+    final portfolioLines = rawLines
+        .where((l) => _portfolioKeys.contains(l.key))
+        .toList();
+    if (portfolioLines.isEmpty) return null;
+    final minLen = portfolioLines
+        .map((l) => l.points.length)
+        .reduce(min);
+    if (minLen < 2) return null;
+
+    final avgPoints = <ChartPoint>[];
+    for (int i = 0; i < minLen; i++) {
+      double sum = 0;
+      for (final line in portfolioLines) {
+        sum += line.points[i].value;
+      }
+      avgPoints.add(ChartPoint(
+        date: portfolioLines.first.points[i].date,
+        value: sum / portfolioLines.length,
+      ));
+    }
+    return ChartLine(
+      key: 'benchmark_avg',
+      label: '7자산 단순평균',
+      color: const Color(0xFF999999),
+      dashed: true,
+      points: avgPoints,
+    );
+  }
+
   List<ChartLine> _filterByType(List<ChartLine> rawLines) {
     final code = _selectedType.riskCode;
-    return rawLines.where((line) {
-      return line.key == code ||
-          line.key == '${code}_expected' ||
-          _benchmarkKeys.contains(line.key);
-    }).toList();
+    final result = <ChartLine>[];
+
+    // Selected portfolio line
+    for (final line in rawLines) {
+      if (line.key == code) {
+        result.add(line);
+        break;
+      }
+    }
+
+    // Benchmark (toggle-controlled)
+    if (_showBenchmark) {
+      final bench = _buildBenchmarkLine(rawLines);
+      if (bench != null) result.add(bench);
+    }
+
+    return result;
   }
 
   List<ChartLine> _filterByRange(List<ChartLine> rawLines) {
@@ -461,46 +510,87 @@ class _ComparisonViewState extends State<_ComparisonView>
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
         children: [
-          // Portfolio type selector
+          // Portfolio type selector + benchmark toggle
           Row(
-            children: InvestmentType.values.map((t) {
-              final active = _selectedType == t;
-              return Padding(
-                padding: const EdgeInsets.only(right: 6),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() => _selectedType = t);
-                    _drawCtrl.forward(from: 0);
-                  },
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: active
-                          ? WeRoboColors.primary
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
+            children: [
+              ...InvestmentType.values.map((t) {
+                final active = _selectedType == t;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: GestureDetector(
+                    onTap: () {
+                      setState(() => _selectedType = t);
+                      _drawCtrl.forward(from: 0);
+                    },
+                    child: AnimatedContainer(
+                      duration:
+                          const Duration(milliseconds: 200),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
                         color: active
                             ? WeRoboColors.primary
-                            : tc.border,
-                        width: 1,
+                            : Colors.transparent,
+                        borderRadius:
+                            BorderRadius.circular(8),
+                        border: Border.all(
+                          color: active
+                              ? WeRoboColors.primary
+                              : tc.border,
+                          width: 1,
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      t.label,
-                      style: WeRoboTypography.caption.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: active
-                            ? WeRoboColors.white
-                            : tc.textTertiary,
+                      child: Text(
+                        t.label,
+                        style:
+                            WeRoboTypography.caption.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: active
+                              ? WeRoboColors.white
+                              : tc.textTertiary,
+                        ),
                       ),
                     ),
                   ),
+                );
+              }),
+              const Spacer(),
+              GestureDetector(
+                onTap: () {
+                  setState(
+                      () => _showBenchmark = !_showBenchmark);
+                  _drawCtrl.forward(from: 0);
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: _showBenchmark
+                        ? const Color(0xFF999999)
+                            .withValues(alpha: 0.15)
+                        : Colors.transparent,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _showBenchmark
+                          ? const Color(0xFF999999)
+                          : tc.border,
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    '벤치마크',
+                    style: WeRoboTypography.caption.copyWith(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 10,
+                      color: _showBenchmark
+                          ? tc.textPrimary
+                          : tc.textTertiary,
+                    ),
+                  ),
                 ),
-              );
-            }).toList(),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           // Time range chips
