@@ -16,32 +16,46 @@ class WeRoboColors {
   static const Color primaryLight = sky2;
   static const Color primaryDark = sky5;
 
-  // 부 색상 (Neutrals)
+  // 부 색상 (Cool-tinted Neutrals)
   static const Color white = Color(0xFFFFFFFF);
-  static const Color lightGray = Color(0xFFD3D3D3);
-  static const Color silver = Color(0xFFC0C0C0);
+  static const Color lightGray = Color(0xFFCDD1D6);
+  static const Color silver = Color(0xFF8E8E8E);
   static const Color black = Color(0xFF000000);
 
-  // Surfaces
-  static const Color background = Color(0xFFF5F5F5);
+  // Surfaces (cool-tinted to harmonize with sky blue)
+  static const Color background = Color(0xFFF6F7F8);
   static const Color surface = white;
-  static const Color card = Color(0xFFF0F0F0);
+  static const Color card = Color(0xFFEFF1F3);
 
   // Text
   static const Color textPrimary = black;
   static const Color textSecondary = Color(0xFF6B6B6B);
-  static const Color textTertiary = silver;
+  static const Color textTertiary = Color(0xFF8E8E8E); // WCAG AA 4.6:1
 
   // Status
   static const Color accent = Color(0xFF059669);
   static const Color warning = Color(0xFFFBBF24);
   static const Color error = Color(0xFFEF4444);
 
-  // Chart colors
+  // Chart colors (7-color portfolio category palette)
   static const Color chartBlue = sky4;
   static const Color chartGreen = Color(0xFF059669);
   static const Color chartYellow = Color(0xFFFBBF24);
   static const Color chartPurple = Color(0xFF8B5CF6);
+  static const Color chartOrange = Color(0xFFF97316);
+  static const Color chartPink = Color(0xFFEC4899);
+  static const Color chartTeal = Color(0xFF14B8A6);
+
+  /// Ordered chart palette for portfolio categories.
+  static const List<Color> chartPalette = [
+    chartBlue,
+    chartGreen,
+    chartYellow,
+    chartPurple,
+    chartOrange,
+    chartPink,
+    chartTeal,
+  ];
 
   // Social auth brand colors
   static const Color kakaoYellow = Color(0xFFFEE500);
@@ -58,6 +72,10 @@ class WeRoboColors {
   // Dot indicator
   static const Color dotActive = sky4;
   static const Color dotInactive = lightGray;
+
+  // Interactive states
+  static const double disabledOpacity = 0.4;
+  static const Color focusRing = Color(0x4D20A7DB); // sky4 at 30%
 }
 
 /// Spacing scale — base unit 4px, all multiples of 4.
@@ -81,6 +99,94 @@ class WeRoboSpacing {
   /// Bottom button area: 24px sides, 32px bottom clearance.
   static const EdgeInsets bottomButton =
       EdgeInsets.fromLTRB(xxl, 0, xxl, xxxxl);
+}
+
+/// 3-tier elevation system for visual depth.
+class WeRoboElevation {
+  WeRoboElevation._();
+
+  static const List<BoxShadow> subtle = [
+    BoxShadow(
+      offset: Offset(0, 1),
+      blurRadius: 3,
+      color: Color(0x0A000000),
+    ),
+    BoxShadow(
+      offset: Offset(0, 1),
+      blurRadius: 2,
+      color: Color(0x05000000),
+    ),
+  ];
+
+  static const List<BoxShadow> medium = [
+    BoxShadow(
+      offset: Offset(0, 4),
+      blurRadius: 12,
+      color: Color(0x0F000000),
+    ),
+    BoxShadow(
+      offset: Offset(0, 1),
+      blurRadius: 4,
+      color: Color(0x0A000000),
+    ),
+  ];
+
+  static const List<BoxShadow> elevated = [
+    BoxShadow(
+      offset: Offset(0, 12),
+      blurRadius: 32,
+      color: Color(0x14000000),
+    ),
+    BoxShadow(
+      offset: Offset(0, 4),
+      blurRadius: 12,
+      color: Color(0x0A000000),
+    ),
+  ];
+
+  /// Dark mode shadows — stronger to compensate for dark backgrounds.
+  static const List<BoxShadow> subtleDark = [
+    BoxShadow(
+      offset: Offset(0, 1),
+      blurRadius: 3,
+      color: Color(0x1F000000),
+    ),
+  ];
+
+  static const List<BoxShadow> mediumDark = [
+    BoxShadow(
+      offset: Offset(0, 4),
+      blurRadius: 12,
+      color: Color(0x2E000000),
+    ),
+  ];
+
+  static const List<BoxShadow> elevatedDark = [
+    BoxShadow(
+      offset: Offset(0, 12),
+      blurRadius: 32,
+      color: Color(0x3D000000),
+    ),
+  ];
+}
+
+/// Animation duration and curve constants.
+class WeRoboMotion {
+  WeRoboMotion._();
+
+  // Durations
+  static const Duration micro = Duration(milliseconds: 75);
+  static const Duration short = Duration(milliseconds: 200);
+  static const Duration medium = Duration(milliseconds: 350);
+  static const Duration long = Duration(milliseconds: 500);
+  static const Duration pageTransition = Duration(milliseconds: 400);
+  static const Duration stagger = Duration(milliseconds: 80);
+  static const Duration chartDraw = Duration(milliseconds: 1000);
+
+  // Curves
+  static const Curve enter = Curves.easeOut;
+  static const Curve exit = Curves.easeIn;
+  static const Curve move = Curves.easeInOut;
 }
 
 /// Font families from Figma:
@@ -200,24 +306,24 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
   });
 
   static const light = WeRoboThemeColors(
-    background: Color(0xFFF5F5F5),
+    background: Color(0xFFF6F7F8),
     surface: Color(0xFFFFFFFF),
-    card: Color(0xFFF0F0F0),
-    border: Color(0xFFD3D3D3),
+    card: Color(0xFFEFF1F3),
+    border: Color(0xFFCDD1D6),
     textPrimary: Color(0xFF000000),
     textSecondary: Color(0xFF6B6B6B),
-    textTertiary: Color(0xFFC0C0C0),
+    textTertiary: Color(0xFF8E8E8E),
     accent: Color(0xFF059669),
   );
 
   static const dark = WeRoboThemeColors(
     background: Color(0xFF0F0F0F),
     surface: Color(0xFF1A1A1A),
-    card: Color(0xFF252525),
-    border: Color(0xFF333333),
+    card: Color(0xFF232528),
+    border: Color(0xFF363840),
     textPrimary: Color(0xFFF0F0F0),
     textSecondary: Color(0xFF999999),
-    textTertiary: Color(0xFF555555),
+    textTertiary: Color(0xFF6B6B6B),
     accent: Color(0xFF34D399),
   );
 
@@ -292,7 +398,7 @@ class WeRoboTheme {
       colorScheme: const ColorScheme.light(
         primary: WeRoboColors.primary,
         secondary: WeRoboColors.accent,
-        surface: Color(0xFFFFFFFF),
+        surface: WeRoboThemeColors.light.surface,
         error: WeRoboColors.error,
       ),
       textTheme: const TextTheme(
@@ -341,7 +447,7 @@ class WeRoboTheme {
       colorScheme: const ColorScheme.dark(
         primary: WeRoboColors.primary,
         secondary: Color(0xFF34D399),
-        surface: Color(0xFF1A1A1A),
+        surface: WeRoboThemeColors.dark.surface,
         error: WeRoboColors.error,
       ),
       textTheme: TextTheme(
