@@ -20,9 +20,19 @@ Sky blue (#20A7DB) as primary communicates trust and stability, common in Korean
 | warning | #FBBF24 | Risk indicators |
 | error | #EF4444 | Error states only |
 
-**Neutrals:** White (#FFFFFF) surface, #F0F0F0 cards, #D3D3D3 borders, #000000 primary text, #6B6B6B secondary text, #C0C0C0 tertiary text.
+**Neutrals (cool-tinted):** White (#FFFFFF) surface, #EFF1F3 cards, #CDD1D6 borders, #000000 primary text, #6B6B6B secondary text, #8E8E8E tertiary text. Neutrals carry a subtle cool tint to harmonize with the sky blue primary. Background: #F6F7F8.
 
 **Chart palette:** 7 fixed colors per portfolio category. Consistent across all investment types so users build visual memory of sector colors.
+
+| Index | Hex | Category Example |
+|-------|---------|------------------|
+| 1 | #20A7DB | 미국 주식 |
+| 2 | #059669 | 선진국 채권 |
+| 3 | #FBBF24 | 한국 주식 |
+| 4 | #8B5CF6 | 신흥국 주식 |
+| 5 | #F97316 | 원자재 |
+| 6 | #EC4899 | 부동산 |
+| 7 | #14B8A6 | 대체투자 |
 
 ## Typography
 5-font system designed for Korean readability:
@@ -45,6 +55,18 @@ Sky blue (#20A7DB) as primary communicates trust and stability, common in Korean
 5. **Data animation.** Charts draw progressively (800-1200ms). Rolling numbers animate between values. Donut sectors interpolate smoothly on type switch.
 6. **No parallax, no bounce, no spring.** These feel wrong for a finance app. Use easeOut and easeInOut curves only.
 
+**Animation constants (codified as `WeRoboMotion` in theme.dart):**
+
+| Token | Duration | Curve | Usage |
+|-------|----------|-------|-------|
+| micro | 75ms | easeOut | Toggle states, checkbox, radio |
+| short | 200ms | easeOut | Hover effects, press feedback |
+| medium | 350ms | easeInOut | Expand/collapse, tab switch |
+| long | 500ms | easeInOut | Page transitions, full-screen |
+| pageTransition | 400ms | easeOut | FadeTransition between screens |
+| stagger | 80ms offset | easeOut | Per-item delay in list reveals |
+| chartDraw | 800-1200ms | easeOut | Progressive chart rendering |
+
 ## Plain-Language Design Principle
 Every data point has two layers: the number and the explanation. Beginners see the explanation first, experts see the number first. Both are always present.
 
@@ -56,6 +78,28 @@ Every data point has two layers: the number and the explanation. Beginners see t
 - Rebalancing: "자산 비중이 목표에서 10% 이상 벗어나면 자동으로 조정"
 
 **Rule:** If a user needs a finance degree to understand a screen, add a caption. If a number has no context, add a comparison (e.g., "은행 예금 이자보다 높은 수익").
+
+## Elevation System
+3-tier shadow scale for visual depth. All shadows are neutral (no colored shadows).
+
+| Tier | CSS-equivalent | Flutter | Usage |
+|------|---------------|---------|-------|
+| subtle | 0 1px 3px rgba(0,0,0,0.04) | `BoxShadow(blurRadius: 3, offset: Offset(0,1), color: Color(0x0A000000))` | Cards, stat rows, list items |
+| medium | 0 4px 12px rgba(0,0,0,0.06) | `BoxShadow(blurRadius: 12, offset: Offset(0,4), color: Color(0x0F000000))` | Tooltips, dropdowns, popovers |
+| elevated | 0 12px 32px rgba(0,0,0,0.08) | `BoxShadow(blurRadius: 32, offset: Offset(0,12), color: Color(0x14000000))` | Modals, bottom sheets, toasts |
+
+**Dark mode shadows:** Increase opacity ~3x (0.04 -> 0.12, 0.06 -> 0.18, 0.08 -> 0.24) because darker backgrounds absorb more shadow.
+
+## Interactive States
+
+| State | Token | Value | Usage |
+|-------|-------|-------|-------|
+| Disabled | opacity | 0.4 | All disabled buttons, inputs, toggles |
+| Focus | ring | 0 0 0 3px rgba(32,167,219,0.3) | Inputs, buttons on keyboard focus |
+| Pressed | scale | 0.97x | All tappable elements (via Pressable) |
+| Hover (web) | primary-dark | #1C96C5 | Primary buttons on hover |
+
+**Focus ring:** 3px sky blue at 30% alpha. Applied via BoxShadow in Flutter. Required for accessibility, visible on keyboard navigation.
 
 ## Component Vocabulary
 - **Cards:** 12px radius, #F0F0F0 background, no border. Content-first.
@@ -134,10 +178,10 @@ Implemented via `WeRoboThemeColors` extension with light/dark variants.
 **Surface hierarchy (dark):**
 | Token | Light | Dark |
 |-------|-------|------|
-| background | #F5F5F5 | #0F0F0F |
+| background | #F6F7F8 | #0F0F0F |
 | surface | #FFFFFF | #1A1A1A |
-| card | #F0F0F0 | #252525 |
-| border | #D3D3D3 | #333333 |
+| card | #EFF1F3 | #232528 |
+| border | #CDD1D6 | #363840 |
 
 **Color adjustments:**
 - Primary sky blue (#20A7DB) works on dark backgrounds without change
@@ -146,7 +190,7 @@ Implemented via `WeRoboThemeColors` extension with light/dark variants.
 - Error red (#EF4444) stays unchanged
 - Text primary: #000000 -> #F0F0F0
 - Text secondary: #6B6B6B -> #999999
-- Text tertiary: #C0C0C0 -> #555555
+- Text tertiary: #8E8E8E -> #6B6B6B
 
 **Chart adjustments:**
 - Grid lines: lighter alpha on dark (0.15 instead of 0.3)
@@ -168,6 +212,7 @@ Implemented via `WeRoboThemeColors` extension with light/dark variants.
 | 2026-04-09 | Contribution analysis added | Meeting requirement. Per-asset return bars with plain-language commentary. |
 | 2026-04-09 | Auto-rebalancing UI (toggle + explanation) | Meeting requirement. 10% drift rule explained in portfolio tab. Settings toggle for demo. |
 | 2026-04-09 | Preview mode added | "로그인 없이 둘러보기" link on login screen for pre-auth browsing. |
+| 2026-04-09 | Polish pass: 6 fixes | Text tertiary #C0C0C0->#8E8E8E (WCAG AA), cool-tinted neutrals, 7-color chart palette, elevation system, interactive states, animation constants |
 
 ## Competitive Positioning
 Researched 2026-04-09. Key competitors: Toss Invest, Robinhood, Wealthfront, Betterment, Kakao Pay Securities.
