@@ -1,3 +1,4 @@
+import '../models/chart_data.dart';
 import '../models/mobile_backend_models.dart';
 
 /// Mock earnings data for demo until backend deploys
@@ -184,6 +185,46 @@ class MockEarningsData {
 
   static double totalReturnPctFor(String riskCode) {
     return totalReturnFor(riskCode) / 100000000 * 100;
+  }
+
+  /// Generate mock daily cumulative return points from Mar 3, 2025
+  /// to today, simulating the earnings-history API endpoint.
+  /// Base investment: ₩100,000,000.
+  static List<ChartPoint> dailyCumulativePoints({
+    required String riskCode,
+    double baseInvestment = 100000000,
+  }) {
+    final annualReturn = riskCode == 'conservative'
+        ? 0.06
+        : riskCode == 'growth'
+            ? 0.08
+            : 0.07;
+    final dailyReturn = annualReturn / 252;
+    final volatility = riskCode == 'conservative'
+        ? 0.005
+        : riskCode == 'growth'
+            ? 0.012
+            : 0.008;
+
+    final start = DateTime(2025, 3, 3);
+    final end = DateTime.now();
+    final points = <ChartPoint>[];
+    double value = baseInvestment;
+
+    // Deterministic pseudo-random using date as seed
+    var day = start;
+    int seed = riskCode.hashCode;
+    while (!day.isAfter(end)) {
+      if (day.weekday <= 5) {
+        // Simple deterministic noise
+        seed = ((seed * 1103515245 + 12345) & 0x7fffffff);
+        final noise = ((seed % 1000) / 1000.0 - 0.5) * 2 * volatility;
+        value *= (1 + dailyReturn + noise);
+        points.add(ChartPoint(date: day, value: value));
+      }
+      day = day.add(const Duration(days: 1));
+    }
+    return points;
   }
 
   /// Plain-language commentary for the top contributor

@@ -4,6 +4,7 @@ import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
+import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
 
 class HomeTab extends StatefulWidget {
@@ -156,8 +157,17 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   int? _touchIndex;
 
   List<ChartPoint> get _allValue {
-    return PortfolioStateProvider.of(context)
+    // Use backtest data if available, otherwise mock daily
+    // cumulative returns from Mar 3 (meeting requirement).
+    final backtest = PortfolioStateProvider.of(context)
         .portfolioValuePoints(baseInvestment: _baseInvestment);
+    if (backtest.isNotEmpty) return backtest;
+    final riskCode =
+        PortfolioStateProvider.of(context).type.riskCode;
+    return MockEarningsData.dailyCumulativePoints(
+      riskCode: riskCode,
+      baseInvestment: _baseInvestment,
+    );
   }
 
   /// Flat cost basis at base investment (deposits tracked by API
