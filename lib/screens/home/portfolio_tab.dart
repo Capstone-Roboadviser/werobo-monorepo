@@ -192,6 +192,49 @@ class _PortfolioTabState extends State<PortfolioTab> {
             _NextRebalanceCard(rebalanceDates: rebalanceDates),
             const SizedBox(height: 20),
 
+            // Auto-rebalancing explanation
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: WeRoboColors.primary
+                    .withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.auto_fix_high_rounded,
+                          size: 18,
+                          color: WeRoboColors.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        '자동 리밸런싱',
+                        style:
+                            WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'WeRobo는 분기마다 포트폴리오를 자동으로 점검합니다. '
+                    '자산 비중이 목표에서 10% 이상 벗어나면 '
+                    '자동으로 조정해서 위험을 관리합니다.',
+                    style: WeRoboTypography.caption.copyWith(
+                      color: tc.textSecondary,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
             // Rebalancing history
             Text('리밸런싱 기록',
                 style: WeRoboTypography.heading3.themed(context)),
@@ -222,11 +265,34 @@ class _PortfolioStatsCard extends StatelessWidget {
 
   const _PortfolioStatsCard({required this.portfolio});
 
+  // Market-relative risk score: 0-100 scale
+  // max_market_vol = 0.20 (20% annualized, aggressive equity)
+  static const double _maxMarketVol = 0.20;
+
+  int _riskScore(double volatility) =>
+      ((volatility / _maxMarketVol) * 100).round().clamp(0, 100);
+
+  String _riskLabel(int score) {
+    if (score <= 33) return '낮음';
+    if (score <= 66) return '보통';
+    return '높음';
+  }
+
+  Color _riskColor(int score, WeRoboThemeColors tc) {
+    if (score <= 33) return tc.accent;
+    if (score <= 66) return WeRoboColors.warning;
+    return WeRoboColors.error;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final p = portfolio;
     if (p == null) return const SizedBox.shrink();
+
+    final score = _riskScore(p.volatility);
+    final riskLabel = _riskLabel(score);
+    final riskColor = _riskColor(score, tc);
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -246,9 +312,10 @@ class _PortfolioStatsCard extends StatelessWidget {
           ),
           _statDivider(tc),
           _StatItem(
-            label: '위험도',
-            value: p.volatilityLabel,
-            valueColor: tc.textPrimary,
+            label: '시장 대비 위험도',
+            value: '$score',
+            subtitle: riskLabel,
+            valueColor: riskColor,
           ),
           _statDivider(tc),
           _StatItem(
@@ -274,11 +341,13 @@ class _PortfolioStatsCard extends StatelessWidget {
 class _StatItem extends StatelessWidget {
   final String label;
   final String value;
+  final String? subtitle;
   final Color valueColor;
 
   const _StatItem({
     required this.label,
     required this.value,
+    this.subtitle,
     required this.valueColor,
   });
 
@@ -300,6 +369,15 @@ class _StatItem extends StatelessWidget {
               color: valueColor,
             ),
           ),
+          if (subtitle != null)
+            Text(
+              subtitle!,
+              style: WeRoboTypography.caption.copyWith(
+                color: valueColor,
+                fontWeight: FontWeight.w600,
+                fontSize: 10,
+              ),
+            ),
         ],
       ),
     );
