@@ -70,6 +70,22 @@ robo_mobile_backend/
 - `POST /api/v1/portfolios/volatility-history`
 - `POST /api/v1/portfolios/comparison-backtest`
 
+## 관리자 refresh와 snapshot
+
+`POST /admin/api/prices/refresh`는 이제 가격 데이터만 적재하는 것으로 끝나지 않습니다.
+
+성공 또는 부분 성공으로 끝나면 같은 요청 안에서 아래 작업이 이어집니다.
+
+1. active 유니버스의 공통 가격 구간 계산
+2. `managed_universe` 기준 efficient frontier 재계산
+3. `short`, `medium`, `long` horizon별 materialized frontier snapshot 저장
+
+그 결과 모바일 API의 아래 엔드포인트는 `managed_universe` 요청 시 저장된 snapshot을 우선 읽고, 없을 때만 기존 계산 경로로 fallback 합니다.
+
+- `POST /api/v1/portfolios/recommendation`
+- `POST /api/v1/portfolios/frontier-preview`
+- `POST /api/v1/portfolios/frontier-selection`
+
 ## 실행 방법
 
 ```bash
@@ -114,6 +130,7 @@ uvicorn mobile_backend.main:app --reload
 - 모바일 초기 로딩 payload를 작게 유지할 수 있음
 - efficient frontier 전체를 내부적으로 계산하되, 화면에는 필요한 점만 샘플링해서 전달할 수 있음
 - 위험도/기대수익률 라벨과 실제 선택 포트폴리오를 같은 frontier 기반으로 맞출 수 있음
+- 관리자 refresh 이후에는 materialized frontier snapshot을 재사용하므로 동일 유니버스 요청의 첫 응답 지연을 줄일 수 있음
 
 ## 다음 권장 작업
 

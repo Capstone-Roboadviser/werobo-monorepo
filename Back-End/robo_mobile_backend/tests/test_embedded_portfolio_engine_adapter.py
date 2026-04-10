@@ -202,6 +202,49 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(response["portfolio"]["code"], "selected")
         self.assertEqual(response["portfolio"]["label"], "선택 포트폴리오")
 
+    def test_build_recommendation_uses_materialized_snapshot_when_available(self) -> None:
+        adapter, _ = self._build_fake_adapter()
+        snapshot_payload = adapter.build_materialized_frontier_snapshot(
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+        )
+        adapter._get_managed_universe_snapshot_payload = lambda **kwargs: snapshot_payload
+        adapter._build_context = lambda **kwargs: self.fail("snapshot hit should skip context rebuild")
+
+        response = adapter.build_recommendation(
+            resolved_profile=RiskProfile.BALANCED,
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.MANAGED_UNIVERSE,
+            propensity_score=45.0,
+        )
+
+        self.assertEqual(response["recommended_portfolio_code"], "balanced")
+        self.assertEqual(
+            [portfolio["code"] for portfolio in response["portfolios"]],
+            ["conservative", "balanced", "growth"],
+        )
+
+    def test_build_frontier_selection_uses_materialized_snapshot_when_available(self) -> None:
+        adapter, _ = self._build_fake_adapter()
+        snapshot_payload = adapter.build_materialized_frontier_snapshot(
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+        )
+        adapter._get_managed_universe_snapshot_payload = lambda **kwargs: snapshot_payload
+        adapter._build_context = lambda **kwargs: self.fail("snapshot hit should skip context rebuild")
+
+        response = adapter.build_frontier_selection(
+            resolved_profile=RiskProfile.BALANCED,
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.MANAGED_UNIVERSE,
+            propensity_score=45.0,
+            target_volatility=0.119,
+        )
+
+        self.assertEqual(response["selected_point_index"], 1)
+        self.assertEqual(response["representative_code"], "balanced")
+        self.assertEqual(response["portfolio"]["code"], "selected")
+
 
 if __name__ == "__main__":
     unittest.main()

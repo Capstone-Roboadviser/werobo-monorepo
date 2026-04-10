@@ -215,6 +215,14 @@ class ManagedPriceRefreshJobItemResponse(BaseModel):
     finished_at: str | None = None
 
 
+class ManagedFrontierSnapshotStatusResponse(BaseModel):
+    status: str = Field(..., description="frontier snapshot 갱신 상태", examples=["success"])
+    snapshot_count: int = Field(..., description="이번 요청에서 갱신한 snapshot 수", examples=[3])
+    horizons: list[str] = Field(default_factory=list, description="갱신 성공한 투자기간 목록", examples=[["short", "medium", "long"]])
+    failed_horizons: list[str] = Field(default_factory=list, description="갱신 실패한 투자기간 목록")
+    message: str | None = Field(default=None, description="frontier snapshot 갱신 메시지")
+
+
 class ManagedUniverseStatusResponse(BaseModel):
     database_configured: bool = Field(..., description="DATABASE_URL 설정 여부", examples=[True])
     active_version: ManagedUniverseVersionResponse | None = Field(default=None, description="현재 active 유니버스 버전")
@@ -263,6 +271,7 @@ class ManagedPriceRefreshResponse(BaseModel):
     job: ManagedPriceRefreshJobResponse = Field(..., description="갱신 작업 결과")
     price_stats: ManagedPriceStatsResponse = Field(..., description="갱신 후 가격 통계")
     price_window: ManagedUniversePriceWindowResponse | None = Field(default=None, description="갱신 후 공통 가격 구간")
+    frontier_snapshot: ManagedFrontierSnapshotStatusResponse | None = Field(default=None, description="가격 갱신 직후 재생성한 frontier snapshot 결과")
 
 
 class TickerLookupResponse(BaseModel):

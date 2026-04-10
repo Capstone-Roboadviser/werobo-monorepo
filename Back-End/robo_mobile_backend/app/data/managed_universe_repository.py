@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import json
 
 import pandas as pd
 
 from app.core.config import DATABASE_URL
-from app.domain.enums import PriceRefreshMode
+from app.domain.enums import InvestmentHorizon, PriceRefreshMode, SimulationDataSource
 from app.domain.models import (
+    ManagedFrontierSnapshot,
     ManagedPriceRefreshJob,
     ManagedPriceRefreshJobItem,
     ManagedUniversePriceWindow,
@@ -132,10 +134,31 @@ class ManagedUniverseRepository:
                     )
                     """
                 )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS frontier_snapshots (
+                        id BIGSERIAL PRIMARY KEY,
+                        version_id BIGINT NOT NULL REFERENCES universe_versions(id) ON DELETE CASCADE,
+                        data_source TEXT NOT NULL,
+                        investment_horizon TEXT NOT NULL,
+                        aligned_start_date DATE,
+                        aligned_end_date DATE,
+                        total_point_count INTEGER NOT NULL DEFAULT 0,
+                        source_refresh_job_id BIGINT REFERENCES refresh_jobs(id) ON DELETE SET NULL,
+                        payload JSONB NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE (version_id, data_source, investment_horizon)
+                    )
+                    """
+                )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_items_version_sector ON universe_items(version_id, sector_code)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_asset_roles_version ON universe_asset_roles(version_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_history_ticker_date ON price_history(ticker, date)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_refresh_jobs_version_created_at ON refresh_jobs(version_id, created_at DESC)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_frontier_snapshots_version_horizon ON frontier_snapshots(version_id, investment_horizon)"
+                )
             connection.commit()
 
     def list_universe_versions(self) -> list[ManagedUniverseVersion]:
@@ -327,6 +350,7 @@ class ManagedUniverseRepository:
                     (version_name, notes, should_activate, version_id),
                 )
                 cursor.execute("DELETE FROM universe_price_windows WHERE version_id = %s", (version_id,))
+                cursor.execute("DELETE FROM frontier_snapshots WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM universe_items WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM universe_asset_roles WHERE version_id = %s", (version_id,))
                 cursor.executemany(
@@ -828,6 +852,114 @@ class ManagedUniverseRepository:
                 rows = cursor.fetchall()
         return [self._refresh_job_item_from_row(row) for row in rows]
 
+    def upsert_frontier_snapshot(
+        self,
+        *,
+        version_id: int,
+        data_source: str,
+        investment_horizon: str,
+        aligned_start_date: str | None,
+        aligned_end_date: str | None,
+        total_point_count: int,
+        payload: dict[str, object],
+        source_refresh_job_id: int | None = None,
+    ) -> ManagedFrontierSnapshot:
+        self._ensure_ready()
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO frontier_snapshots (
+                        version_id,
+                        data_source,
+                        investment_horizon,
+                        aligned_start_date,
+                        aligned_end_date,
+                        total_point_count,
+                        source_refresh_job_id,
+                        payload,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (version_id, data_source, investment_horizon) DO UPDATE
+                    SET aligned_start_date = EXCLUDED.aligned_start_date,
+                        aligned_end_date = EXCLUDED.aligned_end_date,
+                        total_point_count = EXCLUDED.total_point_count,
+                        source_refresh_job_id = EXCLUDED.source_refresh_job_id,
+                        payload = EXCLUDED.payload,
+                        updated_at = NOW()
+                    RETURNING
+                        id,
+                        version_id,
+                        data_source,
+                        investment_horizon,
+                        aligned_start_date::TEXT AS aligned_start_date,
+                        aligned_end_date::TEXT AS aligned_end_date,
+                        total_point_count,
+                        source_refresh_job_id,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    """,
+                    (
+                        version_id,
+                        data_source,
+                        investment_horizon,
+                        aligned_start_date,
+                        aligned_end_date,
+                        total_point_count,
+                        source_refresh_job_id,
+                        payload_json,
+                    ),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            raise RuntimeError("frontier snapshot 저장 결과를 다시 읽지 못했습니다.")
+        return self._frontier_snapshot_from_row(row)
+
+    def get_frontier_snapshot(
+        self,
+        *,
+        version_id: int,
+        data_source: str,
+        investment_horizon: str,
+    ) -> ManagedFrontierSnapshot | None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        version_id,
+                        data_source,
+                        investment_horizon,
+                        aligned_start_date::TEXT AS aligned_start_date,
+                        aligned_end_date::TEXT AS aligned_end_date,
+                        total_point_count,
+                        source_refresh_job_id,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    FROM frontier_snapshots
+                    WHERE version_id = %s
+                      AND data_source = %s
+                      AND investment_horizon = %s
+                    """,
+                    (version_id, data_source, investment_horizon),
+                )
+                row = cursor.fetchone()
+        return None if row is None else self._frontier_snapshot_from_row(row)
+
+    def delete_frontier_snapshots(self, version_id: int) -> None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM frontier_snapshots WHERE version_id = %s", (version_id,))
+            connection.commit()
+
     def is_empty(self) -> bool:
         if not self.is_configured():
             return True
@@ -905,6 +1037,26 @@ class ManagedUniverseRepository:
             youngest_ticker=None if row["youngest_ticker"] is None else str(row["youngest_ticker"]),
             youngest_start_date=None if row["youngest_start_date"] is None else str(row["youngest_start_date"]),
             ticker_count=int(row["ticker_count"] or 0),
+        )
+
+    def _frontier_snapshot_from_row(self, row: dict) -> ManagedFrontierSnapshot:
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return ManagedFrontierSnapshot(
+            snapshot_id=int(row["id"]),
+            version_id=int(row["version_id"]),
+            data_source=SimulationDataSource(str(row["data_source"])),
+            investment_horizon=InvestmentHorizon(str(row["investment_horizon"])),
+            aligned_start_date=None if row["aligned_start_date"] is None else str(row["aligned_start_date"]),
+            aligned_end_date=None if row["aligned_end_date"] is None else str(row["aligned_end_date"]),
+            total_point_count=int(row["total_point_count"] or 0),
+            source_refresh_job_id=None
+            if row["source_refresh_job_id"] is None
+            else int(row["source_refresh_job_id"]),
+            payload=dict(payload),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
         )
 
     def _delete_price_window(self, version_id: int) -> None:

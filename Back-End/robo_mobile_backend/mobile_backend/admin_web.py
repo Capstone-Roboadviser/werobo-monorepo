@@ -1186,7 +1186,10 @@ def render_admin_page() -> HTMLResponse:
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        showMessage('#refresh-result', `갱신 완료\\njob: ${result.job.status}\\nmessage: ${result.job.message || '-'}\\nrows: ${result.price_stats.total_rows}`);
+        const snapshotMessage = result.frontier_snapshot
+          ? `\\nsnapshot: ${result.frontier_snapshot.status} (${result.frontier_snapshot.snapshot_count})\\nsnapshot message: ${result.frontier_snapshot.message || '-'}`
+          : '';
+        showMessage('#refresh-result', `갱신 완료\\njob: ${result.job.status}\\nmessage: ${result.job.message || '-'}\\nrows: ${result.price_stats.total_rows}${snapshotMessage}`);
         await reloadAll();
       } catch (error) {
         showMessage('#refresh-result', error.message, true);

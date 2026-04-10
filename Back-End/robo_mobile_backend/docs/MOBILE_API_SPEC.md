@@ -23,6 +23,12 @@
   - `expected_return`, `volatility`, `target_volatility`, `weight`, `return_pct`는 퍼센트 문자열이 아니라 소수 비율입니다.
   - 예: `0.12`는 `12%`를 의미합니다.
 
+## Materialized Snapshot 규칙
+
+- `data_source=managed_universe`일 때 recommendation/preview/selection API는 active 유니버스의 materialized frontier snapshot을 먼저 조회합니다.
+- snapshot은 관리자 `가격 갱신 실행` 후 자동 재생성됩니다.
+- snapshot이 없거나 현재 active 버전의 공통 가격 구간과 맞지 않으면, 서버는 기존 계산 경로로 fallback 합니다.
+
 ## Enum 값
 
 ### `risk_profile`
@@ -208,6 +214,7 @@
 
 - 모바일은 이 응답을 앱 메모리에 들고 있다가, 사용자가 점을 옮길 때마다 위험도와 기대수익률 라벨을 즉시 갱신하면 됩니다.
 - 사용자가 최종 위치를 확정한 뒤에만 상세 포트폴리오 API를 호출하는 구조를 권장합니다.
+- `managed_universe`에서는 가능한 한 materialized snapshot을 재사용하므로, 첫 호출 성능은 admin refresh 완료 여부에 크게 영향을 받습니다.
 
 ## 4. 선택 frontier 포트폴리오 상세
 
@@ -217,6 +224,7 @@
 
 - 사용자가 preview 차트에서 선택한 `target_volatility`를 기준으로, 가장 가까운 frontier 포인트의 실제 포트폴리오 상세를 반환합니다.
 - 드래그 중에는 preview만 사용하고, 손을 떼거나 확정 버튼을 누를 때 이 API를 호출하는 용도입니다.
+- `managed_universe` 요청에서는 저장된 per-point snapshot이 있으면 종목 비중/자산군 비중까지 재계산 없이 바로 반환합니다.
 
 요청 예시:
 

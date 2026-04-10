@@ -156,6 +156,16 @@
 
 - 가격 데이터는 버전별 테이블이 아니라 전역 가격 테이블에 누적 저장됩니다.
 - 계산은 버전별 종목 집합의 공통 가격 구간만 사용합니다.
+- refresh가 `success` 또는 `partial_success`로 끝나면 같은 요청 안에서 `managed_universe`용 frontier snapshot도 다시 생성합니다.
+- snapshot은 `short`, `medium`, `long` horizon별로 저장되며, 모바일 recommendation/preview/selection API가 우선 재사용합니다.
+
+응답 추가 필드:
+
+- `frontier_snapshot.status`
+- `frontier_snapshot.snapshot_count`
+- `frontier_snapshot.horizons`
+- `frontier_snapshot.failed_horizons`
+- `frontier_snapshot.message`
 
 ## 3. Readiness 확인
 

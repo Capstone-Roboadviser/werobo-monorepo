@@ -163,10 +163,35 @@ class ManagedPriceRefreshJobItem:
 
 
 @dataclass(frozen=True)
+class ManagedFrontierSnapshot:
+    snapshot_id: int
+    version_id: int
+    data_source: SimulationDataSource
+    investment_horizon: InvestmentHorizon
+    aligned_start_date: str | None
+    aligned_end_date: str | None
+    total_point_count: int
+    source_refresh_job_id: int | None
+    payload: dict[str, object]
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class ManagedFrontierSnapshotBuildStatus:
+    status: str
+    snapshot_count: int
+    horizons: list[str] = field(default_factory=list)
+    failed_horizons: list[str] = field(default_factory=list)
+    message: str | None = None
+
+
+@dataclass(frozen=True)
 class ManagedPriceRefreshResult:
     job: ManagedPriceRefreshJob
     price_stats: ManagedPriceStats
     price_window: ManagedUniversePriceWindow | None = None
+    frontier_snapshot_status: ManagedFrontierSnapshotBuildStatus | None = None
 
 
 @dataclass(frozen=True)
