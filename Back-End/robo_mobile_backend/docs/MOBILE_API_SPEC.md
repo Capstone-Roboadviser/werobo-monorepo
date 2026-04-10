@@ -234,5 +234,5 @@
 ## 구현 메모
 
 - 모바일 API는 [mobile_portfolio_service.py](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/services/mobile_portfolio_service.py) 를 통해 계산 코어를 호출합니다.
-- 실제 계산 응답 변환은 [legacy_fastapi_demo.py](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/integrations/legacy_fastapi_demo.py) 가 담당합니다.
+- 실제 계산 응답 변환은 [embedded_portfolio_engine.py](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/integrations/embedded_portfolio_engine.py) 가 담당합니다.
 - `managed_universe`를 사용하는 경우, 실제 결과는 현재 active 관리자 유니버스 상태에 영향을 받습니다.

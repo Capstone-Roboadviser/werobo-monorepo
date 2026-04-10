@@ -23,7 +23,7 @@
 중요:
 
 - 계산 코어는 프로젝트 루트의 [`app`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/app) 패키지에 포함되어 있습니다.
-- 이 `app` 패키지는 기존 `fastapi-demo`의 계산 관련 계층을 모바일 백엔드 안으로 이관한 것입니다.
+- 이 `app` 패키지는 모바일 백엔드가 직접 보유하는 내장 계산 코어입니다.
 - 모바일 API는 [`mobile_backend`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend) 패키지에서 별도 계약을 유지합니다.
 
 ## 프로젝트 구조
@@ -84,18 +84,17 @@ uvicorn mobile_backend.main:app --reload
 
 ## 계산 코어 동작 방식
 
-현재 [`legacy_fastapi_demo.py`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/integrations/legacy_fastapi_demo.py)는 프로젝트 내부의 [`app`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/app) 계산 패키지를 읽어 모바일 응답 형태로 재조립합니다.
+현재 [`embedded_portfolio_engine.py`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/integrations/embedded_portfolio_engine.py)는 프로젝트 내부의 [`app`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/app) 계산 패키지를 읽어 모바일 응답 형태로 재조립합니다.
 
 이 구조의 장점:
 
 - 모바일 API와 계산 코어가 같은 프로젝트 안에 존재함
-- 기존 계산 검증 자산을 빠르게 재사용할 수 있음
+- 계산 코어를 외부 프로젝트 없이 독립적으로 유지할 수 있음
 - 이후 계산 코어 리팩터링도 같은 저장소 안에서 진행할 수 있음
 
 주의할 점:
 
-- 현재 계산 패키지의 일부 모듈/이름은 기존 구조를 유지하고 있습니다.
-- 즉 외부 의존성은 제거됐지만, 내부 구조 정리는 아직 더 진행할 수 있습니다.
+- 현재 계산 패키지는 모바일 백엔드 안에 포함돼 있지만, 내부 네임스페이스 정리는 계속 진행할 수 있습니다.
 
 ## 다음 권장 작업
 

@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
-from mobile_backend.integrations.legacy_fastapi_demo import LegacyFastapiDemoAdapter
+from mobile_backend.integrations.embedded_portfolio_engine import EmbeddedPortfolioEngineAdapter
 from mobile_backend.services.profile_service import ProfileService
 
 
 class MobilePortfolioService:
     def __init__(self) -> None:
         self.profile_service = ProfileService()
-        self.calculation_adapter = LegacyFastapiDemoAdapter()
+        self.calculation_adapter = EmbeddedPortfolioEngineAdapter()
 
     def resolve_profile(
         self,
@@ -50,14 +50,7 @@ class MobilePortfolioService:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
         rolling_window: int,
-        weights: dict[str, float] | None = None,
     ) -> dict[str, object]:
-        if weights is not None:
-            return self.calculation_adapter.get_volatility_history_from_weights(
-                weights=weights,
-                data_source=data_source,
-                rolling_window=rolling_window,
-            )
         resolved_profile = self.profile_service.resolve_risk_profile(
             propensity_score=propensity_score,
             explicit_profile=explicit_profile,

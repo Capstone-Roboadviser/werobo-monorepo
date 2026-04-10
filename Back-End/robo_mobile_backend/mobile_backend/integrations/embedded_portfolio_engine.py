@@ -1,14 +1,10 @@
 from __future__ import annotations
 
-import logging
-
 from mobile_backend.core.config import PROFILE_LABELS
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
 
-logger = logging.getLogger(__name__)
 
-
-class LegacyFastapiDemoAdapter:
+class EmbeddedPortfolioEngineAdapter:
     """Adapter for the embedded portfolio calculation core.
 
     The mobile backend keeps its own copy of the calculation packages under the
@@ -17,59 +13,58 @@ class LegacyFastapiDemoAdapter:
     """
 
     def __init__(self) -> None:
-        self._load_legacy_modules()
+        self._load_calculation_modules()
 
-    def _load_legacy_modules(self) -> None:
-        from app.api.routes import portfolio as legacy_portfolio_routes
+    def _load_calculation_modules(self) -> None:
+        from app.api.routes import portfolio as core_portfolio_routes
         from app.api.schemas.request import (
-            ComparisonBacktestRequest as LegacyComparisonBacktestRequest,
-            VolatilityHistoryRequest as LegacyVolatilityHistoryRequest,
+            ComparisonBacktestRequest as CoreComparisonBacktestRequest,
+            VolatilityHistoryRequest as CoreVolatilityHistoryRequest,
         )
         from app.core.config import RISK_FREE_RATE
         from app.domain.enums import (
-            InvestmentHorizon as LegacyInvestmentHorizon,
-            RiskProfile as LegacyRiskProfile,
-            SimulationDataSource as LegacySimulationDataSource,
+            InvestmentHorizon as CoreInvestmentHorizon,
+            RiskProfile as CoreRiskProfile,
+            SimulationDataSource as CoreSimulationDataSource,
         )
-        from app.domain.models import UserProfile as LegacyUserProfile
-        from app.engine.frontier import build_frontier_options, select_frontier_point_by_return
+        from app.domain.models import UserProfile as CoreUserProfile
+        from app.engine.frontier import build_frontier_options
         from app.engine.math import portfolio_metrics_from_weights, risk_contributions
         from app.services.portfolio_service import PortfolioSimulationService
 
-        self.legacy_portfolio_routes = legacy_portfolio_routes
-        self.LegacyComparisonBacktestRequest = LegacyComparisonBacktestRequest
-        self.LegacyVolatilityHistoryRequest = LegacyVolatilityHistoryRequest
-        self.LegacyInvestmentHorizon = LegacyInvestmentHorizon
-        self.LegacyRiskProfile = LegacyRiskProfile
-        self.LegacySimulationDataSource = LegacySimulationDataSource
-        self.LegacyUserProfile = LegacyUserProfile
+        self.core_portfolio_routes = core_portfolio_routes
+        self.CoreComparisonBacktestRequest = CoreComparisonBacktestRequest
+        self.CoreVolatilityHistoryRequest = CoreVolatilityHistoryRequest
+        self.CoreInvestmentHorizon = CoreInvestmentHorizon
+        self.CoreRiskProfile = CoreRiskProfile
+        self.CoreSimulationDataSource = CoreSimulationDataSource
+        self.CoreUserProfile = CoreUserProfile
         self.build_frontier_options = build_frontier_options
-        self.select_frontier_point_by_return = select_frontier_point_by_return
         self.portfolio_metrics_from_weights = portfolio_metrics_from_weights
         self.risk_contributions = risk_contributions
         self.RISK_FREE_RATE = RISK_FREE_RATE
         self.portfolio_service = PortfolioSimulationService()
 
-    def _to_legacy_data_source(self, value: SimulationDataSource):
-        return self.LegacySimulationDataSource(value.value)
+    def _to_core_data_source(self, value: SimulationDataSource):
+        return self.CoreSimulationDataSource(value.value)
 
-    def _to_legacy_horizon(self, value: InvestmentHorizon):
-        return self.LegacyInvestmentHorizon(value.value)
+    def _to_core_horizon(self, value: InvestmentHorizon):
+        return self.CoreInvestmentHorizon(value.value)
 
-    def _to_legacy_risk_profile(self, value: RiskProfile):
-        return self.LegacyRiskProfile(value.value)
+    def _to_core_risk_profile(self, value: RiskProfile):
+        return self.CoreRiskProfile(value.value)
 
-    def _build_legacy_user_profile(
+    def _build_core_user_profile(
         self,
         *,
         risk_profile: RiskProfile,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
     ):
-        return self.LegacyUserProfile(
-            risk_profile=self._to_legacy_risk_profile(risk_profile),
-            investment_horizon=self._to_legacy_horizon(investment_horizon),
-            data_source=self._to_legacy_data_source(data_source),
+        return self.CoreUserProfile(
+            risk_profile=self._to_core_risk_profile(risk_profile),
+            investment_horizon=self._to_core_horizon(investment_horizon),
+            data_source=self._to_core_data_source(data_source),
         )
 
     def _build_context(
@@ -78,7 +73,7 @@ class LegacyFastapiDemoAdapter:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
     ):
-        base_profile = self._build_legacy_user_profile(
+        base_profile = self._build_core_user_profile(
             risk_profile=RiskProfile.BALANCED,
             investment_horizon=investment_horizon,
             data_source=data_source,
@@ -108,16 +103,13 @@ class LegacyFastapiDemoAdapter:
         risk_profile: RiskProfile,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
-        frontier_point=None,
-        code_override: str | None = None,
-        label_override: str | None = None,
     ) -> dict[str, object]:
-        legacy_user_profile = self._build_legacy_user_profile(
+        core_user_profile = self._build_core_user_profile(
             risk_profile=risk_profile,
             investment_horizon=investment_horizon,
             data_source=data_source,
         )
-        point = frontier_point if frontier_point is not None else self._select_profile_option_point(context, risk_profile)
+        point = self._select_profile_option_point(context, risk_profile)
         target_volatility = float(point.volatility)
 
         optimization_weights = self.portfolio_service._weights_for_optimization(
@@ -155,15 +147,15 @@ class LegacyFastapiDemoAdapter:
             )
 
         portfolio_id = self.portfolio_service.mapping_service.build_portfolio_id(
-            legacy_user_profile,
+            core_user_profile,
             target_volatility,
         )
         if context.selected_combination is not None:
             portfolio_id = f"stocks-{portfolio_id}"
 
         return {
-            "code": code_override if code_override is not None else risk_profile.value,
-            "label": label_override if label_override is not None else PROFILE_LABELS[risk_profile.value],
+            "code": risk_profile.value,
+            "label": PROFILE_LABELS[risk_profile.value],
             "portfolio_id": portfolio_id,
             "target_volatility": round(float(target_volatility), 4),
             "expected_return": round(float(metrics.expected_return), 4),
@@ -229,73 +221,51 @@ class LegacyFastapiDemoAdapter:
         data_source: SimulationDataSource,
         propensity_score: float | None,
     ) -> dict[str, object]:
+        # Recommendation cards share the same universe/context. Only the target
+        # volatility selection changes per risk profile, so reuse the context once.
         context, instrument_by_ticker = self._build_context_bundle(
             investment_horizon=investment_horizon,
             data_source=data_source,
         )
+        portfolios = [
+            self._build_portfolio_snapshot_from_context(
+                context=context,
+                instrument_by_ticker=instrument_by_ticker,
+                risk_profile=profile,
+                investment_horizon=investment_horizon,
+                data_source=data_source,
+            )
+            for profile in (
+                RiskProfile.CONSERVATIVE,
+                RiskProfile.BALANCED,
+                RiskProfile.GROWTH,
+            )
+        ]
 
-        # Build the selected profile's portfolio
-        selected_snapshot = self._build_portfolio_snapshot_from_context(
-            context=context,
-            instrument_by_ticker=instrument_by_ticker,
-            risk_profile=resolved_profile,
-            investment_horizon=investment_horizon,
-            data_source=data_source,
+        resolved_target = next(
+            portfolio["target_volatility"]
+            for portfolio in portfolios
+            if portfolio["code"] == resolved_profile.value
         )
-
-        # Find ±10% return deviation variants on the efficient frontier
-        selected_return = float(selected_snapshot["expected_return"])
-        lower_target = selected_return * 0.9
-        higher_target = selected_return * 1.1
-
-        frontier_points = context.frontier_points
-        lower_idx = self.select_frontier_point_by_return(frontier_points, lower_target)
-        higher_idx = self.select_frontier_point_by_return(frontier_points, higher_target)
-
-        logger.info(
-            "±10%% variants: selected_return=%.4f, "
-            "lower_target=%.4f (idx=%d, actual=%.4f), "
-            "higher_target=%.4f (idx=%d, actual=%.4f)",
-            selected_return,
-            lower_target, lower_idx, frontier_points[lower_idx].expected_return,
-            higher_target, higher_idx, frontier_points[higher_idx].expected_return,
-        )
-
-        lower_snapshot = self._build_portfolio_snapshot_from_context(
-            context=context,
-            instrument_by_ticker=instrument_by_ticker,
-            risk_profile=resolved_profile,
-            investment_horizon=investment_horizon,
-            data_source=data_source,
-            frontier_point=frontier_points[lower_idx],
-            code_override="lower_return",
-            label_override="낮은 수익률",
-        )
-
-        higher_snapshot = self._build_portfolio_snapshot_from_context(
-            context=context,
-            instrument_by_ticker=instrument_by_ticker,
-            risk_profile=resolved_profile,
-            investment_horizon=investment_horizon,
-            data_source=data_source,
-            frontier_point=frontier_points[higher_idx],
-            code_override="higher_return",
-            label_override="높은 수익률",
-        )
-
-        portfolios = [lower_snapshot, selected_snapshot, higher_snapshot]
 
         return {
             "resolved_profile": {
                 "code": resolved_profile.value,
                 "label": PROFILE_LABELS[resolved_profile.value],
                 "propensity_score": propensity_score,
-                "target_volatility": selected_snapshot["target_volatility"],
+                "target_volatility": resolved_target,
                 "investment_horizon": investment_horizon.value,
             },
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
-            "portfolios": portfolios,
+            "portfolios": [
+                {
+                    key: value
+                    for key, value in portfolio.items()
+                    if key != "stock_weights"
+                }
+                for portfolio in portfolios
+            ],
         }
 
     def get_volatility_history(
@@ -317,10 +287,10 @@ class LegacyFastapiDemoAdapter:
             investment_horizon=investment_horizon,
             data_source=data_source,
         )
-        response = self.legacy_portfolio_routes.volatility_history(
-            self.LegacyVolatilityHistoryRequest(
+        response = self.core_portfolio_routes.volatility_history(
+            self.CoreVolatilityHistoryRequest(
                 weights=snapshot["stock_weights"],
-                data_source=self._to_legacy_data_source(data_source),
+                data_source=self._to_core_data_source(data_source),
                 rolling_window=rolling_window,
             )
         )
@@ -339,43 +309,14 @@ class LegacyFastapiDemoAdapter:
             ],
         }
 
-    def get_volatility_history_from_weights(
-        self,
-        *,
-        weights: dict[str, float],
-        data_source: SimulationDataSource,
-        rolling_window: int,
-    ) -> dict[str, object]:
-        response = self.legacy_portfolio_routes.volatility_history(
-            self.LegacyVolatilityHistoryRequest(
-                weights=weights,
-                data_source=self._to_legacy_data_source(data_source),
-                rolling_window=rolling_window,
-            )
-        )
-        return {
-            "portfolio_code": "custom",
-            "portfolio_label": "사용자 포트폴리오",
-            "rolling_window": rolling_window,
-            "earliest_data_date": response.earliest_data_date,
-            "latest_data_date": response.latest_data_date,
-            "points": [
-                {
-                    "date": point.date,
-                    "volatility": point.volatility,
-                }
-                for point in response.points
-            ],
-        }
-
     def get_comparison_backtest(
         self,
         *,
         data_source: SimulationDataSource,
     ) -> dict[str, object]:
-        response = self.legacy_portfolio_routes.comparison_backtest(
-            self.LegacyComparisonBacktestRequest(
-                data_source=self._to_legacy_data_source(data_source),
+        response = self.core_portfolio_routes.comparison_backtest(
+            self.CoreComparisonBacktestRequest(
+                data_source=self._to_core_data_source(data_source),
             )
         )
         return {
