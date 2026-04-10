@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/portfolio_state.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
@@ -262,6 +263,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
   int? _selectedPreviewPosition;
   bool _previewLoading = true;
   bool _previewUnavailable = false;
+  bool _didUseInitialCache = false;
 
   MobileFrontierPreviewPoint? get _selectedPreviewPoint {
     final preview = _preview;
@@ -299,6 +301,20 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     _loadFrontierPreview();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didUseInitialCache) {
+      return;
+    }
+    _didUseInitialCache = true;
+    final cachedPreview = PortfolioStateProvider.of(context).frontierPreview;
+    if (cachedPreview == null || cachedPreview.points.isEmpty) {
+      return;
+    }
+    _applyPreview(cachedPreview, fromCache: true);
+  }
+
   Future<void> _loadFrontierPreview() async {
     try {
       final preview = await MobileBackendApi.instance.fetchFrontierPreview(
@@ -307,28 +323,8 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       if (!mounted) {
         return;
       }
-      final recommendedPosition = preview.recommendedPreviewPosition;
-      final normalizedT = preview.points.length <= 1
-          ? _initialDotT
-          : recommendedPosition / (preview.points.length - 1);
-      setState(() {
-        _preview = preview;
-        _selectedPreviewPosition = recommendedPosition;
-        _previewLoading = false;
-        _previewUnavailable = false;
-        _dotT = normalizedT;
-      });
-      widget.onPositionChanged?.call(_dotT);
-      final previewPoint = preview.recommendedPoint;
-      if (previewPoint != null) {
-        widget.onFrontierSelectionChanged?.call(
-          OnboardingFrontierSelection(
-            normalizedT: normalizedT,
-            targetVolatility: previewPoint.volatility,
-            dataSource: preview.dataSource,
-          ),
-        );
-      }
+      PortfolioStateProvider.of(context).setFrontierPreview(preview);
+      _applyPreview(preview);
     } catch (_) {
       if (!mounted) {
         return;
@@ -340,6 +336,45 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         _previewUnavailable = true;
       });
       widget.onFrontierSelectionChanged?.call(null);
+    }
+  }
+
+  void _applyPreview(
+    MobileFrontierPreviewResponse preview, {
+    bool fromCache = false,
+  }) {
+    final recommendedPosition = preview.recommendedPreviewPosition;
+    final normalizedT = preview.points.length <= 1
+        ? _initialDotT
+        : recommendedPosition / (preview.points.length - 1);
+    setState(() {
+      _preview = preview;
+      _selectedPreviewPosition = recommendedPosition;
+      _previewLoading = false;
+      _previewUnavailable = false;
+      _dotT = normalizedT;
+    });
+    if (fromCache) {
+      logAction('use cached frontier preview', {
+        'dataSource': preview.dataSource,
+        'points': preview.points.length,
+      });
+    } else {
+      logAction('update frontier preview', {
+        'dataSource': preview.dataSource,
+        'points': preview.points.length,
+      });
+    }
+    widget.onPositionChanged?.call(_dotT);
+    final previewPoint = preview.recommendedPoint;
+    if (previewPoint != null) {
+      widget.onFrontierSelectionChanged?.call(
+        OnboardingFrontierSelection(
+          normalizedT: normalizedT,
+          targetVolatility: previewPoint.volatility,
+          dataSource: preview.dataSource,
+        ),
+      );
     }
   }
 
