@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
@@ -27,6 +28,15 @@ class _HomeShellState extends State<HomeShell> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    logPageEnter('HomeShell');
+    logAction('tab selected', {
+      'tab': 'home',
+    });
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_backtestFetched) {
@@ -37,11 +47,16 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _fetchBacktest() async {
     try {
-      final bt = await MobileBackendApi.instance
-          .fetchComparisonBacktest();
+      final bt = await MobileBackendApi.instance.fetchComparisonBacktest();
       if (!mounted) return;
       PortfolioStateProvider.of(context).setBacktest(bt);
     } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    logPageExit('HomeShell');
+    super.dispose();
   }
 
   @override
@@ -66,8 +81,7 @@ class _HomeShellState extends State<HomeShell> {
         child: SafeArea(
           top: false,
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: 8, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -75,25 +89,37 @@ class _HomeShellState extends State<HomeShell> {
                   icon: Icons.home_rounded,
                   label: '홈',
                   isActive: _currentTab == 0,
-                  onTap: () => setState(() => _currentTab = 0),
+                  onTap: () {
+                    logAction('tab selected', {'tab': 'home'});
+                    setState(() => _currentTab = 0);
+                  },
                 ),
                 _NavItem(
                   icon: Icons.pie_chart_rounded,
                   label: '포트폴리오',
                   isActive: _currentTab == 1,
-                  onTap: () => setState(() => _currentTab = 1),
+                  onTap: () {
+                    logAction('tab selected', {'tab': 'portfolio'});
+                    setState(() => _currentTab = 1);
+                  },
                 ),
                 _NavItem(
                   icon: Icons.forum_rounded,
                   label: '커뮤니티',
                   isActive: _currentTab == 2,
-                  onTap: () => setState(() => _currentTab = 2),
+                  onTap: () {
+                    logAction('tab selected', {'tab': 'community'});
+                    setState(() => _currentTab = 2);
+                  },
                 ),
                 _NavItem(
                   icon: Icons.settings_rounded,
                   label: '설정',
                   isActive: _currentTab == 3,
-                  onTap: () => setState(() => _currentTab = 3),
+                  onTap: () {
+                    logAction('tab selected', {'tab': 'settings'});
+                    setState(() => _currentTab = 3);
+                  },
                 ),
               ],
             ),
@@ -120,8 +146,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final color =
-        isActive ? WeRoboColors.primary : tc.textTertiary;
+    final color = isActive ? WeRoboColors.primary : tc.textTertiary;
 
     return Pressable(
       onTap: onTap,
@@ -148,8 +173,7 @@ class _NavItem extends StatelessWidget {
               label,
               style: TextStyle(
                 fontSize: 10,
-                fontWeight:
-                    isActive ? FontWeight.w600 : FontWeight.w400,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                 color: color,
               ),
             ),

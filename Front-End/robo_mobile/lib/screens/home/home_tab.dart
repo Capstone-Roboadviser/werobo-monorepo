@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
@@ -14,14 +15,14 @@ class HomeTab extends StatefulWidget {
   State<HomeTab> createState() => _HomeTabState();
 }
 
-class _HomeTabState extends State<HomeTab>
-    with SingleTickerProviderStateMixin {
+class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
   bool _showWelcome = true;
 
   @override
   void initState() {
     super.initState();
+    logPageEnter('HomeTab');
     _staggerCtrl = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -30,6 +31,7 @@ class _HomeTabState extends State<HomeTab>
 
   @override
   void dispose() {
+    logPageExit('HomeTab');
     _staggerCtrl.dispose();
     super.dispose();
   }
@@ -81,11 +83,12 @@ class _HomeTabState extends State<HomeTab>
 
             // Welcome banner (first visit only)
             if (_showWelcome)
-              _stagger(0, _WelcomeBanner(
-                type: type,
-                onDismiss: () =>
-                    setState(() => _showWelcome = false),
-              )),
+              _stagger(
+                  0,
+                  _WelcomeBanner(
+                    type: type,
+                    onDismiss: () => setState(() => _showWelcome = false),
+                  )),
             if (_showWelcome) const SizedBox(height: 16),
 
             // Hero: value + chart + time range
@@ -96,37 +99,38 @@ class _HomeTabState extends State<HomeTab>
             const SizedBox(height: 28),
 
             // Recent activity
-            _stagger(_showWelcome ? 2 : 1, Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('최근 활동',
-                    style:
-                        WeRoboTypography.heading3.themed(context)),
-                const SizedBox(height: 12),
-                _ActivityCard(
-                  icon: Icons.sync_alt_rounded,
-                  iconColor: WeRoboColors.primary,
-                  title: '리밸런싱 완료',
-                  date: '2026-04-01',
-                  value: '₩15,826,400',
-                ),
-                _ActivityCard(
-                  icon: Icons.arrow_downward_rounded,
-                  iconColor: tc.accent,
-                  title: '입금',
-                  date: '2026-03-15',
-                  value: '+₩500,000',
-                  valueColor: tc.accent,
-                ),
-                _ActivityCard(
-                  icon: Icons.sync_alt_rounded,
-                  iconColor: WeRoboColors.primary,
-                  title: '리밸런싱 완료',
-                  date: '2026-01-02',
-                  value: '₩15,120,000',
-                ),
-              ],
-            )),
+            _stagger(
+                _showWelcome ? 2 : 1,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('최근 활동',
+                        style: WeRoboTypography.heading3.themed(context)),
+                    const SizedBox(height: 12),
+                    _ActivityCard(
+                      icon: Icons.sync_alt_rounded,
+                      iconColor: WeRoboColors.primary,
+                      title: '리밸런싱 완료',
+                      date: '2026-04-01',
+                      value: '₩15,826,400',
+                    ),
+                    _ActivityCard(
+                      icon: Icons.arrow_downward_rounded,
+                      iconColor: tc.accent,
+                      title: '입금',
+                      date: '2026-03-15',
+                      value: '+₩500,000',
+                      valueColor: tc.accent,
+                    ),
+                    _ActivityCard(
+                      icon: Icons.sync_alt_rounded,
+                      iconColor: WeRoboColors.primary,
+                      title: '리밸런싱 완료',
+                      date: '2026-01-02',
+                      value: '₩15,120,000',
+                    ),
+                  ],
+                )),
             const SizedBox(height: 32),
           ],
         ),
@@ -142,8 +146,7 @@ class _PortfolioHeroChart extends StatefulWidget {
   const _PortfolioHeroChart({required this.type});
 
   @override
-  State<_PortfolioHeroChart> createState() =>
-      _PortfolioHeroChartState();
+  State<_PortfolioHeroChart> createState() => _PortfolioHeroChartState();
 }
 
 class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
@@ -162,8 +165,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final backtest = PortfolioStateProvider.of(context)
         .portfolioValuePoints(baseInvestment: _baseInvestment);
     if (backtest.isNotEmpty) return backtest;
-    final riskCode =
-        PortfolioStateProvider.of(context).type.riskCode;
+    final riskCode = PortfolioStateProvider.of(context).type.riskCode;
     return MockEarningsData.dailyCumulativePoints(
       riskCode: riskCode,
       baseInvestment: _baseInvestment,
@@ -206,10 +208,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
   List<ChartPoint> _filterByRange(List<ChartPoint> all) {
     if (all.isEmpty) return all;
-    final cutoff = DateTime.now()
-        .subtract(Duration(days: _rangeDays[_range]));
-    final filtered =
-        all.where((p) => p.date.isAfter(cutoff)).toList();
+    final cutoff = DateTime.now().subtract(Duration(days: _rangeDays[_range]));
+    final filtered = all.where((p) => p.date.isAfter(cutoff)).toList();
     return filtered.isNotEmpty ? filtered : all;
   }
 
@@ -230,21 +230,17 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final costPts = _costBasisFor(valuePts);
 
     // Compute hero stats from filtered data
-    final currentValue =
-        valuePts.isNotEmpty ? valuePts.last.value : 0.0;
-    final startValue =
-        valuePts.isNotEmpty ? valuePts.first.value : 0.0;
+    final currentValue = valuePts.isNotEmpty ? valuePts.last.value : 0.0;
+    final startValue = valuePts.isNotEmpty ? valuePts.first.value : 0.0;
     final change = currentValue - startValue;
-    final changePct =
-        startValue > 0 ? (change / startValue) * 100 : 0.0;
+    final changePct = startValue > 0 ? (change / startValue) * 100 : 0.0;
     final isPositive = change >= 0;
 
     // Crosshair values
     String? crosshairDate;
     double? crosshairValue;
     double? crosshairCost;
-    if (_touchIndex != null &&
-        _touchIndex! < valuePts.length) {
+    if (_touchIndex != null && _touchIndex! < valuePts.length) {
       final pt = valuePts[_touchIndex!];
       crosshairDate =
           '${pt.date.year}-${pt.date.month.toString().padLeft(2, '0')}-${pt.date.day.toString().padLeft(2, '0')}';
@@ -254,9 +250,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
       }
     }
 
-    final rangeLabel = _range == 4
-        ? '전체'
-        : '${_rangeLabels[_range]} 대비';
+    final rangeLabel = _range == 4 ? '전체' : '${_rangeLabels[_range]} 대비';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,8 +271,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           duration: const Duration(milliseconds: 1200),
           curve: Curves.easeOutCubic,
           builder: (context, val, _) {
-            final displayVal =
-                crosshairValue ?? val;
+            final displayVal = crosshairValue ?? val;
             return Text(
               '₩${_formatCurrency(displayVal.toInt())}',
               style: TextStyle(
@@ -318,19 +311,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
             onPanUpdate: (d) {
               const padL = 12.0;
               const padR = 12.0;
-              final chartW =
-                  constraints.maxWidth - padL - padR;
+              final chartW = constraints.maxWidth - padL - padR;
               final x = d.localPosition.dx - padL;
-              final idx = ((x / chartW) *
-                      (valuePts.length - 1))
+              final idx = ((x / chartW) * (valuePts.length - 1))
                   .round()
                   .clamp(0, valuePts.length - 1);
               setState(() => _touchIndex = idx);
             },
-            onPanEnd: (_) =>
-                setState(() => _touchIndex = null),
-            onTapUp: (_) =>
-                setState(() => _touchIndex = null),
+            onPanEnd: (_) => setState(() => _touchIndex = null),
+            onTapUp: (_) => setState(() => _touchIndex = null),
             child: AnimatedBuilder(
               animation: _drawCtrl,
               builder: (context, _) {
@@ -363,25 +352,19 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           children: List.generate(_rangeLabels.length, (i) {
             final active = i == _range;
             return Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: GestureDetector(
                 onTap: () => _selectRange(i),
                 child: AnimatedContainer(
-                  duration:
-                      const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 6),
+                  duration: const Duration(milliseconds: 200),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                   decoration: BoxDecoration(
-                    color: active
-                        ? WeRoboColors.primary
-                        : Colors.transparent,
+                    color: active ? WeRoboColors.primary : Colors.transparent,
                     borderRadius: BorderRadius.circular(8),
                     border: active
                         ? null
-                        : Border.all(
-                            color: tc.border,
-                            width: 0.5),
+                        : Border.all(color: tc.border, width: 0.5),
                   ),
                   child: Text(
                     _rangeLabels[i],
@@ -389,9 +372,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                       fontFamily: WeRoboFonts.body,
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
-                      color: active
-                          ? WeRoboColors.white
-                          : tc.textTertiary,
+                      color: active ? WeRoboColors.white : tc.textTertiary,
                     ),
                   ),
                 ),
@@ -426,8 +407,7 @@ class _PerformanceBadge extends StatelessWidget {
     final sign = isPositive ? '+' : '';
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
@@ -492,15 +472,12 @@ class _CrosshairBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final gain = costBasis != null
-        ? portfolioValue - costBasis!
-        : null;
+    final gain = costBasis != null ? portfolioValue - costBasis! : null;
     final isPositive = gain != null && gain >= 0;
     final color = isPositive ? tc.accent : WeRoboColors.error;
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-          horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: tc.card,
         borderRadius: BorderRadius.circular(8),
@@ -610,10 +587,8 @@ class _PortfolioValuePainter extends CustomPainter {
     maxY += range * 0.05;
     final rangeY = maxY - minY;
 
-    double toX(int i, int total) =>
-        padL + chartW * i / (total - 1);
-    double toY(double val) =>
-        padT + chartH - ((val - minY) / rangeY) * chartH;
+    double toX(int i, int total) => padL + chartW * i / (total - 1);
+    double toY(double val) => padT + chartH - ((val - minY) / rangeY) * chartH;
 
     // Grid lines (4 horizontal, very subtle)
     final gridPaint = Paint()
@@ -621,8 +596,7 @@ class _PortfolioValuePainter extends CustomPainter {
       ..strokeWidth = 0.5;
     for (int i = 0; i <= 4; i++) {
       final y = padT + chartH * i / 4;
-      canvas.drawLine(
-          Offset(padL, y), Offset(w - padR, y), gridPaint);
+      canvas.drawLine(Offset(padL, y), Offset(w - padR, y), gridPaint);
     }
 
     final drawCount =
@@ -630,8 +604,7 @@ class _PortfolioValuePainter extends CustomPainter {
 
     // Cost basis line (draw first, behind portfolio)
     if (costPts.length >= 2) {
-      final costCount =
-          min(drawCount, costPts.length);
+      final costCount = min(drawCount, costPts.length);
       final costPath = Path();
       for (int i = 0; i < costCount; i++) {
         final x = toX(i, valuePts.length);
@@ -683,9 +656,7 @@ class _PortfolioValuePainter extends CustomPainter {
     );
     canvas.drawPath(
       areaPath,
-      Paint()
-        ..shader =
-            gradient.createShader(Rect.fromLTWH(0, 0, w, h)),
+      Paint()..shader = gradient.createShader(Rect.fromLTWH(0, 0, w, h)),
     );
 
     // Portfolio line stroke
@@ -702,17 +673,13 @@ class _PortfolioValuePainter extends CustomPainter {
     // End dot
     if (drawCount > 0 && touchIndex == null) {
       final lastY = toY(valuePts[drawCount - 1].value);
-      canvas.drawCircle(
-          Offset(lastX, lastY), 4, Paint()..color = primaryColor);
-      canvas.drawCircle(
-          Offset(lastX, lastY), 2, Paint()..color = tooltipBg);
+      canvas.drawCircle(Offset(lastX, lastY), 4, Paint()..color = primaryColor);
+      canvas.drawCircle(Offset(lastX, lastY), 2, Paint()..color = tooltipBg);
     }
 
     // X-axis date labels (5 evenly spaced)
-    final labelStyle = TextStyle(
-        fontSize: 9,
-        color: textColor,
-        fontFamily: 'IBMPlexSans');
+    final labelStyle =
+        TextStyle(fontSize: 9, color: textColor, fontFamily: 'IBMPlexSans');
     final totalPts = valuePts.length;
     for (int i = 0; i < 5; i++) {
       final idx = (totalPts - 1) * i ~/ 4;
@@ -724,8 +691,7 @@ class _PortfolioValuePainter extends CustomPainter {
         textDirection: TextDirection.ltr,
       )..layout();
       final x = toX(idx, totalPts);
-      tp.paint(
-          canvas, Offset(x - tp.width / 2, h - padB + 6));
+      tp.paint(canvas, Offset(x - tp.width / 2, h - padB + 6));
     }
 
     // Crosshair
@@ -744,17 +710,14 @@ class _PortfolioValuePainter extends CustomPainter {
 
       // Dots
       final vy = toY(valuePts[ti].value);
-      canvas.drawCircle(
-          Offset(tx, vy), 5, Paint()..color = primaryColor);
-      canvas.drawCircle(
-          Offset(tx, vy), 3, Paint()..color = tooltipBg);
+      canvas.drawCircle(Offset(tx, vy), 5, Paint()..color = primaryColor);
+      canvas.drawCircle(Offset(tx, vy), 3, Paint()..color = tooltipBg);
 
       if (ti < costPts.length) {
         final cy = toY(costPts[ti].value);
         canvas.drawCircle(Offset(tx, cy), 4,
             Paint()..color = costColor.withValues(alpha: 0.8));
-        canvas.drawCircle(
-            Offset(tx, cy), 2, Paint()..color = tooltipBg);
+        canvas.drawCircle(Offset(tx, cy), 2, Paint()..color = tooltipBg);
       }
     }
   }
@@ -782,8 +745,7 @@ class _WelcomeBanner extends StatelessWidget {
   final InvestmentType type;
   final VoidCallback onDismiss;
 
-  const _WelcomeBanner(
-      {required this.type, required this.onDismiss});
+  const _WelcomeBanner({required this.type, required this.onDismiss});
 
   @override
   Widget build(BuildContext context) {
@@ -816,8 +778,7 @@ class _WelcomeBanner extends StatelessWidget {
                 Text(
                   '투자 여정을 시작해 보세요',
                   style: WeRoboTypography.caption.copyWith(
-                    color: WeRoboColors.white
-                        .withValues(alpha: 0.8),
+                    color: WeRoboColors.white.withValues(alpha: 0.8),
                   ),
                 ),
               ],
@@ -884,15 +845,11 @@ class _ActivityCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(title,
-                      style: WeRoboTypography.bodySmall
-                          .copyWith(
-                              color: tc.textPrimary,
-                              fontWeight: FontWeight.w500)),
+                      style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary, fontWeight: FontWeight.w500)),
                   Text(date,
                       style: WeRoboTypography.caption
-                          .copyWith(
-                              fontFamily:
-                                  WeRoboFonts.english)
+                          .copyWith(fontFamily: WeRoboFonts.english)
                           .themed(context)),
                 ],
               ),

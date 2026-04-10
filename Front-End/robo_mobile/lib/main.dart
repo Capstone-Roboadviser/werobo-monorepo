@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'app/debug_page_logger.dart';
 import 'app/portfolio_state.dart';
 import 'app/theme.dart';
 import 'app/theme_state.dart';
 import 'screens/onboarding/splash_screen.dart';
 
 void main() {
+  logAction('app boot');
   runApp(const WeRoboApp());
 }
 

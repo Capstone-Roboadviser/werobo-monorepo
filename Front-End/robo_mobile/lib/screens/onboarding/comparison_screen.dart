@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../app/debug_page_logger.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
@@ -31,6 +32,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   void initState() {
     super.initState();
     _selectedCode = widget.selectedPortfolioCode;
+    logPageEnter('ComparisonScreen', {
+      'selected': _selectedCode,
+    });
+    logAction('comparison initial selected', {
+      'portfolio': _selectedCode,
+    });
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -43,6 +50,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   @override
   void dispose() {
+    logPageExit('ComparisonScreen');
     _fadeController.dispose();
     super.dispose();
   }
@@ -125,8 +133,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                           right: index == portfolios.length - 1 ? 0 : 6,
                         ),
                         child: GestureDetector(
-                          onTap: () =>
-                              setState(() => _selectedCode = portfolio.code),
+                          onTap: () {
+                            logAction('select comparison portfolio', {
+                              'portfolio': portfolio.code,
+                            });
+                            setState(() => _selectedCode = portfolio.code);
+                          },
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 250),
                             padding: const EdgeInsets.symmetric(vertical: 12),
@@ -227,6 +239,9 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
+                      logAction('tap confirm portfolio', {
+                        'selected': _selectedCode,
+                      });
                       Navigator.of(context).push(
                         PageRouteBuilder(
                           pageBuilder: (_, __, ___) => ConfirmationScreen(

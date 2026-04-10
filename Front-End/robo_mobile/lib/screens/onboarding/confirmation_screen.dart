@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
@@ -50,6 +51,10 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     _portfolio = widget.frontierSelection?.portfolio ??
         widget.recommendation
             .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
+    logPageEnter('ConfirmationScreen', {
+      'selected': widget.selectedPortfolioCode,
+      'portfolio': _portfolio.code,
+    });
     _details = _portfolio.toCategoryDetails();
     _categories = _portfolio.toCategories();
     _fadeController = AnimationController(
@@ -65,6 +70,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
 
   @override
   void dispose() {
+    logPageExit('ConfirmationScreen');
     _fadeController.dispose();
     super.dispose();
   }
@@ -269,6 +275,9 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   }
 
   void _confirmPortfolio() {
+    logAction('confirm portfolio selection', {
+      'selected': _portfolio.code,
+    });
     final state = PortfolioStateProvider.of(context);
     final selectedType = widget.frontierSelection == null
         ? _portfolio.investmentType

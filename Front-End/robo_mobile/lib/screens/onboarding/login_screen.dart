@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/debug_page_logger.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
@@ -29,6 +30,9 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
+    logPageEnter('LoginScreen', {
+      'selected': widget.selectedPortfolioCode,
+    });
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 600),
       vsync: this,
@@ -41,11 +45,16 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
+    logPageExit('LoginScreen');
     _fadeController.dispose();
     super.dispose();
   }
 
   void _onSocialLogin(String provider) {
+    logAction('tap social login', {
+      'provider': provider,
+      'mode': _isLogin ? 'login' : 'signup',
+    });
     // TODO: Implement actual auth for each provider
     Navigator.of(context).push(
       PageRouteBuilder(

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../app/debug_page_logger.dart';
 import '../../app/theme.dart';
 import 'onboarding_screen.dart';
 
@@ -22,6 +23,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
+    logPageEnter('SplashScreen');
     _controller = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -62,6 +64,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   void dispose() {
+    logPageExit('SplashScreen');
     _navigationTimer?.cancel();
     _controller.dispose();
     super.dispose();

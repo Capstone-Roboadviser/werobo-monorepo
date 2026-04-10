@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../app/debug_page_logger.dart';
 import '../models/mobile_backend_models.dart';
 
 class MobileBackendException implements Exception {
@@ -195,17 +196,31 @@ class MobileBackendApi {
     final dataSources = preferredDataSource == null
         ? _dataSources
         : <String>[preferredDataSource];
+    final operation = _operationName(path);
 
     for (final dataSource in dataSources) {
+      final body = bodyForDataSource(dataSource);
+      logApi('start', operation, {
+        'dataSource': dataSource,
+        'body': _formatBody(body),
+      });
       try {
-        return await _post(
+        final result = await _post(
           path: path,
-          body: bodyForDataSource(dataSource),
+          body: body,
           parser: parser,
           timeout: timeout,
         );
+        logApi('success', operation, {
+          'dataSource': dataSource,
+        });
+        return result;
       } catch (error) {
         lastError = error;
+        logApi('fail', operation, {
+          'dataSource': dataSource,
+          'error': error.toString(),
+        });
         attemptLogs.add(_formatAttemptLog(
           path: path,
           dataSource: dataSource,
@@ -281,5 +296,34 @@ class MobileBackendApi {
       return '$dataSource $path -> timeout';
     }
     return '$dataSource $path -> ${error.runtimeType}';
+  }
+
+  String _operationName(String path) {
+    switch (path) {
+      case '/portfolios/recommendation':
+        return 'fetchRecommendation';
+      case '/portfolios/frontier-preview':
+        return 'fetchFrontierPreview';
+      case '/portfolios/frontier-selection':
+        return 'fetchFrontierSelection';
+      case '/portfolios/volatility-history':
+        return 'fetchVolatilityHistory';
+      case '/portfolios/return-history':
+        return 'fetchReturnHistory';
+      case '/portfolio/earnings-history':
+        return 'fetchEarningsHistory';
+      case '/portfolio/rebalance-simulation':
+        return 'fetchRebalanceSimulation';
+      case '/portfolios/comparison-backtest':
+        return 'fetchComparisonBacktest';
+      default:
+        return path;
+    }
+  }
+
+  String _formatBody(Map<String, dynamic> body) {
+    return body.entries
+        .map((entry) => '${entry.key}=${entry.value}')
+        .join(', ');
   }
 }

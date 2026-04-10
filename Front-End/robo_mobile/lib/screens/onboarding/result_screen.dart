@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../app/debug_page_logger.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
@@ -47,12 +48,12 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
   void initState() {
     super.initState();
     final portfolio = _selectedPortfolio;
-    debugPrint(
-      '[WeRobo.Page] enter PortfolioResultScreen '
-      'data_source=${widget.frontierSelection?.dataSource ?? widget.recommendation.dataSource} '
-      'portfolio=${portfolio.code} '
-      'expected_return=${portfolio.expectedReturn.toStringAsFixed(4)}',
-    );
+    logPageEnter('PortfolioResultScreen', {
+      'data_source': widget.frontierSelection?.dataSource ??
+          widget.recommendation.dataSource,
+      'portfolio': portfolio.code,
+      'expected_return': portfolio.expectedReturn.toStringAsFixed(4),
+    });
     _staggerCtrl = AnimationController(
       duration: const Duration(milliseconds: 700),
       vsync: this,
@@ -61,6 +62,7 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
 
   @override
   void dispose() {
+    logPageExit('PortfolioResultScreen');
     _staggerCtrl.dispose();
     super.dispose();
   }
@@ -129,6 +131,10 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
               child: Pressable(
                 onTap: () {
+                  logAction('tap start investment', {
+                    'selected': widget.frontierSelection?.representativeCode ??
+                        portfolio.code,
+                  });
                   Navigator.of(context).pushReplacement(
                     PageRouteBuilder(
                       pageBuilder: (_, __, ___) => LoginScreen(

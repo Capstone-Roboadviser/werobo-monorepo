@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../app/debug_page_logger.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
@@ -38,6 +39,10 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
   @override
   void initState() {
     super.initState();
+    logPageEnter('PortfolioLoadingScreen', {
+      'dotT': widget.dotT.toStringAsFixed(2),
+      'target_volatility': widget.targetVolatility?.toStringAsFixed(4),
+    });
 
     _progressController = AnimationController(
       duration: const Duration(milliseconds: 4000),
@@ -69,12 +74,16 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
 
   @override
   void dispose() {
+    logPageExit('PortfolioLoadingScreen');
     _progressController.dispose();
     _rotationController.dispose();
     super.dispose();
   }
 
   Future<void> _loadRecommendation() async {
+    logAction('load recommendation', {
+      'dotT': widget.dotT.toStringAsFixed(2),
+    });
     setState(() {
       _errorMessage = null;
       _recommendation = null;
@@ -114,6 +123,13 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         _recommendation = recommendation;
         _frontierSelection = frontierSelection;
       });
+      if (frontierSelection != null) {
+        logAction('frontier selection resolved', {
+          'representative': frontierSelection.representativeCode,
+          'target_volatility':
+              frontierSelection.selectedTargetVolatility.toStringAsFixed(4),
+        });
+      }
       _tryProceed();
     } catch (error) {
       if (!mounted) {
@@ -124,6 +140,9 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
       setState(() {
         _errorMessage = _buildUiErrorMessage(error);
         _fallbackRecommendation = _buildFallbackRecommendation();
+      });
+      logAction('recommendation failed', {
+        'error': error.toString(),
       });
     }
   }
@@ -200,6 +219,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     if (fallback == null) {
       return;
     }
+    logAction('continue with demo');
     setState(() {
       _recommendation = fallback;
       _errorMessage = null;
@@ -217,6 +237,10 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     }
 
     _hasNavigated = true;
+    logAction('navigate loading -> result', {
+      'selected': _frontierSelection?.representativeCode ??
+          _recommendation!.recommendedPortfolioCode,
+    });
     Future.delayed(const Duration(milliseconds: 250), () {
       if (!mounted) {
         return;
@@ -240,6 +264,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
   }
 
   void _retry() {
+    logAction('tap retry recommendation');
     _animationFinished = false;
     _requestFinished = false;
     _hasNavigated = false;

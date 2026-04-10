@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
@@ -33,6 +34,18 @@ class _PortfolioTabState extends State<PortfolioTab> {
   // Rebalance simulation API data (falls back to mock)
   List<MobileRebalanceEvent>? _apiRebalanceEvents;
   bool _rebalanceFetched = false;
+
+  @override
+  void initState() {
+    super.initState();
+    logPageEnter('PortfolioTab');
+  }
+
+  @override
+  void dispose() {
+    logPageExit('PortfolioTab');
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {

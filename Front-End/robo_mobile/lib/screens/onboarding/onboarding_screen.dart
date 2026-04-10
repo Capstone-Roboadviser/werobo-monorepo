@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/debug_page_logger.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
@@ -36,7 +37,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   static const int _pageCount = 2;
 
   @override
+  void initState() {
+    super.initState();
+    logPageEnter('OnboardingScreen');
+    logPageEnter('onboarding step 1/2');
+  }
+
+  @override
   void dispose() {
+    logPageExit('OnboardingScreen');
     _pageController.dispose();
     super.dispose();
   }
@@ -86,6 +95,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     : null,
                 onPageChanged: (index) {
                   setState(() => _currentPage = index);
+                  logPageEnter('onboarding step ${index + 1}/2');
                 },
                 children: [
                   const _ServiceDescriptionPage(),
