@@ -62,6 +62,7 @@ robo_mobile_backend/
 - `POST /admin/api/universe/versions`
 - `POST /admin/api/universe/versions/{version_id}/activate`
 - `POST /admin/api/prices/refresh`
+- `POST /admin/api/prices/refresh/active`
 - `GET /admin/api/universe/readiness`
 - `POST /api/v1/profile/resolve`
 - `POST /api/v1/portfolios/recommendation`
@@ -85,6 +86,15 @@ robo_mobile_backend/
 - `POST /api/v1/portfolios/recommendation`
 - `POST /api/v1/portfolios/frontier-preview`
 - `POST /api/v1/portfolios/frontier-selection`
+
+자동 주기 갱신이 필요하면 `POST /admin/api/prices/refresh/active`를 사용하면 됩니다.
+
+- 대상: 현재 active 유니버스만
+- 인증: `X-Admin-Secret` 헤더
+- 서버 설정: `ADMIN_REFRESH_SECRET` 환경변수
+- 권장 호출 주기: 하루 1번
+
+현재 가격 데이터는 `yfinance`의 일별 가격 데이터(`date`, `adjusted_close`)를 사용합니다.
 
 ## 실행 방법
 

@@ -82,6 +82,7 @@
 | `DELETE` | `/admin/api/universe/versions/{version_id}` | 버전 삭제 |
 | `POST` | `/admin/api/universe/versions/{version_id}/activate` | active 전환 |
 | `POST` | `/admin/api/prices/refresh` | 가격 갱신 |
+| `POST` | `/admin/api/prices/refresh/active` | active 유니버스 주기 갱신 |
 | `GET` | `/admin/api/universe/readiness` | 시뮬레이션 준비 상태 |
 | `GET` | `/admin/api/tickers/search` | 종목명/키워드 검색 |
 | `GET` | `/admin/api/tickers/lookup` | 티커 자동채움 |
@@ -158,6 +159,7 @@
 - 계산은 버전별 종목 집합의 공통 가격 구간만 사용합니다.
 - refresh가 `success` 또는 `partial_success`로 끝나면 같은 요청 안에서 `managed_universe`용 frontier snapshot도 다시 생성합니다.
 - snapshot은 `short`, `medium`, `long` horizon별로 저장되며, 모바일 recommendation/preview/selection API가 우선 재사용합니다.
+- 현재 가격 수집 단위는 일봉입니다. 저장 컬럼은 `date`, `adjusted_close`입니다.
 
 응답 추가 필드:
 
@@ -166,6 +168,30 @@
 - `frontier_snapshot.horizons`
 - `frontier_snapshot.failed_horizons`
 - `frontier_snapshot.message`
+
+### `POST /admin/api/prices/refresh/active`
+
+용도:
+
+- Railway cron/job 등 외부 스케줄러가 현재 active 유니버스를 주기적으로 갱신할 때 사용합니다.
+
+보안:
+
+- 서버 환경변수 `ADMIN_REFRESH_SECRET`가 설정되어 있어야 합니다.
+- 요청 헤더 `X-Admin-Secret`이 그 값과 일치해야 합니다.
+
+입력:
+
+- `refresh_mode`
+  - `incremental`
+  - `full`
+- `full_lookback_years`
+
+운영 권장:
+
+- 일반 운영은 `incremental`
+- 장기 백필이나 문제 복구 시에만 `full`
+- 미국 시장 종가 반영 이후 하루 1회 호출
 
 ## 3. Readiness 확인
 

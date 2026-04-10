@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException, Query
+import secrets
+
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.api.schemas.request import (
+    ActivePriceRefreshRequest,
     ManagedUniverseVersionCreateRequest,
     ManagedUniverseVersionUpdateRequest,
     PriceRefreshRequest,
@@ -41,6 +44,7 @@ from app.services.portfolio_service import PortfolioSimulationService
 from app.services.price_refresh_service import PriceRefreshService
 from app.services.ticker_discovery_service import TickerDiscoveryService
 from mobile_backend.services.frontier_snapshot_service import FrontierSnapshotService
+from mobile_backend.core.config import ADMIN_REFRESH_SECRET
 
 
 router = APIRouter(prefix="/admin/api", tags=["admin"])
@@ -59,6 +63,12 @@ COMMON_ADMIN_404 = {
     404: {
         "model": ErrorResponse,
         "description": "요청한 유니버스 버전을 찾을 수 없습니다.",
+    }
+}
+COMMON_ADMIN_401 = {
+    401: {
+        "model": ErrorResponse,
+        "description": "관리자 secret이 없거나 일치하지 않습니다.",
     }
 }
 
@@ -270,6 +280,42 @@ def refresh_prices(payload: PriceRefreshRequest) -> ManagedPriceRefreshResponse:
             price_stats=result.price_stats,
             price_window=result.price_window,
             frontier_snapshot_status=snapshot_status,
+        )
+    return _price_refresh_response(result)
+
+
+@router.post(
+    "/prices/refresh/active",
+    response_model=ManagedPriceRefreshResponse,
+    summary="active 유니버스 가격 갱신",
+    description=(
+        "cron/job에서 호출하기 위한 active 유니버스 전용 가격 갱신 엔드포인트입니다. "
+        "ADMIN_REFRESH_SECRET 환경변수와 X-Admin-Secret 헤더가 일치해야 실행됩니다."
+    ),
+    responses={**COMMON_ADMIN_401, **COMMON_ADMIN_422},
+)
+def refresh_active_prices(
+    payload: ActivePriceRefreshRequest,
+    x_admin_secret: str | None = Header(default=None, alias="X-Admin-Secret"),
+) -> ManagedPriceRefreshResponse:
+    _verify_admin_refresh_secret(x_admin_secret)
+    try:
+        result = price_refresh_service.refresh_prices(
+            version_id=None,
+            refresh_mode=payload.refresh_mode,
+            full_lookback_years=payload.full_lookback_years,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if result.job.status in {"success", "partial_success"}:
+        result = ManagedPriceRefreshResult(
+            job=result.job,
+            price_stats=result.price_stats,
+            price_window=result.price_window,
+            frontier_snapshot_status=frontier_snapshot_service.rebuild_managed_universe_snapshots(
+                version_id=result.job.version_id,
+                source_refresh_job_id=result.job.job_id,
+            ),
         )
     return _price_refresh_response(result)
 
@@ -503,3 +549,10 @@ def _price_window_response(price_window: ManagedUniversePriceWindow) -> ManagedU
         youngest_start_date=price_window.youngest_start_date,
         ticker_count=price_window.ticker_count,
     )
+
+
+def _verify_admin_refresh_secret(x_admin_secret: str | None) -> None:
+    if not ADMIN_REFRESH_SECRET:
+        raise HTTPException(status_code=401, detail="ADMIN_REFRESH_SECRET가 설정되지 않았습니다.")
+    if x_admin_secret is None or not secrets.compare_digest(x_admin_secret, ADMIN_REFRESH_SECRET):
+        raise HTTPException(status_code=401, detail="X-Admin-Secret이 올바르지 않습니다.")

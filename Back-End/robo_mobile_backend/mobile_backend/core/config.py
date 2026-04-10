@@ -1,3 +1,6 @@
+import os
+
+
 APP_NAME = "Robo Mobile Backend"
 APP_VERSION = "0.1.0"
 APP_DESCRIPTION = (
@@ -6,6 +9,7 @@ APP_DESCRIPTION = (
     "calculation core for mobile clients."
 )
 API_PREFIX = "/api/v1"
+ADMIN_REFRESH_SECRET = os.getenv("ADMIN_REFRESH_SECRET", "").strip()
 
 PROFILE_LABELS = {
     "conservative": "안정형",
