@@ -20,6 +20,10 @@ class PortfolioState extends ChangeNotifier {
 
   /// The selected portfolio from the API recommendation.
   MobilePortfolioRecommendation? get selectedPortfolio {
+    if (_frontierSelection != null &&
+        _frontierSelection!.representativeCode == _type.riskCode) {
+      return _frontierSelection!.portfolio;
+    }
     if (_recommendation == null) return null;
     for (final p in _recommendation!.portfolios) {
       if (p.investmentType == _type) return p;
@@ -59,7 +63,7 @@ class PortfolioState extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setFrontierSelection(MobileFrontierSelectionResponse selection) {
+  void setFrontierSelection(MobileFrontierSelectionResponse? selection) {
     _frontierSelection = selection;
     notifyListeners();
   }

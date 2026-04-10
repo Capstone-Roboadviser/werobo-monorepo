@@ -8,11 +8,13 @@ import 'confirmation_screen.dart';
 class ComparisonScreen extends StatefulWidget {
   final MobileRecommendationResponse recommendation;
   final String selectedPortfolioCode;
+  final MobileFrontierSelectionResponse? frontierSelection;
 
   const ComparisonScreen({
     super.key,
     required this.recommendation,
     required this.selectedPortfolioCode,
+    this.frontierSelection,
   });
 
   @override
@@ -60,12 +62,20 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     }
   }
 
+  MobilePortfolioRecommendation _portfolioForCode(String code) {
+    final frontierSelection = widget.frontierSelection;
+    if (frontierSelection != null &&
+        frontierSelection.representativeCode == code) {
+      return frontierSelection.portfolio;
+    }
+    return widget.recommendation.portfolioByCodeOrRecommended(code);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final portfolios = widget.recommendation.portfolios;
-    final selected =
-        widget.recommendation.portfolioByCodeOrRecommended(_selectedCode);
+    final selected = _portfolioForCode(_selectedCode);
     final categories = selected.toCategories();
     final risk = selected.volatilityLabel;
     final returnRate = selected.expectedReturnLabel;
@@ -121,14 +131,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                             duration: const Duration(milliseconds: 250),
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: isSelected
-                                  ? WeRoboColors.primary
-                                  : tc.card,
+                              color:
+                                  isSelected ? WeRoboColors.primary : tc.card,
                               borderRadius: BorderRadius.circular(12),
                               border: isSelected
                                   ? null
-                                  : Border.all(
-                                      color: tc.border, width: 1),
+                                  : Border.all(color: tc.border, width: 1),
                             ),
                             child: Text(
                               portfolio.label,
@@ -180,8 +188,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: WeRoboColors.primary
-                        .withValues(alpha: 0.06),
+                    color: WeRoboColors.primary.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -225,6 +232,10 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                           pageBuilder: (_, __, ___) => ConfirmationScreen(
                             recommendation: widget.recommendation,
                             selectedPortfolioCode: _selectedCode,
+                            frontierSelection: _selectedCode ==
+                                    widget.frontierSelection?.representativeCode
+                                ? widget.frontierSelection
+                                : null,
                           ),
                           transitionsBuilder: (_, anim, __, child) =>
                               FadeTransition(opacity: anim, child: child),

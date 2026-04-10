@@ -8,8 +8,15 @@ import 'result_screen.dart';
 
 class PortfolioLoadingScreen extends StatefulWidget {
   final double dotT;
+  final double? targetVolatility;
+  final String? previewDataSource;
 
-  const PortfolioLoadingScreen({super.key, required this.dotT});
+  const PortfolioLoadingScreen({
+    super.key,
+    required this.dotT,
+    this.targetVolatility,
+    this.previewDataSource,
+  });
 
   @override
   State<PortfolioLoadingScreen> createState() => _PortfolioLoadingScreenState();
@@ -21,6 +28,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
   late AnimationController _rotationController;
   late Animation<double> _progressAnimation;
   MobileRecommendationResponse? _recommendation;
+  MobileFrontierSelectionResponse? _frontierSelection;
   MobileRecommendationResponse? _fallbackRecommendation;
   String? _errorMessage;
   bool _animationFinished = false;
@@ -70,6 +78,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     setState(() {
       _errorMessage = null;
       _recommendation = null;
+      _frontierSelection = null;
       _fallbackRecommendation = null;
     });
     _requestFinished = false;
@@ -78,9 +87,23 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
       final recommendation =
           await MobileBackendApi.instance.fetchRecommendation(
         propensityScore: widget.dotT * 100,
+        preferredDataSource: widget.previewDataSource,
       );
       if (recommendation.portfolios.isEmpty) {
         throw const MobileBackendException('추천 포트폴리오가 아직 준비되지 않았어요.');
+      }
+      MobileFrontierSelectionResponse? frontierSelection;
+      if (widget.targetVolatility != null) {
+        try {
+          frontierSelection =
+              await MobileBackendApi.instance.fetchFrontierSelection(
+            propensityScore: widget.dotT * 100,
+            targetVolatility: widget.targetVolatility!,
+            preferredDataSource: widget.previewDataSource,
+          );
+        } catch (_) {
+          frontierSelection = null;
+        }
       }
       if (!mounted) {
         return;
@@ -89,6 +112,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
       _requestFinished = true;
       setState(() {
         _recommendation = recommendation;
+        _frontierSelection = frontierSelection;
       });
       _tryProceed();
     } catch (error) {
@@ -202,7 +226,9 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
           pageBuilder: (context, animation, secondaryAnimation) =>
               PortfolioResultScreen(
             recommendation: _recommendation!,
-            selectedPortfolioCode: _recommendation!.recommendedPortfolioCode,
+            selectedPortfolioCode: _frontierSelection?.representativeCode ??
+                _recommendation!.recommendedPortfolioCode,
+            frontierSelection: _frontierSelection,
           ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);

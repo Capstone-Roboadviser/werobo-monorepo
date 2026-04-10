@@ -43,6 +43,7 @@ class MobileBackendApi {
   Future<MobileRecommendationResponse> fetchRecommendation({
     required double propensityScore,
     String investmentHorizon = 'medium',
+    String? preferredDataSource,
   }) {
     return _postWithFallback(
       path: '/portfolios/recommendation',
@@ -53,6 +54,7 @@ class MobileBackendApi {
       },
       parser: MobileRecommendationResponse.fromJson,
       timeout: _defaultTimeout,
+      preferredDataSource: preferredDataSource,
     );
   }
 
@@ -60,6 +62,7 @@ class MobileBackendApi {
     required double propensityScore,
     String investmentHorizon = 'medium',
     int samplePoints = 61,
+    String? preferredDataSource,
   }) {
     return _postWithFallback(
       path: '/portfolios/frontier-preview',
@@ -71,6 +74,7 @@ class MobileBackendApi {
       },
       parser: MobileFrontierPreviewResponse.fromJson,
       timeout: _defaultTimeout,
+      preferredDataSource: preferredDataSource,
     );
   }
 
@@ -78,6 +82,7 @@ class MobileBackendApi {
     required double propensityScore,
     required double targetVolatility,
     String investmentHorizon = 'medium',
+    String? preferredDataSource,
   }) {
     return _postWithFallback(
       path: '/portfolios/frontier-selection',
@@ -89,6 +94,7 @@ class MobileBackendApi {
       },
       parser: MobileFrontierSelectionResponse.fromJson,
       timeout: _defaultTimeout,
+      preferredDataSource: preferredDataSource,
     );
   }
 
@@ -96,6 +102,7 @@ class MobileBackendApi {
     required String riskProfile,
     String investmentHorizon = 'medium',
     int rollingWindow = 20,
+    String? preferredDataSource,
   }) {
     return _postWithFallback(
       path: '/portfolios/volatility-history',
@@ -107,6 +114,7 @@ class MobileBackendApi {
       },
       parser: MobileVolatilityHistoryResponse.fromJson,
       timeout: _defaultTimeout,
+      preferredDataSource: preferredDataSource,
     );
   }
 
@@ -180,11 +188,15 @@ class MobileBackendApi {
     required Map<String, dynamic> Function(String dataSource) bodyForDataSource,
     required T Function(Map<String, dynamic> json) parser,
     required Duration timeout,
+    String? preferredDataSource,
   }) async {
     Object? lastError;
     final attemptLogs = <String>[];
+    final dataSources = preferredDataSource == null
+        ? _dataSources
+        : <String>[preferredDataSource];
 
-    for (final dataSource in _dataSources) {
+    for (final dataSource in dataSources) {
       try {
         return await _post(
           path: path,

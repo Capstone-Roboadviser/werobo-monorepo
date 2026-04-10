@@ -12,11 +12,13 @@ import 'widgets/vestor_pie_chart.dart';
 class PortfolioResultScreen extends StatefulWidget {
   final MobileRecommendationResponse recommendation;
   final String selectedPortfolioCode;
+  final MobileFrontierSelectionResponse? frontierSelection;
 
   const PortfolioResultScreen({
     super.key,
     required this.recommendation,
     required this.selectedPortfolioCode,
+    this.frontierSelection,
   });
 
   @override
@@ -27,14 +29,27 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
 
+  MobilePortfolioRecommendation get _selectedPortfolio {
+    return widget.frontierSelection?.portfolio ??
+        widget.recommendation
+            .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
+  }
+
+  String get _displayLabel {
+    final representativeLabel = widget.frontierSelection?.representativeLabel;
+    if (representativeLabel != null) {
+      return '$representativeLabel 기준 선택 포트폴리오';
+    }
+    return _selectedPortfolio.label;
+  }
+
   @override
   void initState() {
     super.initState();
-    final portfolio = widget.recommendation
-        .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
+    final portfolio = _selectedPortfolio;
     debugPrint(
       '[WeRobo.Page] enter PortfolioResultScreen '
-      'data_source=${widget.recommendation.dataSource} '
+      'data_source=${widget.frontierSelection?.dataSource ?? widget.recommendation.dataSource} '
       'portfolio=${portfolio.code} '
       'expected_return=${portfolio.expectedReturn.toStringAsFixed(4)}',
     );
@@ -68,8 +83,7 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final portfolio = widget.recommendation
-        .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
+    final portfolio = _selectedPortfolio;
     final categories = portfolio.toCategories();
 
     return Scaffold(
@@ -88,6 +102,8 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
                       _ResultTypeCard(
                         recommendation: widget.recommendation,
                         portfolio: portfolio,
+                        displayLabel: _displayLabel,
+                        frontierSelection: widget.frontierSelection,
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -117,7 +133,10 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
                     PageRouteBuilder(
                       pageBuilder: (_, __, ___) => LoginScreen(
                         recommendation: widget.recommendation,
-                        selectedPortfolioCode: portfolio.code,
+                        selectedPortfolioCode:
+                            widget.frontierSelection?.representativeCode ??
+                                portfolio.code,
+                        frontierSelection: widget.frontierSelection,
                       ),
                       transitionsBuilder: (_, anim, __, child) =>
                           FadeTransition(opacity: anim, child: child),
@@ -150,10 +169,14 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
 class _ResultTypeCard extends StatelessWidget {
   final MobileRecommendationResponse recommendation;
   final MobilePortfolioRecommendation portfolio;
+  final String displayLabel;
+  final MobileFrontierSelectionResponse? frontierSelection;
 
   const _ResultTypeCard({
     required this.recommendation,
     required this.portfolio,
+    required this.displayLabel,
+    required this.frontierSelection,
   });
 
   @override
@@ -170,13 +193,13 @@ class _ResultTypeCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '당신에겐 ${portfolio.label} 포트폴리오가 잘 맞아요',
+            '당신에겐 $displayLabel가 잘 맞아요',
             style: WeRoboTypography.heading3.themed(context),
           ),
           const SizedBox(height: 6),
           Text(
-            '${recommendation.resolvedProfile.label} 성향과 목표 변동성 '
-            '${formatRatioPercent(recommendation.resolvedProfile.targetVolatility)}를 반영했어요.',
+            '${recommendation.resolvedProfile.label} 성향을 바탕으로 목표 변동성 '
+            '${formatRatioPercent(frontierSelection?.selectedTargetVolatility ?? recommendation.resolvedProfile.targetVolatility)}를 반영했어요.',
             style: WeRoboTypography.bodySmall.copyWith(
               color: tc.textSecondary,
             ),
@@ -295,11 +318,9 @@ class _BlurredTickerSection extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
         children: [
-          Text(ticker,
-              style: WeRoboTypography.bodySmall.themed(context)),
+          Text(ticker, style: WeRoboTypography.bodySmall.themed(context)),
           const Spacer(),
-          Text(pct,
-              style: WeRoboTypography.bodySmall.themed(context)),
+          Text(pct, style: WeRoboTypography.bodySmall.themed(context)),
         ],
       ),
     );

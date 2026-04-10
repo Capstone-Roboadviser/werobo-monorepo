@@ -7,11 +7,13 @@ import 'comparison_screen.dart';
 class LoginScreen extends StatefulWidget {
   final MobileRecommendationResponse recommendation;
   final String selectedPortfolioCode;
+  final MobileFrontierSelectionResponse? frontierSelection;
 
   const LoginScreen({
     super.key,
     required this.recommendation,
     required this.selectedPortfolioCode,
+    this.frontierSelection,
   });
 
   @override
@@ -50,6 +52,7 @@ class _LoginScreenState extends State<LoginScreen>
         pageBuilder: (_, __, ___) => ComparisonScreen(
           recommendation: widget.recommendation,
           selectedPortfolioCode: widget.selectedPortfolioCode,
+          frontierSelection: widget.frontierSelection,
         ),
         transitionsBuilder: (_, anim, __, child) =>
             FadeTransition(opacity: anim, child: child),

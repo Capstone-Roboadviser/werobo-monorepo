@@ -7,6 +7,18 @@ import 'widgets/donut_chart.dart';
 import 'widgets/efficient_frontier_chart.dart';
 import 'widgets/page_indicator.dart';
 
+class OnboardingFrontierSelection {
+  final double normalizedT;
+  final double targetVolatility;
+  final String dataSource;
+
+  const OnboardingFrontierSelection({
+    required this.normalizedT,
+    required this.targetVolatility,
+    required this.dataSource,
+  });
+}
+
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
 
@@ -19,6 +31,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   int _currentPage = 0;
   bool _chartDragging = false;
   double _selectedDotT = 0.45;
+  OnboardingFrontierSelection? _frontierSelection;
 
   static const int _pageCount = 2;
 
@@ -43,7 +56,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
-            PortfolioLoadingScreen(dotT: _selectedDotT),
+            PortfolioLoadingScreen(
+          dotT: _selectedDotT,
+          targetVolatility: _frontierSelection?.targetVolatility,
+          previewDataSource: _frontierSelection?.dataSource,
+        ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -78,6 +95,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     },
                     onPositionChanged: (t) {
                       _selectedDotT = t;
+                    },
+                    onFrontierSelectionChanged: (selection) {
+                      _frontierSelection = selection;
                     },
                   ),
                 ],
@@ -211,10 +231,12 @@ class _LegendItem extends StatelessWidget {
 class _EfficientFrontierPage extends StatefulWidget {
   final ValueChanged<bool>? onDragStateChanged;
   final ValueChanged<double>? onPositionChanged;
+  final ValueChanged<OnboardingFrontierSelection?>? onFrontierSelectionChanged;
 
   const _EfficientFrontierPage({
     this.onDragStateChanged,
     this.onPositionChanged,
+    this.onFrontierSelectionChanged,
   });
 
   @override
@@ -287,6 +309,16 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         _dotT = normalizedT;
       });
       widget.onPositionChanged?.call(_dotT);
+      final previewPoint = preview.recommendedPoint;
+      if (previewPoint != null) {
+        widget.onFrontierSelectionChanged?.call(
+          OnboardingFrontierSelection(
+            normalizedT: normalizedT,
+            targetVolatility: previewPoint.volatility,
+            dataSource: preview.dataSource,
+          ),
+        );
+      }
     } catch (_) {
       if (!mounted) {
         return;
@@ -297,6 +329,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         _previewLoading = false;
         _previewUnavailable = true;
       });
+      widget.onFrontierSelectionChanged?.call(null);
     }
   }
 
@@ -313,6 +346,13 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       _dotT = normalizedT;
     });
     widget.onPositionChanged?.call(normalizedT);
+    widget.onFrontierSelectionChanged?.call(
+      OnboardingFrontierSelection(
+        normalizedT: normalizedT,
+        targetVolatility: preview.points[previewPosition].volatility,
+        dataSource: preview.dataSource,
+      ),
+    );
   }
 
   @override
@@ -371,6 +411,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
                 _selectedPreviewPosition = null;
               });
               widget.onPositionChanged?.call(t);
+              widget.onFrontierSelectionChanged?.call(null);
             },
           ),
           if (_previewLoading || _previewUnavailable) ...[

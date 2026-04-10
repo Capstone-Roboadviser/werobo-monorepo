@@ -13,11 +13,13 @@ import 'widgets/vestor_pie_chart.dart';
 class ConfirmationScreen extends StatefulWidget {
   final MobileRecommendationResponse recommendation;
   final String selectedPortfolioCode;
+  final MobileFrontierSelectionResponse? frontierSelection;
 
   const ConfirmationScreen({
     super.key,
     required this.recommendation,
     required this.selectedPortfolioCode,
+    this.frontierSelection,
   });
 
   @override
@@ -45,8 +47,9 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   @override
   void initState() {
     super.initState();
-    _portfolio = widget.recommendation
-        .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
+    _portfolio = widget.frontierSelection?.portfolio ??
+        widget.recommendation
+            .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
     _details = _portfolio.toCategoryDetails();
     _categories = _portfolio.toCategories();
     _fadeController = AnimationController(
@@ -80,7 +83,8 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     try {
       volatilityHistory =
           await MobileBackendApi.instance.fetchVolatilityHistory(
-        riskProfile: _portfolio.code,
+        riskProfile:
+            widget.frontierSelection?.representativeCode ?? _portfolio.code,
         investmentHorizon:
             widget.recommendation.resolvedProfile.investmentHorizon,
       );
@@ -168,8 +172,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       return Text(
         key: const ValueKey('default'),
         '포트폴리오\n비중',
-        style:
-            WeRoboTypography.heading3.copyWith(color: tc.textPrimary),
+        style: WeRoboTypography.heading3.copyWith(color: tc.textPrimary),
         textAlign: TextAlign.center,
       );
     }
@@ -267,10 +270,17 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
 
   void _confirmPortfolio() {
     final state = PortfolioStateProvider.of(context);
+    final selectedType = widget.frontierSelection == null
+        ? _portfolio.investmentType
+        : investmentTypeFromRiskCode(
+            widget.frontierSelection!.representativeCode ??
+                widget.recommendation.recommendedPortfolioCode,
+          );
     state.setTypeAndRecommendation(
-      _portfolio.investmentType,
+      selectedType,
       widget.recommendation,
     );
+    state.setFrontierSelection(widget.frontierSelection);
     if (_backtestResponse != null) {
       state.setBacktest(_backtestResponse!);
     }
