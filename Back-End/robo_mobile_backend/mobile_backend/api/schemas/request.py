@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.core.config import TARGET_VOLATILITY_MAX, TARGET_VOLATILITY_MIN
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
 
 
@@ -25,6 +26,24 @@ class RecommendationRequest(ProfileResolutionRequest):
     pass
 
 
+class FrontierPreviewRequest(ProfileResolutionRequest):
+    sample_points: int = Field(
+        default=61,
+        ge=3,
+        le=121,
+        description="모바일 차트에 내려줄 frontier preview 포인트 수",
+    )
+
+
+class FrontierSelectionRequest(ProfileResolutionRequest):
+    target_volatility: float = Field(
+        ...,
+        ge=TARGET_VOLATILITY_MIN,
+        le=TARGET_VOLATILITY_MAX,
+        description="사용자가 차트에서 선택한 목표 변동성",
+    )
+
+
 class VolatilityHistoryRequest(ProfileResolutionRequest):
     rolling_window: int = Field(default=20, ge=5, le=60, description="롤링 변동성 계산 윈도우")
 
@@ -34,4 +53,3 @@ class ComparisonBacktestRequest(BaseModel):
         default=SimulationDataSource.MANAGED_UNIVERSE,
         description="비교 백테스트에 사용할 종목 유니버스",
     )
-

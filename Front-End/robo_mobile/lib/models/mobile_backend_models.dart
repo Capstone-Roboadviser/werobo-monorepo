@@ -390,6 +390,115 @@ class MobileRecommendationResponse {
   }
 }
 
+class MobileFrontierPreviewPoint {
+  final int index;
+  final double volatility;
+  final double expectedReturn;
+  final bool isRecommended;
+  final String? representativeCode;
+  final String? representativeLabel;
+
+  const MobileFrontierPreviewPoint({
+    required this.index,
+    required this.volatility,
+    required this.expectedReturn,
+    required this.isRecommended,
+    required this.representativeCode,
+    required this.representativeLabel,
+  });
+
+  factory MobileFrontierPreviewPoint.fromJson(Map<String, dynamic> json) {
+    return MobileFrontierPreviewPoint(
+      index: (json['index'] as num?)?.toInt() ?? 0,
+      volatility: _asDouble(json['volatility']),
+      expectedReturn: _asDouble(json['expected_return']),
+      isRecommended: json['is_recommended'] == true,
+      representativeCode: json['representative_code']?.toString(),
+      representativeLabel: json['representative_label']?.toString(),
+    );
+  }
+}
+
+class MobileFrontierPreviewResponse {
+  final MobileResolvedProfile resolvedProfile;
+  final String recommendedPortfolioCode;
+  final String dataSource;
+  final int totalPointCount;
+  final double minVolatility;
+  final double maxVolatility;
+  final List<MobileFrontierPreviewPoint> points;
+
+  const MobileFrontierPreviewResponse({
+    required this.resolvedProfile,
+    required this.recommendedPortfolioCode,
+    required this.dataSource,
+    required this.totalPointCount,
+    required this.minVolatility,
+    required this.maxVolatility,
+    required this.points,
+  });
+
+  factory MobileFrontierPreviewResponse.fromJson(Map<String, dynamic> json) {
+    return MobileFrontierPreviewResponse(
+      resolvedProfile: MobileResolvedProfile.fromJson(
+        json['resolved_profile'] as Map<String, dynamic>? ?? const {},
+      ),
+      recommendedPortfolioCode:
+          json['recommended_portfolio_code']?.toString() ?? '',
+      dataSource: json['data_source']?.toString() ?? '',
+      totalPointCount: (json['total_point_count'] as num?)?.toInt() ?? 0,
+      minVolatility: _asDouble(json['min_volatility']),
+      maxVolatility: _asDouble(json['max_volatility']),
+      points: (json['points'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileFrontierPreviewPoint.fromJson)
+          .toList(),
+    );
+  }
+}
+
+class MobileFrontierSelectionResponse {
+  final MobileResolvedProfile resolvedProfile;
+  final String dataSource;
+  final double requestedTargetVolatility;
+  final double selectedTargetVolatility;
+  final int selectedPointIndex;
+  final int totalPointCount;
+  final String? representativeCode;
+  final String? representativeLabel;
+  final MobilePortfolioRecommendation portfolio;
+
+  const MobileFrontierSelectionResponse({
+    required this.resolvedProfile,
+    required this.dataSource,
+    required this.requestedTargetVolatility,
+    required this.selectedTargetVolatility,
+    required this.selectedPointIndex,
+    required this.totalPointCount,
+    required this.representativeCode,
+    required this.representativeLabel,
+    required this.portfolio,
+  });
+
+  factory MobileFrontierSelectionResponse.fromJson(Map<String, dynamic> json) {
+    return MobileFrontierSelectionResponse(
+      resolvedProfile: MobileResolvedProfile.fromJson(
+        json['resolved_profile'] as Map<String, dynamic>? ?? const {},
+      ),
+      dataSource: json['data_source']?.toString() ?? '',
+      requestedTargetVolatility: _asDouble(json['requested_target_volatility']),
+      selectedTargetVolatility: _asDouble(json['selected_target_volatility']),
+      selectedPointIndex: (json['selected_point_index'] as num?)?.toInt() ?? 0,
+      totalPointCount: (json['total_point_count'] as num?)?.toInt() ?? 0,
+      representativeCode: json['representative_code']?.toString(),
+      representativeLabel: json['representative_label']?.toString(),
+      portfolio: MobilePortfolioRecommendation.fromJson(
+        json['portfolio'] as Map<String, dynamic>? ?? const {},
+      ),
+    );
+  }
+}
+
 class MobileVolatilityPoint {
   final DateTime date;
   final double volatility;
@@ -750,11 +859,10 @@ class MobileRebalanceSimulationResponse {
           .whereType<Map<String, dynamic>>()
           .map(MobileRebalanceTimePoint.fromJson)
           .toList(),
-      rebalanceEvents:
-          (json['rebalance_events'] as List<dynamic>? ?? const [])
-              .whereType<Map<String, dynamic>>()
-              .map(MobileRebalanceEvent.fromJson)
-              .toList(),
+      rebalanceEvents: (json['rebalance_events'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileRebalanceEvent.fromJson)
+          .toList(),
       finalValue: _asDouble(json['final_value']),
       totalReturnPct: _asDouble(json['total_return_pct']),
       noRebalanceFinalValue: _asDouble(json['no_rebalance_final_value']),

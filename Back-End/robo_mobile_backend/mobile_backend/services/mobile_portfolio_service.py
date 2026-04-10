@@ -42,6 +42,48 @@ class MobilePortfolioService:
             propensity_score=propensity_score,
         )
 
+    def build_frontier_preview(
+        self,
+        *,
+        propensity_score: float | None,
+        explicit_profile: RiskProfile | None,
+        investment_horizon: InvestmentHorizon,
+        data_source: SimulationDataSource,
+        sample_points: int,
+    ) -> dict[str, object]:
+        resolved_profile = self.profile_service.resolve_risk_profile(
+            propensity_score=propensity_score,
+            explicit_profile=explicit_profile,
+        )
+        return self.calculation_adapter.build_frontier_preview(
+            resolved_profile=resolved_profile,
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+            propensity_score=propensity_score,
+            sample_points=sample_points,
+        )
+
+    def build_frontier_selection(
+        self,
+        *,
+        propensity_score: float | None,
+        explicit_profile: RiskProfile | None,
+        investment_horizon: InvestmentHorizon,
+        data_source: SimulationDataSource,
+        target_volatility: float,
+    ) -> dict[str, object]:
+        resolved_profile = self.profile_service.resolve_risk_profile(
+            propensity_score=propensity_score,
+            explicit_profile=explicit_profile,
+        )
+        return self.calculation_adapter.build_frontier_selection(
+            resolved_profile=resolved_profile,
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+            propensity_score=propensity_score,
+            target_volatility=target_volatility,
+        )
+
     def build_volatility_history(
         self,
         *,

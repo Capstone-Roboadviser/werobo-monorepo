@@ -8,15 +8,8 @@ from mobile_backend.integrations.embedded_portfolio_engine import EmbeddedPortfo
 
 
 class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
-    def test_build_recommendation_reuses_single_context(self) -> None:
+    def _build_fake_adapter(self) -> tuple[EmbeddedPortfolioEngineAdapter, SimpleNamespace]:
         adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
-        call_count = 0
-        target_volatility_by_profile = {
-            RiskProfile.CONSERVATIVE: 0.08,
-            RiskProfile.BALANCED: 0.12,
-            RiskProfile.GROWTH: 0.16,
-        }
-
         fake_context = SimpleNamespace(
             assets=[
                 SimpleNamespace(code="us_value", name="미국 가치주"),
@@ -66,8 +59,6 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         )
 
         def fake_build_context(*, investment_horizon: InvestmentHorizon, data_source: SimulationDataSource):
-            nonlocal call_count
-            call_count += 1
             self.assertEqual(investment_horizon, InvestmentHorizon.MEDIUM)
             self.assertEqual(data_source, SimulationDataSource.STOCK_COMBINATION_DEMO)
             return fake_context
@@ -127,7 +118,6 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         adapter.RISK_FREE_RATE = 0.02
         adapter.portfolio_service = SimpleNamespace(
             mapping_service=SimpleNamespace(
-                resolve_target_volatility=lambda profile: target_volatility_by_profile[profile.risk_profile],
                 build_portfolio_id=lambda profile, target_volatility: (
                     f"{profile.risk_profile.value}-{int(target_volatility * 100)}"
                 ),
@@ -135,6 +125,23 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             _weights_for_optimization=lambda weights, instruments: dict(weights),
             _build_sector_allocations=fake_build_sector_allocations,
         )
+        return adapter, fake_context
+
+    def test_build_recommendation_reuses_single_context(self) -> None:
+        adapter, _ = self._build_fake_adapter()
+        call_count = 0
+
+        original_build_context = adapter._build_context
+
+        def counting_build_context(*, investment_horizon: InvestmentHorizon, data_source: SimulationDataSource):
+            nonlocal call_count
+            call_count += 1
+            return original_build_context(
+                investment_horizon=investment_horizon,
+                data_source=data_source,
+            )
+
+        adapter._build_context = counting_build_context
 
         response = adapter.build_recommendation(
             resolved_profile=RiskProfile.BALANCED,
@@ -154,6 +161,46 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             [portfolio["target_volatility"] for portfolio in response["portfolios"]],
             [0.08, 0.12, 0.16],
         )
+
+    def test_build_frontier_preview_keeps_representative_points(self) -> None:
+        adapter, _ = self._build_fake_adapter()
+
+        response = adapter.build_frontier_preview(
+            resolved_profile=RiskProfile.BALANCED,
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+            propensity_score=45.0,
+            sample_points=3,
+        )
+
+        self.assertEqual(response["recommended_portfolio_code"], "balanced")
+        self.assertEqual(response["total_point_count"], 3)
+        self.assertEqual([point["index"] for point in response["points"]], [0, 1, 2])
+        self.assertEqual(
+            [point["representative_code"] for point in response["points"]],
+            ["conservative", "balanced", "growth"],
+        )
+        self.assertEqual(
+            [point["is_recommended"] for point in response["points"]],
+            [False, True, False],
+        )
+
+    def test_build_frontier_selection_returns_selected_portfolio(self) -> None:
+        adapter, _ = self._build_fake_adapter()
+
+        response = adapter.build_frontier_selection(
+            resolved_profile=RiskProfile.BALANCED,
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+            propensity_score=45.0,
+            target_volatility=0.119,
+        )
+
+        self.assertEqual(response["selected_point_index"], 1)
+        self.assertEqual(response["selected_target_volatility"], 0.12)
+        self.assertEqual(response["representative_code"], "balanced")
+        self.assertEqual(response["portfolio"]["code"], "selected")
+        self.assertEqual(response["portfolio"]["label"], "선택 포트폴리오")
 
 
 if __name__ == "__main__":

@@ -9,10 +9,14 @@ class PortfolioState extends ChangeNotifier {
   InvestmentType _type = InvestmentType.balanced;
   MobileRecommendationResponse? _recommendation;
   MobileComparisonBacktestResponse? _backtest;
+  MobileFrontierPreviewResponse? _frontierPreview;
+  MobileFrontierSelectionResponse? _frontierSelection;
 
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
   MobileComparisonBacktestResponse? get backtest => _backtest;
+  MobileFrontierPreviewResponse? get frontierPreview => _frontierPreview;
+  MobileFrontierSelectionResponse? get frontierSelection => _frontierSelection;
 
   /// The selected portfolio from the API recommendation.
   MobilePortfolioRecommendation? get selectedPortfolio {
@@ -47,6 +51,16 @@ class PortfolioState extends ChangeNotifier {
 
   void setBacktest(MobileComparisonBacktestResponse bt) {
     _backtest = bt;
+    notifyListeners();
+  }
+
+  void setFrontierPreview(MobileFrontierPreviewResponse preview) {
+    _frontierPreview = preview;
+    notifyListeners();
+  }
+
+  void setFrontierSelection(MobileFrontierSelectionResponse selection) {
+    _frontierSelection = selection;
     notifyListeners();
   }
 
@@ -92,15 +106,13 @@ class PortfolioState extends ChangeNotifier {
               color: parseBackendHexColor(line.color),
               dashed: line.style != 'solid',
               points: line.points
-                  .map((p) =>
-                      ChartPoint(date: p.date, value: p.returnPct))
+                  .map((p) => ChartPoint(date: p.date, value: p.returnPct))
                   .toList(),
             ))
         .toList();
   }
 
-  List<DateTime> get rebalanceDates =>
-      _backtest?.rebalanceDates ?? const [];
+  List<DateTime> get rebalanceDates => _backtest?.rebalanceDates ?? const [];
 
   /// Convenience: derive type from efficient frontier dot position
   void setFromDotT(double dotT) {
@@ -117,8 +129,8 @@ class PortfolioStateProvider extends InheritedNotifier<PortfolioState> {
   }) : super(notifier: state);
 
   static PortfolioState of(BuildContext context) {
-    final provider = context
-        .dependOnInheritedWidgetOfExactType<PortfolioStateProvider>();
+    final provider =
+        context.dependOnInheritedWidgetOfExactType<PortfolioStateProvider>();
     assert(provider != null, 'No PortfolioStateProvider in widget tree');
     return provider!.notifier!;
   }

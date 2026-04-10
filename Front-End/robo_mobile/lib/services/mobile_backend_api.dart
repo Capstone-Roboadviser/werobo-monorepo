@@ -56,6 +56,42 @@ class MobileBackendApi {
     );
   }
 
+  Future<MobileFrontierPreviewResponse> fetchFrontierPreview({
+    required double propensityScore,
+    String investmentHorizon = 'medium',
+    int samplePoints = 61,
+  }) {
+    return _postWithFallback(
+      path: '/portfolios/frontier-preview',
+      bodyForDataSource: (dataSource) => <String, dynamic>{
+        'propensity_score': propensityScore.clamp(0, 100),
+        'investment_horizon': investmentHorizon,
+        'data_source': dataSource,
+        'sample_points': samplePoints,
+      },
+      parser: MobileFrontierPreviewResponse.fromJson,
+      timeout: _defaultTimeout,
+    );
+  }
+
+  Future<MobileFrontierSelectionResponse> fetchFrontierSelection({
+    required double propensityScore,
+    required double targetVolatility,
+    String investmentHorizon = 'medium',
+  }) {
+    return _postWithFallback(
+      path: '/portfolios/frontier-selection',
+      bodyForDataSource: (dataSource) => <String, dynamic>{
+        'propensity_score': propensityScore.clamp(0, 100),
+        'investment_horizon': investmentHorizon,
+        'data_source': dataSource,
+        'target_volatility': targetVolatility,
+      },
+      parser: MobileFrontierSelectionResponse.fromJson,
+      timeout: _defaultTimeout,
+    );
+  }
+
   Future<MobileVolatilityHistoryResponse> fetchVolatilityHistory({
     required String riskProfile,
     String investmentHorizon = 'medium',

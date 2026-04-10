@@ -28,7 +28,7 @@ class EmbeddedPortfolioEngineAdapter:
             SimulationDataSource as CoreSimulationDataSource,
         )
         from app.domain.models import UserProfile as CoreUserProfile
-        from app.engine.frontier import build_frontier_options
+        from app.engine.frontier import build_frontier_options, select_frontier_point_index
         from app.engine.math import portfolio_metrics_from_weights, risk_contributions
         from app.services.portfolio_service import PortfolioSimulationService
 
@@ -40,6 +40,7 @@ class EmbeddedPortfolioEngineAdapter:
         self.CoreSimulationDataSource = CoreSimulationDataSource
         self.CoreUserProfile = CoreUserProfile
         self.build_frontier_options = build_frontier_options
+        self.select_frontier_point_index = select_frontier_point_index
         self.portfolio_metrics_from_weights = portfolio_metrics_from_weights
         self.risk_contributions = risk_contributions
         self.RISK_FREE_RATE = RISK_FREE_RATE
@@ -95,21 +96,23 @@ class EmbeddedPortfolioEngineAdapter:
         }
         return context, instrument_by_ticker
 
-    def _build_portfolio_snapshot_from_context(
+    def _build_portfolio_snapshot_from_point(
         self,
         *,
         context,
         instrument_by_ticker,
-        risk_profile: RiskProfile,
+        point,
+        portfolio_code: str,
+        portfolio_label: str,
+        portfolio_profile: RiskProfile,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
     ) -> dict[str, object]:
         core_user_profile = self._build_core_user_profile(
-            risk_profile=risk_profile,
+            risk_profile=portfolio_profile,
             investment_horizon=investment_horizon,
             data_source=data_source,
         )
-        point = self._select_profile_option_point(context, risk_profile)
         target_volatility = float(point.volatility)
 
         optimization_weights = self.portfolio_service._weights_for_optimization(
@@ -154,8 +157,8 @@ class EmbeddedPortfolioEngineAdapter:
             portfolio_id = f"stocks-{portfolio_id}"
 
         return {
-            "code": risk_profile.value,
-            "label": PROFILE_LABELS[risk_profile.value],
+            "code": portfolio_code,
+            "label": portfolio_label,
             "portfolio_id": portfolio_id,
             "target_volatility": round(float(target_volatility), 4),
             "expected_return": round(float(metrics.expected_return), 4),
@@ -173,6 +176,27 @@ class EmbeddedPortfolioEngineAdapter:
             "stock_allocations": stock_allocations,
             "stock_weights": {str(k).upper(): float(v) for k, v in point.weights.items()},
         }
+
+    def _build_portfolio_snapshot_from_context(
+        self,
+        *,
+        context,
+        instrument_by_ticker,
+        risk_profile: RiskProfile,
+        investment_horizon: InvestmentHorizon,
+        data_source: SimulationDataSource,
+    ) -> dict[str, object]:
+        point = self._select_profile_option_point(context, risk_profile)
+        return self._build_portfolio_snapshot_from_point(
+            context=context,
+            instrument_by_ticker=instrument_by_ticker,
+            point=point,
+            portfolio_code=risk_profile.value,
+            portfolio_label=PROFILE_LABELS[risk_profile.value],
+            portfolio_profile=risk_profile,
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+        )
 
     def _select_profile_option_point(
         self,
@@ -193,6 +217,56 @@ class EmbeddedPortfolioEngineAdapter:
         if point is None:
             raise RuntimeError(f"{risk_profile.value} 대표 포트폴리오 포인트를 찾지 못했습니다.")
         return point
+
+    def _build_representative_index_map(self, context) -> dict[RiskProfile, int]:
+        profile_keys = (
+            RiskProfile.CONSERVATIVE,
+            RiskProfile.BALANCED,
+            RiskProfile.GROWTH,
+        )
+        option_points = self.build_frontier_options(context.frontier_points)
+        index_map: dict[RiskProfile, int] = {}
+        for profile, (_, point) in zip(profile_keys, option_points):
+            index_map[profile] = self.select_frontier_point_index(
+                context.frontier_points,
+                float(point.volatility),
+            )
+        return index_map
+
+    def _build_resolved_profile_payload(
+        self,
+        *,
+        resolved_profile: RiskProfile,
+        propensity_score: float | None,
+        investment_horizon: InvestmentHorizon,
+        target_volatility: float,
+    ) -> dict[str, object]:
+        return {
+            "code": resolved_profile.value,
+            "label": PROFILE_LABELS[resolved_profile.value],
+            "propensity_score": propensity_score,
+            "target_volatility": round(float(target_volatility), 4),
+            "investment_horizon": investment_horizon.value,
+        }
+
+    def _build_preview_indices(
+        self,
+        *,
+        total_point_count: int,
+        sample_points: int,
+        highlighted_indices: set[int],
+    ) -> list[int]:
+        if total_point_count <= 0:
+            return []
+        if total_point_count <= sample_points:
+            return list(range(total_point_count))
+
+        sampled_indices = {
+            int(round(position * (total_point_count - 1) / (sample_points - 1)))
+            for position in range(sample_points)
+        }
+        sampled_indices.update(highlighted_indices)
+        return sorted(sampled_indices)
 
     def _build_portfolio_snapshot(
         self,
@@ -249,13 +323,12 @@ class EmbeddedPortfolioEngineAdapter:
         )
 
         return {
-            "resolved_profile": {
-                "code": resolved_profile.value,
-                "label": PROFILE_LABELS[resolved_profile.value],
-                "propensity_score": propensity_score,
-                "target_volatility": resolved_target,
-                "investment_horizon": investment_horizon.value,
-            },
+            "resolved_profile": self._build_resolved_profile_payload(
+                resolved_profile=resolved_profile,
+                propensity_score=propensity_score,
+                investment_horizon=investment_horizon,
+                target_volatility=resolved_target,
+            ),
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
             "portfolios": [
@@ -266,6 +339,118 @@ class EmbeddedPortfolioEngineAdapter:
                 }
                 for portfolio in portfolios
             ],
+        }
+
+    def build_frontier_preview(
+        self,
+        *,
+        resolved_profile: RiskProfile,
+        investment_horizon: InvestmentHorizon,
+        data_source: SimulationDataSource,
+        propensity_score: float | None,
+        sample_points: int,
+    ) -> dict[str, object]:
+        context, _ = self._build_context_bundle(
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+        )
+        representative_indices = self._build_representative_index_map(context)
+        recommended_index = representative_indices[resolved_profile]
+        representative_index_lookup = {
+            index: profile for profile, index in representative_indices.items()
+        }
+        preview_indices = self._build_preview_indices(
+            total_point_count=len(context.frontier_points),
+            sample_points=sample_points,
+            highlighted_indices=set(representative_indices.values()),
+        )
+
+        return {
+            "resolved_profile": self._build_resolved_profile_payload(
+                resolved_profile=resolved_profile,
+                propensity_score=propensity_score,
+                investment_horizon=investment_horizon,
+                target_volatility=context.frontier_points[recommended_index].volatility,
+            ),
+            "recommended_portfolio_code": resolved_profile.value,
+            "data_source": data_source.value,
+            "total_point_count": len(context.frontier_points),
+            "min_volatility": round(float(context.frontier_points[0].volatility), 4),
+            "max_volatility": round(float(context.frontier_points[-1].volatility), 4),
+            "points": [
+                {
+                    "index": index,
+                    "volatility": round(float(context.frontier_points[index].volatility), 4),
+                    "expected_return": round(float(context.frontier_points[index].expected_return), 4),
+                    "is_recommended": index == recommended_index,
+                    "representative_code": None
+                    if representative_index_lookup.get(index) is None
+                    else representative_index_lookup[index].value,
+                    "representative_label": None
+                    if representative_index_lookup.get(index) is None
+                    else PROFILE_LABELS[representative_index_lookup[index].value],
+                }
+                for index in preview_indices
+            ],
+        }
+
+    def build_frontier_selection(
+        self,
+        *,
+        resolved_profile: RiskProfile,
+        investment_horizon: InvestmentHorizon,
+        data_source: SimulationDataSource,
+        propensity_score: float | None,
+        target_volatility: float,
+    ) -> dict[str, object]:
+        context, instrument_by_ticker = self._build_context_bundle(
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+        )
+        selected_point_index = self.select_frontier_point_index(
+            context.frontier_points,
+            target_volatility,
+        )
+        representative_indices = self._build_representative_index_map(context)
+        representative_profile = min(
+            representative_indices,
+            key=lambda profile: abs(
+                context.frontier_points[representative_indices[profile]].volatility
+                - context.frontier_points[selected_point_index].volatility
+            ),
+        )
+        snapshot = self._build_portfolio_snapshot_from_point(
+            context=context,
+            instrument_by_ticker=instrument_by_ticker,
+            point=context.frontier_points[selected_point_index],
+            portfolio_code="selected",
+            portfolio_label="선택 포트폴리오",
+            portfolio_profile=resolved_profile,
+            investment_horizon=investment_horizon,
+            data_source=data_source,
+        )
+        return {
+            "resolved_profile": self._build_resolved_profile_payload(
+                resolved_profile=resolved_profile,
+                propensity_score=propensity_score,
+                investment_horizon=investment_horizon,
+                target_volatility=context.frontier_points[representative_indices[resolved_profile]].volatility,
+            ),
+            "data_source": data_source.value,
+            "requested_target_volatility": round(float(target_volatility), 4),
+            "selected_target_volatility": round(
+                float(context.frontier_points[selected_point_index].volatility),
+                4,
+            ),
+            "selected_point_index": selected_point_index,
+            "total_point_count": len(context.frontier_points),
+            "representative_code": representative_profile.value,
+            "representative_label": PROFILE_LABELS[representative_profile.value],
+            "portfolio": {
+                key: value
+                for key, value in snapshot.items()
+                if key != "stock_weights"
+            },
         }
 
     def get_volatility_history(

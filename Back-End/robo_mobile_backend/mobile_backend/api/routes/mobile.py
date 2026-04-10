@@ -4,6 +4,8 @@ from fastapi import APIRouter, HTTPException
 
 from mobile_backend.api.schemas.request import (
     ComparisonBacktestRequest,
+    FrontierPreviewRequest,
+    FrontierSelectionRequest,
     ProfileResolutionRequest,
     RecommendationRequest,
     VolatilityHistoryRequest,
@@ -11,6 +13,8 @@ from mobile_backend.api.schemas.request import (
 from mobile_backend.api.schemas.response import (
     ComparisonBacktestResponse,
     ErrorResponse,
+    FrontierPreviewResponse,
+    FrontierSelectionResponse,
     ProfileResolutionResponse,
     RecommendationResponse,
     VolatilityHistoryResponse,
@@ -76,6 +80,51 @@ def get_recommendation(payload: RecommendationRequest) -> RecommendationResponse
             data_source=payload.data_source,
         )
         return RecommendationResponse(**response)
+    except Exception as exc:
+        _handle_runtime_error(exc)
+
+
+@router.post(
+    "/portfolios/frontier-preview",
+    response_model=FrontierPreviewResponse,
+    summary="드래그용 frontier preview",
+    description=(
+        "모바일 차트 드래그 UX를 위해 전체 efficient frontier를 다운샘플한 preview 포인트를 반환합니다. "
+        "초기 진입은 가볍게 유지하고, 실제 상세 포트폴리오는 별도 selection API에서 가져오도록 설계되었습니다."
+    ),
+    responses=COMMON_ERROR_RESPONSES,
+)
+def get_frontier_preview(payload: FrontierPreviewRequest) -> FrontierPreviewResponse:
+    try:
+        response = mobile_portfolio_service.build_frontier_preview(
+            propensity_score=payload.propensity_score,
+            explicit_profile=payload.risk_profile,
+            investment_horizon=payload.investment_horizon,
+            data_source=payload.data_source,
+            sample_points=payload.sample_points,
+        )
+        return FrontierPreviewResponse(**response)
+    except Exception as exc:
+        _handle_runtime_error(exc)
+
+
+@router.post(
+    "/portfolios/frontier-selection",
+    response_model=FrontierSelectionResponse,
+    summary="선택 frontier 포트폴리오 상세",
+    description="사용자가 차트에서 놓은 목표 변동성을 기준으로 가장 가까운 frontier 포인트의 상세 포트폴리오를 반환합니다.",
+    responses=COMMON_ERROR_RESPONSES,
+)
+def get_frontier_selection(payload: FrontierSelectionRequest) -> FrontierSelectionResponse:
+    try:
+        response = mobile_portfolio_service.build_frontier_selection(
+            propensity_score=payload.propensity_score,
+            explicit_profile=payload.risk_profile,
+            investment_horizon=payload.investment_horizon,
+            data_source=payload.data_source,
+            target_volatility=payload.target_volatility,
+        )
+        return FrontierSelectionResponse(**response)
     except Exception as exc:
         _handle_runtime_error(exc)
 

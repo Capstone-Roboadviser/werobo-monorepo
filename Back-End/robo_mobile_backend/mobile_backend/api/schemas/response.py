@@ -117,6 +117,37 @@ class RecommendationResponse(BaseModel):
     portfolios: list[PortfolioRecommendationItemResponse] = Field(default_factory=list, description="안정형/균형형/성장형 3개 대표 포트폴리오")
 
 
+class FrontierPreviewPointResponse(BaseModel):
+    index: int = Field(..., description="전체 frontier 목록 기준 포인트 인덱스", examples=[24])
+    volatility: float = Field(..., description="연 변동성", examples=[0.1042])
+    expected_return: float = Field(..., description="연 기대수익률", examples=[0.0831])
+    is_recommended: bool = Field(..., description="사용자 추천 위험유형에 해당하는 포인트인지 여부", examples=[False])
+    representative_code: str | None = Field(default=None, description="대표 포트폴리오 코드와 일치할 때의 코드", examples=["balanced"])
+    representative_label: str | None = Field(default=None, description="대표 포트폴리오 표시 이름", examples=["균형형"])
+
+
+class FrontierPreviewResponse(BaseModel):
+    resolved_profile: ResolvedProfileItemResponse = Field(..., description="사용자 판정 결과")
+    recommended_portfolio_code: str = Field(..., description="사용자에게 추천되는 대표 포트폴리오 코드", examples=["balanced"])
+    data_source: str = Field(..., description="계산에 사용한 데이터 소스", examples=["managed_universe"])
+    total_point_count: int = Field(..., description="내부에서 계산된 전체 frontier 포인트 수", examples=[80])
+    min_volatility: float = Field(..., description="frontier 최소 변동성", examples=[0.0415])
+    max_volatility: float = Field(..., description="frontier 최대 변동성", examples=[0.1918])
+    points: list[FrontierPreviewPointResponse] = Field(default_factory=list, description="모바일 차트용으로 다운샘플된 frontier 포인트")
+
+
+class FrontierSelectionResponse(BaseModel):
+    resolved_profile: ResolvedProfileItemResponse = Field(..., description="사용자 판정 결과")
+    data_source: str = Field(..., description="계산에 사용한 데이터 소스", examples=["managed_universe"])
+    requested_target_volatility: float = Field(..., description="앱이 선택 요청한 목표 변동성", examples=[0.11])
+    selected_target_volatility: float = Field(..., description="실제로 매칭된 frontier 포인트의 목표 변동성", examples=[0.1084])
+    selected_point_index: int = Field(..., description="내부 frontier 목록에서 매칭된 포인트 인덱스", examples=[31])
+    total_point_count: int = Field(..., description="내부에서 계산된 전체 frontier 포인트 수", examples=[80])
+    representative_code: str | None = Field(default=None, description="가장 가까운 대표 포트폴리오 코드", examples=["balanced"])
+    representative_label: str | None = Field(default=None, description="가장 가까운 대표 포트폴리오 이름", examples=["균형형"])
+    portfolio: PortfolioRecommendationItemResponse = Field(..., description="사용자가 확정한 선택 포트폴리오 상세")
+
+
 class VolatilityPointResponse(BaseModel):
     date: str = Field(..., description="관측일", examples=["2025-01-31"])
     volatility: float = Field(..., description="연환산 롤링 변동성", examples=[0.1123])
