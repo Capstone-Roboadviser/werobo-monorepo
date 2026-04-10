@@ -96,6 +96,28 @@ robo_mobile_backend/
 
 현재 가격 데이터는 `yfinance`의 일별 가격 데이터(`date`, `adjusted_close`)를 사용합니다.
 
+### Railway cron 권장 설정
+
+Railway에서는 웹 서비스와 별도로 cron 서비스를 하나 더 두는 편이 안전합니다.
+
+- Source Repo: 같은 `werobo-monorepo`
+- Root Directory: `/Back-End/robo_mobile_backend`
+- Start Command: `python scripts/run_active_refresh.py`
+
+cron 서비스 변수:
+
+- `BACKEND_BASE_URL=https://robomobilebackend-production.up.railway.app`
+- `ADMIN_REFRESH_SECRET=<웹 서비스와 동일한 secret>`
+- `REFRESH_MODE=incremental`
+- `FULL_LOOKBACK_YEARS=5`
+
+권장 스케줄:
+
+- 하루 1번
+- 미국 종가 반영 이후 한국시간 오전 7~9시대
+- Railway cron은 UTC 기준
+- 예시: 한국시간 오전 8시는 UTC 전날 23시이므로 `0 23 * * *`
+
 ## 실행 방법
 
 ```bash
