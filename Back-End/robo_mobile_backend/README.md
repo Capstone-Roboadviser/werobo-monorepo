@@ -15,6 +15,8 @@
 - Swagger/OpenAPI 문서가 정리된 모바일 API 라우트
 - 투자성향 판정 API
 - 3개 대표 포트폴리오 추천 API
+- efficient frontier preview API
+- 선택 frontier 포트폴리오 상세 API
 - 포트폴리오 변동성 추이 API
 - 포트폴리오 유형별 성과 비교 API
 - 프로젝트 내부에 포함된 계산 코어와 모바일 응답 adapter
@@ -22,9 +24,9 @@
 
 중요:
 
-- 계산 코어는 프로젝트 루트의 [`app`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/app) 패키지에 포함되어 있습니다.
+- 계산 코어는 프로젝트 루트의 [`app`](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/app) 패키지에 포함되어 있습니다.
 - 이 `app` 패키지는 모바일 백엔드가 직접 보유하는 내장 계산 코어입니다.
-- 모바일 API는 [`mobile_backend`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend) 패키지에서 별도 계약을 유지합니다.
+- 모바일 API는 [`mobile_backend`](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/mobile_backend) 패키지에서 별도 계약을 유지합니다.
 
 ## 프로젝트 구조
 
@@ -46,9 +48,9 @@ robo_mobile_backend/
 
 ## 문서
 
-- [모바일 API 명세](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/docs/MOBILE_API_SPEC.md)
-- [관리자 운영 문서](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/docs/ADMIN_OPERATIONS.md)
-- [아키텍처 개요](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/docs/ARCHITECTURE.md)
+- [모바일 API 명세](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/docs/MOBILE_API_SPEC.md)
+- [관리자 운영 문서](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/docs/ADMIN_OPERATIONS.md)
+- [아키텍처 개요](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/docs/ARCHITECTURE.md)
 
 ## 주요 엔드포인트
 
@@ -63,13 +65,15 @@ robo_mobile_backend/
 - `GET /admin/api/universe/readiness`
 - `POST /api/v1/profile/resolve`
 - `POST /api/v1/portfolios/recommendation`
+- `POST /api/v1/portfolios/frontier-preview`
+- `POST /api/v1/portfolios/frontier-selection`
 - `POST /api/v1/portfolios/volatility-history`
 - `POST /api/v1/portfolios/comparison-backtest`
 
 ## 실행 방법
 
 ```bash
-cd "/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend"
+cd "/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend"
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -84,7 +88,7 @@ uvicorn mobile_backend.main:app --reload
 
 ## 계산 코어 동작 방식
 
-현재 [`embedded_portfolio_engine.py`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/integrations/embedded_portfolio_engine.py)는 프로젝트 내부의 [`app`](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/app) 계산 패키지를 읽어 모바일 응답 형태로 재조립합니다.
+현재 [`embedded_portfolio_engine.py`](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/mobile_backend/integrations/embedded_portfolio_engine.py)는 프로젝트 내부의 [`app`](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/app) 계산 패키지를 읽어 모바일 응답 형태로 재조립합니다.
 
 이 구조의 장점:
 
@@ -95,6 +99,21 @@ uvicorn mobile_backend.main:app --reload
 주의할 점:
 
 - 현재 계산 패키지는 모바일 백엔드 안에 포함돼 있지만, 내부 네임스페이스 정리는 계속 진행할 수 있습니다.
+
+## 모바일 차트 흐름
+
+현재 모바일 투자 흐름은 두 단계로 나뉩니다.
+
+1. `/api/v1/portfolios/recommendation`
+   초기 진입 시 안정형, 균형형, 성장형 3개 대표 포트폴리오를 빠르게 보여줍니다.
+2. `/api/v1/portfolios/frontier-preview` + `/api/v1/portfolios/frontier-selection`
+   드래그 기반 차트 UX에서는 preview 포인트만 먼저 내려주고, 사용자가 최종 위치를 확정한 뒤 상세 포트폴리오를 가져오는 구조를 지원합니다.
+
+이 구조를 쓰는 이유:
+
+- 모바일 초기 로딩 payload를 작게 유지할 수 있음
+- efficient frontier 전체를 내부적으로 계산하되, 화면에는 필요한 점만 샘플링해서 전달할 수 있음
+- 위험도/기대수익률 라벨과 실제 선택 포트폴리오를 같은 frontier 기반으로 맞출 수 있음
 
 ## 다음 권장 작업
 

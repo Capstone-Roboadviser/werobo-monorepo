@@ -455,6 +455,24 @@ class MobileFrontierPreviewResponse {
           .toList(),
     );
   }
+
+  int get recommendedPreviewPosition {
+    final recommendedIndex = points.indexWhere((point) => point.isRecommended);
+    if (recommendedIndex >= 0) {
+      return recommendedIndex;
+    }
+    if (points.isEmpty) {
+      return 0;
+    }
+    return points.length ~/ 2;
+  }
+
+  MobileFrontierPreviewPoint? get recommendedPoint {
+    if (points.isEmpty) {
+      return null;
+    }
+    return points[recommendedPreviewPosition];
+  }
 }
 
 class MobileFrontierSelectionResponse {

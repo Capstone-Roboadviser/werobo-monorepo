@@ -10,7 +10,7 @@
 - QA
 - 백엔드 운영 담당자
 
-이 문서는 현재 코드 기준 계약을 설명합니다. 기준 구현은 [mobile.py](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/api/routes/mobile.py), [request.py](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/api/schemas/request.py), [response.py](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/api/schemas/response.py) 입니다.
+이 문서는 현재 코드 기준 계약을 설명합니다. 기준 구현은 [mobile.py](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/mobile_backend/api/routes/mobile.py), [request.py](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/mobile_backend/api/schemas/request.py), [response.py](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/mobile_backend/api/schemas/response.py) 입니다.
 
 ## 기본 규칙
 
@@ -59,7 +59,7 @@
 
 ## 투자성향 판정 규칙
 
-위험 유형 판정은 [profile_service.py](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/services/profile_service.py) 기준으로 동작합니다.
+위험 유형 판정은 [profile_service.py](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/mobile_backend/services/profile_service.py) 기준으로 동작합니다.
 
 우선순위:
 
@@ -90,6 +90,8 @@
 |---|---|---|
 | `POST` | `/api/v1/profile/resolve` | 투자성향 판정 |
 | `POST` | `/api/v1/portfolios/recommendation` | 안정형/균형형/성장형 3개 포트폴리오 추천 |
+| `POST` | `/api/v1/portfolios/frontier-preview` | 드래그용 efficient frontier preview 포인트 |
+| `POST` | `/api/v1/portfolios/frontier-selection` | 선택한 목표 변동성에 대응하는 상세 포트폴리오 |
 | `POST` | `/api/v1/portfolios/volatility-history` | 선택 위험유형 포트폴리오의 변동성 추이 |
 | `POST` | `/api/v1/portfolios/comparison-backtest` | 유형별 비교 백테스트 |
 
@@ -161,7 +163,85 @@
 - `sector_allocations`: 자산군별 비중과 위험기여도
 - `stock_allocations`: 종목별 비중
 
-## 3. 포트폴리오 변동성 추이
+대표 포트폴리오 3개는 내부 efficient frontier 전체 포인트 중 대표 지점만 잘라낸 결과입니다. 모바일 UX를 단순하게 유지하기 위해 전체 frontier를 한 번에 모두 내려주지 않습니다.
+
+## 3. 드래그용 frontier preview
+
+### `POST /api/v1/portfolios/frontier-preview`
+
+설명:
+
+- 온보딩이나 비교 화면에서 efficient frontier 곡선을 가볍게 그리기 위한 preview 전용 API입니다.
+- 내부적으로는 전체 frontier 포인트를 계산하지만, 응답에는 모바일 차트에 필요한 sample point만 내려줍니다.
+- 대표 3개 포트폴리오에 해당하는 포인트는 sample에서 빠지지 않도록 항상 포함됩니다.
+- `resolved_profile`은 추천 지점을 알려주고, `points[]`는 드래그 가능한 전체 미리보기 점 목록을 제공합니다.
+
+요청 예시:
+
+```json
+{
+  "propensity_score": 45,
+  "investment_horizon": "medium",
+  "data_source": "managed_universe",
+  "sample_points": 61
+}
+```
+
+응답 핵심 필드:
+
+- `resolved_profile`
+- `recommended_portfolio_code`
+- `data_source`
+- `total_point_count`: 내부에서 실제 계산한 전체 frontier 포인트 수
+- `min_volatility`, `max_volatility`: 차트 축 범위 계산용 힌트
+- `points[]`: 다운샘플된 preview 포인트
+
+`points[]` 항목:
+
+- `index`: 전체 frontier 기준 인덱스
+- `volatility`: 연 변동성
+- `expected_return`: 연 기대수익률
+- `is_recommended`: 사용자 추천 지점 여부
+- `representative_code`, `representative_label`: 대표 3개 포트폴리오와 겹칠 때만 채워짐
+
+운영 메모:
+
+- 모바일은 이 응답을 앱 메모리에 들고 있다가, 사용자가 점을 옮길 때마다 위험도와 기대수익률 라벨을 즉시 갱신하면 됩니다.
+- 사용자가 최종 위치를 확정한 뒤에만 상세 포트폴리오 API를 호출하는 구조를 권장합니다.
+
+## 4. 선택 frontier 포트폴리오 상세
+
+### `POST /api/v1/portfolios/frontier-selection`
+
+설명:
+
+- 사용자가 preview 차트에서 선택한 `target_volatility`를 기준으로, 가장 가까운 frontier 포인트의 실제 포트폴리오 상세를 반환합니다.
+- 드래그 중에는 preview만 사용하고, 손을 떼거나 확정 버튼을 누를 때 이 API를 호출하는 용도입니다.
+
+요청 예시:
+
+```json
+{
+  "propensity_score": 45,
+  "investment_horizon": "medium",
+  "data_source": "managed_universe",
+  "target_volatility": 0.108
+}
+```
+
+응답 핵심 필드:
+
+- `resolved_profile`
+- `data_source`
+- `requested_target_volatility`
+- `selected_target_volatility`: 실제 매칭된 frontier 포인트의 변동성
+- `selected_point_index`
+- `representative_code`, `representative_label`: 가장 가까운 대표 포트폴리오 분류
+- `portfolio`: 사용자가 선택한 상세 포트폴리오
+
+`portfolio` 구조는 `/portfolios/recommendation`의 각 포트폴리오 항목과 동일합니다.
+
+## 5. 포트폴리오 변동성 추이
 
 ### `POST /api/v1/portfolios/volatility-history`
 
@@ -195,7 +275,7 @@
 - `date`
 - `volatility`
 
-## 4. 유형별 비교 백테스트
+## 6. 유형별 비교 백테스트
 
 ### `POST /api/v1/portfolios/comparison-backtest`
 
@@ -233,6 +313,7 @@
 
 ## 구현 메모
 
-- 모바일 API는 [mobile_portfolio_service.py](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/services/mobile_portfolio_service.py) 를 통해 계산 코어를 호출합니다.
-- 실제 계산 응답 변환은 [embedded_portfolio_engine.py](/Users/yoonseungjae/Documents/code/RoboAdviser/robo_mobile_backend/mobile_backend/integrations/embedded_portfolio_engine.py) 가 담당합니다.
+- 모바일 API는 [mobile_portfolio_service.py](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/mobile_backend/services/mobile_portfolio_service.py) 를 통해 계산 코어를 호출합니다.
+- 실제 계산 응답 변환은 [embedded_portfolio_engine.py](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/mobile_backend/integrations/embedded_portfolio_engine.py) 가 담당합니다.
 - `managed_universe`를 사용하는 경우, 실제 결과는 현재 active 관리자 유니버스 상태에 영향을 받습니다.
+- recommendation, frontier preview, frontier selection은 같은 계산 컨텍스트를 기반으로 보기 때문에, 같은 `data_source`와 같은 시점의 데이터에서는 서로 일관된 위험도/기대수익률 축을 유지해야 합니다.

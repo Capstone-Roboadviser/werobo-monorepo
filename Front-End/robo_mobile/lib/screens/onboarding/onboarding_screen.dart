@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../models/mobile_backend_models.dart';
+import '../../services/mobile_backend_api.dart';
 import 'loading_screen.dart';
 import 'widgets/donut_chart.dart';
 import 'widgets/efficient_frontier_chart.dart';
@@ -220,14 +222,98 @@ class _EfficientFrontierPage extends StatefulWidget {
 }
 
 class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
-  // t=0 -> low risk/return, t=1 -> high risk/return
-  double _dotT = 0.45;
+  static const double _initialDotT = 0.45;
+  static const double _previewPropensityScore = 45.0;
 
-  // Placeholder ranges (will be replaced by real algorithm later)
-  // Risk: 8.4% (t=0) to 13.7% (t=1)
-  // Return: 24.7% (t=0) to 31.6% (t=1)
-  double get _risk => 8.4 + (_dotT * (13.7 - 8.4));
-  double get _returnRate => 24.7 + (_dotT * (31.6 - 24.7));
+  double _dotT = 0.45;
+  MobileFrontierPreviewResponse? _preview;
+  int? _selectedPreviewPosition;
+  bool _previewLoading = true;
+  bool _previewUnavailable = false;
+
+  MobileFrontierPreviewPoint? get _selectedPreviewPoint {
+    final preview = _preview;
+    final selectedPreviewPosition = _selectedPreviewPosition;
+    if (preview == null ||
+        preview.points.isEmpty ||
+        selectedPreviewPosition == null ||
+        selectedPreviewPosition < 0 ||
+        selectedPreviewPosition >= preview.points.length) {
+      return null;
+    }
+    return preview.points[selectedPreviewPosition];
+  }
+
+  double get _risk {
+    final previewPoint = _selectedPreviewPoint;
+    if (previewPoint != null) {
+      return previewPoint.volatility * 100;
+    }
+    return 8.4 + (_dotT * (13.7 - 8.4));
+  }
+
+  double get _returnRate {
+    final previewPoint = _selectedPreviewPoint;
+    if (previewPoint != null) {
+      return previewPoint.expectedReturn * 100;
+    }
+    return 24.7 + (_dotT * (31.6 - 24.7));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.onPositionChanged?.call(_dotT);
+    _loadFrontierPreview();
+  }
+
+  Future<void> _loadFrontierPreview() async {
+    try {
+      final preview = await MobileBackendApi.instance.fetchFrontierPreview(
+        propensityScore: _previewPropensityScore,
+      );
+      if (!mounted) {
+        return;
+      }
+      final recommendedPosition = preview.recommendedPreviewPosition;
+      final normalizedT = preview.points.length <= 1
+          ? _initialDotT
+          : recommendedPosition / (preview.points.length - 1);
+      setState(() {
+        _preview = preview;
+        _selectedPreviewPosition = recommendedPosition;
+        _previewLoading = false;
+        _previewUnavailable = false;
+        _dotT = normalizedT;
+      });
+      widget.onPositionChanged?.call(_dotT);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _preview = null;
+        _selectedPreviewPosition = null;
+        _previewLoading = false;
+        _previewUnavailable = true;
+      });
+    }
+  }
+
+  void _handlePreviewPositionChanged(int previewPosition) {
+    final preview = _preview;
+    if (preview == null || preview.points.isEmpty) {
+      return;
+    }
+    final normalizedT = preview.points.length <= 1
+        ? _initialDotT
+        : previewPosition / (preview.points.length - 1);
+    setState(() {
+      _selectedPreviewPosition = previewPosition;
+      _dotT = normalizedT;
+    });
+    widget.onPositionChanged?.call(normalizedT);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -275,12 +361,30 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
           const SizedBox(height: 24),
 
           EfficientFrontierChart(
+            previewPoints: _preview?.points,
+            selectedPreviewPosition: _selectedPreviewPosition,
             onDragStateChanged: widget.onDragStateChanged,
+            onPreviewPointChanged: _handlePreviewPositionChanged,
             onPositionChanged: (t) {
-              setState(() => _dotT = t);
+              setState(() {
+                _dotT = t;
+                _selectedPreviewPosition = null;
+              });
               widget.onPositionChanged?.call(t);
             },
           ),
+          if (_previewLoading || _previewUnavailable) ...[
+            const SizedBox(height: 12),
+            Text(
+              _previewLoading
+                  ? '실제 frontier preview를 불러오는 중이에요.'
+                  : 'preview를 불러오지 못해 예시 곡선을 표시하고 있어요.',
+              style: WeRoboTypography.caption.copyWith(
+                color: tc.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -338,12 +442,11 @@ class _StatCard extends StatelessWidget {
       child: Column(
         children: [
           Text(label,
-              style: WeRoboTypography.caption.copyWith(
-                  color: tc.textSecondary)),
+              style:
+                  WeRoboTypography.caption.copyWith(color: tc.textSecondary)),
           const SizedBox(height: 4),
           Text(value,
-              style: WeRoboTypography.number.copyWith(
-                  color: tc.textPrimary)),
+              style: WeRoboTypography.number.copyWith(color: tc.textPrimary)),
         ],
       ),
     );
