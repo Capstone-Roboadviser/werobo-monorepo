@@ -28,6 +28,22 @@ flutter pub get
 flutter run
 ```
 
+## 웹 배포
+
+GitHub Pages는 `main` push 시 GitHub Actions가 자동으로 Flutter 웹 빌드를 수행합니다.
+
+- workflow: [/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/.github/workflows/robo-mobile-pages.yml](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/.github/workflows/robo-mobile-pages.yml)
+- build script: [/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Front-End/robo_mobile/scripts/build_web.sh](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Front-End/robo_mobile/scripts/build_web.sh)
+
+즉 보통은 로컬에서 먼저 `flutter build web`을 할 필요가 없습니다. push하면 Actions가 `/werobo-monorepo/` base href로 빌드해서 Pages에 올립니다.
+
+로컬 확인이 필요하면:
+
+```bash
+cd "/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Front-End/robo_mobile"
+WEB_BASE_HREF=/werobo-monorepo/ bash scripts/build_web.sh
+```
+
 ## 참고
 
 - Flutter 문서: https://docs.flutter.dev/

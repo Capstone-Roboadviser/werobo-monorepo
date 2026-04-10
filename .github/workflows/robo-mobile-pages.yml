@@ -1,0 +1,53 @@
+name: Deploy Robo Mobile Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/robo-mobile-pages.yml"
+      - "Front-End/robo_mobile/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "robo-mobile-pages"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: Front-End/robo_mobile
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build Flutter web
+        run: |
+          chmod +x scripts/build_web.sh
+          WEB_BASE_HREF=/werobo-monorepo/ bash scripts/build_web.sh
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: Front-End/robo_mobile/build/web
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
