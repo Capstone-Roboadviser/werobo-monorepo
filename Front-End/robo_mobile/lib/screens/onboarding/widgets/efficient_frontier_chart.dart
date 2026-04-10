@@ -2,6 +2,173 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../../../models/mobile_backend_models.dart';
+import '../../../models/portfolio_data.dart';
+
+/// Individual asset position on the risk-return plane.
+class _AssetDot {
+  final String code;
+  final String name;
+  final double volatility;
+  final double expectedReturn;
+  final Color color;
+
+  const _AssetDot({
+    required this.code,
+    required this.name,
+    required this.volatility,
+    required this.expectedReturn,
+    required this.color,
+  });
+}
+
+/// Hardcoded asset positions estimated from backend data.
+/// Volatility = individual asset std-dev; expectedReturn = individual
+/// expected annual return.  Values are rough estimates that place each
+/// asset class in the right relative position on the frontier chart.
+const _kAssetDots = <_AssetDot>[
+  _AssetDot(
+    code: 'cash_equivalents',
+    name: '현금성',
+    volatility: 0.02,
+    expectedReturn: 0.032,
+    color: CategoryColors.cash,
+  ),
+  _AssetDot(
+    code: 'short_term_bond',
+    name: '단기채권',
+    volatility: 0.03,
+    expectedReturn: 0.038,
+    color: CategoryColors.bond,
+  ),
+  _AssetDot(
+    code: 'infra_bond',
+    name: '인프라채권',
+    volatility: 0.07,
+    expectedReturn: 0.048,
+    color: CategoryColors.infra,
+  ),
+  _AssetDot(
+    code: 'gold',
+    name: '금',
+    volatility: 0.15,
+    expectedReturn: 0.052,
+    color: CategoryColors.gold,
+  ),
+  _AssetDot(
+    code: 'new_growth',
+    name: '신성장주',
+    volatility: 0.22,
+    expectedReturn: 0.070,
+    color: CategoryColors.newGrowth,
+  ),
+  _AssetDot(
+    code: 'us_value',
+    name: '미국가치주',
+    volatility: 0.18,
+    expectedReturn: 0.075,
+    color: CategoryColors.valueStock,
+  ),
+  _AssetDot(
+    code: 'us_growth',
+    name: '미국성장주',
+    volatility: 0.25,
+    expectedReturn: 0.085,
+    color: CategoryColors.growthStock,
+  ),
+];
+
+/// Sector weights at sampled preview positions (0-based index into the
+/// 61-point preview array).  Values from backend frontier-selection API.
+const _kWeightsAtPosition = <int, Map<String, double>>{
+  // conservative end (vol ≈ 0.057)
+  0: {
+    'short_term_bond': 0.30,
+    'cash_equivalents': 0.30,
+    'gold': 0.22,
+    'us_value': 0.07,
+    'new_growth': 0.05,
+    'infra_bond': 0.03,
+    'us_growth': 0.03,
+  },
+  // vol ≈ 0.08
+  20: {
+    'short_term_bond': 0.30,
+    'cash_equivalents': 0.29,
+    'infra_bond': 0.26,
+    'new_growth': 0.05,
+    'us_value': 0.04,
+    'us_growth': 0.03,
+    'gold': 0.03,
+  },
+  // vol ≈ 0.10
+  35: {
+    'short_term_bond': 0.30,
+    'us_value': 0.23,
+    'cash_equivalents': 0.19,
+    'infra_bond': 0.17,
+    'new_growth': 0.05,
+    'gold': 0.03,
+    'us_growth': 0.03,
+  },
+  // vol ≈ 0.12
+  45: {
+    'us_value': 0.30,
+    'short_term_bond': 0.30,
+    'infra_bond': 0.16,
+    'cash_equivalents': 0.13,
+    'new_growth': 0.05,
+    'us_growth': 0.03,
+    'gold': 0.03,
+  },
+  // vol ≈ 0.15
+  55: {
+    'short_term_bond': 0.30,
+    'us_value': 0.30,
+    'infra_bond': 0.24,
+    'cash_equivalents': 0.05,
+    'new_growth': 0.05,
+    'gold': 0.03,
+    'us_growth': 0.03,
+  },
+  // growth end (vol ≈ 0.19)
+  60: {
+    'us_value': 0.30,
+    'infra_bond': 0.30,
+    'short_term_bond': 0.21,
+    'us_growth': 0.08,
+    'new_growth': 0.05,
+    'cash_equivalents': 0.03,
+    'gold': 0.03,
+  },
+};
+
+/// Linearly interpolate asset weights between nearest keyed positions.
+Map<String, double> _interpolateWeights(int position) {
+  final keys = _kWeightsAtPosition.keys.toList()..sort();
+  if (keys.isEmpty) return {};
+  if (position <= keys.first) return _kWeightsAtPosition[keys.first]!;
+  if (position >= keys.last) return _kWeightsAtPosition[keys.last]!;
+
+  int lower = keys.first;
+  int upper = keys.last;
+  for (final k in keys) {
+    if (k <= position) lower = k;
+    if (k >= position) {
+      upper = k;
+      break;
+    }
+  }
+  if (lower == upper) return _kWeightsAtPosition[lower]!;
+
+  final t = (position - lower) / (upper - lower);
+  final lowerW = _kWeightsAtPosition[lower]!;
+  final upperW = _kWeightsAtPosition[upper]!;
+  final allCodes = {...lowerW.keys, ...upperW.keys};
+  return {
+    for (final code in allCodes)
+      code: (lowerW[code] ?? 0.0) * (1 - t) + (upperW[code] ?? 0.0) * t,
+  };
+}
 
 class EfficientFrontierChart extends StatefulWidget {
   final ValueChanged<double>? onPositionChanged;
@@ -106,13 +273,13 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
   int _nearestPreviewPosition(Offset localPos, double w, double h) {
     final previewPoints = widget.previewPoints!;
     final minVolatility =
-        previewPoints.map((point) => point.volatility).reduce(min);
+        previewPoints.map((p) => p.volatility).reduce(min);
     final maxVolatility =
-        previewPoints.map((point) => point.volatility).reduce(max);
+        previewPoints.map((p) => p.volatility).reduce(max);
     final minExpectedReturn =
-        previewPoints.map((point) => point.expectedReturn).reduce(min);
+        previewPoints.map((p) => p.expectedReturn).reduce(min);
     final maxExpectedReturn =
-        previewPoints.map((point) => point.expectedReturn).reduce(max);
+        previewPoints.map((p) => p.expectedReturn).reduce(max);
 
     var nearestIndex = 0;
     var nearestDistance = double.infinity;
@@ -173,32 +340,27 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
         return LayoutBuilder(
           builder: (context, constraints) {
             final w = constraints.maxWidth;
-            const h = 240.0;
+            const h = 300.0;
 
             return GestureDetector(
               onLongPressStart: (details) {
                 if (_controller.isCompleted) {
-                  final dotPos = _hasPreviewPoints
-                      ? _previewPointToOffset(
-                          widget.previewPoints![
-                              widget.selectedPreviewPosition ??
-                                  widget.previewPoints!.length ~/ 2],
-                          w,
-                          h,
-                          widget.previewPoints!
-                              .map((point) => point.volatility)
-                              .reduce(min),
-                          widget.previewPoints!
-                              .map((point) => point.volatility)
-                              .reduce(max),
-                          widget.previewPoints!
-                              .map((point) => point.expectedReturn)
-                              .reduce(min),
-                          widget.previewPoints!
-                              .map((point) => point.expectedReturn)
-                              .reduce(max),
-                        )
-                      : _tToPoint(_dotT, w, h);
+                  late final Offset dotPos;
+                  if (_hasPreviewPoints) {
+                    final pp = widget.previewPoints!;
+                    dotPos = _previewPointToOffset(
+                      pp[widget.selectedPreviewPosition ??
+                          pp.length ~/ 2],
+                      w,
+                      h,
+                      pp.map((p) => p.volatility).reduce(min),
+                      pp.map((p) => p.volatility).reduce(max),
+                      pp.map((p) => p.expectedReturn).reduce(min),
+                      pp.map((p) => p.expectedReturn).reduce(max),
+                    );
+                  } else {
+                    dotPos = _tToPoint(_dotT, w, h);
+                  }
                   if ((details.localPosition - dotPos).distance < 60) {
                     setState(() => _isDragging = true);
                     widget.onDragStateChanged?.call(true);
@@ -314,8 +476,7 @@ class _FrontierPainter extends CustomPainter {
       fontSize: 10,
     );
 
-    _drawText(canvas, '기대수익률', const Offset(4, 4), labelStyle);
-    _drawText(canvas, '위험도', Offset(w - 32, h - 16), labelStyle);
+    _drawText(canvas, '연 기대수익률', const Offset(4, 4), labelStyle);
 
     final hasPreviewPoints = previewPoints != null && previewPoints!.isNotEmpty;
     if (hasPreviewPoints) {
@@ -406,8 +567,12 @@ class _FrontierPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final points = previewPoints!;
-    final minVolatility = points.map((point) => point.volatility).reduce(min);
-    final maxVolatility = points.map((point) => point.volatility).reduce(max);
+
+    // Use frontier-only range so the curve fills the canvas.
+    final minVolatility =
+        points.map((point) => point.volatility).reduce(min);
+    final maxVolatility =
+        points.map((point) => point.volatility).reduce(max);
     final minExpectedReturn =
         points.map((point) => point.expectedReturn).reduce(min);
     final maxExpectedReturn =
@@ -505,6 +670,72 @@ class _FrontierPainter extends CustomPainter {
           fontWeight: FontWeight.w600,
         ),
       );
+    }
+
+    // Asset dots — positioned at fixed layout slots around the frontier.
+    // Appear when weight > 10%, sized by weight, with percentage labels.
+    if (dotProgress > 0) {
+      final weights = _interpolateWeights(selectedPosition);
+
+      // Fixed (x%, y%) positions for each asset, chosen to avoid
+      // overlapping the frontier curve or each other.
+      // Slots positioned well clear of the frontier curve which
+      // arcs from bottom-left (~0.15, 0.86) up to right (~0.85, 0.20).
+      const slotsByCode = <String, Offset>{
+        'short_term_bond': Offset(0.52, 0.72), // below curve, center
+        'cash_equivalents': Offset(0.72, 0.72), // below curve, right
+        'infra_bond': Offset(0.08, 0.14), // top-left corner
+        'gold': Offset(0.35, 0.10), // top, left-center
+        'us_value': Offset(0.62, 0.04), // top, right-center
+        'new_growth': Offset(0.92, 0.38), // far right, mid
+        'us_growth': Offset(0.92, 0.55), // far right, lower
+      };
+
+      for (final asset in _kAssetDots) {
+        final weight = weights[asset.code] ?? 0.0;
+        if (weight <= 0.10) continue;
+        final slot = slotsByCode[asset.code];
+        if (slot == null) continue;
+
+        final pos = Offset(w * slot.dx, h * slot.dy);
+        // Scale: 3px at 10% → 8px at 30%+.
+        final radius =
+            (3 + (weight - 0.10).clamp(0.0, 0.20) * 25) * dotProgress;
+        final assetPaint = Paint()
+          ..style = PaintingStyle.fill
+          ..color = asset.color.withValues(alpha: 0.7 * dotProgress);
+        canvas.drawCircle(pos, radius, assetPaint);
+        // Border ring
+        final assetRingPaint = Paint()
+          ..style = PaintingStyle.stroke
+          ..color = asset.color.withValues(alpha: 0.9 * dotProgress)
+          ..strokeWidth = 1.5;
+        canvas.drawCircle(pos, radius, assetRingPaint);
+
+        // Asset name
+        _drawText(
+          canvas,
+          asset.name,
+          Offset(pos.dx + radius + 4, pos.dy - 6),
+          labelStyle.copyWith(
+            color: asset.color.withValues(alpha: dotProgress),
+            fontWeight: FontWeight.w600,
+            fontSize: 9,
+          ),
+        );
+        // Weight percentage (faint but readable)
+        final pctText = '${(weight * 100).toStringAsFixed(0)}%';
+        _drawText(
+          canvas,
+          pctText,
+          Offset(pos.dx + radius + 4, pos.dy + 5),
+          labelStyle.copyWith(
+            color: asset.color.withValues(alpha: 0.50 * dotProgress),
+            fontWeight: FontWeight.w400,
+            fontSize: 9,
+          ),
+        );
+      }
     }
   }
 

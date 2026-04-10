@@ -42,6 +42,21 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.initState();
     logPageEnter('OnboardingScreen');
     logPageEnter('onboarding step 1/2');
+    _prefetchFrontierPreview();
+  }
+
+  /// Start fetching the frontier preview while the user is still on page 1
+  /// so it's cached by the time they swipe to the frontier page.
+  Future<void> _prefetchFrontierPreview() async {
+    try {
+      final preview = await MobileBackendApi.instance.fetchFrontierPreview(
+        propensityScore: 45.0,
+      );
+      if (!mounted) return;
+      PortfolioStateProvider.of(context).setFrontierPreview(preview);
+    } catch (_) {
+      // Frontier page will retry on its own if the prefetch fails.
+    }
   }
 
   @override
@@ -258,32 +273,74 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
   static const double _initialDotT = 0.45;
   static const double _previewPropensityScore = 45.0;
 
+  /// Embedded frontier preview so the real curve renders instantly.
+  /// Silently replaced when the live API responds.
+  static final _embeddedPreview =
+      MobileFrontierPreviewResponse.fromJson(const <String, dynamic>{
+    'resolved_profile': {
+      'code': 'balanced',
+      'label': '균형형',
+      'propensity_score': 45.0,
+      'target_volatility': 0.0696,
+      'investment_horizon': 'medium',
+    },
+    'recommended_portfolio_code': 'balanced',
+    'data_source': 'managed_universe',
+    'total_point_count': 80,
+    'min_volatility': 0.0567,
+    'max_volatility': 0.1918,
+    'points': <Map<String, dynamic>>[
+      {'index': 0, 'volatility': 0.0567, 'expected_return': 0.043, 'is_recommended': false, 'representative_code': 'conservative', 'representative_label': '안정형'},
+      {'index': 1, 'volatility': 0.0567, 'expected_return': 0.0433, 'is_recommended': false},
+      {'index': 3, 'volatility': 0.0568, 'expected_return': 0.0438, 'is_recommended': false},
+      {'index': 4, 'volatility': 0.0569, 'expected_return': 0.044, 'is_recommended': false},
+      {'index': 5, 'volatility': 0.057, 'expected_return': 0.0443, 'is_recommended': false},
+      {'index': 7, 'volatility': 0.0573, 'expected_return': 0.0448, 'is_recommended': false},
+      {'index': 8, 'volatility': 0.0575, 'expected_return': 0.045, 'is_recommended': false},
+      {'index': 9, 'volatility': 0.0576, 'expected_return': 0.0453, 'is_recommended': false},
+      {'index': 11, 'volatility': 0.058, 'expected_return': 0.0457, 'is_recommended': false},
+      {'index': 12, 'volatility': 0.0583, 'expected_return': 0.046, 'is_recommended': false},
+      {'index': 14, 'volatility': 0.0588, 'expected_return': 0.0465, 'is_recommended': false},
+      {'index': 16, 'volatility': 0.0593, 'expected_return': 0.047, 'is_recommended': false},
+      {'index': 18, 'volatility': 0.0599, 'expected_return': 0.0475, 'is_recommended': false},
+      {'index': 20, 'volatility': 0.0605, 'expected_return': 0.048, 'is_recommended': false},
+      {'index': 22, 'volatility': 0.0612, 'expected_return': 0.0485, 'is_recommended': false},
+      {'index': 25, 'volatility': 0.0623, 'expected_return': 0.0492, 'is_recommended': false},
+      {'index': 28, 'volatility': 0.0635, 'expected_return': 0.0499, 'is_recommended': false},
+      {'index': 30, 'volatility': 0.0643, 'expected_return': 0.0504, 'is_recommended': false},
+      {'index': 33, 'volatility': 0.0657, 'expected_return': 0.0512, 'is_recommended': false},
+      {'index': 36, 'volatility': 0.0673, 'expected_return': 0.0519, 'is_recommended': false},
+      {'index': 40, 'volatility': 0.0696, 'expected_return': 0.0529, 'is_recommended': true, 'representative_code': 'balanced', 'representative_label': '균형형'},
+      {'index': 43, 'volatility': 0.0715, 'expected_return': 0.0536, 'is_recommended': false},
+      {'index': 46, 'volatility': 0.0735, 'expected_return': 0.0544, 'is_recommended': false},
+      {'index': 49, 'volatility': 0.0762, 'expected_return': 0.0551, 'is_recommended': false},
+      {'index': 53, 'volatility': 0.0813, 'expected_return': 0.0561, 'is_recommended': false},
+      {'index': 57, 'volatility': 0.0871, 'expected_return': 0.0571, 'is_recommended': false},
+      {'index': 61, 'volatility': 0.0948, 'expected_return': 0.0581, 'is_recommended': false},
+      {'index': 65, 'volatility': 0.1055, 'expected_return': 0.0591, 'is_recommended': false},
+      {'index': 68, 'volatility': 0.1129, 'expected_return': 0.0598, 'is_recommended': false},
+      {'index': 72, 'volatility': 0.1288, 'expected_return': 0.0608, 'is_recommended': false},
+      {'index': 76, 'volatility': 0.1511, 'expected_return': 0.0618, 'is_recommended': false},
+      {'index': 79, 'volatility': 0.1918, 'expected_return': 0.0625, 'is_recommended': false, 'representative_code': 'growth', 'representative_label': '성장형'},
+    ],
+  });
+
   double _dotT = 0.45;
-  MobileFrontierPreviewResponse? _preview;
+  late MobileFrontierPreviewResponse _preview;
   int? _selectedPreviewPosition;
-  bool _previewLoading = true;
+  bool _previewLoading = false;
   bool _previewUnavailable = false;
   bool _didUseInitialCache = false;
 
   MobileFrontierPreviewPoint? get _selectedPreviewPoint {
-    final preview = _preview;
     final selectedPreviewPosition = _selectedPreviewPosition;
-    if (preview == null ||
-        preview.points.isEmpty ||
+    if (_preview.points.isEmpty ||
         selectedPreviewPosition == null ||
         selectedPreviewPosition < 0 ||
-        selectedPreviewPosition >= preview.points.length) {
+        selectedPreviewPosition >= _preview.points.length) {
       return null;
     }
-    return preview.points[selectedPreviewPosition];
-  }
-
-  double get _risk {
-    final previewPoint = _selectedPreviewPoint;
-    if (previewPoint != null) {
-      return previewPoint.volatility * 100;
-    }
-    return 8.4 + (_dotT * (13.7 - 8.4));
+    return _preview.points[selectedPreviewPosition];
   }
 
   double get _returnRate {
@@ -297,6 +354,14 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
   @override
   void initState() {
     super.initState();
+    // Show the embedded frontier instantly, then silently replace
+    // with live data when the API responds.
+    _preview = _embeddedPreview;
+    final rec = _embeddedPreview.recommendedPreviewPosition;
+    _selectedPreviewPosition = rec;
+    _dotT = _embeddedPreview.points.length <= 1
+        ? _initialDotT
+        : rec / (_embeddedPreview.points.length - 1);
     widget.onPositionChanged?.call(_dotT);
     _loadFrontierPreview();
   }
@@ -329,13 +394,11 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       if (!mounted) {
         return;
       }
+      // Keep the embedded preview — it's better than showing nothing.
       setState(() {
-        _preview = null;
-        _selectedPreviewPosition = null;
         _previewLoading = false;
         _previewUnavailable = true;
       });
-      widget.onFrontierSelectionChanged?.call(null);
     }
   }
 
@@ -379,13 +442,12 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
   }
 
   void _handlePreviewPositionChanged(int previewPosition) {
-    final preview = _preview;
-    if (preview == null || preview.points.isEmpty) {
+    if (_preview.points.isEmpty) {
       return;
     }
-    final normalizedT = preview.points.length <= 1
+    final normalizedT = _preview.points.length <= 1
         ? _initialDotT
-        : previewPosition / (preview.points.length - 1);
+        : previewPosition / (_preview.points.length - 1);
     setState(() {
       _selectedPreviewPosition = previewPosition;
       _dotT = normalizedT;
@@ -394,8 +456,8 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     widget.onFrontierSelectionChanged?.call(
       OnboardingFrontierSelection(
         normalizedT: normalizedT,
-        targetVolatility: preview.points[previewPosition].volatility,
-        dataSource: preview.dataSource,
+        targetVolatility: _preview.points[previewPosition].volatility,
+        dataSource: _preview.dataSource,
       ),
     );
   }
@@ -423,30 +485,16 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
           ),
           const SizedBox(height: 24),
 
-          // Risk / Return display
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: '위험도',
-                  value: '${_risk.toStringAsFixed(1)}%',
-                  color: WeRoboColors.warning,
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: _StatCard(
-                  label: '수익률',
-                  value: '${_returnRate.toStringAsFixed(1)}%',
-                  color: tc.accent,
-                ),
-              ),
-            ],
+          // Return display
+          _StatCard(
+            label: '연 기대수익률',
+            value: '${_returnRate.toStringAsFixed(1)}%',
+            color: WeRoboColors.primary,
           ),
           const SizedBox(height: 24),
 
           EfficientFrontierChart(
-            previewPoints: _preview?.points,
+            previewPoints: _preview.points,
             selectedPreviewPosition: _selectedPreviewPosition,
             onDragStateChanged: widget.onDragStateChanged,
             onPreviewPointChanged: _handlePreviewPositionChanged,
@@ -532,7 +580,7 @@ class _StatCard extends StatelessWidget {
                   WeRoboTypography.caption.copyWith(color: tc.textSecondary)),
           const SizedBox(height: 4),
           Text(value,
-              style: WeRoboTypography.number.copyWith(color: tc.textPrimary)),
+              style: WeRoboTypography.number.copyWith(color: color)),
         ],
       ),
     );
