@@ -214,8 +214,9 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                         ? 0.45
                         : previewPosition / (widget.previewPoints!.length - 1);
                     setState(() => _dotT = nextDotT);
+                    // Preview mode uses the discrete frontier point callback as
+                    // the single source of truth for card values and selection.
                     widget.onPreviewPointChanged?.call(previewPosition);
-                    widget.onPositionChanged?.call(nextDotT);
                   } else {
                     setState(() {
                       _dotT = _screenToT(details.localPosition, w, h);
