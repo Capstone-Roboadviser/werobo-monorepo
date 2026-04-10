@@ -6,7 +6,7 @@ import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import '../../services/mobile_backend_api.dart';
-import 'welcome_screen.dart';
+import '../home/home_shell.dart';
 import 'widgets/portfolio_charts.dart';
 import 'widgets/vestor_pie_chart.dart';
 
@@ -78,13 +78,11 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
 
     // Card 2: volatility-history
     try {
-      final isVariant = _portfolio.investmentType.isVariant;
       volatilityHistory =
           await MobileBackendApi.instance.fetchVolatilityHistory(
-        riskProfile: isVariant ? null : _portfolio.code,
+        riskProfile: _portfolio.code,
         investmentHorizon:
             widget.recommendation.resolvedProfile.investmentHorizon,
-        weights: isVariant ? _portfolio.stockWeights : null,
       );
     } catch (error) {
       errors.add(_friendlyError(error));
@@ -278,7 +276,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     }
     Navigator.of(context).pushAndRemoveUntil(
       PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const WelcomeScreen(),
+        pageBuilder: (_, __, ___) => const HomeShell(),
         transitionsBuilder: (_, anim, __, child) =>
             FadeTransition(opacity: anim, child: child),
         transitionDuration: const Duration(milliseconds: 400),

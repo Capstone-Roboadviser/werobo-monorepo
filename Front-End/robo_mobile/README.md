@@ -1,46 +1,16 @@
 # robo_mobile
 
-Flutter client for the WeRobo robo-advisor experience. The app now supports
-mobile targets plus Flutter Web deployment to GitHub Pages.
+A new Flutter project.
 
-## Local development
+## Getting Started
 
-```bash
-flutter pub get
-flutter run
-```
+This project is a starting point for a Flutter application.
 
-To run in a browser:
+A few resources to get you started if this is your first Flutter project:
 
-```bash
-flutter run -d chrome
-```
+- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
+- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
 
-## Build for web
-
-Root-hosted build:
-
-```bash
-bash scripts/build_web.sh
-```
-
-GitHub Pages build for this repository:
-
-```bash
-WEB_BASE_HREF=/werobo-monorepo/ bash scripts/build_web.sh
-```
-
-## GitHub Pages deployment
-
-This repo includes a GitHub Actions workflow at
-`.github/workflows/robo-mobile-pages.yml` that deploys
-`Front-End/robo_mobile/build/web` to GitHub Pages on every push to `main`.
-
-Repository settings still need one-time setup:
-
-1. GitHub repo `Settings -> Pages`
-2. `Source`: `GitHub Actions`
-
-After that, the app will deploy to:
-
-`https://capstone-roboadviser.github.io/werobo-monorepo/`
+For help getting started with Flutter development, view the
+[online documentation](https://docs.flutter.dev/), which offers tutorials,
+samples, guidance on mobile development, and a full API reference.

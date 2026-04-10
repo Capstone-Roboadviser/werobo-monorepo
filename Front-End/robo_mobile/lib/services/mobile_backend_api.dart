@@ -56,25 +56,17 @@ class MobileBackendApi {
   }
 
   Future<MobileVolatilityHistoryResponse> fetchVolatilityHistory({
-    String? riskProfile,
+    required String riskProfile,
     String investmentHorizon = 'medium',
     int rollingWindow = 20,
-    Map<String, double>? weights,
   }) {
     return _postWithFallback(
       path: '/portfolios/volatility-history',
-      bodyForDataSource: (dataSource) {
-        final body = <String, dynamic>{
-          'investment_horizon': investmentHorizon,
-          'rolling_window': rollingWindow,
-          'data_source': dataSource,
-        };
-        if (weights != null) {
-          body['weights'] = weights;
-        } else if (riskProfile != null) {
-          body['risk_profile'] = riskProfile;
-        }
-        return body;
+      bodyForDataSource: (dataSource) => <String, dynamic>{
+        'risk_profile': riskProfile,
+        'investment_horizon': investmentHorizon,
+        'rolling_window': rollingWindow,
+        'data_source': dataSource,
       },
       parser: MobileVolatilityHistoryResponse.fromJson,
       timeout: const Duration(seconds: 20),

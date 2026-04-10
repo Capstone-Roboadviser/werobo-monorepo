@@ -17,22 +17,6 @@ def select_frontier_point_index(frontier_points: list[FrontierPoint], target_vol
     )
 
 
-def select_frontier_point_by_return(frontier_points: list[FrontierPoint], target_return: float) -> int:
-    """Find the frontier point closest to *target_return*.
-
-    Tiebreaker: prefer lower volatility.
-    """
-    if not frontier_points:
-        raise RuntimeError("선택할 효율적 투자선 포인트가 없습니다.")
-    return min(
-        range(len(frontier_points)),
-        key=lambda index: (
-            abs(frontier_points[index].expected_return - target_return),
-            frontier_points[index].volatility,
-        ),
-    )
-
-
 def build_frontier_options(
     frontier_points: list[FrontierPoint],
     labels: tuple[str, str, str] = ("안정형", "균형형", "성장형"),

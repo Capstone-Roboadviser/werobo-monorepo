@@ -4,18 +4,11 @@ import 'package:flutter/material.dart';
 enum InvestmentType {
   safe('안전형', '안전형 투자를 원하시는 군요!'),
   balanced('균형형', '균형 잡힌 투자를 원하시는 군요!'),
-  growth('성장형', '성장형 투자를 원하시는 군요!'),
-  lowerReturn('낮은 수익률', '선택한 포트폴리오보다 수익률이 낮아요'),
-  higherReturn('높은 수익률', '선택한 포트폴리오보다 수익률이 높아요');
+  growth('성장형', '성장형 투자를 원하시는 군요!');
 
   final String label;
   final String description;
   const InvestmentType(this.label, this.description);
-
-  /// Whether this is a ±10% comparison variant (not a base profile).
-  bool get isVariant =>
-      this == InvestmentType.lowerReturn ||
-      this == InvestmentType.higherReturn;
 
   /// API-side risk profile code.
   String get riskCode {
@@ -26,10 +19,6 @@ enum InvestmentType {
         return 'balanced';
       case InvestmentType.growth:
         return 'growth';
-      case InvestmentType.lowerReturn:
-        return 'lower_return';
-      case InvestmentType.higherReturn:
-        return 'higher_return';
     }
   }
 
@@ -98,12 +87,10 @@ class PortfolioData {
     switch (type) {
       case InvestmentType.safe:
         return _safeCats;
+      case InvestmentType.balanced:
+        return _balancedCats;
       case InvestmentType.growth:
         return _growthCats;
-      case InvestmentType.balanced:
-      case InvestmentType.lowerReturn:
-      case InvestmentType.higherReturn:
-        return _balancedCats;
     }
   }
 
@@ -111,12 +98,10 @@ class PortfolioData {
     switch (type) {
       case InvestmentType.safe:
         return _safeDetails;
+      case InvestmentType.balanced:
+        return _balancedDetails;
       case InvestmentType.growth:
         return _growthDetails;
-      case InvestmentType.balanced:
-      case InvestmentType.lowerReturn:
-      case InvestmentType.higherReturn:
-        return _balancedDetails;
     }
   }
 
@@ -125,12 +110,10 @@ class PortfolioData {
     switch (type) {
       case InvestmentType.safe:
         return ('8.4%', '24.7%');
+      case InvestmentType.balanced:
+        return ('10.8%', '28.1%');
       case InvestmentType.growth:
         return ('13.7%', '31.6%');
-      case InvestmentType.balanced:
-      case InvestmentType.lowerReturn:
-      case InvestmentType.higherReturn:
-        return ('10.8%', '28.1%');
     }
   }
 

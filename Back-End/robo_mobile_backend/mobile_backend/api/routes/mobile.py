@@ -95,7 +95,6 @@ def get_volatility_history(payload: VolatilityHistoryRequest) -> VolatilityHisto
             investment_horizon=payload.investment_horizon,
             data_source=payload.data_source,
             rolling_window=payload.rolling_window,
-            weights=payload.weights,
         )
         return VolatilityHistoryResponse(**response)
     except Exception as exc:

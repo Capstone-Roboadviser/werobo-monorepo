@@ -147,8 +147,8 @@ void main() {
       }
     });
 
-    test('there are 5 types (3 base + 2 variants)', () {
-      expect(InvestmentType.values.length, 5);
+    test('there are exactly 3 types', () {
+      expect(InvestmentType.values.length, 3);
     });
   });
 }

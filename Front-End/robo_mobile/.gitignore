@@ -55,6 +55,7 @@ ios/Flutter/flutter_export_environment.sh
 
 # Unused platforms
 linux/
+web/
 windows/
 macos/
 
