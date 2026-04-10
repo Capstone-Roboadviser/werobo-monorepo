@@ -32,6 +32,7 @@ class MobileBackendApi {
 
   static const String baseUrl =
       'https://robomobilebackend-production.up.railway.app';
+  static const Duration _defaultTimeout = Duration(seconds: 45);
   static const List<String> _dataSources = <String>[
     'managed_universe',
     'stock_combination_demo',
@@ -51,7 +52,7 @@ class MobileBackendApi {
         'data_source': dataSource,
       },
       parser: MobileRecommendationResponse.fromJson,
-      timeout: const Duration(seconds: 20),
+      timeout: _defaultTimeout,
     );
   }
 
@@ -69,7 +70,7 @@ class MobileBackendApi {
         'data_source': dataSource,
       },
       parser: MobileVolatilityHistoryResponse.fromJson,
-      timeout: const Duration(seconds: 20),
+      timeout: _defaultTimeout,
     );
   }
 
@@ -87,7 +88,7 @@ class MobileBackendApi {
         'data_source': dataSource,
       },
       parser: MobileReturnHistoryResponse.fromJson,
-      timeout: const Duration(seconds: 20),
+      timeout: _defaultTimeout,
     );
   }
 
@@ -105,7 +106,7 @@ class MobileBackendApi {
         'data_source': dataSource,
       },
       parser: MobileEarningsHistoryResponse.fromJson,
-      timeout: const Duration(seconds: 30),
+      timeout: _defaultTimeout,
     );
   }
 
@@ -123,7 +124,7 @@ class MobileBackendApi {
         'data_source': dataSource,
       },
       parser: MobileRebalanceSimulationResponse.fromJson,
-      timeout: const Duration(seconds: 30),
+      timeout: _defaultTimeout,
     );
   }
 
@@ -134,7 +135,7 @@ class MobileBackendApi {
         'data_source': dataSource,
       },
       parser: MobileComparisonBacktestResponse.fromJson,
-      timeout: const Duration(seconds: 20),
+      timeout: _defaultTimeout,
     );
   }
 
