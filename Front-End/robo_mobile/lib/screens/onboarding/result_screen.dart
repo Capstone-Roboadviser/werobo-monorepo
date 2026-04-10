@@ -30,6 +30,14 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
   @override
   void initState() {
     super.initState();
+    final portfolio = widget.recommendation
+        .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
+    debugPrint(
+      '[WeRobo.Page] enter PortfolioResultScreen '
+      'data_source=${widget.recommendation.dataSource} '
+      'portfolio=${portfolio.code} '
+      'expected_return=${portfolio.expectedReturn.toStringAsFixed(4)}',
+    );
     _staggerCtrl = AnimationController(
       duration: const Duration(milliseconds: 700),
       vsync: this,
