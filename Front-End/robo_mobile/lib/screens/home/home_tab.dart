@@ -8,7 +8,10 @@ import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
+import '../../models/rebalance_insight.dart';
 import '../../services/mobile_backend_api.dart';
+import 'insight_detail_page.dart';
+import 'widgets/insight_transition_chart.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -76,6 +79,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final type = state.type;
     final activities = state.accountActivities;
     final hasAccount = state.hasPrototypeAccount;
+    final hasInsightBanner = state.unreadInsightCount > 0;
+    int staggerIdx = 0;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -89,7 +94,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             // Welcome banner (first visit only)
             if (_showWelcome)
               _stagger(
-                  0,
+                  staggerIdx,
                   _WelcomeBanner(
                     type: type,
                     onDismiss: () => setState(() => _showWelcome = false),
@@ -98,14 +103,31 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
             // Hero: value + chart + time range
             _stagger(
-              _showWelcome ? 1 : 0,
+              _showWelcome ? ++staggerIdx : staggerIdx,
               _PortfolioHeroChart(type: type),
             ),
             const SizedBox(height: 28),
 
+            // Insight banner (after rebalancing) — below chart
+            if (hasInsightBanner)
+              Divider(
+                color: tc.border.withValues(alpha: 0.3),
+                height: 1,
+              ),
+            if (hasInsightBanner) const SizedBox(height: 16),
+            if (hasInsightBanner)
+              _stagger(
+                ++staggerIdx,
+                _InsightBanner(
+                  latestInsight: state.unreadInsights.first,
+                  unreadCount: state.unreadInsightCount,
+                ),
+              ),
+            if (hasInsightBanner) const SizedBox(height: 20),
+
             // Recent activity
             _stagger(
-                _showWelcome ? 2 : 1,
+                ++staggerIdx,
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -859,6 +881,124 @@ String _formatCurrency(int amount) {
 }
 
 // ─── Welcome banner ───────────────────────────────────────────
+
+// ─── Insight banner ──────────────────────────────────────────
+
+class _InsightBanner extends StatelessWidget {
+  final RebalanceInsight latestInsight;
+  final int unreadCount;
+
+  const _InsightBanner({
+    required this.latestInsight,
+    required this.unreadCount,
+  });
+
+  String _formatKoreanDate(String isoDate) {
+    final date = DateTime.tryParse(isoDate);
+    if (date == null) return isoDate;
+    return '${date.year}년 ${date.month}월';
+  }
+
+  String _summaryText() {
+    final allocs = latestInsight.allocations;
+    if (allocs.isEmpty) return '포트폴리오 비중을 조정했어요.';
+
+    // Find the allocation with the largest absolute delta
+    RebalanceInsightAllocation biggest = allocs.first;
+    for (final a in allocs) {
+      if (a.delta.abs() > biggest.delta.abs()) biggest = a;
+    }
+
+    final pct = (biggest.delta.abs() * 100).round();
+    if (pct == 0) return '포트폴리오 비중을 조정했어요.';
+
+    if (biggest.delta > 0) {
+      return '${biggest.assetName} 비중을 $pct% 늘렸어요.';
+    }
+    return '${biggest.assetName} 비중을 $pct% 줄였어요.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+
+    return Pressable(
+      onTap: () {
+        Navigator.push(
+          context,
+          PageRouteBuilder<void>(
+            pageBuilder: (_, __, ___) =>
+                InsightDetailPage(insight: latestInsight),
+            transitionsBuilder: (_, anim, __, child) =>
+                FadeTransition(opacity: anim, child: child),
+          ),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            // Icon
+            InsightDonutThumbnail(
+              allocations: latestInsight.allocations,
+              size: 40,
+            ),
+            const SizedBox(width: 12),
+
+            // Text
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'New · ${_formatKoreanDate(latestInsight.rebalanceDate)}',
+                        style: WeRoboTypography.caption.copyWith(
+                          color: tc.textTertiary,
+                        ),
+                      ),
+                      if (unreadCount > 1) ...[
+                        Text(
+                          '  ·  ',
+                          style: WeRoboTypography.caption.copyWith(
+                            color: tc.textTertiary,
+                          ),
+                        ),
+                        Text(
+                          '+${unreadCount - 1}개 더 보기',
+                          style: WeRoboTypography.caption.copyWith(
+                            color: tc.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _summaryText(),
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Chevron
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: tc.textTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Welcome banner ─────────────────────────────────────────
 
 class _WelcomeBanner extends StatelessWidget {
   final InvestmentType type;

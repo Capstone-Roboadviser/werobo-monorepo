@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/chart_data.dart';
 import '../models/mobile_backend_models.dart';
 import '../models/portfolio_data.dart';
+import '../models/rebalance_insight.dart';
 import '../services/mobile_backend_api.dart';
 
 /// App-level state holder for auth, onboarding bootstrap state, and portfolio data.
@@ -21,6 +22,7 @@ class PortfolioState extends ChangeNotifier {
   MobileFrontierSelectionResponse? _frontierSelection;
   MobileAuthSession? _authSession;
   MobileAccountDashboard? _accountDashboard;
+  List<RebalanceInsight> _insights = [];
 
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
@@ -35,6 +37,12 @@ class PortfolioState extends ChangeNotifier {
       _accountDashboard?.history ?? const [];
   List<MobileAccountActivity> get accountActivities =>
       _accountDashboard?.recentActivity ?? const [];
+  List<RebalanceInsight> get insights => _insights;
+  List<RebalanceInsight> get unreadInsights =>
+      _insights.where((i) => !i.isRead).toList();
+  int get unreadInsightCount =>
+      _insights.where((i) => !i.isRead).length;
+
   bool get isLoggedIn => _authSession != null;
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
   bool get hasCompletedPortfolioSetup =>
@@ -191,6 +199,7 @@ class PortfolioState extends ChangeNotifier {
     _frontierPreview = null;
     _backtest = null;
     _accountDashboard = null;
+    _insights = [];
     if (notify) {
       notifyListeners();
     }
@@ -206,6 +215,7 @@ class PortfolioState extends ChangeNotifier {
     _frontierPreview = null;
     _frontierSelection = null;
     _accountDashboard = null;
+    _insights = [];
     if (notify) {
       notifyListeners();
     }
@@ -302,6 +312,55 @@ class PortfolioState extends ChangeNotifier {
     }
     notifyListeners();
     return dashboard;
+  }
+
+  Future<void> refreshInsights({bool notify = true}) async {
+    final accessToken = _authSession?.accessToken;
+    if (accessToken != null && accessToken.isNotEmpty) {
+      try {
+        final response = await MobileBackendApi.instance
+            .fetchRebalanceInsights(accessToken: accessToken);
+        _insights = response.insights;
+        if (notify) notifyListeners();
+        return;
+      } catch (_) {}
+    }
+    // Fall back to mock insights based on current portfolio
+    _insights = MockInsightData.insightsFor(categories);
+    if (notify) notifyListeners();
+  }
+
+  Future<void> markInsightAsRead(int insightId) async {
+    // For mock insights (negative IDs), just update locally
+    if (insightId < 0) {
+      _markInsightReadLocally(insightId);
+      return;
+    }
+    final accessToken = _authSession?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) return;
+    try {
+      await MobileBackendApi.instance.markInsightRead(
+        accessToken: accessToken,
+        insightId: insightId,
+      );
+      _markInsightReadLocally(insightId);
+    } catch (_) {}
+  }
+
+  void _markInsightReadLocally(int insightId) {
+    final idx = _insights.indexWhere((i) => i.id == insightId);
+    if (idx >= 0) {
+      final old = _insights[idx];
+      _insights[idx] = RebalanceInsight(
+        id: old.id,
+        rebalanceDate: old.rebalanceDate,
+        allocations: old.allocations,
+        explanationText: old.explanationText,
+        isRead: true,
+        createdAt: old.createdAt,
+      );
+      notifyListeners();
+    }
   }
 
   List<ChartPoint> portfolioValuePoints({

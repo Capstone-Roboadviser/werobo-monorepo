@@ -89,6 +89,24 @@ class PortfolioAccountRepository:
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_portfolio_daily_snapshots_snapshot_date ON portfolio_daily_snapshots(snapshot_date)"
                 )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS rebalance_insights (
+                        id BIGSERIAL PRIMARY KEY,
+                        account_id BIGINT NOT NULL REFERENCES portfolio_accounts(id) ON DELETE CASCADE,
+                        rebalance_date DATE NOT NULL,
+                        pre_weights JSONB NOT NULL,
+                        post_weights JSONB NOT NULL,
+                        explanation_text TEXT,
+                        read_at TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE(account_id, rebalance_date)
+                    )
+                    """
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_rebalance_insights_account ON rebalance_insights(account_id)"
+                )
             connection.commit()
 
     def replace_account(
@@ -355,6 +373,101 @@ class PortfolioAccountRepository:
                 rows = cursor.fetchall()
         return [self._snapshot_from_row(row) for row in rows]
 
+    def upsert_rebalance_insight(
+        self,
+        *,
+        account_id: int,
+        rebalance_date: str,
+        pre_weights: dict[str, float],
+        post_weights: dict[str, float],
+        explanation_text: str | None = None,
+    ) -> dict[str, object]:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO rebalance_insights (
+                        account_id, rebalance_date, pre_weights, post_weights, explanation_text
+                    )
+                    VALUES (%s, %s::date, %s::jsonb, %s::jsonb, %s)
+                    ON CONFLICT (account_id, rebalance_date) DO UPDATE SET
+                        pre_weights = EXCLUDED.pre_weights,
+                        post_weights = EXCLUDED.post_weights,
+                        explanation_text = EXCLUDED.explanation_text
+                    RETURNING
+                        id,
+                        account_id,
+                        TO_CHAR(rebalance_date, 'YYYY-MM-DD') AS rebalance_date,
+                        pre_weights,
+                        post_weights,
+                        explanation_text,
+                        read_at,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at
+                    """,
+                    (
+                        account_id,
+                        rebalance_date,
+                        json.dumps(pre_weights),
+                        json.dumps(post_weights),
+                        explanation_text,
+                    ),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        return self._insight_from_row(row)
+
+    def list_rebalance_insights(self, account_id: int) -> list[dict[str, object]]:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        account_id,
+                        TO_CHAR(rebalance_date, 'YYYY-MM-DD') AS rebalance_date,
+                        pre_weights,
+                        post_weights,
+                        explanation_text,
+                        read_at,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at
+                    FROM rebalance_insights
+                    WHERE account_id = %s
+                    ORDER BY rebalance_date DESC
+                    """,
+                    (account_id,),
+                )
+                rows = cursor.fetchall()
+        return [self._insight_from_row(row) for row in rows]
+
+    def mark_insight_read(self, insight_id: int) -> dict[str, object] | None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    UPDATE rebalance_insights
+                    SET read_at = NOW()
+                    WHERE id = %s AND read_at IS NULL
+                    RETURNING
+                        id,
+                        account_id,
+                        TO_CHAR(rebalance_date, 'YYYY-MM-DD') AS rebalance_date,
+                        pre_weights,
+                        post_weights,
+                        explanation_text,
+                        read_at,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at
+                    """,
+                    (insight_id,),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            return None
+        return self._insight_from_row(row)
+
     def _ensure_ready(self) -> None:
         if not self.is_configured():
             raise RuntimeError("DATABASE_URL이 설정되지 않아 프로토타입 자산 계정을 사용할 수 없습니다.")
@@ -423,4 +536,22 @@ class PortfolioAccountRepository:
             "profit_loss_pct": float(row["profit_loss_pct"]),
             "created_at": str(row["created_at"]),
             "updated_at": str(row["updated_at"]),
+        }
+
+    def _insight_from_row(self, row: dict[str, object]) -> dict[str, object]:
+        pre_weights = row["pre_weights"]
+        post_weights = row["post_weights"]
+        if isinstance(pre_weights, str):
+            pre_weights = json.loads(pre_weights)
+        if isinstance(post_weights, str):
+            post_weights = json.loads(post_weights)
+        return {
+            "id": int(row["id"]),
+            "account_id": int(row["account_id"]),
+            "rebalance_date": str(row["rebalance_date"]),
+            "pre_weights": {str(k): float(v) for k, v in (pre_weights or {}).items()},
+            "post_weights": {str(k): float(v) for k, v in (post_weights or {}).items()},
+            "explanation_text": row["explanation_text"],
+            "is_read": row["read_at"] is not None,
+            "created_at": str(row["created_at"]),
         }

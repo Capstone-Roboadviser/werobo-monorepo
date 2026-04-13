@@ -20,6 +20,7 @@ class _HomeShellState extends State<HomeShell> {
   int _currentTab = 0;
   bool _backtestFetched = false;
   bool _accountFetched = false;
+  bool _insightsFetched = false;
 
   static const _tabs = [
     HomeTab(),
@@ -48,6 +49,10 @@ class _HomeShellState extends State<HomeShell> {
       _accountFetched = true;
       _fetchAccountDashboard();
     }
+    if (!_insightsFetched) {
+      _insightsFetched = true;
+      _fetchInsights();
+    }
   }
 
   Future<void> _fetchBacktest() async {
@@ -65,6 +70,13 @@ class _HomeShellState extends State<HomeShell> {
     }
     try {
       await state.refreshAccountDashboard(notify: true);
+    } catch (_) {}
+  }
+
+  Future<void> _fetchInsights() async {
+    final state = PortfolioStateProvider.of(context);
+    try {
+      await state.refreshInsights(notify: true);
     } catch (_) {}
   }
 
