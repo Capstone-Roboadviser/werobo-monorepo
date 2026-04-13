@@ -130,17 +130,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
     });
   }
 
-  /// Extract performance points from comparison-backtest data
-  /// for the selected portfolio type.
-  List<ChartPoint>? _performancePoints() {
-    final state = PortfolioStateProvider.of(context);
-    final code = state.type.riskCode;
-    for (final line in state.comparisonLines) {
-      if (line.key == code) return line.points;
-    }
-    return null;
-  }
-
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
@@ -220,7 +209,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
                       key: ValueKey('trend_${type.name}'),
                       type: type,
                       volatilityPoints: _volatilityPoints,
-                      performancePoints: _performancePoints(),
                       comparisonLines: lines,
                       rebalanceDates: rebalanceDates,
                       isLoading: _isLoadingHistory,
@@ -607,7 +595,6 @@ class _AllocationView extends StatelessWidget {
 class _TrendView extends StatelessWidget {
   final InvestmentType type;
   final List<ChartPoint>? volatilityPoints;
-  final List<ChartPoint>? performancePoints;
   final List<ChartLine> comparisonLines;
   final List<DateTime> rebalanceDates;
   final bool isLoading;
@@ -616,7 +603,6 @@ class _TrendView extends StatelessWidget {
     super.key,
     required this.type,
     this.volatilityPoints,
-    this.performancePoints,
     required this.comparisonLines,
     required this.rebalanceDates,
     this.isLoading = false,
@@ -640,7 +626,6 @@ class _TrendView extends StatelessWidget {
       child: PortfolioCharts(
         type: type,
         volatilityPoints: volatilityPoints,
-        performancePoints: performancePoints,
         comparisonLines: comparisonLines.isNotEmpty ? comparisonLines : null,
         rebalanceDates: rebalanceDates.isNotEmpty ? rebalanceDates : null,
         useFallbackMock: false,

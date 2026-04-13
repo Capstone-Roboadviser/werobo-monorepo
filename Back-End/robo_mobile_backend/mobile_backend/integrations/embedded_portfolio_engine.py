@@ -806,19 +806,41 @@ class EmbeddedPortfolioEngineAdapter:
             data_source=self._to_core_data_source(data_source),
             rolling_window=rolling_window,
         )
+
+        portfolio_dates = {point.date for point in response.points}
+        portfolio_points = [
+            {"date": point.date, "volatility": point.value}
+            for point in response.points
+        ]
+
+        # Compute equal-weight (1/N) benchmark volatility, isolated
+        # so failures don't break the main response.
+        benchmark_points: list[dict[str, object]] | None = None
+        try:
+            tickers = list(snapshot["stock_weights"].keys())
+            equal_weights = {t: 1.0 / len(tickers) for t in tickers}
+            bench_response = self.portfolio_analytics_service.build_volatility_history(
+                weights=equal_weights,
+                data_source=self._to_core_data_source(data_source),
+                rolling_window=rolling_window,
+            )
+            # Inner join on dates: only include dates present in both
+            benchmark_points = [
+                {"date": point.date, "volatility": point.value}
+                for point in bench_response.points
+                if point.date in portfolio_dates
+            ]
+        except Exception:
+            benchmark_points = None
+
         return {
             "portfolio_code": risk_profile.value,
             "portfolio_label": PROFILE_LABELS[risk_profile.value],
             "rolling_window": rolling_window,
             "earliest_data_date": response.earliest_data_date,
             "latest_data_date": response.latest_data_date,
-            "points": [
-                {
-                    "date": point.date,
-                    "volatility": point.value,
-                }
-                for point in response.points
-            ],
+            "points": portfolio_points,
+            "benchmark_points": benchmark_points,
         }
 
     def get_comparison_backtest(

@@ -222,6 +222,7 @@ class VolatilityHistoryResponse(BaseModel):
     earliest_data_date: str = Field(..., description="사용한 데이터의 시작일", examples=["2020-01-02"])
     latest_data_date: str = Field(..., description="사용한 데이터의 종료일", examples=["2026-03-31"])
     points: list[VolatilityPointResponse] = Field(default_factory=list, description="날짜별 변동성 추이")
+    benchmark_points: list[VolatilityPointResponse] | None = Field(default=None, description="7자산 동일비중 포트폴리오 변동성 추이 (날짜는 points와 동일)")
 
 
 class ComparisonLinePointResponse(BaseModel):
