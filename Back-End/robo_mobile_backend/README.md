@@ -17,9 +17,9 @@
 - 이메일 회원가입 / 로그인 API
 - 인증 사용자용 프로토타입 자산 계정 / 입금 API
 - 3개 대표 포트폴리오 추천 API
-- efficient frontier preview API
-- 선택 frontier 포트폴리오 상세 API
-- 포트폴리오 변동성 추이 API
+- full frontier까지 요청 가능한 efficient frontier preview API
+- `point_index` 기반 exact frontier selection API
+- 대표 분류 또는 exact 종목 비중 기준 포트폴리오 변동성 추이 API
 - 포트폴리오 유형별 성과 비교 API
 - 프로젝트 내부에 포함된 계산 코어와 모바일 응답 adapter
 - 가벼운 관리자 웹에서 종목 검색/등록과 자산군별 role 지정
@@ -219,23 +219,25 @@ uvicorn mobile_backend.main:app --reload
 
 ## 모바일 차트 흐름
 
-현재 모바일 투자 흐름은 두 단계로 나뉩니다.
+현재 모바일 투자 흐름은 아래처럼 나뉩니다.
 
-1. `/api/v1/portfolios/recommendation`
-   초기 진입 시 안정형, 균형형, 성장형 3개 대표 포트폴리오를 빠르게 보여줍니다.
-2. `/api/v1/portfolios/frontier-preview` + `/api/v1/portfolios/frontier-selection`
-   드래그 기반 차트 UX에서는 preview 포인트만 먼저 내려주고, 사용자가 최종 위치를 확정한 뒤 상세 포트폴리오를 가져오는 구조를 지원합니다.
+1. `/api/v1/portfolios/frontier-preview`
+   현재 모바일 온보딩은 기본적으로 이 endpoint를 먼저 호출합니다. 앱은 `sample_points=1000`으로 preview를 받아 efficient frontier 점들을 메모리에 들고, 드래그 중 위험도/기대수익률 라벨을 즉시 갱신합니다.
+2. `/api/v1/portfolios/frontier-selection`
+   사용자가 확정한 `selected_point_index`를 그대로 넘겨 exact 포트폴리오를 가져옵니다. 이 시점부터 결과/비교/확정/계정 생성은 선택된 exact 포트폴리오를 기준으로 이어집니다.
+3. `/api/v1/portfolios/recommendation`
+   대표 3종 요약이 필요할 때 사용할 수 있는 보조 endpoint로 유지합니다.
 
 이 구조를 쓰는 이유:
 
 - 모바일 초기 로딩 payload를 작게 유지할 수 있음
-- efficient frontier 전체를 내부적으로 계산하되, 화면에는 필요한 점만 샘플링해서 전달할 수 있음
-- 위험도/기대수익률 라벨과 실제 선택 포트폴리오를 같은 frontier 기반으로 맞출 수 있음
+- efficient frontier 전체를 내부적으로 계산하되, 앱이 필요하면 거의 full frontier에 가까운 점 집합도 요청할 수 있음
+- 위험도/기대수익률 라벨과 실제 선택 포트폴리오를 같은 frontier point 기반으로 정확히 맞출 수 있음
 - 관리자 refresh 이후에는 materialized frontier snapshot을 재사용하므로 동일 유니버스 요청의 첫 응답 지연을 줄일 수 있음
 
 ## 다음 권장 작업
 
 1. 모바일 앱의 투자성향 설문 규칙 확정
-2. 사용자 인증 / 저장 API 추가
+2. 소셜 로그인 provider 연결
 3. 내부 `app` 계산 패키지를 `mobile_backend` 네임스페이스로 점진 통합
 4. 모바일 전용 OpenAPI 응답 예시와 에러 모델 보강
