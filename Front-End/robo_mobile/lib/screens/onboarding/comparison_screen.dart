@@ -10,15 +10,11 @@ import '../../services/mobile_backend_api.dart';
 import 'confirmation_screen.dart';
 
 class ComparisonScreen extends StatefulWidget {
-  final MobileRecommendationResponse recommendation;
-  final String selectedPortfolioCode;
-  final MobileFrontierSelectionResponse? frontierSelection;
+  final MobileFrontierSelectionResponse frontierSelection;
 
   const ComparisonScreen({
     super.key,
-    required this.recommendation,
-    required this.selectedPortfolioCode,
-    this.frontierSelection,
+    required this.frontierSelection,
   });
 
   @override
@@ -32,7 +28,6 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   // Slider state
   double _sliderValue = 0.5;
-  String _snappedCode = 'balanced';
   MobileFrontierSelectionResponse? _currentSelection;
   int _requestSeqNo = 0;
   Timer? _debounceTimer;
@@ -41,14 +36,13 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   MobileFrontierPreviewResponse? _frontierPreview;
   late double _minVol;
   late double _maxVol;
-  late List<_SnapPoint> _snapPoints;
 
   bool _didInit = false;
 
   @override
   void initState() {
     super.initState();
-    _snappedCode = widget.selectedPortfolioCode;
+    _currentSelection = widget.frontierSelection;
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
@@ -71,40 +65,32 @@ class _ComparisonScreenState extends State<ComparisonScreen>
           PortfolioStateProvider.of(context).frontierPreview;
       _initSliderRange();
 
-      logPageEnter('ComparisonScreen', {'selected': _snappedCode});
-      logAction('comparison initial selected', {
-        'portfolio': _snappedCode,
+      logPageEnter('ComparisonScreen', {
+        'selected': widget.frontierSelection.classificationCode,
+        'selected_point_index': widget.frontierSelection.selectedPointIndex,
       });
-
-      // Fire initial API call for the selected portfolio
-      _fetchSelection(_sliderToVolatility(_sliderValue));
+      logAction('comparison initial selected', {
+        'classification': widget.frontierSelection.classificationCode,
+        'selected_point_index': widget.frontierSelection.selectedPointIndex,
+      });
     }
   }
 
   void _initSliderRange() {
-    final portfolios = widget.recommendation.portfolios;
-    final sorted = [...portfolios]
-      ..sort((a, b) => a.volatility.compareTo(b.volatility));
-
-    if (_frontierPreview != null) {
+    final preview = _frontierPreview;
+    if (preview != null && preview.points.isNotEmpty) {
       _minVol = _frontierPreview!.minVolatility;
       _maxVol = _frontierPreview!.maxVolatility;
+      final initialPosition =
+          preview.positionForPointIndex(widget.frontierSelection.selectedPointIndex);
+      _sliderValue = preview.points.length <= 1
+          ? 0.5
+          : initialPosition / (preview.points.length - 1);
     } else {
-      _minVol = sorted.first.volatility;
-      _maxVol = sorted.last.volatility;
+      _minVol = widget.frontierSelection.selectedTargetVolatility;
+      _maxVol = widget.frontierSelection.selectedTargetVolatility;
+      _sliderValue = 0.5;
     }
-
-    final range = _maxVol - _minVol;
-    _snapPoints = sorted.map((p) {
-      final pos = range > 0 ? (p.volatility - _minVol) / range : 0.5;
-      return _SnapPoint(code: p.code, label: p.label, position: pos);
-    }).toList();
-
-    // Set initial slider position to match selected portfolio
-    final initial = _snapPoints
-        .where((s) => s.code == widget.selectedPortfolioCode)
-        .firstOrNull;
-    _sliderValue = initial?.position ?? 0.5;
   }
 
   @override
@@ -117,6 +103,15 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
   double _sliderToVolatility(double t) =>
       _minVol + t * (_maxVol - _minVol);
+
+  int _previewPositionForSlider(double value) {
+    final points = _frontierPreview?.points;
+    if (points == null || points.isEmpty) {
+      return 0;
+    }
+    final scaled = (value * (points.length - 1)).round();
+    return scaled.clamp(0, points.length - 1);
+  }
 
   MobileFrontierPreviewPoint? _nearestPreviewPoint(double t) {
     final points = _frontierPreview?.points;
@@ -138,31 +133,36 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     setState(() => _sliderValue = value);
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      _fetchSelection(_sliderToVolatility(value));
+      _fetchSelection(_previewPositionForSlider(value));
     });
   }
 
-  Future<void> _fetchSelection(double targetVol) async {
+  Future<void> _fetchSelection(int previewPosition) async {
+    final preview = _frontierPreview;
+    if (preview == null || preview.points.isEmpty) {
+      return;
+    }
+    final selectedPreviewPoint = preview.points[previewPosition];
     final mySeq = ++_requestSeqNo;
-    // No loading indicator — previous data stays visible during fetch
     try {
-      final profile = widget.recommendation.resolvedProfile;
       final result =
           await MobileBackendApi.instance.fetchFrontierSelection(
-        propensityScore: profile.propensityScore ?? 50,
-        targetVolatility: targetVol,
-        investmentHorizon: profile.investmentHorizon,
-        preferredDataSource: widget.recommendation.dataSource,
+        propensityScore:
+            widget.frontierSelection.resolvedProfile.propensityScore ?? 50,
+        pointIndex: selectedPreviewPoint.index,
+        targetVolatility: selectedPreviewPoint.volatility,
+        investmentHorizon:
+            widget.frontierSelection.resolvedProfile.investmentHorizon,
+        preferredDataSource: widget.frontierSelection.dataSource,
       );
       if (!mounted || mySeq != _requestSeqNo) return;
       setState(() {
         _currentSelection = result;
-        _snappedCode =
-            result.representativeCode ?? _snappedCode;
       });
       logAction('slider selection loaded', {
-        'code': _snappedCode,
-        'volatility': targetVol.toStringAsFixed(4),
+        'selected_point_index': result.selectedPointIndex,
+        'classification': result.classificationCode,
+        'volatility': result.selectedTargetVolatility.toStringAsFixed(4),
       });
     } on Exception catch (e) {
       if (!mounted || mySeq != _requestSeqNo) return;
@@ -173,28 +173,10 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     }
   }
 
-  String _portfolioSummary(String code) {
-    switch (code) {
-      case 'conservative':
-        return '채권 중심으로 변동이 적어요.\n'
-            '은행 예금보다 높은 수익을 기대할 수 있어요.';
-      case 'growth':
-        return '주식 비중이 높아 수익 가능성이 커요.\n'
-            '단기적으로 변동이 클 수 있지만 장기 성장을 추구해요.';
-      case 'balanced':
-      default:
-        return '주식과 채권을 균형 있게 배분해요.\n'
-            '적당한 수익과 안정성을 동시에 추구해요.';
-    }
-  }
-
-  MobilePortfolioRecommendation _portfolioForCode(String code) {
-    final frontierSelection = widget.frontierSelection;
-    if (frontierSelection != null &&
-        frontierSelection.representativeCode == code) {
-      return frontierSelection.portfolio;
-    }
-    return widget.recommendation.portfolioByCodeOrRecommended(code);
+  String _portfolioSummary(MobilePortfolioRecommendation portfolio) {
+    return '연 기대수익률 ${portfolio.expectedReturnLabel}, '
+        '연 변동성 ${portfolio.volatilityLabel} 수준의 조합입니다.\n'
+        '슬라이더를 움직이면 frontier 위의 다른 지점으로 바로 바꿀 수 있어요.';
   }
 
   @override
@@ -203,14 +185,15 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 
     // Instant stats from preview point
     final previewPoint = _nearestPreviewPoint(_sliderValue);
+    final displayPortfolio = _currentSelection?.portfolio ??
+        widget.frontierSelection.portfolio;
     final instantReturn = previewPoint != null
         ? formatRatioPercent(previewPoint.expectedReturn)
-        : _portfolioForCode(_snappedCode).expectedReturnLabel;
+        : displayPortfolio.expectedReturnLabel;
 
     // Market-relative risk (instant from preview volatility)
-    final avg = widget.recommendation.averageVolatility;
-    final previewVol = previewPoint?.volatility ??
-        _portfolioForCode(_snappedCode).volatility;
+    final avg = _frontierPreview?.averageVolatility ?? displayPortfolio.volatility;
+    final previewVol = previewPoint?.volatility ?? displayPortfolio.volatility;
     final riskDiff = avg > 0 ? (previewVol - avg) / avg : 0.0;
     final riskPct = (riskDiff.abs() * 100).round();
     final isRiskier = riskDiff >= 0;
@@ -225,16 +208,11 @@ class _ComparisonScreenState extends State<ComparisonScreen>
             ? WeRoboColors.warning
             : tc.accent;
 
-    // Donut/sector data from API response or fallback
-    final displayPortfolio = _currentSelection?.portfolio ??
-        _portfolioForCode(_snappedCode);
     final categories = displayPortfolio.toCategories();
-    final donutLabel = _currentSelection?.representativeLabel ??
-        displayPortfolio.label;
+    final donutLabel = displayPortfolio.label;
 
-    final divisions = _frontierPreview != null
-        ? _frontierPreview!.points.length - 1
-        : 60;
+    final previewCount = _frontierPreview?.points.length ?? 0;
+    final divisions = previewCount > 1 ? previewCount - 1 : null;
 
     return Scaffold(
       backgroundColor: tc.surface,
@@ -264,7 +242,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
               ),
               const SizedBox(height: 4),
               Text(
-                '${widget.recommendation.resolvedProfile.label}'
+                '${widget.frontierSelection.resolvedProfile.label}'
                 ' 성향과 비교해 보세요',
                 style: WeRoboTypography.bodySmall.themed(context),
               ),
@@ -301,19 +279,21 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Row(
                         children: [
-                          for (int i = 0; i < _snapPoints.length; i++)
-                            ...[
-                              if (i == 0) const SizedBox.shrink(),
-                              if (i > 0) const Spacer(),
-                              Text(
-                                _snapPoints[i].label,
-                                style:
-                                    WeRoboTypography.caption.copyWith(
-                                  color: tc.textSecondary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
+                          Text(
+                            '낮은 위험',
+                            style: WeRoboTypography.caption.copyWith(
+                              color: tc.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '높은 기대수익',
+                            style: WeRoboTypography.caption.copyWith(
+                              color: tc.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -361,7 +341,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    _portfolioSummary(_snappedCode),
+                    _portfolioSummary(displayPortfolio),
                     style: WeRoboTypography.caption.copyWith(
                       color: tc.textSecondary,
                       height: 1.5,
@@ -385,7 +365,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                   duration: const Duration(milliseconds: 300),
                   child: _SectorList(
                     key: ValueKey(
-                        '${_snappedCode}_${_currentSelection?.selectedPointIndex}'),
+                        '${displayPortfolio.code}_${_currentSelection?.selectedPointIndex ?? widget.frontierSelection.selectedPointIndex}'),
                     categories: categories,
                   ),
                 ),
@@ -397,20 +377,16 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
+                      final selection = _currentSelection ?? widget.frontierSelection;
                       logAction('tap confirm portfolio', {
-                        'selected': _snappedCode,
+                        'selected': selection.classificationCode,
+                        'selected_point_index': selection.selectedPointIndex,
                       });
                       Navigator.of(context).push(
                         PageRouteBuilder(
                           pageBuilder: (_, __, ___) =>
                               ConfirmationScreen(
-                            recommendation: widget.recommendation,
-                            selectedPortfolioCode: _snappedCode,
-                            frontierSelection:
-                                _currentSelection?.representativeCode ==
-                                        _snappedCode
-                                    ? _currentSelection
-                                    : null,
+                            frontierSelection: selection,
                           ),
                           transitionsBuilder:
                               (_, anim, __, child) =>
@@ -431,18 +407,6 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       ),
     );
   }
-}
-
-class _SnapPoint {
-  final String code;
-  final String label;
-  final double position;
-
-  const _SnapPoint({
-    required this.code,
-    required this.label,
-    required this.position,
-  });
 }
 
 /// Rolling number stat chip with smooth old→new animation

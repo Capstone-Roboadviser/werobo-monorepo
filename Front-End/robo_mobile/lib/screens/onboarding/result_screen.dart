@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../app/debug_page_logger.dart';
+import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
@@ -11,15 +12,11 @@ import 'login_screen.dart';
 import 'widgets/vestor_pie_chart.dart';
 
 class PortfolioResultScreen extends StatefulWidget {
-  final MobileRecommendationResponse recommendation;
-  final String selectedPortfolioCode;
-  final MobileFrontierSelectionResponse? frontierSelection;
+  final MobileFrontierSelectionResponse frontierSelection;
 
   const PortfolioResultScreen({
     super.key,
-    required this.recommendation,
-    required this.selectedPortfolioCode,
-    this.frontierSelection,
+    required this.frontierSelection,
   });
 
   @override
@@ -30,28 +27,18 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
 
-  MobilePortfolioRecommendation get _selectedPortfolio {
-    return widget.frontierSelection?.portfolio ??
-        widget.recommendation
-            .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
-  }
+  MobilePortfolioRecommendation get _selectedPortfolio => widget.frontierSelection.portfolio;
 
-  String get _displayLabel {
-    final representativeLabel = widget.frontierSelection?.representativeLabel;
-    if (representativeLabel != null) {
-      return '$representativeLabel 기준 선택 포트폴리오';
-    }
-    return _selectedPortfolio.label;
-  }
+  String get _displayLabel => _selectedPortfolio.label;
 
   @override
   void initState() {
     super.initState();
     final portfolio = _selectedPortfolio;
     logPageEnter('PortfolioResultScreen', {
-      'data_source': widget.frontierSelection?.dataSource ??
-          widget.recommendation.dataSource,
+      'data_source': widget.frontierSelection.dataSource,
       'portfolio': portfolio.code,
+      'selected_point_index': widget.frontierSelection.selectedPointIndex,
       'expected_return': portfolio.expectedReturn.toStringAsFixed(4),
     });
     _staggerCtrl = AnimationController(
@@ -87,6 +74,7 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
     final tc = WeRoboThemeColors.of(context);
     final portfolio = _selectedPortfolio;
     final categories = portfolio.toCategories();
+    final preview = PortfolioStateProvider.of(context).frontierPreview;
 
     return Scaffold(
       backgroundColor: tc.surface,
@@ -102,10 +90,10 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
                     _stagger(
                       0,
                       _ResultTypeCard(
-                        recommendation: widget.recommendation,
                         portfolio: portfolio,
                         displayLabel: _displayLabel,
                         frontierSelection: widget.frontierSelection,
+                        preview: preview,
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -132,16 +120,13 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
               child: Pressable(
                 onTap: () {
                   logAction('tap start investment', {
-                    'selected': widget.frontierSelection?.representativeCode ??
-                        portfolio.code,
+                    'selected': widget.frontierSelection.classificationCode,
+                    'selected_point_index':
+                        widget.frontierSelection.selectedPointIndex,
                   });
                   Navigator.of(context).pushReplacement(
                     PageRouteBuilder(
                       pageBuilder: (_, __, ___) => LoginScreen(
-                        recommendation: widget.recommendation,
-                        selectedPortfolioCode:
-                            widget.frontierSelection?.representativeCode ??
-                                portfolio.code,
                         frontierSelection: widget.frontierSelection,
                       ),
                       transitionsBuilder: (_, anim, __, child) =>
@@ -173,27 +158,32 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
 }
 
 class _ResultTypeCard extends StatelessWidget {
-  final MobileRecommendationResponse recommendation;
   final MobilePortfolioRecommendation portfolio;
   final String displayLabel;
-  final MobileFrontierSelectionResponse? frontierSelection;
+  final MobileFrontierSelectionResponse frontierSelection;
+  final MobileFrontierPreviewResponse? preview;
 
   const _ResultTypeCard({
-    required this.recommendation,
     required this.portfolio,
     required this.displayLabel,
     required this.frontierSelection,
+    required this.preview,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final comparison = recommendation.marketRiskComparison(portfolio);
-    final riskColor = comparison.isRiskier ? WeRoboColors.warning : tc.accent;
-    final riskText = comparison.percentDiff == 0
+    final averageVolatility = preview?.averageVolatility ?? portfolio.volatility;
+    final riskDiff = averageVolatility == 0
+        ? 0.0
+        : (portfolio.volatility - averageVolatility) / averageVolatility;
+    final percentDiff = (riskDiff.abs() * 100).round();
+    final isRiskier = riskDiff >= 0;
+    final riskColor = isRiskier ? WeRoboColors.warning : tc.accent;
+    final riskText = percentDiff == 0
         ? '시장 평균 수준의 자산'
-        : '시장대비 ${comparison.percentDiff}%\n'
-            '${comparison.isRiskier ? '더 위험한' : '더 안전한'} 자산';
+        : '시장대비 $percentDiff%\n'
+            '${isRiskier ? '더 위험한' : '더 안전한'} 자산';
 
     return Container(
       width: double.infinity,
@@ -211,8 +201,8 @@ class _ResultTypeCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${recommendation.resolvedProfile.label} 성향을 바탕으로 목표 변동성 '
-            '${formatRatioPercent(frontierSelection?.selectedTargetVolatility ?? recommendation.resolvedProfile.targetVolatility)}를 반영했어요.',
+            '${frontierSelection.resolvedProfile.label} 성향을 바탕으로 목표 변동성 '
+            '${formatRatioPercent(frontierSelection.selectedTargetVolatility)}를 반영했어요.',
             style: WeRoboTypography.bodySmall.copyWith(
               color: tc.textSecondary,
             ),

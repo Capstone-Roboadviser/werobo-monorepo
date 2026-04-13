@@ -112,7 +112,7 @@ def get_frontier_preview(payload: FrontierPreviewRequest) -> FrontierPreviewResp
     "/portfolios/frontier-selection",
     response_model=FrontierSelectionResponse,
     summary="선택 frontier 포트폴리오 상세",
-    description="사용자가 차트에서 놓은 목표 변동성을 기준으로 가장 가까운 frontier 포인트의 상세 포트폴리오를 반환합니다.",
+    description="사용자가 차트에서 선택한 point_index 또는 목표 변동성에 해당하는 frontier 포인트의 상세 포트폴리오를 반환합니다.",
     responses=COMMON_ERROR_RESPONSES,
 )
 def get_frontier_selection(payload: FrontierSelectionRequest) -> FrontierSelectionResponse:
@@ -123,6 +123,7 @@ def get_frontier_selection(payload: FrontierSelectionRequest) -> FrontierSelecti
             investment_horizon=payload.investment_horizon,
             data_source=payload.data_source,
             target_volatility=payload.target_volatility,
+            point_index=payload.point_index,
         )
         return FrontierSelectionResponse(**response)
     except Exception as exc:
@@ -133,7 +134,7 @@ def get_frontier_selection(payload: FrontierSelectionRequest) -> FrontierSelecti
     "/portfolios/volatility-history",
     response_model=VolatilityHistoryResponse,
     summary="포트폴리오 변동성 추이",
-    description="선택된 위험유형의 대표 포트폴리오에 대해 과거 실현 변동성 추이를 반환합니다.",
+    description="선택된 대표 포트폴리오 또는 전달된 종목 비중 기준으로 과거 실현 변동성 추이를 반환합니다.",
     responses=COMMON_ERROR_RESPONSES,
 )
 def get_volatility_history(payload: VolatilityHistoryRequest) -> VolatilityHistoryResponse:
@@ -144,6 +145,7 @@ def get_volatility_history(payload: VolatilityHistoryRequest) -> VolatilityHisto
             investment_horizon=payload.investment_horizon,
             data_source=payload.data_source,
             rolling_window=payload.rolling_window,
+            stock_weights=payload.stock_weights,
         )
         return VolatilityHistoryResponse(**response)
     except Exception as exc:

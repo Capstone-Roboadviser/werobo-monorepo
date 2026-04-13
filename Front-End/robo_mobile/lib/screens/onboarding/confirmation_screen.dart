@@ -12,15 +12,11 @@ import 'widgets/portfolio_charts.dart';
 import 'widgets/vestor_pie_chart.dart';
 
 class ConfirmationScreen extends StatefulWidget {
-  final MobileRecommendationResponse recommendation;
-  final String selectedPortfolioCode;
-  final MobileFrontierSelectionResponse? frontierSelection;
+  final MobileFrontierSelectionResponse frontierSelection;
 
   const ConfirmationScreen({
     super.key,
-    required this.recommendation,
-    required this.selectedPortfolioCode,
-    this.frontierSelection,
+    required this.frontierSelection,
   });
 
   @override
@@ -51,11 +47,10 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   @override
   void initState() {
     super.initState();
-    _portfolio = widget.frontierSelection?.portfolio ??
-        widget.recommendation
-            .portfolioByCodeOrRecommended(widget.selectedPortfolioCode);
+    _portfolio = widget.frontierSelection.portfolio;
     logPageEnter('ConfirmationScreen', {
-      'selected': widget.selectedPortfolioCode,
+      'selected': widget.frontierSelection.classificationCode,
+      'selected_point_index': widget.frontierSelection.selectedPointIndex,
       'portfolio': _portfolio.code,
     });
     _details = _portfolio.toCategoryDetails();
@@ -92,10 +87,11 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     try {
       volatilityHistory =
           await MobileBackendApi.instance.fetchVolatilityHistory(
-        riskProfile:
-            widget.frontierSelection?.representativeCode ?? _portfolio.code,
+        riskProfile: widget.frontierSelection.classificationCode,
         investmentHorizon:
-            widget.recommendation.resolvedProfile.investmentHorizon,
+            widget.frontierSelection.resolvedProfile.investmentHorizon,
+        preferredDataSource: widget.frontierSelection.dataSource,
+        stockWeights: _portfolio.stockWeights,
       );
     } catch (error) {
       errors.add(_friendlyError(error));
@@ -104,7 +100,9 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     // Card 7: comparison-backtest
     try {
       comparisonBacktest =
-          await MobileBackendApi.instance.fetchComparisonBacktest();
+          await MobileBackendApi.instance.fetchComparisonBacktest(
+        preferredDataSource: widget.frontierSelection.dataSource,
+      );
     } catch (error) {
       errors.add(_friendlyError(error));
     }
@@ -275,19 +273,14 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     }
     setState(() => _isConfirming = true);
     logAction('confirm portfolio selection', {
-      'selected': _portfolio.code,
+      'selected': widget.frontierSelection.classificationCode,
+      'selected_point_index': widget.frontierSelection.selectedPointIndex,
     });
     final state = PortfolioStateProvider.of(context);
-    final selectedType = widget.frontierSelection == null
-        ? _portfolio.investmentType
-        : investmentTypeFromRiskCode(
-            widget.frontierSelection!.representativeCode ??
-                widget.recommendation.recommendedPortfolioCode,
-          );
-    state.setTypeAndRecommendation(
-      selectedType,
-      widget.recommendation,
+    final selectedType = investmentTypeFromRiskCode(
+      widget.frontierSelection.classificationCode,
     );
+    state.setType(selectedType);
     state.setFrontierSelection(widget.frontierSelection);
     if (_backtestResponse != null) {
       state.setBacktest(_backtestResponse!);
@@ -299,8 +292,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
           'initialCash': _initialPrototypeCashAmount.toInt(),
         });
         await state.createPrototypeAccount(
-          recommendation: widget.recommendation,
-          portfolio: _portfolio,
+          selection: widget.frontierSelection,
           initialCashAmount: _initialPrototypeCashAmount,
         );
       } catch (error) {

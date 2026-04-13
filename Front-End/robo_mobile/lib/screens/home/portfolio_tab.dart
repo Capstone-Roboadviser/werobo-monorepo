@@ -65,7 +65,11 @@ class _PortfolioTabState extends State<PortfolioTab> {
   Future<void> _fetchBacktest() async {
     _backtestFetched = true;
     try {
-      final bt = await MobileBackendApi.instance.fetchComparisonBacktest();
+      final state = PortfolioStateProvider.of(context);
+      final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
+        preferredDataSource:
+            state.frontierSelection?.dataSource ?? state.accountSummary?.dataSource,
+      );
       if (!mounted) return;
       PortfolioStateProvider.of(context).setBacktest(bt);
     } catch (_) {}
@@ -100,12 +104,15 @@ class _PortfolioTabState extends State<PortfolioTab> {
 
     final state = PortfolioStateProvider.of(context);
     final rec = state.recommendation;
-    final portfolio = rec?.portfolioByCode(type.riskCode);
-    final horizon = rec?.resolvedProfile.investmentHorizon ?? 'medium';
-    final riskProfile = state.frontierSelection != null &&
-            state.frontierSelection!.representativeCode == type.riskCode
-        ? state.frontierSelection!.representativeCode!
-        : portfolio?.code ?? type.riskCode;
+    final selection = state.frontierSelection;
+    final portfolio = state.selectedPortfolio ?? rec?.portfolioByCode(type.riskCode);
+    final accountSummary = state.accountSummary;
+    final horizon = selection?.resolvedProfile.investmentHorizon ??
+        accountSummary?.investmentHorizon ??
+        rec?.resolvedProfile.investmentHorizon ??
+        'medium';
+    final riskProfile =
+        selection?.classificationCode ?? portfolio?.code ?? type.riskCode;
 
     List<ChartPoint>? volPoints;
 
@@ -114,6 +121,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
           await MobileBackendApi.instance.fetchVolatilityHistory(
         riskProfile: riskProfile,
         investmentHorizon: horizon,
+        preferredDataSource: selection?.dataSource ?? accountSummary?.dataSource,
+        stockWeights: portfolio?.stockWeights,
       );
       volPoints = volResponse.points
           .map((p) => ChartPoint(
@@ -153,15 +162,18 @@ class _PortfolioTabState extends State<PortfolioTab> {
             const SizedBox(height: 12),
 
             // Portfolio type selector
-            _PortfolioTypeSelector(
-              currentType: type,
-              onTypeChanged: (t) {
-                PortfolioStateProvider.of(context).setType(t);
-                setState(() => _selectedSector = null);
-                _fetchHistoryForType(t);
-              },
-            ),
-            const SizedBox(height: 16),
+            if (portfolioState.recommendation != null &&
+                portfolioState.frontierSelection == null) ...[
+              _PortfolioTypeSelector(
+                currentType: type,
+                onTypeChanged: (t) {
+                  PortfolioStateProvider.of(context).setType(t);
+                  setState(() => _selectedSector = null);
+                  _fetchHistoryForType(t);
+                },
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // Risk & return summary
             _PortfolioStatsCard(

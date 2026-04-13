@@ -70,7 +70,8 @@ class MobilePortfolioService:
         explicit_profile: RiskProfile | None,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
-        target_volatility: float,
+        target_volatility: float | None,
+        point_index: int | None,
     ) -> dict[str, object]:
         resolved_profile = self.profile_service.resolve_risk_profile(
             propensity_score=propensity_score,
@@ -82,6 +83,7 @@ class MobilePortfolioService:
             data_source=data_source,
             propensity_score=propensity_score,
             target_volatility=target_volatility,
+            point_index=point_index,
         )
 
     def build_volatility_history(
@@ -92,6 +94,7 @@ class MobilePortfolioService:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
         rolling_window: int,
+        stock_weights: dict[str, float] | None,
     ) -> dict[str, object]:
         resolved_profile = self.profile_service.resolve_risk_profile(
             propensity_score=propensity_score,
@@ -102,6 +105,7 @@ class MobilePortfolioService:
             investment_horizon=investment_horizon,
             data_source=data_source,
             rolling_window=rolling_window,
+            stock_weights=stock_weights,
         )
 
     def build_comparison_backtest(

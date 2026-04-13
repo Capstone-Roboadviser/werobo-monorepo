@@ -11,11 +11,13 @@ import 'widgets/page_indicator.dart';
 
 class OnboardingFrontierSelection {
   final double normalizedT;
+  final int selectedPointIndex;
   final double targetVolatility;
   final String dataSource;
 
   const OnboardingFrontierSelection({
     required this.normalizedT,
+    required this.selectedPointIndex,
     required this.targetVolatility,
     required this.dataSource,
   });
@@ -51,6 +53,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     try {
       final preview = await MobileBackendApi.instance.fetchFrontierPreview(
         propensityScore: 45.0,
+        samplePoints: 1000,
       );
       if (!mounted) return;
       PortfolioStateProvider.of(context).setFrontierPreview(preview);
@@ -83,6 +86,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         pageBuilder: (context, animation, secondaryAnimation) =>
             PortfolioLoadingScreen(
           dotT: _selectedDotT,
+          selectedPointIndex: _frontierSelection?.selectedPointIndex,
           targetVolatility: _frontierSelection?.targetVolatility,
           previewDataSource: _frontierSelection?.dataSource,
         ),
@@ -588,6 +592,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     try {
       final preview = await MobileBackendApi.instance.fetchFrontierPreview(
         propensityScore: _previewPropensityScore,
+        samplePoints: 1000,
       );
       if (!mounted) {
         return;
@@ -638,6 +643,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       widget.onFrontierSelectionChanged?.call(
         OnboardingFrontierSelection(
           normalizedT: normalizedT,
+          selectedPointIndex: previewPoint.index,
           targetVolatility: previewPoint.volatility,
           dataSource: preview.dataSource,
         ),
@@ -660,9 +666,28 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     widget.onFrontierSelectionChanged?.call(
       OnboardingFrontierSelection(
         normalizedT: normalizedT,
+        selectedPointIndex: _preview.points[previewPosition].index,
         targetVolatility: _preview.points[previewPosition].volatility,
         dataSource: _preview.dataSource,
       ),
+    );
+  }
+
+  OnboardingFrontierSelection? _selectionForNormalizedT(double normalizedT) {
+    if (_preview.points.isEmpty) {
+      return null;
+    }
+    final previewPosition = _preview.points.length <= 1
+        ? 0
+        : (normalizedT * (_preview.points.length - 1))
+            .round()
+            .clamp(0, _preview.points.length - 1);
+    final point = _preview.points[previewPosition];
+    return OnboardingFrontierSelection(
+      normalizedT: normalizedT,
+      selectedPointIndex: point.index,
+      targetVolatility: point.volatility,
+      dataSource: _preview.dataSource,
     );
   }
 
@@ -735,12 +760,15 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
             onDragStateChanged: widget.onDragStateChanged,
             onPreviewPointChanged: _handlePreviewPositionChanged,
             onPositionChanged: (t) {
+              final selection = _selectionForNormalizedT(t);
               setState(() {
-                _dotT = t;
-                _selectedPreviewPosition = null;
+                _dotT = selection?.normalizedT ?? t;
+                _selectedPreviewPosition = selection == null
+                    ? null
+                    : _preview.positionForPointIndex(selection.selectedPointIndex);
               });
-              widget.onPositionChanged?.call(t);
-              widget.onFrontierSelectionChanged?.call(null);
+              widget.onPositionChanged?.call(selection?.normalizedT ?? t);
+              widget.onFrontierSelectionChanged?.call(selection);
             },
           ),
           if (_previewLoading || _previewUnavailable) ...[

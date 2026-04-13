@@ -30,22 +30,37 @@ class FrontierPreviewRequest(ProfileResolutionRequest):
     sample_points: int = Field(
         default=61,
         ge=3,
-        le=121,
-        description="모바일 차트에 내려줄 frontier preview 포인트 수",
+        le=1000,
+        description="모바일 차트에 내려줄 frontier preview 포인트 수. 전체 frontier를 모두 받고 싶다면 충분히 큰 값을 넘기면 됩니다.",
     )
 
 
 class FrontierSelectionRequest(ProfileResolutionRequest):
-    target_volatility: float = Field(
-        ...,
+    target_volatility: float | None = Field(
+        default=None,
         ge=TARGET_VOLATILITY_MIN,
         le=TARGET_VOLATILITY_MAX,
         description="사용자가 차트에서 선택한 목표 변동성",
     )
+    point_index: int | None = Field(
+        default=None,
+        ge=0,
+        description="사용자가 frontier preview에서 선택한 내부 포인트 인덱스",
+    )
+
+    @model_validator(mode="after")
+    def validate_selection_input(self) -> "FrontierSelectionRequest":
+        if self.target_volatility is None and self.point_index is None:
+            raise ValueError("target_volatility 또는 point_index 중 하나는 반드시 제공해야 합니다.")
+        return self
 
 
 class VolatilityHistoryRequest(ProfileResolutionRequest):
     rolling_window: int = Field(default=20, ge=5, le=60, description="롤링 변동성 계산 윈도우")
+    stock_weights: dict[str, float] | None = Field(
+        default=None,
+        description="선택 포트폴리오의 종목 비중 맵. 주어지면 대표 포트폴리오 대신 이 비중으로 변동성 추이를 계산합니다.",
+    )
 
 
 class ComparisonBacktestRequest(BaseModel):

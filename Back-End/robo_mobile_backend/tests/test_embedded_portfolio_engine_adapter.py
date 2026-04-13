@@ -200,6 +200,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
             propensity_score=45.0,
             target_volatility=0.119,
+            point_index=None,
         )
 
         self.assertEqual(response["selected_point_index"], 1)
@@ -207,6 +208,22 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(response["representative_code"], "balanced")
         self.assertEqual(response["portfolio"]["code"], "selected")
         self.assertEqual(response["portfolio"]["label"], "선택 포트폴리오")
+
+    def test_build_frontier_selection_uses_exact_point_index_when_provided(self) -> None:
+        adapter, _ = self._build_fake_adapter()
+
+        response = adapter.build_frontier_selection(
+            resolved_profile=RiskProfile.BALANCED,
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+            propensity_score=45.0,
+            target_volatility=None,
+            point_index=2,
+        )
+
+        self.assertEqual(response["selected_point_index"], 2)
+        self.assertEqual(response["selected_target_volatility"], 0.16)
+        self.assertEqual(response["representative_code"], "growth")
 
     def test_build_recommendation_uses_materialized_snapshot_when_available(self) -> None:
         adapter, _ = self._build_fake_adapter()
@@ -245,6 +262,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             data_source=SimulationDataSource.MANAGED_UNIVERSE,
             propensity_score=45.0,
             target_volatility=0.119,
+            point_index=None,
         )
 
         self.assertEqual(response["selected_point_index"], 1)
@@ -271,6 +289,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             investment_horizon=InvestmentHorizon.MEDIUM,
             data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
             rolling_window=20,
+            stock_weights=None,
         )
 
         self.assertEqual(response["portfolio_code"], "balanced")

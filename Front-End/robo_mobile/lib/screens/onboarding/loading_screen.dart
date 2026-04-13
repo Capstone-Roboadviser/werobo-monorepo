@@ -9,12 +9,14 @@ import 'result_screen.dart';
 
 class PortfolioLoadingScreen extends StatefulWidget {
   final double dotT;
+  final int? selectedPointIndex;
   final double? targetVolatility;
   final String? previewDataSource;
 
   const PortfolioLoadingScreen({
     super.key,
     required this.dotT,
+    this.selectedPointIndex,
     this.targetVolatility,
     this.previewDataSource,
   });
@@ -28,9 +30,8 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
   late AnimationController _progressController;
   late AnimationController _rotationController;
   late Animation<double> _progressAnimation;
-  MobileRecommendationResponse? _recommendation;
   MobileFrontierSelectionResponse? _frontierSelection;
-  MobileRecommendationResponse? _fallbackRecommendation;
+  MobileFrontierSelectionResponse? _fallbackSelection;
   String? _errorMessage;
   bool _animationFinished = false;
   bool _requestFinished = false;
@@ -41,6 +42,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     super.initState();
     logPageEnter('PortfolioLoadingScreen', {
       'dotT': widget.dotT.toStringAsFixed(2),
+      'point_index': widget.selectedPointIndex,
       'target_volatility': widget.targetVolatility?.toStringAsFixed(4),
     });
 
@@ -69,7 +71,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     });
 
     _progressController.forward();
-    _loadRecommendation();
+    _loadSelection();
   }
 
   @override
@@ -80,56 +82,40 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     super.dispose();
   }
 
-  Future<void> _loadRecommendation() async {
-    logAction('load recommendation', {
+  Future<void> _loadSelection() async {
+    logAction('load frontier selection', {
       'dotT': widget.dotT.toStringAsFixed(2),
+      'point_index': widget.selectedPointIndex,
     });
     setState(() {
       _errorMessage = null;
-      _recommendation = null;
       _frontierSelection = null;
-      _fallbackRecommendation = null;
+      _fallbackSelection = null;
     });
     _requestFinished = false;
 
     try {
-      final recommendation =
-          await MobileBackendApi.instance.fetchRecommendation(
+      final frontierSelection =
+          await MobileBackendApi.instance.fetchFrontierSelection(
         propensityScore: widget.dotT * 100,
+        pointIndex: widget.selectedPointIndex,
+        targetVolatility: widget.targetVolatility,
         preferredDataSource: widget.previewDataSource,
       );
-      if (recommendation.portfolios.isEmpty) {
-        throw const MobileBackendException('추천 포트폴리오가 아직 준비되지 않았어요.');
-      }
-      MobileFrontierSelectionResponse? frontierSelection;
-      if (widget.targetVolatility != null) {
-        try {
-          frontierSelection =
-              await MobileBackendApi.instance.fetchFrontierSelection(
-            propensityScore: widget.dotT * 100,
-            targetVolatility: widget.targetVolatility!,
-            preferredDataSource: widget.previewDataSource,
-          );
-        } catch (_) {
-          frontierSelection = null;
-        }
-      }
       if (!mounted) {
         return;
       }
 
       _requestFinished = true;
       setState(() {
-        _recommendation = recommendation;
         _frontierSelection = frontierSelection;
       });
-      if (frontierSelection != null) {
-        logAction('frontier selection resolved', {
-          'representative': frontierSelection.representativeCode,
-          'target_volatility':
-              frontierSelection.selectedTargetVolatility.toStringAsFixed(4),
-        });
-      }
+      logAction('frontier selection resolved', {
+        'classification': frontierSelection.classificationCode,
+        'selected_point_index': frontierSelection.selectedPointIndex,
+        'target_volatility':
+            frontierSelection.selectedTargetVolatility.toStringAsFixed(4),
+      });
       _tryProceed();
     } catch (error) {
       if (!mounted) {
@@ -139,15 +125,15 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
       _requestFinished = true;
       setState(() {
         _errorMessage = _buildUiErrorMessage(error);
-        _fallbackRecommendation = _buildFallbackRecommendation();
+        _fallbackSelection = _buildFallbackSelection();
       });
-      logAction('recommendation failed', {
+      logAction('frontier selection failed', {
         'error': error.toString(),
       });
     }
   }
 
-  MobileRecommendationResponse _buildFallbackRecommendation() {
+  MobileFrontierSelectionResponse _buildFallbackSelection() {
     final type = InvestmentType.fromDotT(widget.dotT);
     final (risk, _) = PortfolioData.statsFor(type);
 
@@ -188,7 +174,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
       );
     }
 
-    return MobileRecommendationResponse(
+    return MobileFrontierSelectionResponse(
       resolvedProfile: MobileResolvedProfile(
         code: type.name,
         label: type.label,
@@ -196,11 +182,14 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         targetVolatility: riskVal,
         investmentHorizon: 'medium',
       ),
-      recommendedPortfolioCode: type.name,
       dataSource: 'fallback',
-      portfolios: [
-        for (final t in InvestmentType.values) buildPortfolio(t),
-      ],
+      requestedTargetVolatility: riskVal,
+      selectedTargetVolatility: riskVal,
+      selectedPointIndex: widget.selectedPointIndex ?? 0,
+      totalPointCount: 1,
+      representativeCode: type.name,
+      representativeLabel: type.label,
+      portfolio: buildPortfolio(type),
     );
   }
 
@@ -211,17 +200,17 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
       }
       return error.message;
     }
-    return '외부 추천 API 호출에 실패했어요. 다시 시도하거나 데모로 계속 진행할 수 있어요.';
+    return '선택 포트폴리오 API 호출에 실패했어요. 다시 시도하거나 데모로 계속 진행할 수 있어요.';
   }
 
   void _continueWithDemo() {
-    final fallback = _fallbackRecommendation;
+    final fallback = _fallbackSelection;
     if (fallback == null) {
       return;
     }
     logAction('continue with demo');
     setState(() {
-      _recommendation = fallback;
+      _frontierSelection = fallback;
       _errorMessage = null;
     });
     _tryProceed();
@@ -230,7 +219,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
   void _tryProceed() {
     if (!_animationFinished ||
         !_requestFinished ||
-        _recommendation == null ||
+        _frontierSelection == null ||
         _hasNavigated ||
         !mounted) {
       return;
@@ -238,8 +227,8 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
 
     _hasNavigated = true;
     logAction('navigate loading -> result', {
-      'selected': _frontierSelection?.representativeCode ??
-          _recommendation!.recommendedPortfolioCode,
+      'selected': _frontierSelection!.classificationCode,
+      'selected_point_index': _frontierSelection!.selectedPointIndex,
     });
     Future.delayed(const Duration(milliseconds: 250), () {
       if (!mounted) {
@@ -249,10 +238,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         PageRouteBuilder(
           pageBuilder: (context, animation, secondaryAnimation) =>
               PortfolioResultScreen(
-            recommendation: _recommendation!,
-            selectedPortfolioCode: _frontierSelection?.representativeCode ??
-                _recommendation!.recommendedPortfolioCode,
-            frontierSelection: _frontierSelection,
+            frontierSelection: _frontierSelection!,
           ),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
@@ -264,12 +250,12 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
   }
 
   void _retry() {
-    logAction('tap retry recommendation');
+    logAction('tap retry frontier selection');
     _animationFinished = false;
     _requestFinished = false;
     _hasNavigated = false;
     _progressController.forward(from: 0);
-    _loadRecommendation();
+    _loadSelection();
   }
 
   @override
@@ -313,7 +299,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
             ),
             const SizedBox(height: 40),
             Text(
-              hasError ? '추천 포트폴리오를 불러오지 못했어요' : '최적 포트폴리오를 찾는 중...',
+              hasError ? '선택 포트폴리오를 불러오지 못했어요' : '선택 포트폴리오를 찾는 중...',
               style: WeRoboTypography.body.copyWith(
                 color: tc.textSecondary,
               ),
@@ -341,7 +327,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
               SizedBox(
                 width: 180,
                 child: OutlinedButton(
-                  onPressed: _fallbackRecommendation == null
+                  onPressed: _fallbackSelection == null
                       ? null
                       : _continueWithDemo,
                   child: const Text('데모로 계속 보기'),

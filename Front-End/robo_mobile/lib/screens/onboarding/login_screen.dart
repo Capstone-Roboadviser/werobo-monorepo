@@ -9,15 +9,11 @@ import '../home/home_shell.dart';
 import 'comparison_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  final MobileRecommendationResponse recommendation;
-  final String selectedPortfolioCode;
-  final MobileFrontierSelectionResponse? frontierSelection;
+  final MobileFrontierSelectionResponse frontierSelection;
 
   const LoginScreen({
     super.key,
-    required this.recommendation,
-    required this.selectedPortfolioCode,
-    this.frontierSelection,
+    required this.frontierSelection,
   });
 
   @override
@@ -44,7 +40,8 @@ class _LoginScreenState extends State<LoginScreen>
   void initState() {
     super.initState();
     logPageEnter('LoginScreen', {
-      'selected': widget.selectedPortfolioCode,
+      'selected': widget.frontierSelection.classificationCode,
+      'selected_point_index': widget.frontierSelection.selectedPointIndex,
     });
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 600),
@@ -71,8 +68,6 @@ class _LoginScreenState extends State<LoginScreen>
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => ComparisonScreen(
-          recommendation: widget.recommendation,
-          selectedPortfolioCode: widget.selectedPortfolioCode,
           frontierSelection: widget.frontierSelection,
         ),
         transitionsBuilder: (_, anim, __, child) =>

@@ -81,17 +81,26 @@ class MobileBackendApi {
 
   Future<MobileFrontierSelectionResponse> fetchFrontierSelection({
     required double propensityScore,
-    required double targetVolatility,
+    double? targetVolatility,
+    int? pointIndex,
     String investmentHorizon = 'medium',
     String? preferredDataSource,
   }) {
     return _postWithFallback(
       path: '/portfolios/frontier-selection',
-      bodyForDataSource: (dataSource) => <String, dynamic>{
-        'propensity_score': propensityScore.clamp(0, 100),
-        'investment_horizon': investmentHorizon,
-        'data_source': dataSource,
-        'target_volatility': targetVolatility,
+      bodyForDataSource: (dataSource) {
+        final body = <String, dynamic>{
+          'propensity_score': propensityScore.clamp(0, 100),
+          'investment_horizon': investmentHorizon,
+          'data_source': dataSource,
+        };
+        if (targetVolatility != null) {
+          body['target_volatility'] = targetVolatility;
+        }
+        if (pointIndex != null) {
+          body['point_index'] = pointIndex;
+        }
+        return body;
       },
       parser: MobileFrontierSelectionResponse.fromJson,
       timeout: _defaultTimeout,
@@ -103,15 +112,22 @@ class MobileBackendApi {
     required String riskProfile,
     String investmentHorizon = 'medium',
     int rollingWindow = 20,
+    Map<String, double>? stockWeights,
     String? preferredDataSource,
   }) {
     return _postWithFallback(
       path: '/portfolios/volatility-history',
-      bodyForDataSource: (dataSource) => <String, dynamic>{
-        'risk_profile': riskProfile,
-        'investment_horizon': investmentHorizon,
-        'rolling_window': rollingWindow,
-        'data_source': dataSource,
+      bodyForDataSource: (dataSource) {
+        final body = <String, dynamic>{
+          'risk_profile': riskProfile,
+          'investment_horizon': investmentHorizon,
+          'rolling_window': rollingWindow,
+          'data_source': dataSource,
+        };
+        if (stockWeights != null && stockWeights.isNotEmpty) {
+          body['stock_weights'] = stockWeights;
+        }
+        return body;
       },
       parser: MobileVolatilityHistoryResponse.fromJson,
       timeout: _defaultTimeout,
@@ -173,7 +189,9 @@ class MobileBackendApi {
     );
   }
 
-  Future<MobileComparisonBacktestResponse> fetchComparisonBacktest() {
+  Future<MobileComparisonBacktestResponse> fetchComparisonBacktest({
+    String? preferredDataSource,
+  }) {
     return _postWithFallback(
       path: '/portfolios/comparison-backtest',
       bodyForDataSource: (dataSource) => <String, dynamic>{
@@ -181,6 +199,7 @@ class MobileBackendApi {
       },
       parser: MobileComparisonBacktestResponse.fromJson,
       timeout: _defaultTimeout,
+      preferredDataSource: preferredDataSource,
     );
   }
 
@@ -319,16 +338,19 @@ class MobileBackendApi {
 
   Future<MobileAccountDashboard> createPortfolioAccount({
     required String accessToken,
-    required MobileRecommendationResponse recommendation,
+    required String dataSource,
+    required String investmentHorizon,
     required MobilePortfolioRecommendation portfolio,
+    String? portfolioCode,
+    String? portfolioLabel,
     required double initialCashAmount,
   }) async {
     const path = '/account';
     final body = <String, dynamic>{
-      'data_source': recommendation.dataSource,
-      'investment_horizon': recommendation.resolvedProfile.investmentHorizon,
-      'portfolio_code': portfolio.code,
-      'portfolio_label': portfolio.label,
+      'data_source': dataSource,
+      'investment_horizon': investmentHorizon,
+      'portfolio_code': portfolioCode ?? portfolio.code,
+      'portfolio_label': portfolioLabel ?? portfolio.label,
       'portfolio_id': portfolio.portfolioId,
       'target_volatility': portfolio.targetVolatility,
       'expected_return': portfolio.expectedReturn,

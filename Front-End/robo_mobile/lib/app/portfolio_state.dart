@@ -37,14 +37,14 @@ class PortfolioState extends ChangeNotifier {
       _accountDashboard?.recentActivity ?? const [];
   bool get isLoggedIn => _authSession != null;
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
-  bool get hasCompletedPortfolioSetup => _recommendation != null;
+  bool get hasCompletedPortfolioSetup =>
+      _frontierSelection != null || _recommendation != null;
   bool get canAutoEnterHome =>
       isLoggedIn && (hasCompletedPortfolioSetup || hasPrototypeAccount);
 
   /// The selected portfolio from the API recommendation.
   MobilePortfolioRecommendation? get selectedPortfolio {
-    if (_frontierSelection != null &&
-        _frontierSelection!.representativeCode == _type.riskCode) {
+    if (_frontierSelection != null) {
       return _frontierSelection!.portfolio;
     }
     if (_recommendation == null) return null;
@@ -101,6 +101,7 @@ class PortfolioState extends ChangeNotifier {
   void setFrontierPreview(MobileFrontierPreviewResponse preview) {
     _frontierPreview = preview;
     notifyListeners();
+    _persistPortfolioBootstrapState();
   }
 
   void setFrontierSelection(MobileFrontierSelectionResponse? selection) {
@@ -257,18 +258,21 @@ class PortfolioState extends ChangeNotifier {
   }
 
   Future<MobileAccountDashboard> createPrototypeAccount({
-    required MobileRecommendationResponse recommendation,
-    required MobilePortfolioRecommendation portfolio,
+    required MobileFrontierSelectionResponse selection,
     double initialCashAmount = 10000000,
   }) async {
     final accessToken = _authSession?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
       throw const MobileBackendException('프로토타입 자산 계정을 만들려면 로그인이 필요합니다.');
     }
+    final portfolio = selection.portfolio;
     final dashboard = await MobileBackendApi.instance.createPortfolioAccount(
       accessToken: accessToken,
-      recommendation: recommendation,
+      dataSource: selection.dataSource,
+      investmentHorizon: selection.resolvedProfile.investmentHorizon,
       portfolio: portfolio,
+      portfolioCode: selection.classificationCode,
+      portfolioLabel: portfolio.label,
       initialCashAmount: initialCashAmount,
     );
     _accountDashboard = dashboard;
@@ -386,20 +390,27 @@ class PortfolioState extends ChangeNotifier {
           frontierSelectionJson,
         );
       }
+      final frontierPreviewJson = decoded['frontier_preview'];
+      if (frontierPreviewJson is Map<String, dynamic>) {
+        _frontierPreview = MobileFrontierPreviewResponse.fromJson(
+          frontierPreviewJson,
+        );
+      }
     } catch (_) {
       await prefs.remove(_portfolioBootstrapStorageKey);
     }
   }
 
   Future<void> _persistPortfolioBootstrapState() async {
-    if (_recommendation == null) {
+    if (_recommendation == null && _frontierSelection == null) {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
     final payload = <String, dynamic>{
       'selected_type': _type.riskCode,
-      'recommendation': _recommendation!.toJson(),
+      'recommendation': _recommendation?.toJson(),
       'frontier_selection': _frontierSelection?.toJson(),
+      'frontier_preview': _frontierPreview?.toJson(),
     };
     await prefs.setString(
       _portfolioBootstrapStorageKey,

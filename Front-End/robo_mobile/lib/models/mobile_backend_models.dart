@@ -576,6 +576,13 @@ class MobilePortfolioRecommendation {
 
   String get expectedReturnLabel => formatRatioPercent(expectedReturn);
 
+  Map<String, double> get stockWeights {
+    return <String, double>{
+      for (final allocation in stockAllocations)
+        allocation.ticker.toUpperCase(): allocation.weight,
+    };
+  }
+
   List<PortfolioCategory> toCategories() {
     if (sectorAllocations.isNotEmpty) {
       return [
@@ -857,6 +864,37 @@ class MobileFrontierPreviewResponse {
     return points[recommendedPreviewPosition];
   }
 
+  double get averageVolatility {
+    if (points.isEmpty) {
+      return 0.0;
+    }
+    final total = points.fold<double>(
+      0.0,
+      (sum, point) => sum + point.volatility,
+    );
+    return total / points.length;
+  }
+
+  MobileFrontierPreviewPoint? pointByIndex(int index) {
+    for (final point in points) {
+      if (point.index == index) {
+        return point;
+      }
+    }
+    return null;
+  }
+
+  int positionForPointIndex(int index) {
+    final position = points.indexWhere((point) => point.index == index);
+    if (position >= 0) {
+      return position;
+    }
+    if (points.isEmpty) {
+      return 0;
+    }
+    return recommendedPreviewPosition;
+  }
+
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'resolved_profile': resolvedProfile.toJson(),
@@ -910,6 +948,10 @@ class MobileFrontierSelectionResponse {
       ),
     );
   }
+
+  String get classificationCode => representativeCode ?? resolvedProfile.code;
+
+  String get classificationLabel => representativeLabel ?? resolvedProfile.label;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
