@@ -335,7 +335,7 @@ class EmbeddedPortfolioEngineAdapter:
         self,
         *,
         operation: str,
-        investment_horizon: InvestmentHorizon,
+        investment_horizon: InvestmentHorizon | None,
         status: str,
         lookup: dict[str, object],
     ) -> None:
@@ -343,8 +343,9 @@ class EmbeddedPortfolioEngineAdapter:
             f"operation={operation}",
             f"status={status}",
             "dataSource=managed_universe",
-            f"horizon={investment_horizon.value}",
         ]
+        if investment_horizon is not None:
+            fields.append(f"horizon={investment_horizon.value}")
         for key in (
             "reason",
             "version_id",
@@ -354,6 +355,7 @@ class EmbeddedPortfolioEngineAdapter:
             "snapshot_aligned_start_date",
             "snapshot_aligned_end_date",
             "snapshot_point_count",
+            "snapshot_line_count",
             "snapshot_updated_at",
         ):
             value = lookup.get(key)
@@ -434,6 +436,75 @@ class EmbeddedPortfolioEngineAdapter:
         if snapshot_lookup is None:
             return None, {"reason": "frontier_snapshot_missing"}
         return snapshot_lookup, {"reason": "frontier_snapshot_reused"}
+
+    def _get_managed_universe_comparison_backtest_snapshot_payload(
+        self,
+        *,
+        data_source: SimulationDataSource,
+    ) -> tuple[dict[str, object] | None, dict[str, object]]:
+        if data_source != SimulationDataSource.MANAGED_UNIVERSE:
+            return None, {"reason": "non_managed_universe"}
+        if not self.managed_universe_service.is_configured():
+            return None, {"reason": "database_not_configured"}
+
+        active_version = self.managed_universe_service.get_active_version()
+        if active_version is None:
+            return None, {"reason": "active_version_missing"}
+
+        lookup: dict[str, object] = {
+            "version_id": active_version.version_id,
+            "version_name": active_version.version_name,
+        }
+
+        instruments = self.managed_universe_service.get_instruments_for_version(active_version.version_id)
+        if not instruments:
+            lookup["reason"] = "active_version_has_no_instruments"
+            return None, lookup
+
+        price_window = self.managed_universe_service.get_price_window(active_version.version_id, instruments)
+        if price_window is None:
+            lookup["reason"] = "price_window_missing"
+            return None, lookup
+        lookup["aligned_start_date"] = price_window.aligned_start_date
+        lookup["aligned_end_date"] = price_window.aligned_end_date
+
+        snapshot = self.managed_universe_service.repository.get_comparison_backtest_snapshot(
+            version_id=active_version.version_id,
+            data_source=data_source.value,
+        )
+        if snapshot is None:
+            lookup["reason"] = "comparison_backtest_snapshot_missing"
+            return None, lookup
+        lookup["snapshot_aligned_start_date"] = snapshot.aligned_start_date
+        lookup["snapshot_aligned_end_date"] = snapshot.aligned_end_date
+        lookup["snapshot_line_count"] = snapshot.line_count
+        lookup["snapshot_updated_at"] = snapshot.updated_at
+        if snapshot.aligned_start_date != price_window.aligned_start_date:
+            lookup["reason"] = "aligned_start_date_mismatch"
+            return None, lookup
+        if snapshot.aligned_end_date != price_window.aligned_end_date:
+            lookup["reason"] = "aligned_end_date_mismatch"
+            return None, lookup
+        lookup["reason"] = "comparison_backtest_snapshot_reused"
+        return snapshot.payload, lookup
+
+    def _resolve_managed_universe_comparison_backtest_snapshot_lookup(
+        self,
+        *,
+        data_source: SimulationDataSource,
+    ) -> tuple[dict[str, object] | None, dict[str, object]]:
+        snapshot_lookup = self._get_managed_universe_comparison_backtest_snapshot_payload(
+            data_source=data_source,
+        )
+        if (
+            isinstance(snapshot_lookup, tuple)
+            and len(snapshot_lookup) == 2
+            and isinstance(snapshot_lookup[1], dict)
+        ):
+            return snapshot_lookup
+        if snapshot_lookup is None:
+            return None, {"reason": "comparison_backtest_snapshot_missing"}
+        return snapshot_lookup, {"reason": "comparison_backtest_snapshot_reused"}
 
     def _build_snapshot_portfolio_response(
         self,
@@ -1021,6 +1092,35 @@ class EmbeddedPortfolioEngineAdapter:
         *,
         data_source: SimulationDataSource,
     ) -> dict[str, object]:
+        if data_source == SimulationDataSource.MANAGED_UNIVERSE:
+            snapshot_payload, snapshot_lookup = self._resolve_managed_universe_comparison_backtest_snapshot_lookup(
+                data_source=data_source,
+            )
+            if snapshot_payload is not None:
+                self._log_managed_universe_snapshot_lookup(
+                    operation="comparison_backtest",
+                    investment_horizon=None,
+                    status="hit",
+                    lookup=snapshot_lookup,
+                )
+                return self._build_comparison_backtest_from_snapshot(
+                    snapshot_payload=snapshot_payload,
+                )
+            self._log_managed_universe_snapshot_lookup(
+                operation="comparison_backtest",
+                investment_horizon=None,
+                status="miss",
+                lookup=snapshot_lookup,
+            )
+        return self.build_materialized_comparison_backtest(
+            data_source=data_source,
+        )
+
+    def build_materialized_comparison_backtest(
+        self,
+        *,
+        data_source: SimulationDataSource,
+    ) -> dict[str, object]:
         response = self.portfolio_analytics_service.build_comparison_backtest(
             data_source=self._to_core_data_source(data_source),
         )
@@ -1044,6 +1144,37 @@ class EmbeddedPortfolioEngineAdapter:
                     ],
                 }
                 for line in response.lines
+            ],
+        }
+
+    def _build_comparison_backtest_from_snapshot(
+        self,
+        *,
+        snapshot_payload: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "train_start_date": str(snapshot_payload["train_start_date"]),
+            "train_end_date": str(snapshot_payload["train_end_date"]),
+            "test_start_date": str(snapshot_payload["test_start_date"]),
+            "start_date": str(snapshot_payload["start_date"]),
+            "end_date": str(snapshot_payload["end_date"]),
+            "split_ratio": float(snapshot_payload["split_ratio"]),
+            "rebalance_dates": list(snapshot_payload.get("rebalance_dates", [])),
+            "lines": [
+                {
+                    "key": str(line["key"]),
+                    "label": str(line["label"]),
+                    "color": str(line["color"]),
+                    "style": str(line["style"]),
+                    "points": [
+                        {
+                            "date": str(point["date"]),
+                            "return_pct": float(point["return_pct"]),
+                        }
+                        for point in list(line.get("points", []))
+                    ],
+                }
+                for line in list(snapshot_payload.get("lines", []))
             ],
         }
 

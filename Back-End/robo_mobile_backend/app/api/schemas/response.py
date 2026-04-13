@@ -223,6 +223,13 @@ class ManagedFrontierSnapshotStatusResponse(BaseModel):
     message: str | None = Field(default=None, description="frontier snapshot 갱신 메시지")
 
 
+class ManagedComparisonBacktestSnapshotStatusResponse(BaseModel):
+    status: str = Field(..., description="comparison backtest snapshot 갱신 상태", examples=["success"])
+    snapshot_count: int = Field(..., description="이번 요청에서 갱신한 snapshot 수", examples=[1])
+    line_count: int = Field(..., description="저장된 comparison backtest 라인 수", examples=[8])
+    message: str | None = Field(default=None, description="comparison backtest snapshot 갱신 메시지")
+
+
 class ManagedPortfolioAccountSnapshotStatusResponse(BaseModel):
     status: str = Field(..., description="포트폴리오 계정 snapshot 갱신 상태", examples=["success"])
     account_count: int = Field(..., description="이번 요청에서 처리 대상이 된 포트폴리오 계정 수", examples=[18])
@@ -281,6 +288,10 @@ class ManagedPriceRefreshResponse(BaseModel):
     price_stats: ManagedPriceStatsResponse = Field(..., description="갱신 후 가격 통계")
     price_window: ManagedUniversePriceWindowResponse | None = Field(default=None, description="갱신 후 공통 가격 구간")
     frontier_snapshot: ManagedFrontierSnapshotStatusResponse | None = Field(default=None, description="가격 갱신 직후 재생성한 frontier snapshot 결과")
+    comparison_backtest_snapshot: ManagedComparisonBacktestSnapshotStatusResponse | None = Field(
+        default=None,
+        description="가격 갱신 직후 재생성한 comparison backtest snapshot 결과",
+    )
     account_snapshot_refresh: ManagedPortfolioAccountSnapshotStatusResponse | None = Field(
         default=None,
         description="가격 갱신 직후 재계산한 포트폴리오 계정 snapshot 결과",

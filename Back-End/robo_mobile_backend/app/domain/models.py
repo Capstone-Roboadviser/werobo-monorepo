@@ -178,6 +178,20 @@ class ManagedFrontierSnapshot:
 
 
 @dataclass(frozen=True)
+class ManagedComparisonBacktestSnapshot:
+    snapshot_id: int
+    version_id: int
+    data_source: SimulationDataSource
+    aligned_start_date: str | None
+    aligned_end_date: str | None
+    line_count: int
+    source_refresh_job_id: int | None
+    payload: dict[str, object]
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
 class ManagedFrontierSnapshotBuildStatus:
     status: str
     snapshot_count: int
@@ -187,11 +201,20 @@ class ManagedFrontierSnapshotBuildStatus:
 
 
 @dataclass(frozen=True)
+class ManagedComparisonBacktestSnapshotBuildStatus:
+    status: str
+    snapshot_count: int
+    line_count: int = 0
+    message: str | None = None
+
+
+@dataclass(frozen=True)
 class ManagedPriceRefreshResult:
     job: ManagedPriceRefreshJob
     price_stats: ManagedPriceStats
     price_window: ManagedUniversePriceWindow | None = None
     frontier_snapshot_status: ManagedFrontierSnapshotBuildStatus | None = None
+    comparison_backtest_snapshot_status: ManagedComparisonBacktestSnapshotBuildStatus | None = None
 
 
 @dataclass(frozen=True)

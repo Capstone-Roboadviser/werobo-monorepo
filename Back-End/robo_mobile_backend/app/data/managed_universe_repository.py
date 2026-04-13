@@ -8,6 +8,7 @@ import pandas as pd
 from app.core.config import DATABASE_URL
 from app.domain.enums import InvestmentHorizon, PriceRefreshMode, SimulationDataSource
 from app.domain.models import (
+    ManagedComparisonBacktestSnapshot,
     ManagedFrontierSnapshot,
     ManagedPriceRefreshJob,
     ManagedPriceRefreshJobItem,
@@ -152,12 +153,32 @@ class ManagedUniverseRepository:
                     )
                     """
                 )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS comparison_backtest_snapshots (
+                        id BIGSERIAL PRIMARY KEY,
+                        version_id BIGINT NOT NULL REFERENCES universe_versions(id) ON DELETE CASCADE,
+                        data_source TEXT NOT NULL,
+                        aligned_start_date DATE,
+                        aligned_end_date DATE,
+                        line_count INTEGER NOT NULL DEFAULT 0,
+                        source_refresh_job_id BIGINT REFERENCES refresh_jobs(id) ON DELETE SET NULL,
+                        payload JSONB NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE (version_id, data_source)
+                    )
+                    """
+                )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_items_version_sector ON universe_items(version_id, sector_code)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_asset_roles_version ON universe_asset_roles(version_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_history_ticker_date ON price_history(ticker, date)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_refresh_jobs_version_created_at ON refresh_jobs(version_id, created_at DESC)")
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_frontier_snapshots_version_horizon ON frontier_snapshots(version_id, investment_horizon)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_comparison_backtest_snapshots_version ON comparison_backtest_snapshots(version_id)"
                 )
             connection.commit()
 
@@ -960,6 +981,107 @@ class ManagedUniverseRepository:
                 cursor.execute("DELETE FROM frontier_snapshots WHERE version_id = %s", (version_id,))
             connection.commit()
 
+    def upsert_comparison_backtest_snapshot(
+        self,
+        *,
+        version_id: int,
+        data_source: str,
+        aligned_start_date: str | None,
+        aligned_end_date: str | None,
+        line_count: int,
+        payload: dict[str, object],
+        source_refresh_job_id: int | None = None,
+    ) -> ManagedComparisonBacktestSnapshot:
+        self._ensure_ready()
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO comparison_backtest_snapshots (
+                        version_id,
+                        data_source,
+                        aligned_start_date,
+                        aligned_end_date,
+                        line_count,
+                        source_refresh_job_id,
+                        payload,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (version_id, data_source) DO UPDATE
+                    SET aligned_start_date = EXCLUDED.aligned_start_date,
+                        aligned_end_date = EXCLUDED.aligned_end_date,
+                        line_count = EXCLUDED.line_count,
+                        source_refresh_job_id = EXCLUDED.source_refresh_job_id,
+                        payload = EXCLUDED.payload,
+                        updated_at = NOW()
+                    RETURNING
+                        id,
+                        version_id,
+                        data_source,
+                        aligned_start_date::TEXT AS aligned_start_date,
+                        aligned_end_date::TEXT AS aligned_end_date,
+                        line_count,
+                        source_refresh_job_id,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
+                    """,
+                    (
+                        version_id,
+                        data_source,
+                        aligned_start_date,
+                        aligned_end_date,
+                        line_count,
+                        source_refresh_job_id,
+                        payload_json,
+                    ),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            raise RuntimeError("comparison backtest snapshot 저장 결과를 다시 읽지 못했습니다.")
+        return self._comparison_backtest_snapshot_from_row(row)
+
+    def get_comparison_backtest_snapshot(
+        self,
+        *,
+        version_id: int,
+        data_source: str,
+    ) -> ManagedComparisonBacktestSnapshot | None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        version_id,
+                        data_source,
+                        aligned_start_date::TEXT AS aligned_start_date,
+                        aligned_end_date::TEXT AS aligned_end_date,
+                        line_count,
+                        source_refresh_job_id,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
+                    FROM comparison_backtest_snapshots
+                    WHERE version_id = %s
+                      AND data_source = %s
+                    """,
+                    (version_id, data_source),
+                )
+                row = cursor.fetchone()
+        return None if row is None else self._comparison_backtest_snapshot_from_row(row)
+
+    def delete_comparison_backtest_snapshots(self, version_id: int) -> None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM comparison_backtest_snapshots WHERE version_id = %s", (version_id,))
+            connection.commit()
+
     def is_empty(self) -> bool:
         if not self.is_configured():
             return True
@@ -1051,6 +1173,25 @@ class ManagedUniverseRepository:
             aligned_start_date=None if row["aligned_start_date"] is None else str(row["aligned_start_date"]),
             aligned_end_date=None if row["aligned_end_date"] is None else str(row["aligned_end_date"]),
             total_point_count=int(row["total_point_count"] or 0),
+            source_refresh_job_id=None
+            if row["source_refresh_job_id"] is None
+            else int(row["source_refresh_job_id"]),
+            payload=dict(payload),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+
+    def _comparison_backtest_snapshot_from_row(self, row: dict) -> ManagedComparisonBacktestSnapshot:
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return ManagedComparisonBacktestSnapshot(
+            snapshot_id=int(row["id"]),
+            version_id=int(row["version_id"]),
+            data_source=SimulationDataSource(str(row["data_source"])),
+            aligned_start_date=None if row["aligned_start_date"] is None else str(row["aligned_start_date"]),
+            aligned_end_date=None if row["aligned_end_date"] is None else str(row["aligned_end_date"]),
+            line_count=int(row["line_count"] or 0),
             source_refresh_job_id=None
             if row["source_refresh_job_id"] is None
             else int(row["source_refresh_job_id"]),

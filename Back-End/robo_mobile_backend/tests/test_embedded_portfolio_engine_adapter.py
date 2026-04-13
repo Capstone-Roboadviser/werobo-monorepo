@@ -387,6 +387,45 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(response["lines"][0]["points"][0]["date"], "2025-01-01")
         self.assertEqual(response["lines"][0]["points"][1]["return_pct"], 1.25)
 
+    def test_get_comparison_backtest_uses_materialized_snapshot_when_available(self) -> None:
+        adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
+        adapter._resolve_managed_universe_comparison_backtest_snapshot_lookup = lambda **kwargs: (
+            {
+                "train_start_date": "2024-01-01",
+                "train_end_date": "2024-12-31",
+                "test_start_date": "2025-01-01",
+                "start_date": "2025-01-01",
+                "end_date": "2025-03-31",
+                "split_ratio": 0.9,
+                "rebalance_dates": ["2025-02-01"],
+                "lines": [
+                    {
+                        "key": "balanced",
+                        "label": "균형형",
+                        "color": "#3b82f6",
+                        "style": "solid",
+                        "points": [
+                            {"date": "2025-01-01", "return_pct": 0.0},
+                            {"date": "2025-01-31", "return_pct": 1.25},
+                        ],
+                    }
+                ],
+            },
+            {"reason": "comparison_backtest_snapshot_reused"},
+        )
+        adapter.portfolio_analytics_service = SimpleNamespace(
+            build_comparison_backtest=lambda **kwargs: self.fail(
+                "snapshot hit should skip comparison backtest rebuild"
+            )
+        )
+
+        response = adapter.get_comparison_backtest(
+            data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        )
+
+        self.assertEqual(response["lines"][0]["key"], "balanced")
+        self.assertEqual(response["lines"][0]["points"][1]["return_pct"], 1.25)
+
 
 if __name__ == "__main__":
     unittest.main()

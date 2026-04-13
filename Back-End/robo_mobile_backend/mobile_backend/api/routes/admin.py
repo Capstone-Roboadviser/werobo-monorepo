@@ -13,6 +13,7 @@ from app.api.schemas.response import (
     AssetRoleTemplateResponse,
     CombinationSelectionResponse,
     ErrorResponse,
+    ManagedComparisonBacktestSnapshotStatusResponse,
     ManagedFrontierSnapshotStatusResponse,
     ManagedPortfolioAccountSnapshotStatusResponse,
     ManagedPriceRefreshJobResponse,
@@ -45,6 +46,7 @@ from app.services.portfolio_service import PortfolioSimulationService
 from app.services.price_refresh_service import PriceRefreshService
 from app.services.ticker_discovery_service import TickerDiscoveryService
 from mobile_backend.services.account_service import PortfolioAccountService
+from mobile_backend.services.comparison_backtest_snapshot_service import ComparisonBacktestSnapshotService
 from mobile_backend.services.frontier_snapshot_service import FrontierSnapshotService
 from mobile_backend.core.config import ADMIN_REFRESH_SECRET
 
@@ -55,6 +57,9 @@ price_refresh_service = PriceRefreshService(managed_universe_service)
 portfolio_simulation_service = PortfolioSimulationService()
 ticker_discovery_service = TickerDiscoveryService()
 frontier_snapshot_service = FrontierSnapshotService(managed_universe_service=managed_universe_service)
+comparison_backtest_snapshot_service = ComparisonBacktestSnapshotService(
+    managed_universe_service=managed_universe_service
+)
 portfolio_account_service = PortfolioAccountService()
 COMMON_ADMIN_422 = {
     422: {
@@ -273,9 +278,14 @@ def refresh_prices(payload: PriceRefreshRequest) -> ManagedPriceRefreshResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     snapshot_status = None
+    comparison_snapshot_status = None
     account_snapshot_status = None
     if result.job.status in {"success", "partial_success"}:
         snapshot_status = frontier_snapshot_service.rebuild_managed_universe_snapshots(
+            version_id=result.job.version_id,
+            source_refresh_job_id=result.job.job_id,
+        )
+        comparison_snapshot_status = comparison_backtest_snapshot_service.rebuild_managed_universe_snapshots(
             version_id=result.job.version_id,
             source_refresh_job_id=result.job.job_id,
         )
@@ -285,6 +295,7 @@ def refresh_prices(payload: PriceRefreshRequest) -> ManagedPriceRefreshResponse:
             price_stats=result.price_stats,
             price_window=result.price_window,
             frontier_snapshot_status=snapshot_status,
+            comparison_backtest_snapshot_status=comparison_snapshot_status,
         )
     return _price_refresh_response(result, account_snapshot_status=account_snapshot_status)
 
@@ -319,6 +330,10 @@ def refresh_active_prices(
             price_stats=result.price_stats,
             price_window=result.price_window,
             frontier_snapshot_status=frontier_snapshot_service.rebuild_managed_universe_snapshots(
+                version_id=result.job.version_id,
+                source_refresh_job_id=result.job.job_id,
+            ),
+            comparison_backtest_snapshot_status=comparison_backtest_snapshot_service.rebuild_managed_universe_snapshots(
                 version_id=result.job.version_id,
                 source_refresh_job_id=result.job.job_id,
             ),
@@ -547,6 +562,14 @@ def _price_refresh_response(
             horizons=result.frontier_snapshot_status.horizons,
             failed_horizons=result.frontier_snapshot_status.failed_horizons,
             message=result.frontier_snapshot_status.message,
+        ),
+        comparison_backtest_snapshot=None
+        if result.comparison_backtest_snapshot_status is None
+        else ManagedComparisonBacktestSnapshotStatusResponse(
+            status=result.comparison_backtest_snapshot_status.status,
+            snapshot_count=result.comparison_backtest_snapshot_status.snapshot_count,
+            line_count=result.comparison_backtest_snapshot_status.line_count,
+            message=result.comparison_backtest_snapshot_status.message,
         ),
         account_snapshot_refresh=None
         if account_snapshot_status is None

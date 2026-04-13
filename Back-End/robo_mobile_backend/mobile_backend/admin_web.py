@@ -1189,7 +1189,10 @@ def render_admin_page() -> HTMLResponse:
         const snapshotMessage = result.frontier_snapshot
           ? `\\nsnapshot: ${result.frontier_snapshot.status} (${result.frontier_snapshot.snapshot_count})\\nsnapshot message: ${result.frontier_snapshot.message || '-'}`
           : '';
-        showMessage('#refresh-result', `갱신 완료\\njob: ${result.job.status}\\nmessage: ${result.job.message || '-'}\\nrows: ${result.price_stats.total_rows}${snapshotMessage}`);
+        const comparisonSnapshotMessage = result.comparison_backtest_snapshot
+          ? `\\ncomparison snapshot: ${result.comparison_backtest_snapshot.status} (${result.comparison_backtest_snapshot.snapshot_count})\\ncomparison snapshot message: ${result.comparison_backtest_snapshot.message || '-'}`
+          : '';
+        showMessage('#refresh-result', `갱신 완료\\njob: ${result.job.status}\\nmessage: ${result.job.message || '-'}\\nrows: ${result.price_stats.total_rows}${snapshotMessage}${comparisonSnapshotMessage}`);
         await reloadAll();
       } catch (error) {
         showMessage('#refresh-result', error.message, true);
