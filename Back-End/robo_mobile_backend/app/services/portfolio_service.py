@@ -423,6 +423,21 @@ class PortfolioSimulationService:
             instruments=context.instruments,
         )
 
+    def build_engine_context(
+        self,
+        *,
+        risk_profile: RiskProfile,
+        investment_horizon: InvestmentHorizon,
+        data_source: SimulationDataSource,
+    ) -> EngineContext:
+        return self._prepare_context(
+            UserProfile(
+                risk_profile=risk_profile,
+                investment_horizon=investment_horizon,
+                data_source=data_source,
+            )
+        )
+
     def get_all_profile_weights_for_price_window(
         self,
         *,
@@ -1492,6 +1507,13 @@ class PortfolioSimulationService:
     ) -> dict[str, float]:
         return {str(code).upper(): float(weight) for code, weight in weights.items()}
 
+    def weights_for_optimization(
+        self,
+        weights: dict[str, float],
+        instruments: list[StockInstrument],
+    ) -> dict[str, float]:
+        return self._weights_for_optimization(weights, instruments)
+
     def _build_individual_assets(self, context: EngineContext) -> list[IndividualAssetView]:
         instrument_by_ticker = {instrument.ticker.upper(): instrument for instrument in context.instruments}
         if instrument_by_ticker:
@@ -1577,6 +1599,13 @@ class PortfolioSimulationService:
             aggregated[sector_code] = aggregated.get(sector_code, 0.0) + float(contribution)
         return aggregated
 
+    def aggregate_sector_risk_contributions(
+        self,
+        stock_contributions: dict[str, float],
+        instruments: list[StockInstrument],
+    ) -> dict[str, float]:
+        return self._aggregate_sector_risk_contributions(stock_contributions, instruments)
+
     def _build_sector_allocations(
         self,
         *,
@@ -1601,6 +1630,21 @@ class PortfolioSimulationService:
                 )
             )
         return allocations
+
+    def build_sector_allocations(
+        self,
+        *,
+        stock_weights: dict[str, float],
+        sector_risk_contributions: dict[str, float],
+        assets: list[AssetClass],
+        instruments: list[StockInstrument],
+    ) -> list[AllocationView]:
+        return self._build_sector_allocations(
+            stock_weights=stock_weights,
+            sector_risk_contributions=sector_risk_contributions,
+            assets=assets,
+            instruments=instruments,
+        )
 
     def _to_sector_frontier_point(
         self,

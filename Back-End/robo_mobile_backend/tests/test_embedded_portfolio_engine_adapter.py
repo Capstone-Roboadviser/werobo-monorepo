@@ -3,6 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 import unittest
 
+from app.domain.models import PortfolioHistoryPoint, PortfolioHistorySeries
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
 from mobile_backend.integrations.embedded_portfolio_engine import EmbeddedPortfolioEngineAdapter
 
@@ -122,8 +123,13 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
                     f"{profile.risk_profile.value}-{int(target_volatility * 100)}"
                 ),
             ),
-            _weights_for_optimization=lambda weights, instruments: dict(weights),
-            _build_sector_allocations=fake_build_sector_allocations,
+            weights_for_optimization=lambda weights, instruments: dict(weights),
+            aggregate_sector_risk_contributions=lambda contributions, instruments: {
+                "us_value": contributions.get("VTV", 0.0),
+                "us_growth": contributions.get("VUG", 0.0),
+                "short_term_bond": contributions.get("BND", 0.0),
+            },
+            build_sector_allocations=fake_build_sector_allocations,
         )
         return adapter, fake_context
 
@@ -244,6 +250,89 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(response["selected_point_index"], 1)
         self.assertEqual(response["representative_code"], "balanced")
         self.assertEqual(response["portfolio"]["code"], "selected")
+
+    def test_get_volatility_history_uses_analytics_service(self) -> None:
+        adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
+        adapter._build_context_bundle = lambda **kwargs: (SimpleNamespace(), {})
+        adapter._build_portfolio_snapshot_from_context = lambda **kwargs: {
+            "stock_weights": {"VTV": 0.6, "BND": 0.4},
+        }
+        adapter._to_core_data_source = lambda value: value
+        adapter.portfolio_analytics_service = SimpleNamespace(
+            build_volatility_history=lambda **kwargs: PortfolioHistorySeries(
+                points=[PortfolioHistoryPoint(date="2026-04-01", value=0.123456)],
+                earliest_data_date="2020-01-02",
+                latest_data_date="2026-04-01",
+            )
+        )
+
+        response = adapter.get_volatility_history(
+            risk_profile=RiskProfile.BALANCED,
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+            rolling_window=20,
+        )
+
+        self.assertEqual(response["portfolio_code"], "balanced")
+        self.assertEqual(response["points"], [{"date": "2026-04-01", "volatility": 0.123456}])
+
+    def test_build_portfolio_data_aggregates_sector_risk_contributions(self) -> None:
+        adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
+        context = SimpleNamespace(
+            instruments=[
+                SimpleNamespace(ticker="VTV", name="Value ETF", sector_code="us_value", sector_name="미국 가치주"),
+                SimpleNamespace(ticker="VUG", name="Growth ETF", sector_code="us_growth", sector_name="미국 성장주"),
+            ],
+            expected_returns=None,
+            covariance=None,
+            assets=[
+                SimpleNamespace(code="us_value", name="미국 가치주"),
+                SimpleNamespace(code="us_growth", name="미국 성장주"),
+            ],
+        )
+        point = SimpleNamespace(
+            volatility=0.12,
+            weights={"VTV": 0.55, "VUG": 0.45},
+        )
+
+        captured: dict[str, object] = {}
+
+        def fake_build_sector_allocations(**kwargs):
+            captured["sector_risk_contributions"] = kwargs["sector_risk_contributions"]
+            return []
+
+        adapter.portfolio_service = SimpleNamespace(
+            weights_for_optimization=lambda weights, instruments: dict(weights),
+            aggregate_sector_risk_contributions=lambda contributions, instruments: {
+                "us_value": 0.61,
+                "us_growth": 0.39,
+            },
+            build_sector_allocations=fake_build_sector_allocations,
+        )
+        adapter.portfolio_metrics_from_weights = lambda *args, **kwargs: SimpleNamespace(
+            expected_return=0.08,
+            volatility=0.12,
+            sharpe_ratio=0.5,
+        )
+        adapter.risk_contributions = lambda weights, covariance: {
+            "VTV": 0.61,
+            "VUG": 0.39,
+        }
+        adapter.RISK_FREE_RATE = 0.02
+
+        adapter._build_portfolio_data_from_point(
+            context=context,
+            instrument_by_ticker={
+                "VTV": context.instruments[0],
+                "VUG": context.instruments[1],
+            },
+            point=point,
+        )
+
+        self.assertEqual(
+            captured["sector_risk_contributions"],
+            {"us_value": 0.61, "us_growth": 0.39},
+        )
 
 
 if __name__ == "__main__":

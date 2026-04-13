@@ -19,6 +19,7 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _currentTab = 0;
   bool _backtestFetched = false;
+  bool _accountFetched = false;
 
   static const _tabs = [
     HomeTab(),
@@ -43,6 +44,10 @@ class _HomeShellState extends State<HomeShell> {
       _backtestFetched = true;
       _fetchBacktest();
     }
+    if (!_accountFetched) {
+      _accountFetched = true;
+      _fetchAccountDashboard();
+    }
   }
 
   Future<void> _fetchBacktest() async {
@@ -50,6 +55,16 @@ class _HomeShellState extends State<HomeShell> {
       final bt = await MobileBackendApi.instance.fetchComparisonBacktest();
       if (!mounted) return;
       PortfolioStateProvider.of(context).setBacktest(bt);
+    } catch (_) {}
+  }
+
+  Future<void> _fetchAccountDashboard() async {
+    final state = PortfolioStateProvider.of(context);
+    if (!state.isLoggedIn) {
+      return;
+    }
+    try {
+      await state.refreshAccountDashboard(notify: true);
     } catch (_) {}
   }
 

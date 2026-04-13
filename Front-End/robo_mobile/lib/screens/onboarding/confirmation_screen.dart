@@ -29,6 +29,8 @@ class ConfirmationScreen extends StatefulWidget {
 
 class _ConfirmationScreenState extends State<ConfirmationScreen>
     with SingleTickerProviderStateMixin {
+  static const double _initialPrototypeCashAmount = 10000000.0;
+
   int? _selectedSector;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
@@ -44,6 +46,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   List<ChartLine>? _comparisonLines;
   List<DateTime>? _rebalanceDates;
   MobileComparisonBacktestResponse? _backtestResponse;
+  bool _isConfirming = false;
 
   @override
   void initState() {
@@ -266,7 +269,11 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     );
   }
 
-  void _confirmPortfolio() {
+  Future<void> _confirmPortfolio() async {
+    if (_isConfirming) {
+      return;
+    }
+    setState(() => _isConfirming = true);
     logAction('confirm portfolio selection', {
       'selected': _portfolio.code,
     });
@@ -284,6 +291,37 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     state.setFrontierSelection(widget.frontierSelection);
     if (_backtestResponse != null) {
       state.setBacktest(_backtestResponse!);
+    }
+    if (state.isLoggedIn) {
+      try {
+        logAction('create prototype account', {
+          'portfolio': _portfolio.code,
+          'initialCash': _initialPrototypeCashAmount.toInt(),
+        });
+        await state.createPrototypeAccount(
+          recommendation: widget.recommendation,
+          portfolio: _portfolio,
+          initialCashAmount: _initialPrototypeCashAmount,
+        );
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        setState(() => _isConfirming = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is MobileBackendException
+                  ? error.message
+                  : '프로토타입 자산 계정을 만들지 못했어요.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+    if (!mounted) {
+      return;
     }
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
@@ -364,8 +402,8 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _confirmPortfolio,
-                    child: const Text('투자 확정'),
+                    onPressed: _isConfirming ? null : _confirmPortfolio,
+                    child: Text(_isConfirming ? '계정 생성 중...' : '투자 확정'),
                   ),
                 ),
               ),

@@ -18,11 +18,6 @@ class EmbeddedPortfolioEngineAdapter:
         self._load_calculation_modules()
 
     def _load_calculation_modules(self) -> None:
-        from app.api.routes import portfolio as core_portfolio_routes
-        from app.api.schemas.request import (
-            ComparisonBacktestRequest as CoreComparisonBacktestRequest,
-            VolatilityHistoryRequest as CoreVolatilityHistoryRequest,
-        )
         from app.core.config import RISK_FREE_RATE
         from app.domain.enums import (
             InvestmentHorizon as CoreInvestmentHorizon,
@@ -32,11 +27,9 @@ class EmbeddedPortfolioEngineAdapter:
         from app.domain.models import UserProfile as CoreUserProfile
         from app.engine.frontier import build_frontier_options, select_frontier_point_index
         from app.engine.math import portfolio_metrics_from_weights, risk_contributions
+        from app.services.portfolio_analytics_service import PortfolioAnalyticsService
         from app.services.portfolio_service import PortfolioSimulationService
 
-        self.core_portfolio_routes = core_portfolio_routes
-        self.CoreComparisonBacktestRequest = CoreComparisonBacktestRequest
-        self.CoreVolatilityHistoryRequest = CoreVolatilityHistoryRequest
         self.CoreInvestmentHorizon = CoreInvestmentHorizon
         self.CoreRiskProfile = CoreRiskProfile
         self.CoreSimulationDataSource = CoreSimulationDataSource
@@ -47,6 +40,9 @@ class EmbeddedPortfolioEngineAdapter:
         self.risk_contributions = risk_contributions
         self.RISK_FREE_RATE = RISK_FREE_RATE
         self.portfolio_service = PortfolioSimulationService()
+        self.portfolio_analytics_service = PortfolioAnalyticsService(
+            portfolio_service=self.portfolio_service,
+        )
 
     def _to_core_data_source(self, value: SimulationDataSource):
         return self.CoreSimulationDataSource(value.value)
@@ -76,12 +72,11 @@ class EmbeddedPortfolioEngineAdapter:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
     ):
-        base_profile = self._build_core_user_profile(
+        return self.portfolio_service.build_engine_context(
             risk_profile=RiskProfile.BALANCED,
             investment_horizon=investment_horizon,
             data_source=data_source,
         )
-        return self.portfolio_service._prepare_context(base_profile)
 
     def _build_context_bundle(
         self,
@@ -129,7 +124,7 @@ class EmbeddedPortfolioEngineAdapter:
     ) -> dict[str, object]:
         target_volatility = float(point.volatility)
 
-        optimization_weights = self.portfolio_service._weights_for_optimization(
+        optimization_weights = self.portfolio_service.weights_for_optimization(
             point.weights,
             context.instruments,
         )
@@ -143,9 +138,12 @@ class EmbeddedPortfolioEngineAdapter:
             optimization_weights,
             context.covariance,
         )
-        sector_allocations = self.portfolio_service._build_sector_allocations(
+        sector_allocations = self.portfolio_service.build_sector_allocations(
             stock_weights=point.weights,
-            sector_risk_contributions=contribution_map,
+            sector_risk_contributions=self.portfolio_service.aggregate_sector_risk_contributions(
+                contribution_map,
+                context.instruments,
+            ),
             assets=context.assets,
             instruments=context.instruments,
         )
@@ -803,17 +801,15 @@ class EmbeddedPortfolioEngineAdapter:
             investment_horizon=investment_horizon,
             data_source=data_source,
         )
-        response = self.core_portfolio_routes.volatility_history(
-            self.CoreVolatilityHistoryRequest(
-                weights=snapshot["stock_weights"],
-                data_source=self._to_core_data_source(data_source),
-                rolling_window=rolling_window,
-            )
+        response = self.portfolio_analytics_service.build_volatility_history(
+            weights=snapshot["stock_weights"],
+            data_source=self._to_core_data_source(data_source),
+            rolling_window=rolling_window,
         )
 
         portfolio_dates = {point.date for point in response.points}
         portfolio_points = [
-            {"date": point.date, "volatility": point.volatility}
+            {"date": point.date, "volatility": point.value}
             for point in response.points
         ]
 
@@ -823,16 +819,14 @@ class EmbeddedPortfolioEngineAdapter:
         try:
             tickers = list(snapshot["stock_weights"].keys())
             equal_weights = {t: 1.0 / len(tickers) for t in tickers}
-            bench_response = self.core_portfolio_routes.volatility_history(
-                self.CoreVolatilityHistoryRequest(
-                    weights=equal_weights,
-                    data_source=self._to_core_data_source(data_source),
-                    rolling_window=rolling_window,
-                )
+            bench_response = self.portfolio_analytics_service.build_volatility_history(
+                weights=equal_weights,
+                data_source=self._to_core_data_source(data_source),
+                rolling_window=rolling_window,
             )
             # Inner join on dates: only include dates present in both
             benchmark_points = [
-                {"date": point.date, "volatility": point.volatility}
+                {"date": point.date, "volatility": point.value}
                 for point in bench_response.points
                 if point.date in portfolio_dates
             ]
@@ -854,10 +848,8 @@ class EmbeddedPortfolioEngineAdapter:
         *,
         data_source: SimulationDataSource,
     ) -> dict[str, object]:
-        response = self.core_portfolio_routes.comparison_backtest(
-            self.CoreComparisonBacktestRequest(
-                data_source=self._to_core_data_source(data_source),
-            )
+        response = self.portfolio_analytics_service.build_comparison_backtest(
+            data_source=self._to_core_data_source(data_source),
         )
         return {
             "train_start_date": response.train_start_date,

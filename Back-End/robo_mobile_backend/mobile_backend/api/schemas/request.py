@@ -74,3 +74,44 @@ class LoginRequest(BaseModel):
     @classmethod
     def strip_login_fields(cls, value: str) -> str:
         return value.strip()
+
+
+class PortfolioAccountStockAllocationRequest(BaseModel):
+    ticker: str = Field(..., description="종목 티커")
+    name: str = Field(..., description="종목명")
+    sector_code: str = Field(..., description="자산군 코드")
+    sector_name: str = Field(..., description="자산군 이름")
+    weight: float = Field(..., gt=0, description="포트폴리오 내 종목 비중")
+
+
+class PortfolioAccountSectorAllocationRequest(BaseModel):
+    asset_code: str = Field(..., description="자산군 코드")
+    asset_name: str = Field(..., description="자산군 이름")
+    weight: float = Field(..., ge=0, description="포트폴리오 내 자산군 비중")
+    risk_contribution: float = Field(..., ge=0, description="자산군 위험 기여도")
+
+
+class PortfolioAccountCreateRequest(BaseModel):
+    data_source: SimulationDataSource = Field(..., description="계산에 사용한 데이터 소스")
+    investment_horizon: InvestmentHorizon = Field(..., description="포트폴리오가 계산된 투자 기간")
+    portfolio_code: str = Field(..., description="대표 포트폴리오 코드")
+    portfolio_label: str = Field(..., description="대표 포트폴리오 표시 이름")
+    portfolio_id: str = Field(..., description="포트폴리오 내부 식별자")
+    target_volatility: float = Field(..., ge=0, description="선택된 포트폴리오 목표 변동성")
+    expected_return: float = Field(..., description="연 기대수익률")
+    volatility: float = Field(..., ge=0, description="연 변동성")
+    sharpe_ratio: float = Field(..., description="샤프 비율")
+    initial_cash_amount: float = Field(..., gt=0, description="초기 입금 금액")
+    sector_allocations: list[PortfolioAccountSectorAllocationRequest] = Field(
+        default_factory=list,
+        description="자산군 비중 정보",
+    )
+    stock_allocations: list[PortfolioAccountStockAllocationRequest] = Field(
+        ...,
+        min_length=1,
+        description="종목별 비중 정보",
+    )
+
+
+class PortfolioAccountCashInRequest(BaseModel):
+    amount: float = Field(..., gt=0, description="추가 입금 금액")

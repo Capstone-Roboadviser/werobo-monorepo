@@ -294,6 +294,107 @@ class MobileBackendApi {
     }
   }
 
+  Future<MobileAccountDashboard> fetchPortfolioAccountDashboard({
+    required String accessToken,
+  }) async {
+    logApi('start', 'fetchPortfolioAccountDashboard');
+    try {
+      final result = await _get(
+        path: '/account/dashboard',
+        parser: MobileAccountDashboard.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'fetchPortfolioAccountDashboard', {
+        'hasAccount': result.hasAccount,
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'fetchPortfolioAccountDashboard', {
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<MobileAccountDashboard> createPortfolioAccount({
+    required String accessToken,
+    required MobileRecommendationResponse recommendation,
+    required MobilePortfolioRecommendation portfolio,
+    required double initialCashAmount,
+  }) async {
+    const path = '/account';
+    final body = <String, dynamic>{
+      'data_source': recommendation.dataSource,
+      'investment_horizon': recommendation.resolvedProfile.investmentHorizon,
+      'portfolio_code': portfolio.code,
+      'portfolio_label': portfolio.label,
+      'portfolio_id': portfolio.portfolioId,
+      'target_volatility': portfolio.targetVolatility,
+      'expected_return': portfolio.expectedReturn,
+      'volatility': portfolio.volatility,
+      'sharpe_ratio': portfolio.sharpeRatio,
+      'initial_cash_amount': initialCashAmount,
+      'sector_allocations':
+          portfolio.sectorAllocations.map((item) => item.toJson()).toList(),
+      'stock_allocations':
+          portfolio.stockAllocations.map((item) => item.toJson()).toList(),
+    };
+    logApi('start', 'createPortfolioAccount', {
+      'portfolio': portfolio.code,
+      'amount': initialCashAmount.toInt(),
+    });
+    try {
+      final result = await _post(
+        path: path,
+        body: body,
+        parser: MobileAccountDashboard.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'createPortfolioAccount', {
+        'portfolio': portfolio.code,
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'createPortfolioAccount', {
+        'portfolio': portfolio.code,
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<MobileAccountDashboard> cashInPortfolioAccount({
+    required String accessToken,
+    required double amount,
+  }) async {
+    logApi('start', 'cashInPortfolioAccount', {
+      'amount': amount.toInt(),
+    });
+    try {
+      final result = await _post(
+        path: '/account/cash-in',
+        body: <String, dynamic>{
+          'amount': amount,
+        },
+        parser: MobileAccountDashboard.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'cashInPortfolioAccount', {
+        'amount': amount.toInt(),
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'cashInPortfolioAccount', {
+        'amount': amount.toInt(),
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
   Future<T> _postWithFallback<T>({
     required String path,
     required Map<String, dynamic> Function(String dataSource) bodyForDataSource,
@@ -465,6 +566,12 @@ class MobileBackendApi {
         return 'fetchCurrentAuthSession';
       case '/auth/logout':
         return 'logout';
+      case '/account/dashboard':
+        return 'fetchPortfolioAccountDashboard';
+      case '/account':
+        return 'createPortfolioAccount';
+      case '/account/cash-in':
+        return 'cashInPortfolioAccount';
       default:
         return path;
     }

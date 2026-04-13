@@ -15,6 +15,7 @@
 - Swagger/OpenAPI 문서가 정리된 모바일 API 라우트
 - 투자성향 판정 API
 - 이메일 회원가입 / 로그인 API
+- 인증 사용자용 프로토타입 자산 계정 / 입금 API
 - 3개 대표 포트폴리오 추천 API
 - efficient frontier preview API
 - 선택 frontier 포트폴리오 상세 API
@@ -69,6 +70,9 @@ robo_mobile_backend/
 - `POST /api/v1/auth/signup`
 - `POST /api/v1/auth/login`
 - `GET /api/v1/auth/me`
+- `GET /api/v1/account/dashboard`
+- `POST /api/v1/account`
+- `POST /api/v1/account/cash-in`
 - `POST /api/v1/portfolios/recommendation`
 - `POST /api/v1/portfolios/frontier-preview`
 - `POST /api/v1/portfolios/frontier-selection`
@@ -104,6 +108,30 @@ robo_mobile_backend/
 - 현재 직접 회원가입 계정은 `provider=password`로 저장됩니다.
 - social 계정은 추후 `password_salt` / `password_hash` 없이 provider identity 기반으로 같은 세션 시스템을 재사용할 수 있게 설계되어 있습니다.
 
+## 프로토타입 자산 계정
+
+모바일 앱은 실제 증권 계좌 연동 대신, 프로토타입 단계에서는 앱 내부 입금 이벤트를 DB에 저장하는 방식으로 현재 자산을 추적합니다.
+
+- 계정 테이블: `portfolio_accounts`
+- 입금 이벤트 테이블: `portfolio_cash_flows`
+- 일별 스냅샷 테이블: `portfolio_daily_snapshots`
+
+현재 제공 엔드포인트:
+
+1. `GET /api/v1/account/dashboard`
+   현재 로그인 사용자의 자산 요약, 일별 스냅샷, 최근 활동을 반환합니다.
+2. `POST /api/v1/account`
+   포트폴리오 확정 시점의 종목 비중과 초기 입금액을 저장하고 자산 계정을 생성합니다.
+3. `POST /api/v1/account/cash-in`
+   실제 계좌 연동 없이 프로토타입 입금 이벤트를 저장하고 일별 스냅샷을 다시 계산합니다.
+
+동작 규칙:
+
+- 초기 자산 계정 생성 시 기본 원금과 포트폴리오 종목 비중이 저장됩니다.
+- `cash-in`이 발생하면 누적 원금과 보유 수량 기준으로 일별 스냅샷이 다시 계산됩니다.
+- 홈 화면 `현재 자산` 차트와 `최근 활동`은 이 스냅샷/이벤트를 우선 사용합니다.
+- 로그인하지 않은 사용자는 기존 목업 fallback을 사용합니다.
+
 ## 관리자 refresh와 snapshot
 
 `POST /admin/api/prices/refresh`는 이제 가격 데이터만 적재하는 것으로 끝나지 않습니다.
@@ -113,6 +141,7 @@ robo_mobile_backend/
 1. active 유니버스의 공통 가격 구간 계산
 2. `managed_universe` 기준 efficient frontier 재계산
 3. `short`, `medium`, `long` horizon별 materialized frontier snapshot 저장
+4. `managed_universe`를 사용하는 사용자 포트폴리오 계정의 일별 자산 snapshot 재계산
 
 그 결과 모바일 API의 아래 엔드포인트는 `managed_universe` 요청 시 저장된 snapshot을 우선 읽고, 없을 때만 기존 계산 경로로 fallback 합니다.
 
@@ -126,6 +155,7 @@ robo_mobile_backend/
 - 인증: `X-Admin-Secret` 헤더
 - 서버 설정: `ADMIN_REFRESH_SECRET` 환경변수
 - 권장 호출 주기: 하루 1번
+- 후속 작업: frontier snapshot 재생성 + `managed_universe` 사용자 자산 snapshot 재계산
 
 현재 가격 데이터는 `yfinance`의 일별 가격 데이터(`date`, `adjusted_close`)를 사용합니다.
 
@@ -150,6 +180,12 @@ cron 서비스 변수:
 - 미국 종가 반영 이후 한국시간 오전 7~9시대
 - Railway cron은 UTC 기준
 - 예시: 한국시간 오전 8시는 UTC 전날 23시이므로 `0 23 * * *`
+
+cron이 성공하면 아래가 한 번에 갱신됩니다.
+
+1. active 유니버스 가격 데이터
+2. `managed_universe` materialized frontier snapshot
+3. `managed_universe` 사용자 포트폴리오 계정의 `portfolio_daily_snapshots`
 
 ## 실행 방법
 

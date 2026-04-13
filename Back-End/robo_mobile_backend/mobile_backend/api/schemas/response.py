@@ -38,6 +38,43 @@ class AuthLogoutResponse(BaseModel):
     status: str = Field(..., description="로그아웃 처리 결과", examples=["ok"])
 
 
+class PortfolioAccountSummaryResponse(BaseModel):
+    portfolio_code: str = Field(..., description="현재 계정의 대표 포트폴리오 코드", examples=["balanced"])
+    portfolio_label: str = Field(..., description="현재 계정의 대표 포트폴리오 이름", examples=["균형형"])
+    portfolio_id: str = Field(..., description="현재 계정의 포트폴리오 식별자", examples=["stocks-balanced-medium-0.12"])
+    data_source: str = Field(..., description="계산에 사용한 데이터 소스", examples=["managed_universe"])
+    investment_horizon: str = Field(..., description="포트폴리오 계산에 사용한 투자 기간", examples=["medium"])
+    started_at: str = Field(..., description="자산 추적 시작일", examples=["2026-04-13"])
+    last_snapshot_date: str = Field(..., description="가장 최근 평가일", examples=["2026-04-13"])
+    current_value: float = Field(..., description="현재 총 자산", examples=[10325000])
+    invested_amount: float = Field(..., description="누적 입금 원금", examples=[10000000])
+    profit_loss: float = Field(..., description="평가 손익", examples=[325000])
+    profit_loss_pct: float = Field(..., description="평가 손익률", examples=[0.0325])
+
+
+class PortfolioAccountHistoryPointResponse(BaseModel):
+    date: str = Field(..., description="스냅샷 일자", examples=["2026-04-13"])
+    portfolio_value: float = Field(..., description="해당 일자의 총 자산", examples=[10325000])
+    invested_amount: float = Field(..., description="해당 일자의 누적 입금 원금", examples=[10000000])
+    profit_loss: float = Field(..., description="해당 일자의 평가 손익", examples=[325000])
+    profit_loss_pct: float = Field(..., description="해당 일자의 평가 손익률", examples=[0.0325])
+
+
+class PortfolioAccountActivityResponse(BaseModel):
+    type: str = Field(..., description="활동 타입", examples=["cash_in"])
+    title: str = Field(..., description="활동 표시 제목", examples=["입금"])
+    date: str = Field(..., description="활동 기준일", examples=["2026-04-13"])
+    amount: float | None = Field(default=None, description="활동 금액", examples=[500000])
+    description: str | None = Field(default=None, description="보조 설명", examples=["균형형 포트폴리오로 자산 추적 시작"])
+
+
+class PortfolioAccountDashboardResponse(BaseModel):
+    has_account: bool = Field(..., description="현재 로그인 사용자의 프로토타입 자산 계정 존재 여부", examples=[True])
+    summary: PortfolioAccountSummaryResponse | None = Field(default=None, description="현재 자산 요약")
+    history: list[PortfolioAccountHistoryPointResponse] = Field(default_factory=list, description="일별 자산 스냅샷")
+    recent_activity: list[PortfolioAccountActivityResponse] = Field(default_factory=list, description="최근 활동 내역")
+
+
 class ResolvedProfileItemResponse(BaseModel):
     code: str = Field(..., description="판정된 위험 유형 코드", examples=["balanced"])
     label: str = Field(..., description="위험 유형 표시 이름", examples=["균형형"])
