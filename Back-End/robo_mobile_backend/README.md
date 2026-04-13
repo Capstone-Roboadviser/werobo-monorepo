@@ -141,13 +141,16 @@ robo_mobile_backend/
 1. active 유니버스의 공통 가격 구간 계산
 2. `managed_universe` 기준 efficient frontier 재계산
 3. `short`, `medium`, `long` horizon별 materialized frontier snapshot 저장
-4. `managed_universe`를 사용하는 사용자 포트폴리오 계정의 일별 자산 snapshot 재계산
+4. `managed_universe` comparison backtest snapshot 저장
+5. `managed_universe`를 사용하는 사용자 포트폴리오 계정의 일별 자산 snapshot 재계산
 
 그 결과 모바일 API의 아래 엔드포인트는 `managed_universe` 요청 시 저장된 snapshot을 우선 읽고, 없을 때만 기존 계산 경로로 fallback 합니다.
+즉 응답 기준 시점은 마지막 성공한 admin refresh 시점과 일치할 수 있습니다.
 
 - `POST /api/v1/portfolios/recommendation`
 - `POST /api/v1/portfolios/frontier-preview`
 - `POST /api/v1/portfolios/frontier-selection`
+- `POST /api/v1/portfolios/comparison-backtest`
 
 자동 주기 갱신이 필요하면 `POST /admin/api/prices/refresh/active`를 사용하면 됩니다.
 
@@ -155,7 +158,7 @@ robo_mobile_backend/
 - 인증: `X-Admin-Secret` 헤더
 - 서버 설정: `ADMIN_REFRESH_SECRET` 환경변수
 - 권장 호출 주기: 하루 1번
-- 후속 작업: frontier snapshot 재생성 + `managed_universe` 사용자 자산 snapshot 재계산
+- 후속 작업: frontier snapshot 재생성 + comparison backtest snapshot 재생성 + `managed_universe` 사용자 자산 snapshot 재계산
 
 현재 가격 데이터는 `yfinance`의 일별 가격 데이터(`date`, `adjusted_close`)를 사용합니다.
 
@@ -185,7 +188,8 @@ cron이 성공하면 아래가 한 번에 갱신됩니다.
 
 1. active 유니버스 가격 데이터
 2. `managed_universe` materialized frontier snapshot
-3. `managed_universe` 사용자 포트폴리오 계정의 `portfolio_daily_snapshots`
+3. `managed_universe` comparison backtest snapshot
+4. `managed_universe` 사용자 포트폴리오 계정의 `portfolio_daily_snapshots`
 
 ## 실행 방법
 
@@ -233,7 +237,7 @@ uvicorn mobile_backend.main:app --reload
 - 모바일 초기 로딩 payload를 작게 유지할 수 있음
 - efficient frontier 전체를 내부적으로 계산하되, 앱이 필요하면 거의 full frontier에 가까운 점 집합도 요청할 수 있음
 - 위험도/기대수익률 라벨과 실제 선택 포트폴리오를 같은 frontier point 기반으로 정확히 맞출 수 있음
-- 관리자 refresh 이후에는 materialized frontier snapshot을 재사용하므로 동일 유니버스 요청의 첫 응답 지연을 줄일 수 있음
+- 관리자 refresh 이후에는 materialized frontier snapshot과 comparison backtest snapshot을 재사용하므로 동일 유니버스 요청의 첫 응답 지연을 줄일 수 있음
 
 ## 다음 권장 작업
 

@@ -29,7 +29,9 @@
 ## Materialized Snapshot 규칙
 
 - `data_source=managed_universe`일 때 recommendation/preview/selection API는 active 유니버스의 materialized frontier snapshot을 먼저 조회합니다.
+- 같은 조건에서 `comparison-backtest` API는 active 유니버스의 materialized comparison backtest snapshot을 먼저 조회합니다.
 - snapshot은 관리자 `가격 갱신 실행` 후 자동 재생성됩니다.
+- 따라서 `managed_universe` 응답은 마지막 성공한 관리자 refresh 시점의 가격 구간을 기준으로 재사용될 수 있습니다.
 - snapshot이 없거나 현재 active 버전의 공통 가격 구간과 맞지 않으면, 서버는 기존 계산 경로로 fallback 합니다.
 
 ## Portfolio Account Snapshot 규칙
@@ -565,6 +567,7 @@ Authorization: Bearer token-string
 
 - 안정형, 균형형, 성장형 대표 포트폴리오와 벤치마크를 같은 기간에서 비교합니다.
 - 학습 구간과 테스트 구간 분할 정보가 함께 반환됩니다.
+- `managed_universe`에서는 관리자 refresh 때 미리 계산해 둔 comparison backtest snapshot을 우선 재사용합니다.
 - 이 endpoint는 아직 대표 3분류 기준 비교선에 초점을 맞추며, exact selection 1개를 별도 라인으로 추가해 주지는 않습니다.
 
 요청 예시:

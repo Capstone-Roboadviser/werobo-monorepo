@@ -159,8 +159,10 @@
 - 가격 데이터는 버전별 테이블이 아니라 전역 가격 테이블에 누적 저장됩니다.
 - 계산은 버전별 종목 집합의 공통 가격 구간만 사용합니다.
 - refresh가 `success` 또는 `partial_success`로 끝나면 같은 요청 안에서 `managed_universe`용 frontier snapshot도 다시 생성합니다.
+- 같은 요청 안에서 `managed_universe`용 comparison backtest snapshot도 다시 생성합니다.
 - 같은 요청 안에서 `managed_universe`를 사용하는 사용자 포트폴리오 계정 snapshot도 다시 계산합니다.
-- snapshot은 `short`, `medium`, `long` horizon별로 저장되며, 모바일 recommendation/preview/selection API가 우선 재사용합니다.
+- frontier snapshot은 `short`, `medium`, `long` horizon별로 저장되며, 모바일 recommendation/preview/selection API가 우선 재사용합니다.
+- comparison backtest snapshot은 horizon 없이 버전별 1개로 저장되며, 모바일 `comparison-backtest` API가 우선 재사용합니다.
 - 현재 가격 수집 단위는 일봉입니다. 저장 컬럼은 `date`, `adjusted_close`입니다.
 
 응답 추가 필드:
@@ -170,6 +172,10 @@
 - `frontier_snapshot.horizons`
 - `frontier_snapshot.failed_horizons`
 - `frontier_snapshot.message`
+- `comparison_backtest_snapshot.status`
+- `comparison_backtest_snapshot.snapshot_count`
+- `comparison_backtest_snapshot.line_count`
+- `comparison_backtest_snapshot.message`
 - `account_snapshot_refresh.status`
 - `account_snapshot_refresh.account_count`
 - `account_snapshot_refresh.success_count`
@@ -200,7 +206,7 @@
 - 일반 운영은 `incremental`
 - 장기 백필이나 문제 복구 시에만 `full`
 - 미국 시장 종가 반영 이후 하루 1회 호출
-- 호출 성공 시 `managed_universe` 사용자 자산 snapshot도 함께 최신화됨
+- 호출 성공 시 `managed_universe` comparison backtest snapshot과 사용자 자산 snapshot도 함께 최신화됨
 
 ### 포트폴리오 계정 snapshot 자동 갱신 규칙
 
