@@ -25,7 +25,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
     super.initState();
     logPageEnter('WelcomeScreen');
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     );
 
@@ -45,14 +45,14 @@ class _WelcomeScreenState extends State<WelcomeScreen>
 
     _controller.forward();
 
-    _navigationTimer = Timer(const Duration(seconds: 4), () {
+    _navigationTimer = Timer(const Duration(seconds: 2), () {
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
           PageRouteBuilder(
             pageBuilder: (_, __, ___) => const HomeShell(),
             transitionsBuilder: (_, anim, __, child) =>
                 FadeTransition(opacity: anim, child: child),
-            transitionDuration: const Duration(milliseconds: 400),
+            transitionDuration: const Duration(milliseconds: 300),
           ),
           (_) => false,
         );
