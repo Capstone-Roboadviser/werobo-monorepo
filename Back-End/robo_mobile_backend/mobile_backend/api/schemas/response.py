@@ -44,12 +44,24 @@ class PortfolioAccountSummaryResponse(BaseModel):
     portfolio_id: str = Field(..., description="현재 계정의 포트폴리오 식별자", examples=["stocks-balanced-medium-0.12"])
     data_source: str = Field(..., description="계산에 사용한 데이터 소스", examples=["managed_universe"])
     investment_horizon: str = Field(..., description="포트폴리오 계산에 사용한 투자 기간", examples=["medium"])
+    target_volatility: float = Field(..., description="확정 당시 목표 변동성", examples=[0.12])
+    expected_return: float = Field(..., description="확정 당시 연 기대수익률", examples=[0.0742])
+    volatility: float = Field(..., description="확정 당시 연 변동성", examples=[0.0815])
+    sharpe_ratio: float = Field(..., description="확정 당시 샤프 비율", examples=[0.66])
     started_at: str = Field(..., description="자산 추적 시작일", examples=["2026-04-13"])
     last_snapshot_date: str = Field(..., description="가장 최근 평가일", examples=["2026-04-13"])
     current_value: float = Field(..., description="현재 총 자산", examples=[10325000])
     invested_amount: float = Field(..., description="누적 입금 원금", examples=[10000000])
     profit_loss: float = Field(..., description="평가 손익", examples=[325000])
     profit_loss_pct: float = Field(..., description="평가 손익률", examples=[0.0325])
+    sector_allocations: list["SectorAllocationResponse"] = Field(
+        default_factory=list,
+        description="현재 계정 포트폴리오의 자산군 비중",
+    )
+    stock_allocations: list["StockAllocationResponse"] = Field(
+        default_factory=list,
+        description="현재 계정 포트폴리오의 종목 비중",
+    )
 
 
 class PortfolioAccountHistoryPointResponse(BaseModel):

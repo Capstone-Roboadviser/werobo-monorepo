@@ -87,7 +87,7 @@ class PortfolioAccountService:
             raise PortfolioAccountValidationError("초기 입금 금액은 0보다 커야 합니다.")
 
         stock_weights = self._normalize_stock_weights(stock_allocations)
-        started_at = date.today().isoformat()
+        started_at = datetime.now(UTC).date().isoformat()
         account = self.repository.replace_account(
             user_id=user_id,
             data_source=data_source.value,
@@ -134,7 +134,7 @@ class PortfolioAccountService:
             account_id=int(account["id"]),
             flow_type="cash_in",
             amount=float(amount),
-            effective_date=date.today().isoformat(),
+            effective_date=datetime.now(UTC).date().isoformat(),
         )
         self._refresh_snapshots(account)
         refreshed = self.repository.get_account_by_user_id(user_id)
@@ -208,12 +208,18 @@ class PortfolioAccountService:
                 "portfolio_id": account["portfolio_id"],
                 "data_source": account["data_source"],
                 "investment_horizon": account["investment_horizon"],
+                "target_volatility": account["target_volatility"],
+                "expected_return": account["expected_return"],
+                "volatility": account["volatility"],
+                "sharpe_ratio": account["sharpe_ratio"],
                 "started_at": account["started_at"],
                 "last_snapshot_date": latest["snapshot_date"],
                 "current_value": latest["portfolio_value"],
                 "invested_amount": latest["invested_amount"],
                 "profit_loss": latest["profit_loss"],
                 "profit_loss_pct": latest["profit_loss_pct"],
+                "sector_allocations": account["sector_allocations"],
+                "stock_allocations": account["stock_allocations"],
             }
 
         history = [

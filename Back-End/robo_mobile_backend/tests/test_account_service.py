@@ -161,6 +161,10 @@ def test_create_account_builds_dashboard_and_snapshots() -> None:
 
     assert dashboard["has_account"] is True
     assert dashboard["summary"] is not None
+    assert dashboard["summary"]["target_volatility"] == 0.12
+    assert dashboard["summary"]["expected_return"] == 0.08
+    assert dashboard["summary"]["volatility"] == 0.11
+    assert dashboard["summary"]["sharpe_ratio"] == 0.72
     assert dashboard["summary"]["invested_amount"] == 10_000_000
     assert dashboard["summary"]["current_value"] == 10_000_000
     assert len(dashboard["history"]) >= 1

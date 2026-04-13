@@ -334,6 +334,43 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             {"us_value": 0.61, "us_growth": 0.39},
         )
 
+    def test_get_comparison_backtest_accepts_tuple_points(self) -> None:
+        adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
+        adapter.CoreSimulationDataSource = lambda value: value
+        adapter.CoreComparisonBacktestRequest = (
+            lambda data_source: SimpleNamespace(data_source=data_source)
+        )
+        adapter.core_portfolio_routes = SimpleNamespace(
+            comparison_backtest=lambda request: SimpleNamespace(
+                train_start_date="2024-01-01",
+                train_end_date="2024-12-31",
+                test_start_date="2025-01-01",
+                start_date="2025-01-01",
+                end_date="2025-03-31",
+                split_ratio=0.9,
+                rebalance_dates=["2025-02-01"],
+                lines=[
+                    SimpleNamespace(
+                        key="balanced",
+                        label="균형형",
+                        color="#3b82f6",
+                        style="solid",
+                        points=[
+                            ("2025-01-01", 0.0),
+                            ("2025-01-31", 1.25),
+                        ],
+                    ),
+                ],
+            )
+        )
+
+        response = adapter.get_comparison_backtest(
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+        )
+
+        self.assertEqual(response["lines"][0]["points"][0]["date"], "2025-01-01")
+        self.assertEqual(response["lines"][0]["points"][1]["return_pct"], 1.25)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -38,7 +38,8 @@ class PortfolioState extends ChangeNotifier {
   bool get isLoggedIn => _authSession != null;
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
   bool get hasCompletedPortfolioSetup => _recommendation != null;
-  bool get canAutoEnterHome => isLoggedIn && hasCompletedPortfolioSetup;
+  bool get canAutoEnterHome =>
+      isLoggedIn && (hasCompletedPortfolioSetup || hasPrototypeAccount);
 
   /// The selected portfolio from the API recommendation.
   MobilePortfolioRecommendation? get selectedPortfolio {
@@ -50,7 +51,24 @@ class PortfolioState extends ChangeNotifier {
     for (final p in _recommendation!.portfolios) {
       if (p.investmentType == _type) return p;
     }
-    return null;
+    final accountSummary = _accountDashboard?.summary;
+    if (accountSummary == null) {
+      return null;
+    }
+    if (investmentTypeFromRiskCode(accountSummary.portfolioCode) != _type) {
+      return null;
+    }
+    return MobilePortfolioRecommendation(
+      code: accountSummary.portfolioCode,
+      label: accountSummary.portfolioLabel,
+      portfolioId: accountSummary.portfolioId,
+      targetVolatility: accountSummary.targetVolatility,
+      expectedReturn: accountSummary.expectedReturn,
+      volatility: accountSummary.volatility,
+      sharpeRatio: accountSummary.sharpeRatio,
+      sectorAllocations: accountSummary.sectorAllocations,
+      stockAllocations: accountSummary.stockAllocations,
+    );
   }
 
   List<PortfolioCategory> get categories {
@@ -221,6 +239,10 @@ class PortfolioState extends ChangeNotifier {
       final dashboard = await MobileBackendApi.instance
           .fetchPortfolioAccountDashboard(accessToken: accessToken);
       _accountDashboard = dashboard;
+      final summary = dashboard.summary;
+      if (summary != null) {
+        _type = investmentTypeFromRiskCode(summary.portfolioCode);
+      }
       if (notify) {
         notifyListeners();
       }
@@ -250,6 +272,10 @@ class PortfolioState extends ChangeNotifier {
       initialCashAmount: initialCashAmount,
     );
     _accountDashboard = dashboard;
+    final summary = dashboard.summary;
+    if (summary != null) {
+      _type = investmentTypeFromRiskCode(summary.portfolioCode);
+    }
     notifyListeners();
     return dashboard;
   }
@@ -266,6 +292,10 @@ class PortfolioState extends ChangeNotifier {
       amount: amount,
     );
     _accountDashboard = dashboard;
+    final summary = dashboard.summary;
+    if (summary != null) {
+      _type = investmentTypeFromRiskCode(summary.portfolioCode);
+    }
     notifyListeners();
     return dashboard;
   }

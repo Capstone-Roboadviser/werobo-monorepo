@@ -5,6 +5,7 @@ import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
+import '../home/home_shell.dart';
 import 'comparison_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -81,6 +82,36 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  void _navigateToHome() {
+    Navigator.of(context).pushAndRemoveUntil(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => const HomeShell(),
+        transitionsBuilder: (_, anim, __, child) =>
+            FadeTransition(opacity: anim, child: child),
+        transitionDuration: const Duration(milliseconds: 400),
+      ),
+      (_) => false,
+    );
+  }
+
+  Future<void> _navigateAfterAuthenticated() async {
+    final state = PortfolioStateProvider.of(context);
+    try {
+      await state.refreshAccountDashboard(notify: true);
+    } catch (_) {}
+    if (!mounted) {
+      return;
+    }
+    if (state.hasPrototypeAccount) {
+      logAction('skip onboarding after login', {
+        'reason': 'existing_account',
+      });
+      _navigateToHome();
+      return;
+    }
+    _navigateToComparison();
+  }
+
   void _onSocialLogin(String provider) {
     logAction('tap social login', {
       'provider': provider,
@@ -111,7 +142,7 @@ class _LoginScreenState extends State<LoginScreen>
       'userId': user.id,
       'provider': authProviderTypeToApi(user.provider),
     });
-    _navigateToComparison();
+    await _navigateAfterAuthenticated();
   }
 
   Future<void> _submitDirectAuth() async {
@@ -158,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen>
         'mode': _isLogin ? 'login' : 'signup',
         'userId': session.user.id,
       });
-      _navigateToComparison();
+      await _navigateAfterAuthenticated();
     } catch (error) {
       if (!mounted) {
         return;

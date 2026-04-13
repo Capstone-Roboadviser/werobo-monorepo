@@ -290,38 +290,204 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     'min_volatility': 0.0567,
     'max_volatility': 0.1918,
     'points': <Map<String, dynamic>>[
-      {'index': 0, 'volatility': 0.0567, 'expected_return': 0.043, 'is_recommended': false, 'representative_code': 'conservative', 'representative_label': '안정형'},
-      {'index': 1, 'volatility': 0.0567, 'expected_return': 0.0433, 'is_recommended': false},
-      {'index': 3, 'volatility': 0.0568, 'expected_return': 0.0438, 'is_recommended': false},
-      {'index': 4, 'volatility': 0.0569, 'expected_return': 0.044, 'is_recommended': false},
-      {'index': 5, 'volatility': 0.057, 'expected_return': 0.0443, 'is_recommended': false},
-      {'index': 7, 'volatility': 0.0573, 'expected_return': 0.0448, 'is_recommended': false},
-      {'index': 8, 'volatility': 0.0575, 'expected_return': 0.045, 'is_recommended': false},
-      {'index': 9, 'volatility': 0.0576, 'expected_return': 0.0453, 'is_recommended': false},
-      {'index': 11, 'volatility': 0.058, 'expected_return': 0.0457, 'is_recommended': false},
-      {'index': 12, 'volatility': 0.0583, 'expected_return': 0.046, 'is_recommended': false},
-      {'index': 14, 'volatility': 0.0588, 'expected_return': 0.0465, 'is_recommended': false},
-      {'index': 16, 'volatility': 0.0593, 'expected_return': 0.047, 'is_recommended': false},
-      {'index': 18, 'volatility': 0.0599, 'expected_return': 0.0475, 'is_recommended': false},
-      {'index': 20, 'volatility': 0.0605, 'expected_return': 0.048, 'is_recommended': false},
-      {'index': 22, 'volatility': 0.0612, 'expected_return': 0.0485, 'is_recommended': false},
-      {'index': 25, 'volatility': 0.0623, 'expected_return': 0.0492, 'is_recommended': false},
-      {'index': 28, 'volatility': 0.0635, 'expected_return': 0.0499, 'is_recommended': false},
-      {'index': 30, 'volatility': 0.0643, 'expected_return': 0.0504, 'is_recommended': false},
-      {'index': 33, 'volatility': 0.0657, 'expected_return': 0.0512, 'is_recommended': false},
-      {'index': 36, 'volatility': 0.0673, 'expected_return': 0.0519, 'is_recommended': false},
-      {'index': 40, 'volatility': 0.0696, 'expected_return': 0.0529, 'is_recommended': true, 'representative_code': 'balanced', 'representative_label': '균형형'},
-      {'index': 43, 'volatility': 0.0715, 'expected_return': 0.0536, 'is_recommended': false},
-      {'index': 46, 'volatility': 0.0735, 'expected_return': 0.0544, 'is_recommended': false},
-      {'index': 49, 'volatility': 0.0762, 'expected_return': 0.0551, 'is_recommended': false},
-      {'index': 53, 'volatility': 0.0813, 'expected_return': 0.0561, 'is_recommended': false},
-      {'index': 57, 'volatility': 0.0871, 'expected_return': 0.0571, 'is_recommended': false},
-      {'index': 61, 'volatility': 0.0948, 'expected_return': 0.0581, 'is_recommended': false},
-      {'index': 65, 'volatility': 0.1055, 'expected_return': 0.0591, 'is_recommended': false},
-      {'index': 68, 'volatility': 0.1129, 'expected_return': 0.0598, 'is_recommended': false},
-      {'index': 72, 'volatility': 0.1288, 'expected_return': 0.0608, 'is_recommended': false},
-      {'index': 76, 'volatility': 0.1511, 'expected_return': 0.0618, 'is_recommended': false},
-      {'index': 79, 'volatility': 0.1918, 'expected_return': 0.0625, 'is_recommended': false, 'representative_code': 'growth', 'representative_label': '성장형'},
+      {
+        'index': 0,
+        'volatility': 0.0567,
+        'expected_return': 0.043,
+        'is_recommended': false,
+        'representative_code': 'conservative',
+        'representative_label': '안정형'
+      },
+      {
+        'index': 1,
+        'volatility': 0.0567,
+        'expected_return': 0.0433,
+        'is_recommended': false
+      },
+      {
+        'index': 3,
+        'volatility': 0.0568,
+        'expected_return': 0.0438,
+        'is_recommended': false
+      },
+      {
+        'index': 4,
+        'volatility': 0.0569,
+        'expected_return': 0.044,
+        'is_recommended': false
+      },
+      {
+        'index': 5,
+        'volatility': 0.057,
+        'expected_return': 0.0443,
+        'is_recommended': false
+      },
+      {
+        'index': 7,
+        'volatility': 0.0573,
+        'expected_return': 0.0448,
+        'is_recommended': false
+      },
+      {
+        'index': 8,
+        'volatility': 0.0575,
+        'expected_return': 0.045,
+        'is_recommended': false
+      },
+      {
+        'index': 9,
+        'volatility': 0.0576,
+        'expected_return': 0.0453,
+        'is_recommended': false
+      },
+      {
+        'index': 11,
+        'volatility': 0.058,
+        'expected_return': 0.0457,
+        'is_recommended': false
+      },
+      {
+        'index': 12,
+        'volatility': 0.0583,
+        'expected_return': 0.046,
+        'is_recommended': false
+      },
+      {
+        'index': 14,
+        'volatility': 0.0588,
+        'expected_return': 0.0465,
+        'is_recommended': false
+      },
+      {
+        'index': 16,
+        'volatility': 0.0593,
+        'expected_return': 0.047,
+        'is_recommended': false
+      },
+      {
+        'index': 18,
+        'volatility': 0.0599,
+        'expected_return': 0.0475,
+        'is_recommended': false
+      },
+      {
+        'index': 20,
+        'volatility': 0.0605,
+        'expected_return': 0.048,
+        'is_recommended': false
+      },
+      {
+        'index': 22,
+        'volatility': 0.0612,
+        'expected_return': 0.0485,
+        'is_recommended': false
+      },
+      {
+        'index': 25,
+        'volatility': 0.0623,
+        'expected_return': 0.0492,
+        'is_recommended': false
+      },
+      {
+        'index': 28,
+        'volatility': 0.0635,
+        'expected_return': 0.0499,
+        'is_recommended': false
+      },
+      {
+        'index': 30,
+        'volatility': 0.0643,
+        'expected_return': 0.0504,
+        'is_recommended': false
+      },
+      {
+        'index': 33,
+        'volatility': 0.0657,
+        'expected_return': 0.0512,
+        'is_recommended': false
+      },
+      {
+        'index': 36,
+        'volatility': 0.0673,
+        'expected_return': 0.0519,
+        'is_recommended': false
+      },
+      {
+        'index': 40,
+        'volatility': 0.0696,
+        'expected_return': 0.0529,
+        'is_recommended': true,
+        'representative_code': 'balanced',
+        'representative_label': '균형형'
+      },
+      {
+        'index': 43,
+        'volatility': 0.0715,
+        'expected_return': 0.0536,
+        'is_recommended': false
+      },
+      {
+        'index': 46,
+        'volatility': 0.0735,
+        'expected_return': 0.0544,
+        'is_recommended': false
+      },
+      {
+        'index': 49,
+        'volatility': 0.0762,
+        'expected_return': 0.0551,
+        'is_recommended': false
+      },
+      {
+        'index': 53,
+        'volatility': 0.0813,
+        'expected_return': 0.0561,
+        'is_recommended': false
+      },
+      {
+        'index': 57,
+        'volatility': 0.0871,
+        'expected_return': 0.0571,
+        'is_recommended': false
+      },
+      {
+        'index': 61,
+        'volatility': 0.0948,
+        'expected_return': 0.0581,
+        'is_recommended': false
+      },
+      {
+        'index': 65,
+        'volatility': 0.1055,
+        'expected_return': 0.0591,
+        'is_recommended': false
+      },
+      {
+        'index': 68,
+        'volatility': 0.1129,
+        'expected_return': 0.0598,
+        'is_recommended': false
+      },
+      {
+        'index': 72,
+        'volatility': 0.1288,
+        'expected_return': 0.0608,
+        'is_recommended': false
+      },
+      {
+        'index': 76,
+        'volatility': 0.1511,
+        'expected_return': 0.0618,
+        'is_recommended': false
+      },
+      {
+        'index': 79,
+        'volatility': 0.1918,
+        'expected_return': 0.0625,
+        'is_recommended': false,
+        'representative_code': 'growth',
+        'representative_label': '성장형'
+      },
     ],
   });
 
@@ -360,8 +526,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       );
     }
     final averageVol =
-        points.map((p) => p.volatility).reduce((a, b) => a + b) /
-        points.length;
+        points.map((p) => p.volatility).reduce((a, b) => a + b) / points.length;
     final selected = _selectedPreviewPoint;
     if (selected == null || averageVol == 0) {
       return (
@@ -369,8 +534,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         color: WeRoboColors.accent,
       );
     }
-    final diff =
-        (selected.volatility - averageVol) / averageVol;
+    final diff = (selected.volatility - averageVol) / averageVol;
     final percentDiff = (diff.abs() * 100).round();
     final isRiskier = diff > 0;
     if (percentDiff == 0) {
@@ -380,9 +544,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       );
     }
     // Smooth green→orange transition based on risk factor
-    final lerpT = isRiskier
-        ? (diff.abs() * 2).clamp(0.0, 1.0)
-        : 0.0;
+    final lerpT = isRiskier ? (diff.abs() * 2).clamp(0.0, 1.0) : 0.0;
     final color = Color.lerp(
       const Color(0xFF059669),
       const Color(0xFFF97316),
@@ -533,31 +695,25 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
               Expanded(
                 child: _StatCard(
                   label: '연 기대수익률',
-                  value:
-                      '${_returnRate.toStringAsFixed(1)}%',
+                  value: '${_returnRate.toStringAsFixed(1)}%',
                   color: WeRoboColors.primary,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: AnimatedContainer(
-                  duration:
-                      const Duration(milliseconds: 300),
+                  duration: const Duration(milliseconds: 300),
                   padding: const EdgeInsets.symmetric(
                     vertical: 12,
                     horizontal: 14,
                   ),
                   decoration: BoxDecoration(
-                    color: _riskComparison.color
-                        .withValues(alpha: 0.08),
-                    borderRadius:
-                        BorderRadius.circular(12),
+                    color: _riskComparison.color.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: AnimatedDefaultTextStyle(
-                    duration: const Duration(
-                        milliseconds: 300),
-                    style:
-                        WeRoboTypography.caption.copyWith(
+                    duration: const Duration(milliseconds: 300),
+                    style: WeRoboTypography.caption.copyWith(
                       color: _riskComparison.color,
                       fontWeight: FontWeight.w600,
                     ),
@@ -659,8 +815,7 @@ class _StatCard extends StatelessWidget {
               style:
                   WeRoboTypography.caption.copyWith(color: tc.textSecondary)),
           const SizedBox(height: 4),
-          Text(value,
-              style: WeRoboTypography.number.copyWith(color: color)),
+          Text(value, style: WeRoboTypography.number.copyWith(color: color)),
         ],
       ),
     );

@@ -408,6 +408,13 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
                   onPressed: _handleCashIn,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 44),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                  ),
                   icon: const Icon(Icons.add_rounded, size: 16),
                   label: const Text('입금하기'),
                 ),

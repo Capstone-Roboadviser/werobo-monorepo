@@ -866,13 +866,24 @@ class EmbeddedPortfolioEngineAdapter:
                     "color": line.color,
                     "style": line.style,
                     "points": [
-                        {
-                            "date": point.date,
-                            "return_pct": point.return_pct,
-                        }
+                        self._serialize_comparison_point(point)
                         for point in line.points
                     ],
                 }
                 for line in response.lines
             ],
         }
+
+    @staticmethod
+    def _serialize_comparison_point(point: object) -> dict[str, object]:
+        if hasattr(point, "date") and hasattr(point, "return_pct"):
+            return {
+                "date": getattr(point, "date"),
+                "return_pct": getattr(point, "return_pct"),
+            }
+        if isinstance(point, (tuple, list)) and len(point) == 2:
+            return {
+                "date": point[0],
+                "return_pct": point[1],
+            }
+        raise TypeError(f"Unsupported comparison point type: {type(point).__name__}")

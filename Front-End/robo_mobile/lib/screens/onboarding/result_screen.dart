@@ -189,8 +189,7 @@ class _ResultTypeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final comparison = recommendation.marketRiskComparison(portfolio);
-    final riskColor =
-        comparison.isRiskier ? WeRoboColors.warning : tc.accent;
+    final riskColor = comparison.isRiskier ? WeRoboColors.warning : tc.accent;
     final riskText = comparison.percentDiff == 0
         ? '시장 평균 수준의 자산'
         : '시장대비 ${comparison.percentDiff}%\n'

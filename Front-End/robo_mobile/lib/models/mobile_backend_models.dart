@@ -229,12 +229,18 @@ class MobileAccountSummary {
   final String portfolioId;
   final String dataSource;
   final String investmentHorizon;
+  final double targetVolatility;
+  final double expectedReturn;
+  final double volatility;
+  final double sharpeRatio;
   final String startedAt;
   final String lastSnapshotDate;
   final double currentValue;
   final double investedAmount;
   final double profitLoss;
   final double profitLossPct;
+  final List<MobileSectorAllocation> sectorAllocations;
+  final List<MobileStockAllocation> stockAllocations;
 
   const MobileAccountSummary({
     required this.portfolioCode,
@@ -242,12 +248,18 @@ class MobileAccountSummary {
     required this.portfolioId,
     required this.dataSource,
     required this.investmentHorizon,
+    required this.targetVolatility,
+    required this.expectedReturn,
+    required this.volatility,
+    required this.sharpeRatio,
     required this.startedAt,
     required this.lastSnapshotDate,
     required this.currentValue,
     required this.investedAmount,
     required this.profitLoss,
     required this.profitLossPct,
+    required this.sectorAllocations,
+    required this.stockAllocations,
   });
 
   factory MobileAccountSummary.fromJson(Map<String, dynamic> json) {
@@ -257,12 +269,26 @@ class MobileAccountSummary {
       portfolioId: json['portfolio_id']?.toString() ?? '',
       dataSource: json['data_source']?.toString() ?? '',
       investmentHorizon: json['investment_horizon']?.toString() ?? 'medium',
+      targetVolatility: _asDouble(json['target_volatility']),
+      expectedReturn: _asDouble(json['expected_return']),
+      volatility: _asDouble(json['volatility']),
+      sharpeRatio: _asDouble(json['sharpe_ratio']),
       startedAt: json['started_at']?.toString() ?? '',
       lastSnapshotDate: json['last_snapshot_date']?.toString() ?? '',
       currentValue: _asDouble(json['current_value']),
       investedAmount: _asDouble(json['invested_amount']),
       profitLoss: _asDouble(json['profit_loss']),
       profitLossPct: _asDouble(json['profit_loss_pct']),
+      sectorAllocations:
+          (json['sector_allocations'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(MobileSectorAllocation.fromJson)
+              .toList(),
+      stockAllocations:
+          (json['stock_allocations'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(MobileStockAllocation.fromJson)
+              .toList(),
     );
   }
 }
