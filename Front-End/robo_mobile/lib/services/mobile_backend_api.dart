@@ -33,7 +33,7 @@ class MobileBackendApi {
 
   static const String baseUrl =
       'https://robomobilebackend-production.up.railway.app';
-  static const Duration _defaultTimeout = Duration(seconds: 45);
+  static const Duration _defaultTimeout = Duration(seconds: 75);
   static const List<String> _dataSources = <String>[
     'managed_universe',
     'stock_combination_demo',
