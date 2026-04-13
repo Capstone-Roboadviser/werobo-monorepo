@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -487,6 +488,29 @@ class MobileBackendApi {
     }
   }
 
+  Future<MobileDigestResponse> fetchDigest({
+    required String accessToken,
+  }) async {
+    logApi('start', 'fetchDigest');
+    try {
+      final result = await _get(
+        path: '/account/digest',
+        parser: MobileDigestResponse.fromJson,
+        timeout: const Duration(seconds: 12),
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'fetchDigest', {
+        'degradation': result.degradationLevel,
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'fetchDigest', {
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
   Future<T> _postWithFallback<T>({
     required String path,
     required Map<String, dynamic> Function(String dataSource) bodyForDataSource,
@@ -563,20 +587,35 @@ class MobileBackendApi {
     required Duration timeout,
     Map<String, String> headers = const <String, String>{},
   }) async {
-    final response = await _client
-        .post(
-          Uri.parse('$baseUrl/api/v1$path'),
-          headers: <String, String>{
-            'Content-Type': 'application/json',
-            ...headers,
-          },
-          body: jsonEncode(body),
-        )
-        .timeout(timeout);
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('$baseUrl/api/v1$path'),
+            headers: <String, String>{
+              'Content-Type': 'application/json',
+              ...headers,
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(timeout);
+    } on SocketException {
+      throw const MobileBackendException(
+        '네트워크 연결을 확인해주세요.',
+      );
+    }
     final responseBody = response.body;
-    final decoded = responseBody.isEmpty
-        ? const <String, dynamic>{}
-        : jsonDecode(responseBody);
+    final dynamic decoded;
+    try {
+      decoded = responseBody.isEmpty
+          ? const <String, dynamic>{}
+          : jsonDecode(responseBody);
+    } on FormatException {
+      throw MobileBackendException(
+        '서버 응답 오류가 발생했습니다.',
+        statusCode: response.statusCode,
+      );
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (decoded is! Map<String, dynamic>) {
@@ -599,17 +638,32 @@ class MobileBackendApi {
     required Duration timeout,
     Map<String, String> headers = const <String, String>{},
   }) async {
-    final response = await _client.get(
-      Uri.parse('$baseUrl/api/v1$path'),
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        ...headers,
-      },
-    ).timeout(timeout);
+    final http.Response response;
+    try {
+      response = await _client.get(
+        Uri.parse('$baseUrl/api/v1$path'),
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+      ).timeout(timeout);
+    } on SocketException {
+      throw const MobileBackendException(
+        '네트워크 연결을 확인해주세요.',
+      );
+    }
     final responseBody = response.body;
-    final decoded = responseBody.isEmpty
-        ? const <String, dynamic>{}
-        : jsonDecode(responseBody);
+    final dynamic decoded;
+    try {
+      decoded = responseBody.isEmpty
+          ? const <String, dynamic>{}
+          : jsonDecode(responseBody);
+    } on FormatException {
+      throw MobileBackendException(
+        '서버 응답 오류가 발생했습니다.',
+        statusCode: response.statusCode,
+      );
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (decoded is! Map<String, dynamic>) {

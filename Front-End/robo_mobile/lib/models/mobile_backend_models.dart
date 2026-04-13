@@ -1389,3 +1389,100 @@ class _GroupedSector {
     required this.tickers,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Digest models
+// ---------------------------------------------------------------------------
+
+class DigestDriver {
+  final String ticker;
+  final String nameKo;
+  final String sectorCode;
+  final double weightPct;
+  final double returnPct;
+  final double contributionWon;
+  final String? explanationKo;
+
+  const DigestDriver({
+    required this.ticker,
+    required this.nameKo,
+    required this.sectorCode,
+    required this.weightPct,
+    required this.returnPct,
+    required this.contributionWon,
+    this.explanationKo,
+  });
+
+  factory DigestDriver.fromJson(Map<String, dynamic> json) {
+    return DigestDriver(
+      ticker: json['ticker']?.toString() ?? '',
+      nameKo: json['name_ko']?.toString() ?? '',
+      sectorCode: json['sector_code']?.toString() ?? '',
+      weightPct: _asDouble(json['weight_pct']),
+      returnPct: _asDouble(json['return_pct']),
+      contributionWon: _asDouble(json['contribution_won']),
+      explanationKo: json['explanation_ko']?.toString(),
+    );
+  }
+}
+
+class MobileDigestResponse {
+  final String digestDate;
+  final String periodStart;
+  final String periodEnd;
+  final double totalReturnPct;
+  final double totalReturnWon;
+  final String? narrativeKo;
+  final bool hasNarrative;
+  final List<DigestDriver> drivers;
+  final List<DigestDriver> detractors;
+  final List<String> sourcesUsed;
+  final String disclaimer;
+  final String generatedAt;
+  final int degradationLevel;
+
+  const MobileDigestResponse({
+    required this.digestDate,
+    required this.periodStart,
+    required this.periodEnd,
+    required this.totalReturnPct,
+    required this.totalReturnWon,
+    this.narrativeKo,
+    required this.hasNarrative,
+    required this.drivers,
+    required this.detractors,
+    required this.sourcesUsed,
+    required this.disclaimer,
+    required this.generatedAt,
+    required this.degradationLevel,
+  });
+
+  factory MobileDigestResponse.fromJson(Map<String, dynamic> json) {
+    return MobileDigestResponse(
+      digestDate: json['digest_date']?.toString() ?? '',
+      periodStart: json['period_start']?.toString() ?? '',
+      periodEnd: json['period_end']?.toString() ?? '',
+      totalReturnPct: _asDouble(json['total_return_pct']),
+      totalReturnWon: _asDouble(json['total_return_won']),
+      narrativeKo: json['narrative_ko']?.toString(),
+      hasNarrative: json['has_narrative'] == true,
+      drivers: (json['drivers'] as List<dynamic>?)
+              ?.map((e) =>
+                  DigestDriver.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      detractors: (json['detractors'] as List<dynamic>?)
+              ?.map((e) =>
+                  DigestDriver.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      sourcesUsed: (json['sources_used'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      disclaimer: json['disclaimer']?.toString() ?? '',
+      generatedAt: json['generated_at']?.toString() ?? '',
+      degradationLevel: (json['degradation_level'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
