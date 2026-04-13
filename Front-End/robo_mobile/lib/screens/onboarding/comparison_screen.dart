@@ -154,6 +154,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
         investmentHorizon:
             widget.frontierSelection.resolvedProfile.investmentHorizon,
         preferredDataSource: widget.frontierSelection.dataSource,
+        asOfDate: widget.frontierSelection.asOfDate,
       );
       if (!mounted || mySeq != _requestSeqNo) return;
       setState(() {

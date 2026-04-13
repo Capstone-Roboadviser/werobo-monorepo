@@ -22,6 +22,22 @@ DateTime _parseDate(Object? value) {
       DateTime.fromMillisecondsSinceEpoch(0);
 }
 
+DateTime? _parseOptionalDate(Object? value) {
+  final text = value?.toString().trim() ?? '';
+  if (text.isEmpty) {
+    return null;
+  }
+  return DateTime.tryParse(text);
+}
+
+String? _dateToJson(DateTime? value) {
+  if (value == null) {
+    return null;
+  }
+  final normalized = DateTime(value.year, value.month, value.day);
+  return normalized.toIso8601String().split('T').first;
+}
+
 Color parseBackendHexColor(String value) {
   final hex = value.replaceFirst('#', '');
   if (hex.length == 6) {
@@ -684,12 +700,14 @@ class MobileRecommendationResponse {
   final MobileResolvedProfile resolvedProfile;
   final String recommendedPortfolioCode;
   final String dataSource;
+  final DateTime? asOfDate;
   final List<MobilePortfolioRecommendation> portfolios;
 
   const MobileRecommendationResponse({
     required this.resolvedProfile,
     required this.recommendedPortfolioCode,
     required this.dataSource,
+    required this.asOfDate,
     required this.portfolios,
   });
 
@@ -701,6 +719,7 @@ class MobileRecommendationResponse {
       recommendedPortfolioCode:
           json['recommended_portfolio_code']?.toString() ?? '',
       dataSource: json['data_source']?.toString() ?? '',
+      asOfDate: _parseOptionalDate(json['as_of_date']),
       portfolios: (json['portfolios'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(MobilePortfolioRecommendation.fromJson)
@@ -764,6 +783,7 @@ class MobileRecommendationResponse {
       'resolved_profile': resolvedProfile.toJson(),
       'recommended_portfolio_code': recommendedPortfolioCode,
       'data_source': dataSource,
+      'as_of_date': _dateToJson(asOfDate),
       'portfolios': portfolios.map((portfolio) => portfolio.toJson()).toList(),
     };
   }
@@ -813,6 +833,7 @@ class MobileFrontierPreviewResponse {
   final MobileResolvedProfile resolvedProfile;
   final String recommendedPortfolioCode;
   final String dataSource;
+  final DateTime? asOfDate;
   final int totalPointCount;
   final double minVolatility;
   final double maxVolatility;
@@ -822,6 +843,7 @@ class MobileFrontierPreviewResponse {
     required this.resolvedProfile,
     required this.recommendedPortfolioCode,
     required this.dataSource,
+    required this.asOfDate,
     required this.totalPointCount,
     required this.minVolatility,
     required this.maxVolatility,
@@ -836,6 +858,7 @@ class MobileFrontierPreviewResponse {
       recommendedPortfolioCode:
           json['recommended_portfolio_code']?.toString() ?? '',
       dataSource: json['data_source']?.toString() ?? '',
+      asOfDate: _parseOptionalDate(json['as_of_date']),
       totalPointCount: (json['total_point_count'] as num?)?.toInt() ?? 0,
       minVolatility: _asDouble(json['min_volatility']),
       maxVolatility: _asDouble(json['max_volatility']),
@@ -900,6 +923,7 @@ class MobileFrontierPreviewResponse {
       'resolved_profile': resolvedProfile.toJson(),
       'recommended_portfolio_code': recommendedPortfolioCode,
       'data_source': dataSource,
+      'as_of_date': _dateToJson(asOfDate),
       'total_point_count': totalPointCount,
       'min_volatility': minVolatility,
       'max_volatility': maxVolatility,
@@ -911,6 +935,7 @@ class MobileFrontierPreviewResponse {
 class MobileFrontierSelectionResponse {
   final MobileResolvedProfile resolvedProfile;
   final String dataSource;
+  final DateTime? asOfDate;
   final double requestedTargetVolatility;
   final double selectedTargetVolatility;
   final int selectedPointIndex;
@@ -922,6 +947,7 @@ class MobileFrontierSelectionResponse {
   const MobileFrontierSelectionResponse({
     required this.resolvedProfile,
     required this.dataSource,
+    required this.asOfDate,
     required this.requestedTargetVolatility,
     required this.selectedTargetVolatility,
     required this.selectedPointIndex,
@@ -937,6 +963,7 @@ class MobileFrontierSelectionResponse {
         json['resolved_profile'] as Map<String, dynamic>? ?? const {},
       ),
       dataSource: json['data_source']?.toString() ?? '',
+      asOfDate: _parseOptionalDate(json['as_of_date']),
       requestedTargetVolatility: _asDouble(json['requested_target_volatility']),
       selectedTargetVolatility: _asDouble(json['selected_target_volatility']),
       selectedPointIndex: (json['selected_point_index'] as num?)?.toInt() ?? 0,
@@ -951,12 +978,14 @@ class MobileFrontierSelectionResponse {
 
   String get classificationCode => representativeCode ?? resolvedProfile.code;
 
-  String get classificationLabel => representativeLabel ?? resolvedProfile.label;
+  String get classificationLabel =>
+      representativeLabel ?? resolvedProfile.label;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'resolved_profile': resolvedProfile.toJson(),
       'data_source': dataSource,
+      'as_of_date': _dateToJson(asOfDate),
       'requested_target_volatility': requestedTargetVolatility,
       'selected_target_volatility': selectedTargetVolatility,
       'selected_point_index': selectedPointIndex,

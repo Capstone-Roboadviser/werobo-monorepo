@@ -274,6 +274,7 @@ class PortfolioState extends ChangeNotifier {
       portfolioCode: selection.classificationCode,
       portfolioLabel: portfolio.label,
       initialCashAmount: initialCashAmount,
+      startedAt: selection.asOfDate,
     );
     _accountDashboard = dashboard;
     final summary = dashboard.summary;

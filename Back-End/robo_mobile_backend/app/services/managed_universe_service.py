@@ -68,32 +68,46 @@ class ManagedUniverseService:
         instruments: list[StockInstrument],
         *,
         version_id: int | None = None,
+        end_date: str | None = None,
     ) -> pd.DataFrame:
         tickers = [instrument.ticker for instrument in instruments]
         if version_id is None:
-            return self.repository.load_prices_for_tickers(tickers)
+            return self.repository.load_prices_for_tickers(tickers, end_date=end_date)
 
         price_window = self.get_price_window(version_id, instruments)
+        effective_end_date = end_date
+        if price_window is not None and price_window.aligned_end_date is not None:
+            if effective_end_date is None or effective_end_date > price_window.aligned_end_date:
+                effective_end_date = price_window.aligned_end_date
         return self.repository.load_prices_for_tickers(
             tickers,
             start_date=None if price_window is None else price_window.aligned_start_date,
-            end_date=None if price_window is None else price_window.aligned_end_date,
+            end_date=effective_end_date,
         )
 
     def load_prices_for_tickers(self, tickers: list[str]) -> pd.DataFrame:
         return self.repository.load_prices_for_tickers(tickers)
 
-    def load_prices_for_active_version_tickers(self, tickers: list[str]) -> pd.DataFrame:
+    def load_prices_for_active_version_tickers(
+        self,
+        tickers: list[str],
+        *,
+        end_date: str | None = None,
+    ) -> pd.DataFrame:
         active_version = self.get_active_version()
         if active_version is None:
-            return self.repository.load_prices_for_tickers(tickers)
+            return self.repository.load_prices_for_tickers(tickers, end_date=end_date)
 
         instruments = self.get_instruments_for_version(active_version.version_id)
         price_window = self.get_price_window(active_version.version_id, instruments)
+        effective_end_date = end_date
+        if price_window is not None and price_window.aligned_end_date is not None:
+            if effective_end_date is None or effective_end_date > price_window.aligned_end_date:
+                effective_end_date = price_window.aligned_end_date
         return self.repository.load_prices_for_tickers(
             tickers,
             start_date=None if price_window is None else price_window.aligned_start_date,
-            end_date=None if price_window is None else price_window.aligned_end_date,
+            end_date=effective_end_date,
         )
 
     def get_price_window(

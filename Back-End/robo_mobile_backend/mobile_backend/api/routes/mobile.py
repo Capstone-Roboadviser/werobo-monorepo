@@ -78,6 +78,7 @@ def get_recommendation(payload: RecommendationRequest) -> RecommendationResponse
             explicit_profile=payload.risk_profile,
             investment_horizon=payload.investment_horizon,
             data_source=payload.data_source,
+            as_of_date=payload.as_of_date,
         )
         return RecommendationResponse(**response)
     except Exception as exc:
@@ -102,6 +103,7 @@ def get_frontier_preview(payload: FrontierPreviewRequest) -> FrontierPreviewResp
             investment_horizon=payload.investment_horizon,
             data_source=payload.data_source,
             sample_points=payload.sample_points,
+            as_of_date=payload.as_of_date,
         )
         return FrontierPreviewResponse(**response)
     except Exception as exc:
@@ -124,6 +126,7 @@ def get_frontier_selection(payload: FrontierSelectionRequest) -> FrontierSelecti
             data_source=payload.data_source,
             target_volatility=payload.target_volatility,
             point_index=payload.point_index,
+            as_of_date=payload.as_of_date,
         )
         return FrontierSelectionResponse(**response)
     except Exception as exc:

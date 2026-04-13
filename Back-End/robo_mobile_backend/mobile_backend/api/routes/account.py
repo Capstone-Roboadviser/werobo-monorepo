@@ -94,6 +94,7 @@ def create_account(
                 stock_allocations=[item.model_dump() for item in payload.stock_allocations],
                 sector_allocations=[item.model_dump() for item in payload.sector_allocations],
                 initial_cash_amount=payload.initial_cash_amount,
+                started_at=None if payload.started_at is None else payload.started_at.isoformat(),
             )
         )
     except Exception as exc:

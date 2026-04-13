@@ -81,13 +81,14 @@ class PortfolioAccountService:
         stock_allocations: list[dict[str, object]],
         sector_allocations: list[dict[str, object]],
         initial_cash_amount: float,
+        started_at: str | None = None,
     ) -> dict[str, object]:
         self._ensure_storage_ready()
         if initial_cash_amount <= 0:
             raise PortfolioAccountValidationError("초기 입금 금액은 0보다 커야 합니다.")
 
         stock_weights = self._normalize_stock_weights(stock_allocations)
-        started_at = datetime.now(UTC).date().isoformat()
+        started_at = started_at or datetime.now(UTC).date().isoformat()
         account = self.repository.replace_account(
             user_id=user_id,
             data_source=data_source.value,

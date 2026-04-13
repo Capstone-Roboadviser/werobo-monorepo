@@ -171,6 +171,48 @@ def test_create_account_builds_dashboard_and_snapshots() -> None:
     assert dashboard["recent_activity"][0]["title"] in {"포트폴리오 시작", "초기 입금"}
 
 
+def test_create_account_respects_started_at_override() -> None:
+    repository = FakePortfolioAccountRepository()
+    service = StubPortfolioAccountService(repository)
+    started_at = (date.today() - timedelta(days=1)).isoformat()
+
+    dashboard = service.create_or_replace_account(
+        user_id=3,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "QQQ",
+                "name": "Invesco QQQ Trust",
+                "sector_code": "us_growth",
+                "sector_name": "미국 성장주",
+                "weight": 0.6,
+            },
+            {
+                "ticker": "TLT",
+                "name": "iShares 20+ Year Treasury Bond ETF",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.4,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+        started_at=started_at,
+    )
+
+    assert dashboard["summary"] is not None
+    assert dashboard["summary"]["started_at"] == started_at
+    assert dashboard["history"][0]["date"] == started_at
+
+
 def test_cash_in_updates_invested_amount_and_activity() -> None:
     repository = FakePortfolioAccountRepository()
     service = StubPortfolioAccountService(repository)

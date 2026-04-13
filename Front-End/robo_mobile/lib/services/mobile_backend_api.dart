@@ -45,13 +45,20 @@ class MobileBackendApi {
     required double propensityScore,
     String investmentHorizon = 'medium',
     String? preferredDataSource,
+    DateTime? asOfDate,
   }) {
     return _postWithFallback(
       path: '/portfolios/recommendation',
-      bodyForDataSource: (dataSource) => <String, dynamic>{
-        'propensity_score': propensityScore.clamp(0, 100),
-        'investment_horizon': investmentHorizon,
-        'data_source': dataSource,
+      bodyForDataSource: (dataSource) {
+        final body = <String, dynamic>{
+          'propensity_score': propensityScore.clamp(0, 100),
+          'investment_horizon': investmentHorizon,
+          'data_source': dataSource,
+        };
+        if (asOfDate != null) {
+          body['as_of_date'] = _formatDate(asOfDate);
+        }
+        return body;
       },
       parser: MobileRecommendationResponse.fromJson,
       timeout: _defaultTimeout,
@@ -64,14 +71,21 @@ class MobileBackendApi {
     String investmentHorizon = 'medium',
     int samplePoints = 61,
     String? preferredDataSource,
+    DateTime? asOfDate,
   }) {
     return _postWithFallback(
       path: '/portfolios/frontier-preview',
-      bodyForDataSource: (dataSource) => <String, dynamic>{
-        'propensity_score': propensityScore.clamp(0, 100),
-        'investment_horizon': investmentHorizon,
-        'data_source': dataSource,
-        'sample_points': samplePoints,
+      bodyForDataSource: (dataSource) {
+        final body = <String, dynamic>{
+          'propensity_score': propensityScore.clamp(0, 100),
+          'investment_horizon': investmentHorizon,
+          'data_source': dataSource,
+          'sample_points': samplePoints,
+        };
+        if (asOfDate != null) {
+          body['as_of_date'] = _formatDate(asOfDate);
+        }
+        return body;
       },
       parser: MobileFrontierPreviewResponse.fromJson,
       timeout: _defaultTimeout,
@@ -85,6 +99,7 @@ class MobileBackendApi {
     int? pointIndex,
     String investmentHorizon = 'medium',
     String? preferredDataSource,
+    DateTime? asOfDate,
   }) {
     return _postWithFallback(
       path: '/portfolios/frontier-selection',
@@ -99,6 +114,9 @@ class MobileBackendApi {
         }
         if (pointIndex != null) {
           body['point_index'] = pointIndex;
+        }
+        if (asOfDate != null) {
+          body['as_of_date'] = _formatDate(asOfDate);
         }
         return body;
       },
@@ -344,6 +362,7 @@ class MobileBackendApi {
     String? portfolioCode,
     String? portfolioLabel,
     required double initialCashAmount,
+    DateTime? startedAt,
   }) async {
     const path = '/account';
     final body = <String, dynamic>{
@@ -362,6 +381,9 @@ class MobileBackendApi {
       'stock_allocations':
           portfolio.stockAllocations.map((item) => item.toJson()).toList(),
     };
+    if (startedAt != null) {
+      body['started_at'] = _formatDate(startedAt);
+    }
     logApi('start', 'createPortfolioAccount', {
       'portfolio': portfolio.code,
       'amount': initialCashAmount.toInt(),
@@ -479,6 +501,11 @@ class MobileBackendApi {
       lastError?.toString() ?? '알 수 없는 오류가 발생했습니다.',
       attemptLogs: attemptLogs,
     );
+  }
+
+  String _formatDate(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    return normalized.toIso8601String().split('T').first;
   }
 
   Future<T> _post<T>({

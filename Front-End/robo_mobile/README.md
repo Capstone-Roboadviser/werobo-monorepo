@@ -18,7 +18,7 @@ Flutter 기반 WeRobo 모바일 앱입니다.
 - frontier selection API: `/api/v1/portfolios/frontier-selection`
 - 비교 백테스트 API: `/api/v1/portfolios/comparison-backtest`
 
-현재 온보딩 2/2 차트는 `frontier-preview` 응답을 사용해 위험도와 기대수익률 라벨을 실제 backend preview point와 맞춰서 표시합니다. 앱은 기본적으로 `sample_points=1000`으로 preview를 받아 두고, 사용자가 확정한 `selected_point_index`를 `frontier-selection`에 전달해 exact 포트폴리오를 이어받습니다.
+현재 온보딩 2/2 차트는 `frontier-preview` 응답을 사용해 위험도와 기대수익률 라벨을 실제 backend preview point와 맞춰서 표시합니다. 앱은 기본적으로 `sample_points=301`으로 preview를 받아 두고, 사용자가 확정한 `selected_point_index`를 `frontier-selection`에 전달해 exact 포트폴리오를 이어받습니다.
 
 로그인 화면은 이제 직접 회원가입/로그인도 지원합니다.
 
