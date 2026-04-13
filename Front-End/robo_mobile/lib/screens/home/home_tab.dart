@@ -9,6 +9,7 @@ import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
 import '../../services/mobile_backend_api.dart';
+import 'projection_screen.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -189,8 +190,8 @@ class _PortfolioHeroChart extends StatefulWidget {
 
 class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     with SingleTickerProviderStateMixin {
-  static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
-  static const _rangeDays = [7, 90, 365, 1825, 99999];
+  static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체', '미래'];
+  static const _rangeDays = [7, 90, 365, 1825, 99999, -1];
   static const _baseInvestment = 10000000.0;
   static const _defaultCashInAmount = 500000.0;
 
@@ -307,6 +308,16 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   }
 
   void _selectRange(int idx) {
+    // "미래" tab navigates to ProjectionScreen
+    if (idx == _rangeLabels.length - 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ProjectionScreen(),
+        ),
+      );
+      return;
+    }
     if (idx == _range) return;
     setState(() {
       _range = idx;

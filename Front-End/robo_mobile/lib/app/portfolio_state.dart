@@ -79,6 +79,12 @@ class PortfolioState extends ChangeNotifier {
     return selectedPortfolio?.toCategoryDetails() ?? const [];
   }
 
+  /// Expected annual return for Monte Carlo projection.
+  double? get expectedReturn => selectedPortfolio?.expectedReturn;
+
+  /// Annual volatility for Monte Carlo projection.
+  double? get portfolioVolatility => selectedPortfolio?.volatility;
+
   void setType(InvestmentType newType) {
     if (_type != newType) {
       _type = newType;
