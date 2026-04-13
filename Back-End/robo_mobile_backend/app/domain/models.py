@@ -256,6 +256,19 @@ class CombinationSelectionView:
 
 
 @dataclass(frozen=True)
+class PortfolioHistoryPoint:
+    date: str
+    value: float
+
+
+@dataclass(frozen=True)
+class PortfolioHistorySeries:
+    points: list[PortfolioHistoryPoint]
+    earliest_data_date: str
+    latest_data_date: str
+
+
+@dataclass(frozen=True)
 class ManagedUniverseReadiness:
     ready: bool
     summary: str
