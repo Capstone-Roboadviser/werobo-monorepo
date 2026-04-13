@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from app.engine.rebalance import _quarter_end_dates
+from app.engine.rebalance import DRIFT_THRESHOLD_DEFAULT, check_and_rebalance
 
 
 @dataclass(frozen=True)
@@ -61,12 +61,11 @@ def build_comparison(
         benchmark_series: {name: price_series} with same date index, e.g. {"S&P 500": series}.
     """
     dates = prices.index
-    quarter_ends = _quarter_end_dates(dates)
-    rebalance_dates: list[str] = sorted(d.strftime("%Y-%m-%d") for d in quarter_ends)
+    rebalance_date_set: set[str] = set()
 
     lines: list[ComparisonLine] = []
 
-    # --- Portfolio lines (with quarterly rebalancing) ---
+    # --- Portfolio lines (with drift-based rebalancing) ---
     for profile_name, weights in portfolios.items():
         tickers = list(weights.keys())
         available = [t for t in tickers if t in prices.columns]
@@ -76,22 +75,27 @@ def build_comparison(
         total_w = sum(w.values())
         w = {t: v / total_w for t, v in w.items()}
 
-        # Run rebalancing simulation
+        # Run drift-based rebalancing simulation
         first_prices = prices.iloc[0]
         holdings = {t: w[t] / first_prices[t] for t in available}
+        cash_balance = 0.0
         inv_value = 1.0  # normalized to 1.0
 
         return_points: list[tuple[str, float]] = []
         for i in range(len(prices)):
             current_prices = prices.iloc[i]
             date = dates[i]
-            total_value = sum(holdings[t] * current_prices[t] for t in available)
+            total_value = sum(holdings[t] * current_prices[t] for t in available) + cash_balance
             return_pct = (total_value - inv_value) / inv_value * 100
             return_points.append((date.strftime("%Y-%m-%d"), round(return_pct, 4)))
 
-            if date in quarter_ends and i > 0:
-                for t in available:
-                    holdings[t] = total_value * w[t] / current_prices[t]
+            if i > 0:
+                price_dict = {t: float(current_prices[t]) for t in available}
+                holdings, cash_balance, trades = check_and_rebalance(
+                    holdings, price_dict, w, cash_balance, DRIFT_THRESHOLD_DEFAULT,
+                )
+                if trades:
+                    rebalance_date_set.add(date.strftime("%Y-%m-%d"))
 
         color = _PROFILE_COLORS.get(profile_name, "#64748B")
         label = _PROFILE_LABELS.get(profile_name, profile_name)
@@ -102,6 +106,8 @@ def build_comparison(
             style="solid",
             points=return_points,
         ))
+
+    rebalance_dates: list[str] = sorted(rebalance_date_set)
 
     # --- Expected return trajectory lines ---
     for profile_name, annual_er in expected_returns.items():

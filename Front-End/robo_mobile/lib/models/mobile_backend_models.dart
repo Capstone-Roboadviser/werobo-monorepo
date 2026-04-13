@@ -841,6 +841,7 @@ class MobileRebalanceSimulationResponse {
   final String endDate;
   final double investmentAmount;
   final Map<String, double> targetWeights;
+  final double? driftThreshold;
   final Map<String, String> sectorNames;
   final List<MobileRebalanceTimePoint> timeSeries;
   final List<MobileRebalanceEvent> rebalanceEvents;
@@ -854,6 +855,7 @@ class MobileRebalanceSimulationResponse {
     required this.endDate,
     required this.investmentAmount,
     required this.targetWeights,
+    this.driftThreshold,
     required this.sectorNames,
     required this.timeSeries,
     required this.rebalanceEvents,
@@ -872,6 +874,9 @@ class MobileRebalanceSimulationResponse {
       endDate: json['end_date']?.toString() ?? '',
       investmentAmount: _asDouble(json['investment_amount']),
       targetWeights: tw.map((k, v) => MapEntry(k, _asDouble(v))),
+      driftThreshold: json['drift_threshold'] != null
+          ? _asDouble(json['drift_threshold'])
+          : null,
       sectorNames: sn.map((k, v) => MapEntry(k, v?.toString() ?? '')),
       timeSeries: (json['time_series'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
