@@ -18,6 +18,7 @@
 - 자산군별 role 지정
 - active 유니버스 전환
 - 가격 데이터 갱신
+- 사용자 포트폴리오 계정 snapshot 일괄 재계산
 - readiness 점검
 
 ## 사전 조건
@@ -158,6 +159,7 @@
 - 가격 데이터는 버전별 테이블이 아니라 전역 가격 테이블에 누적 저장됩니다.
 - 계산은 버전별 종목 집합의 공통 가격 구간만 사용합니다.
 - refresh가 `success` 또는 `partial_success`로 끝나면 같은 요청 안에서 `managed_universe`용 frontier snapshot도 다시 생성합니다.
+- 같은 요청 안에서 `managed_universe`를 사용하는 사용자 포트폴리오 계정 snapshot도 다시 계산합니다.
 - snapshot은 `short`, `medium`, `long` horizon별로 저장되며, 모바일 recommendation/preview/selection API가 우선 재사용합니다.
 - 현재 가격 수집 단위는 일봉입니다. 저장 컬럼은 `date`, `adjusted_close`입니다.
 
@@ -168,6 +170,12 @@
 - `frontier_snapshot.horizons`
 - `frontier_snapshot.failed_horizons`
 - `frontier_snapshot.message`
+- `account_snapshot_refresh.status`
+- `account_snapshot_refresh.account_count`
+- `account_snapshot_refresh.success_count`
+- `account_snapshot_refresh.failure_count`
+- `account_snapshot_refresh.failed_user_ids`
+- `account_snapshot_refresh.message`
 
 ### `POST /admin/api/prices/refresh/active`
 
@@ -192,6 +200,19 @@
 - 일반 운영은 `incremental`
 - 장기 백필이나 문제 복구 시에만 `full`
 - 미국 시장 종가 반영 이후 하루 1회 호출
+- 호출 성공 시 `managed_universe` 사용자 자산 snapshot도 함께 최신화됨
+
+### 포트폴리오 계정 snapshot 자동 갱신 규칙
+
+- 대상: `portfolio_accounts.data_source = managed_universe` 인 계정
+- 트리거: `POST /admin/api/prices/refresh`, `POST /admin/api/prices/refresh/active`
+- 방식: 각 계정의 저장된 `stock_weights`와 `portfolio_cash_flows`를 기준으로 `portfolio_daily_snapshots` 전체를 재생성
+- 목적: 모바일 홈의 `현재 자산` 차트와 최근 활동이 일일 가격 갱신을 바로 반영하도록 유지
+
+주의:
+
+- `stock_combination_demo` 계정은 관리자 가격 refresh 대상이 아니므로 이 자동 배치에 포함되지 않습니다.
+- 계정 snapshot 계산은 가격 refresh 이후 수행되므로, 같은 응답 안에서 성공/실패 상태를 함께 확인할 수 있습니다.
 
 ## 3. Readiness 확인
 

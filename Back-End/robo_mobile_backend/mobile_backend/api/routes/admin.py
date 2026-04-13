@@ -14,6 +14,7 @@ from app.api.schemas.response import (
     CombinationSelectionResponse,
     ErrorResponse,
     ManagedFrontierSnapshotStatusResponse,
+    ManagedPortfolioAccountSnapshotStatusResponse,
     ManagedPriceRefreshJobResponse,
     ManagedPriceRefreshResponse,
     ManagedUniverseAssetRoleCatalogResponse,
@@ -43,6 +44,7 @@ from app.services.managed_universe_service import ManagedUniverseService
 from app.services.portfolio_service import PortfolioSimulationService
 from app.services.price_refresh_service import PriceRefreshService
 from app.services.ticker_discovery_service import TickerDiscoveryService
+from mobile_backend.services.account_service import PortfolioAccountService
 from mobile_backend.services.frontier_snapshot_service import FrontierSnapshotService
 from mobile_backend.core.config import ADMIN_REFRESH_SECRET
 
@@ -53,6 +55,7 @@ price_refresh_service = PriceRefreshService(managed_universe_service)
 portfolio_simulation_service = PortfolioSimulationService()
 ticker_discovery_service = TickerDiscoveryService()
 frontier_snapshot_service = FrontierSnapshotService(managed_universe_service=managed_universe_service)
+portfolio_account_service = PortfolioAccountService()
 COMMON_ADMIN_422 = {
     422: {
         "model": ErrorResponse,
@@ -270,18 +273,20 @@ def refresh_prices(payload: PriceRefreshRequest) -> ManagedPriceRefreshResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     snapshot_status = None
+    account_snapshot_status = None
     if result.job.status in {"success", "partial_success"}:
         snapshot_status = frontier_snapshot_service.rebuild_managed_universe_snapshots(
             version_id=result.job.version_id,
             source_refresh_job_id=result.job.job_id,
         )
+        account_snapshot_status = portfolio_account_service.refresh_managed_universe_accounts()
         result = ManagedPriceRefreshResult(
             job=result.job,
             price_stats=result.price_stats,
             price_window=result.price_window,
             frontier_snapshot_status=snapshot_status,
         )
-    return _price_refresh_response(result)
+    return _price_refresh_response(result, account_snapshot_status=account_snapshot_status)
 
 
 @router.post(
@@ -307,6 +312,7 @@ def refresh_active_prices(
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    account_snapshot_status = None
     if result.job.status in {"success", "partial_success"}:
         result = ManagedPriceRefreshResult(
             job=result.job,
@@ -317,7 +323,8 @@ def refresh_active_prices(
                 source_refresh_job_id=result.job.job_id,
             ),
         )
-    return _price_refresh_response(result)
+        account_snapshot_status = portfolio_account_service.refresh_managed_universe_accounts()
+    return _price_refresh_response(result, account_snapshot_status=account_snapshot_status)
 
 
 @router.get(
@@ -523,7 +530,11 @@ def _price_refresh_job_response(job: ManagedPriceRefreshJob) -> ManagedPriceRefr
     )
 
 
-def _price_refresh_response(result: ManagedPriceRefreshResult) -> ManagedPriceRefreshResponse:
+def _price_refresh_response(
+    result: ManagedPriceRefreshResult,
+    *,
+    account_snapshot_status=None,
+) -> ManagedPriceRefreshResponse:
     return ManagedPriceRefreshResponse(
         job=_price_refresh_job_response(result.job),
         price_stats=_price_stats_response(result.price_stats),
@@ -536,6 +547,16 @@ def _price_refresh_response(result: ManagedPriceRefreshResult) -> ManagedPriceRe
             horizons=result.frontier_snapshot_status.horizons,
             failed_horizons=result.frontier_snapshot_status.failed_horizons,
             message=result.frontier_snapshot_status.message,
+        ),
+        account_snapshot_refresh=None
+        if account_snapshot_status is None
+        else ManagedPortfolioAccountSnapshotStatusResponse(
+            status=account_snapshot_status.status,
+            account_count=account_snapshot_status.account_count,
+            success_count=account_snapshot_status.success_count,
+            failure_count=account_snapshot_status.failure_count,
+            failed_user_ids=account_snapshot_status.failed_user_ids,
+            message=account_snapshot_status.message,
         ),
     )
 
