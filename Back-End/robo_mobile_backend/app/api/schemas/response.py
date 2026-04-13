@@ -223,6 +223,15 @@ class ManagedFrontierSnapshotStatusResponse(BaseModel):
     message: str | None = Field(default=None, description="frontier snapshot 갱신 메시지")
 
 
+class ManagedPortfolioAccountSnapshotStatusResponse(BaseModel):
+    status: str = Field(..., description="포트폴리오 계정 snapshot 갱신 상태", examples=["success"])
+    account_count: int = Field(..., description="이번 요청에서 처리 대상이 된 포트폴리오 계정 수", examples=[18])
+    success_count: int = Field(..., description="갱신 성공한 포트폴리오 계정 수", examples=[18])
+    failure_count: int = Field(..., description="갱신 실패한 포트폴리오 계정 수", examples=[0])
+    failed_user_ids: list[int] = Field(default_factory=list, description="갱신 실패한 사용자 ID 목록")
+    message: str | None = Field(default=None, description="포트폴리오 계정 snapshot 갱신 메시지")
+
+
 class ManagedUniverseStatusResponse(BaseModel):
     database_configured: bool = Field(..., description="DATABASE_URL 설정 여부", examples=[True])
     active_version: ManagedUniverseVersionResponse | None = Field(default=None, description="현재 active 유니버스 버전")
@@ -272,6 +281,10 @@ class ManagedPriceRefreshResponse(BaseModel):
     price_stats: ManagedPriceStatsResponse = Field(..., description="갱신 후 가격 통계")
     price_window: ManagedUniversePriceWindowResponse | None = Field(default=None, description="갱신 후 공통 가격 구간")
     frontier_snapshot: ManagedFrontierSnapshotStatusResponse | None = Field(default=None, description="가격 갱신 직후 재생성한 frontier snapshot 결과")
+    account_snapshot_refresh: ManagedPortfolioAccountSnapshotStatusResponse | None = Field(
+        default=None,
+        description="가격 갱신 직후 재계산한 포트폴리오 계정 snapshot 결과",
+    )
 
 
 class TickerLookupResponse(BaseModel):

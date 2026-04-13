@@ -20,6 +20,7 @@ class PortfolioState extends ChangeNotifier {
   MobileFrontierPreviewResponse? _frontierPreview;
   MobileFrontierSelectionResponse? _frontierSelection;
   MobileAuthSession? _authSession;
+  MobileAccountDashboard? _accountDashboard;
 
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
@@ -28,7 +29,14 @@ class PortfolioState extends ChangeNotifier {
   MobileFrontierSelectionResponse? get frontierSelection => _frontierSelection;
   MobileAuthSession? get authSession => _authSession;
   MobileAuthUser? get currentUser => _authSession?.user;
+  MobileAccountDashboard? get accountDashboard => _accountDashboard;
+  MobileAccountSummary? get accountSummary => _accountDashboard?.summary;
+  List<MobileAccountHistoryPoint> get accountHistory =>
+      _accountDashboard?.history ?? const [];
+  List<MobileAccountActivity> get accountActivities =>
+      _accountDashboard?.recentActivity ?? const [];
   bool get isLoggedIn => _authSession != null;
+  bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
   bool get hasCompletedPortfolioSetup => _recommendation != null;
   bool get canAutoEnterHome => isLoggedIn && hasCompletedPortfolioSetup;
 
@@ -163,6 +171,7 @@ class PortfolioState extends ChangeNotifier {
     _frontierSelection = null;
     _frontierPreview = null;
     _backtest = null;
+    _accountDashboard = null;
     if (notify) {
       notifyListeners();
     }
@@ -177,6 +186,7 @@ class PortfolioState extends ChangeNotifier {
     _backtest = null;
     _frontierPreview = null;
     _frontierSelection = null;
+    _accountDashboard = null;
     if (notify) {
       notifyListeners();
     }
@@ -193,6 +203,71 @@ class PortfolioState extends ChangeNotifier {
     _recommendation = rec;
     notifyListeners();
     _persistPortfolioBootstrapState();
+  }
+
+  Future<MobileAccountDashboard?> refreshAccountDashboard({
+    bool notify = true,
+  }) async {
+    final accessToken = _authSession?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      _accountDashboard = null;
+      if (notify) {
+        notifyListeners();
+      }
+      return null;
+    }
+
+    try {
+      final dashboard = await MobileBackendApi.instance
+          .fetchPortfolioAccountDashboard(accessToken: accessToken);
+      _accountDashboard = dashboard;
+      if (notify) {
+        notifyListeners();
+      }
+      return dashboard;
+    } on MobileBackendException catch (error) {
+      if (error.statusCode == 401) {
+        await clearAllPersistedState(notify: true);
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<MobileAccountDashboard> createPrototypeAccount({
+    required MobileRecommendationResponse recommendation,
+    required MobilePortfolioRecommendation portfolio,
+    double initialCashAmount = 10000000,
+  }) async {
+    final accessToken = _authSession?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const MobileBackendException('프로토타입 자산 계정을 만들려면 로그인이 필요합니다.');
+    }
+    final dashboard = await MobileBackendApi.instance.createPortfolioAccount(
+      accessToken: accessToken,
+      recommendation: recommendation,
+      portfolio: portfolio,
+      initialCashAmount: initialCashAmount,
+    );
+    _accountDashboard = dashboard;
+    notifyListeners();
+    return dashboard;
+  }
+
+  Future<MobileAccountDashboard> cashInPrototypeAccount({
+    required double amount,
+  }) async {
+    final accessToken = _authSession?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      throw const MobileBackendException('입금을 진행하려면 로그인이 필요합니다.');
+    }
+    final dashboard = await MobileBackendApi.instance.cashInPortfolioAccount(
+      accessToken: accessToken,
+      amount: amount,
+    );
+    _accountDashboard = dashboard;
+    notifyListeners();
+    return dashboard;
   }
 
   List<ChartPoint> portfolioValuePoints({

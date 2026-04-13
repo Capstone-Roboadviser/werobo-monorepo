@@ -223,6 +223,142 @@ class MobileCurrentAuthSession {
   }
 }
 
+class MobileAccountSummary {
+  final String portfolioCode;
+  final String portfolioLabel;
+  final String portfolioId;
+  final String dataSource;
+  final String investmentHorizon;
+  final String startedAt;
+  final String lastSnapshotDate;
+  final double currentValue;
+  final double investedAmount;
+  final double profitLoss;
+  final double profitLossPct;
+
+  const MobileAccountSummary({
+    required this.portfolioCode,
+    required this.portfolioLabel,
+    required this.portfolioId,
+    required this.dataSource,
+    required this.investmentHorizon,
+    required this.startedAt,
+    required this.lastSnapshotDate,
+    required this.currentValue,
+    required this.investedAmount,
+    required this.profitLoss,
+    required this.profitLossPct,
+  });
+
+  factory MobileAccountSummary.fromJson(Map<String, dynamic> json) {
+    return MobileAccountSummary(
+      portfolioCode: json['portfolio_code']?.toString() ?? '',
+      portfolioLabel: json['portfolio_label']?.toString() ?? '',
+      portfolioId: json['portfolio_id']?.toString() ?? '',
+      dataSource: json['data_source']?.toString() ?? '',
+      investmentHorizon: json['investment_horizon']?.toString() ?? 'medium',
+      startedAt: json['started_at']?.toString() ?? '',
+      lastSnapshotDate: json['last_snapshot_date']?.toString() ?? '',
+      currentValue: _asDouble(json['current_value']),
+      investedAmount: _asDouble(json['invested_amount']),
+      profitLoss: _asDouble(json['profit_loss']),
+      profitLossPct: _asDouble(json['profit_loss_pct']),
+    );
+  }
+}
+
+class MobileAccountHistoryPoint {
+  final DateTime date;
+  final double portfolioValue;
+  final double investedAmount;
+  final double profitLoss;
+  final double profitLossPct;
+
+  const MobileAccountHistoryPoint({
+    required this.date,
+    required this.portfolioValue,
+    required this.investedAmount,
+    required this.profitLoss,
+    required this.profitLossPct,
+  });
+
+  factory MobileAccountHistoryPoint.fromJson(Map<String, dynamic> json) {
+    return MobileAccountHistoryPoint(
+      date: _parseDate(json['date']),
+      portfolioValue: _asDouble(json['portfolio_value']),
+      investedAmount: _asDouble(json['invested_amount']),
+      profitLoss: _asDouble(json['profit_loss']),
+      profitLossPct: _asDouble(json['profit_loss_pct']),
+    );
+  }
+}
+
+class MobileAccountActivity {
+  final String type;
+  final String title;
+  final String date;
+  final double? amount;
+  final String? description;
+
+  const MobileAccountActivity({
+    required this.type,
+    required this.title,
+    required this.date,
+    required this.amount,
+    required this.description,
+  });
+
+  factory MobileAccountActivity.fromJson(Map<String, dynamic> json) {
+    return MobileAccountActivity(
+      type: json['type']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      date: json['date']?.toString() ?? '',
+      amount: json['amount'] == null ? null : _asDouble(json['amount']),
+      description: json['description']?.toString(),
+    );
+  }
+}
+
+class MobileAccountDashboard {
+  final bool hasAccount;
+  final MobileAccountSummary? summary;
+  final List<MobileAccountHistoryPoint> history;
+  final List<MobileAccountActivity> recentActivity;
+
+  const MobileAccountDashboard({
+    required this.hasAccount,
+    required this.summary,
+    required this.history,
+    required this.recentActivity,
+  });
+
+  factory MobileAccountDashboard.fromJson(Map<String, dynamic> json) {
+    return MobileAccountDashboard(
+      hasAccount: json['has_account'] == true,
+      summary: (json['summary'] as Map<String, dynamic>?)
+          ?.let(MobileAccountSummary.fromJson),
+      history: (json['history'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileAccountHistoryPoint.fromJson)
+          .toList(),
+      recentActivity: (json['recent_activity'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileAccountActivity.fromJson)
+          .toList(),
+    );
+  }
+}
+
+extension _NullableMapLet on Map<String, dynamic>? {
+  T? let<T>(T Function(Map<String, dynamic> value) mapper) {
+    final value = this;
+    if (value == null) {
+      return null;
+    }
+    return mapper(value);
+  }
+}
+
 class MobileResolvedProfile {
   final String code;
   final String label;

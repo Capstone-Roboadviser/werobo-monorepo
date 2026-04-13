@@ -5,8 +5,10 @@ import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
+import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
+import '../../services/mobile_backend_api.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -70,7 +72,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final type = PortfolioStateProvider.of(context).type;
+    final state = PortfolioStateProvider.of(context);
+    final type = state.type;
+    final activities = state.accountActivities;
+    final hasAccount = state.hasPrototypeAccount;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -107,34 +112,67 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                     Text('최근 활동',
                         style: WeRoboTypography.heading3.themed(context)),
                     const SizedBox(height: 12),
-                    _ActivityCard(
-                      icon: Icons.sync_alt_rounded,
-                      iconColor: WeRoboColors.primary,
-                      title: '리밸런싱 완료',
-                      date: '2026-04-01',
-                      value: '₩15,826,400',
-                    ),
-                    _ActivityCard(
-                      icon: Icons.arrow_downward_rounded,
-                      iconColor: tc.accent,
-                      title: '입금',
-                      date: '2026-03-15',
-                      value: '+₩500,000',
-                      valueColor: tc.accent,
-                    ),
-                    _ActivityCard(
-                      icon: Icons.sync_alt_rounded,
-                      iconColor: WeRoboColors.primary,
-                      title: '리밸런싱 완료',
-                      date: '2026-01-02',
-                      value: '₩15,120,000',
-                    ),
+                    if (hasAccount && activities.isNotEmpty)
+                      ...activities.map(_buildAccountActivityCard)
+                    else ...[
+                      _ActivityCard(
+                        icon: Icons.sync_alt_rounded,
+                        iconColor: WeRoboColors.primary,
+                        title: '리밸런싱 완료',
+                        date: '2026-04-01',
+                        value: '₩15,826,400',
+                      ),
+                      _ActivityCard(
+                        icon: Icons.arrow_downward_rounded,
+                        iconColor: tc.accent,
+                        title: '입금',
+                        date: '2026-03-15',
+                        value: '+₩500,000',
+                        valueColor: tc.accent,
+                      ),
+                      _ActivityCard(
+                        icon: Icons.sync_alt_rounded,
+                        iconColor: WeRoboColors.primary,
+                        title: '리밸런싱 완료',
+                        date: '2026-01-02',
+                        value: '₩15,120,000',
+                      ),
+                    ],
                   ],
                 )),
             const SizedBox(height: 32),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildAccountActivityCard(MobileAccountActivity activity) {
+    final tc = WeRoboThemeColors.of(context);
+    IconData icon = Icons.account_balance_wallet_rounded;
+    Color iconColor = WeRoboColors.primary;
+    String value = activity.description ?? '';
+    Color? valueColor;
+
+    if (activity.type == 'cash_in' || activity.type == 'initial_deposit') {
+      icon = Icons.arrow_downward_rounded;
+      iconColor = tc.accent;
+      final amount = activity.amount ?? 0;
+      value = '+₩${_formatCurrency(amount.round())}';
+      valueColor = tc.accent;
+    } else if (activity.type == 'portfolio_created') {
+      icon = Icons.pie_chart_rounded;
+      iconColor = WeRoboColors.primary;
+      value = '추적 시작';
+    }
+
+    return _ActivityCard(
+      icon: icon,
+      iconColor: iconColor,
+      title: activity.title,
+      date: activity.date,
+      value: value,
+      valueColor: valueColor,
     );
   }
 }
@@ -154,14 +192,20 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
   static const _rangeDays = [7, 90, 365, 1825, 99999];
   static const _baseInvestment = 10000000.0;
+  static const _defaultCashInAmount = 500000.0;
 
   late AnimationController _drawCtrl;
   int _range = 4; // 전체
   int? _touchIndex;
 
   List<ChartPoint> get _allValue {
-    // Use backtest data if available, otherwise mock daily
-    // cumulative returns from Mar 3 (meeting requirement).
+    final accountHistory = PortfolioStateProvider.of(context).accountHistory;
+    if (accountHistory.isNotEmpty) {
+      return _ensureRenderable([
+        for (final point in accountHistory)
+          ChartPoint(date: point.date, value: point.portfolioValue),
+      ]);
+    }
     final backtest = PortfolioStateProvider.of(context)
         .portfolioValuePoints(baseInvestment: _baseInvestment);
     if (backtest.isNotEmpty) return backtest;
@@ -172,9 +216,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     );
   }
 
-  /// Flat cost basis at base investment (deposits tracked by API
-  /// when available; for now base investment is the floor).
-  List<ChartPoint> _costBasisFor(List<ChartPoint> valuePts) {
+  List<ChartPoint> get _allCostBasis {
+    final accountHistory = PortfolioStateProvider.of(context).accountHistory;
+    if (accountHistory.isNotEmpty) {
+      return _ensureRenderable([
+        for (final point in accountHistory)
+          ChartPoint(date: point.date, value: point.investedAmount),
+      ]);
+    }
+    final valuePts = _allValue;
     if (valuePts.isEmpty) return const [];
     return [
       ChartPoint(date: valuePts.first.date, value: _baseInvestment),
@@ -213,6 +263,49 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     return filtered.isNotEmpty ? filtered : all;
   }
 
+  List<ChartPoint> _ensureRenderable(List<ChartPoint> points) {
+    if (points.length != 1) {
+      return points;
+    }
+    final point = points.first;
+    return [
+      ChartPoint(
+        date: point.date.subtract(const Duration(days: 1)),
+        value: point.value,
+      ),
+      point,
+    ];
+  }
+
+  Future<void> _handleCashIn() async {
+    logAction('tap prototype cash in', {
+      'amount': _defaultCashInAmount.toInt(),
+    });
+    try {
+      await PortfolioStateProvider.of(context).cashInPrototypeAccount(
+        amount: _defaultCashInAmount,
+      );
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('입금이 반영되었습니다.')),
+      );
+      _drawCtrl.forward(from: 0);
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is MobileBackendException ? error.message : '입금을 반영하지 못했어요.',
+          ),
+        ),
+      );
+    }
+  }
+
   void _selectRange(int idx) {
     if (idx == _range) return;
     setState(() {
@@ -225,15 +318,22 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final portfolioState = PortfolioStateProvider.of(context);
+    final accountSummary = portfolioState.accountSummary;
+    final hasPrototypeAccount = portfolioState.hasPrototypeAccount;
     final allValue = _allValue;
+    final allCost = _allCostBasis;
     final valuePts = _filterByRange(allValue);
-    final costPts = _costBasisFor(valuePts);
+    final costPts = _filterByRange(allCost);
 
     // Compute hero stats from filtered data
-    final currentValue = valuePts.isNotEmpty ? valuePts.last.value : 0.0;
+    final currentValue = accountSummary?.currentValue ??
+        (valuePts.isNotEmpty ? valuePts.last.value : 0.0);
     final startValue = valuePts.isNotEmpty ? valuePts.first.value : 0.0;
-    final change = currentValue - startValue;
-    final changePct = startValue > 0 ? (change / startValue) * 100 : 0.0;
+    final change = accountSummary?.profitLoss ?? (currentValue - startValue);
+    final changePct = accountSummary != null
+        ? accountSummary.profitLossPct * 100
+        : (startValue > 0 ? (change / startValue) * 100 : 0.0);
     final isPositive = change >= 0;
 
     // Crosshair values
@@ -296,11 +396,23 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
             costBasis: crosshairCost,
           )
         else
-          _PerformanceBadge(
-            changePct: changePct,
-            changeAmount: change,
-            label: rangeLabel,
-            isPositive: isPositive,
+          Row(
+            children: [
+              _PerformanceBadge(
+                changePct: changePct,
+                changeAmount: change,
+                label: rangeLabel,
+                isPositive: isPositive,
+              ),
+              if (hasPrototypeAccount) ...[
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  onPressed: _handleCashIn,
+                  icon: const Icon(Icons.add_rounded, size: 16),
+                  label: const Text('입금하기'),
+                ),
+              ],
+            ],
           ),
 
         const SizedBox(height: 20),

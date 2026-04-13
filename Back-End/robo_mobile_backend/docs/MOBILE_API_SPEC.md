@@ -19,6 +19,7 @@
 - 인증:
   - 회원가입/로그인 자체는 인증 없이 호출합니다.
   - `GET /api/v1/auth/me`는 `Authorization: Bearer <token>` 헤더가 필요합니다.
+  - `/api/v1/account/*`는 `Authorization: Bearer <token>` 헤더가 필요합니다.
 - 날짜 형식: `YYYY-MM-DD`
 - 비율 값:
   - `propensity_score`는 `0`부터 `100` 사이 점수입니다.
@@ -30,6 +31,13 @@
 - `data_source=managed_universe`일 때 recommendation/preview/selection API는 active 유니버스의 materialized frontier snapshot을 먼저 조회합니다.
 - snapshot은 관리자 `가격 갱신 실행` 후 자동 재생성됩니다.
 - snapshot이 없거나 현재 active 버전의 공통 가격 구간과 맞지 않으면, 서버는 기존 계산 경로로 fallback 합니다.
+
+## Portfolio Account Snapshot 규칙
+
+- 프로토타입 자산 계정은 실제 증권 계좌 연동이 아니라 서버 DB에 저장한 입금 이벤트와 종목 비중을 기준으로 계산합니다.
+- 포트폴리오 확정 시 `POST /api/v1/account`로 계정을 생성하면 `portfolio_accounts`, `portfolio_cash_flows`, `portfolio_daily_snapshots`가 채워집니다.
+- `POST /api/v1/account/cash-in`이 호출되면 누적 원금과 보유 수량 기준으로 일별 자산 snapshot을 다시 계산합니다.
+- `managed_universe` 계정은 관리자 가격 refresh cron이 성공할 때마다 snapshot이 자동 재계산됩니다.
 
 ## Enum 값
 
@@ -100,6 +108,9 @@
 | `POST` | `/api/v1/auth/login` | 이메일 로그인 후 세션 발급 |
 | `GET` | `/api/v1/auth/me` | 현재 로그인 세션 조회 |
 | `POST` | `/api/v1/auth/logout` | 현재 로그인 세션 종료 |
+| `GET` | `/api/v1/account/dashboard` | 현재 로그인 사용자의 자산 계정 요약/히스토리 조회 |
+| `POST` | `/api/v1/account` | 포트폴리오 확정 시 프로토타입 자산 계정 생성 |
+| `POST` | `/api/v1/account/cash-in` | 프로토타입 입금 이벤트 저장 및 스냅샷 재계산 |
 | `POST` | `/api/v1/profile/resolve` | 투자성향 판정 |
 | `POST` | `/api/v1/portfolios/recommendation` | 안정형/균형형/성장형 3개 포트폴리오 추천 |
 | `POST` | `/api/v1/portfolios/frontier-preview` | 드래그용 efficient frontier preview 포인트 |
@@ -221,7 +232,137 @@ Authorization: Bearer token-string
 }
 ```
 
-## 2. 투자성향 판정
+## 2. 프로토타입 자산 계정
+
+### `GET /api/v1/account/dashboard`
+
+설명:
+
+- 현재 로그인 사용자의 자산 계정 상태를 조회합니다.
+- 홈 화면 `현재 자산` 차트, 최근 활동, 누적 원금 표시에 필요한 데이터를 한 번에 반환합니다.
+
+응답 예시:
+
+```json
+{
+  "has_account": true,
+  "summary": {
+    "portfolio_code": "balanced",
+    "portfolio_label": "균형형",
+    "portfolio_id": "stocks-balanced-medium-0.12",
+    "data_source": "managed_universe",
+    "investment_horizon": "medium",
+    "started_at": "2026-04-13",
+    "last_snapshot_date": "2026-04-14",
+    "current_value": 10325000,
+    "invested_amount": 10000000,
+    "profit_loss": 325000,
+    "profit_loss_pct": 0.0325
+  },
+  "history": [
+    {
+      "date": "2026-04-13",
+      "portfolio_value": 10000000,
+      "invested_amount": 10000000,
+      "profit_loss": 0,
+      "profit_loss_pct": 0.0
+    }
+  ],
+  "recent_activity": [
+    {
+      "type": "cash_in",
+      "title": "입금",
+      "date": "2026-04-14",
+      "amount": 500000,
+      "description": null
+    }
+  ]
+}
+```
+
+에러:
+
+- `401`: 헤더 없음, 형식 오류, 만료/무효 토큰
+- `503`: 자산 계정 저장소 미구성
+
+### `POST /api/v1/account`
+
+설명:
+
+- 포트폴리오 확정 시점의 종목 비중과 초기 입금 금액을 저장하고 프로토타입 자산 계정을 생성합니다.
+- 같은 사용자에 대해 다시 호출되면 기존 계정을 교체합니다.
+
+요청 예시:
+
+```json
+{
+  "data_source": "managed_universe",
+  "investment_horizon": "medium",
+  "portfolio_code": "balanced",
+  "portfolio_label": "균형형",
+  "portfolio_id": "stocks-balanced-medium-0.12",
+  "target_volatility": 0.12,
+  "expected_return": 0.08,
+  "volatility": 0.11,
+  "sharpe_ratio": 0.72,
+  "initial_cash_amount": 10000000,
+  "sector_allocations": [
+    {
+      "asset_code": "us_growth",
+      "asset_name": "미국 성장주",
+      "weight": 0.3,
+      "risk_contribution": 0.42
+    }
+  ],
+  "stock_allocations": [
+    {
+      "ticker": "QQQ",
+      "name": "Invesco QQQ Trust",
+      "sector_code": "us_growth",
+      "sector_name": "미국 성장주",
+      "weight": 0.15
+    }
+  ]
+}
+```
+
+응답 형식:
+
+- `GET /api/v1/account/dashboard`와 동일
+
+에러:
+
+- `400`: 초기 입금 금액, 종목 비중 등 입력값 오류
+- `401`: 헤더 없음, 형식 오류, 만료/무효 토큰
+- `503`: 자산 계정 저장소 미구성
+
+### `POST /api/v1/account/cash-in`
+
+설명:
+
+- 실제 결제/계좌 연동 없이 프로토타입 입금 이벤트를 저장합니다.
+- 서버는 입금 후 전체 일별 snapshot을 다시 계산해 최신 자산 곡선을 반환합니다.
+
+요청 예시:
+
+```json
+{
+  "amount": 500000
+}
+```
+
+응답 형식:
+
+- `GET /api/v1/account/dashboard`와 동일
+
+에러:
+
+- `400`: 입금 금액 오류
+- `401`: 헤더 없음, 형식 오류, 만료/무효 토큰
+- `404`: 아직 포트폴리오 계정이 없음
+- `503`: 자산 계정 저장소 미구성
+
+## 3. 투자성향 판정
 
 ### `POST /api/v1/profile/resolve`
 
@@ -254,7 +395,7 @@ Authorization: Bearer token-string
 }
 ```
 
-## 3. 대표 포트폴리오 추천
+## 4. 대표 포트폴리오 추천
 
 ### `POST /api/v1/portfolios/recommendation`
 
@@ -291,7 +432,7 @@ Authorization: Bearer token-string
 
 대표 포트폴리오 3개는 내부 efficient frontier 전체 포인트 중 대표 지점만 잘라낸 결과입니다. 모바일 UX를 단순하게 유지하기 위해 전체 frontier를 한 번에 모두 내려주지 않습니다.
 
-## 4. 드래그용 frontier preview
+## 5. 드래그용 frontier preview
 
 ### `POST /api/v1/portfolios/frontier-preview`
 
@@ -336,7 +477,7 @@ Authorization: Bearer token-string
 - 사용자가 최종 위치를 확정한 뒤에만 상세 포트폴리오 API를 호출하는 구조를 권장합니다.
 - `managed_universe`에서는 가능한 한 materialized snapshot을 재사용하므로, 첫 호출 성능은 admin refresh 완료 여부에 크게 영향을 받습니다.
 
-## 5. 선택 frontier 포트폴리오 상세
+## 6. 선택 frontier 포트폴리오 상세
 
 ### `POST /api/v1/portfolios/frontier-selection`
 
@@ -369,7 +510,7 @@ Authorization: Bearer token-string
 
 `portfolio` 구조는 `/portfolios/recommendation`의 각 포트폴리오 항목과 동일합니다.
 
-## 6. 포트폴리오 변동성 추이
+## 7. 포트폴리오 변동성 추이
 
 ### `POST /api/v1/portfolios/volatility-history`
 
@@ -403,7 +544,7 @@ Authorization: Bearer token-string
 - `date`
 - `volatility`
 
-## 6. 유형별 비교 백테스트
+## 8. 유형별 비교 백테스트
 
 ### `POST /api/v1/portfolios/comparison-backtest`
 
