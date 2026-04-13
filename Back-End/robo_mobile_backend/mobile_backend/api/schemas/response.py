@@ -253,6 +253,31 @@ class ComparisonLineResponse(BaseModel):
     points: list[ComparisonLinePointResponse] = Field(default_factory=list, description="시계열 포인트")
 
 
+class RebalanceInsightAllocationResponse(BaseModel):
+    asset_code: str = Field(..., description="자산군 코드", examples=["us_value"])
+    asset_name: str = Field(..., description="자산군 이름", examples=["미국 가치주"])
+    color: str = Field(..., description="차트 색상 (hex)", examples=["#20A7DB"])
+    before_pct: float = Field(..., description="리밸런싱 전 비중", examples=[0.212])
+    after_pct: float = Field(..., description="리밸런싱 후 비중", examples=[0.200])
+
+
+class RebalanceInsightResponse(BaseModel):
+    id: int = Field(..., description="인사이트 식별자", examples=[1])
+    rebalance_date: str = Field(..., description="리밸런싱 발생일", examples=["2026-04-01"])
+    allocations: list[RebalanceInsightAllocationResponse] = Field(
+        default_factory=list,
+        description="자산군별 리밸런싱 전후 비중",
+    )
+    explanation_text: str | None = Field(default=None, description="리밸런싱 설명 텍스트")
+    is_read: bool = Field(..., description="읽음 여부", examples=[False])
+    created_at: str = Field(..., description="생성 시각(UTC)", examples=["2026-04-01T08:30:00Z"])
+
+
+class RebalanceInsightsListResponse(BaseModel):
+    insights: list[RebalanceInsightResponse] = Field(default_factory=list, description="리밸런싱 인사이트 목록")
+    unread_count: int = Field(..., description="읽지 않은 인사이트 수", examples=[2])
+
+
 class ComparisonBacktestResponse(BaseModel):
     train_start_date: str = Field(..., description="학습 구간 시작일", examples=["2020-01-02"])
     train_end_date: str = Field(..., description="학습 구간 종료일", examples=["2023-12-29"])

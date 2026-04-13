@@ -265,20 +265,151 @@ class PortfolioAccountService:
         }
 
     def _refresh_snapshots(self, account: dict[str, object]) -> None:
+        stock_weights = {
+            str(key): float(value)
+            for key, value in dict(account["stock_weights"]).items()
+        }
         prices = self._load_price_history(
-            tickers=list(account["stock_weights"].keys()),
+            tickers=list(stock_weights.keys()),
             data_source=SimulationDataSource(str(account["data_source"])),
         )
+        cash_flows = self.repository.list_cash_flows(int(account["id"]))
         snapshots = self._build_snapshots(
             prices=prices,
-            stock_weights={
-                str(key): float(value)
-                for key, value in dict(account["stock_weights"]).items()
-            },
-            cash_flows=self.repository.list_cash_flows(int(account["id"])),
+            stock_weights=stock_weights,
+            cash_flows=cash_flows,
             started_at=str(account["started_at"]),
         )
         self.repository.replace_snapshots(int(account["id"]), snapshots)
+        self._detect_and_save_insights(
+            account=account,
+            prices=prices,
+            stock_weights=stock_weights,
+            cash_flows=cash_flows,
+        )
+
+    def _detect_and_save_insights(
+        self,
+        *,
+        account: dict[str, object],
+        prices: pd.DataFrame,
+        stock_weights: dict[str, float],
+        cash_flows: list[dict[str, object]],
+    ) -> None:
+        """Detect drift-based rebalancing and create insight records."""
+        from mobile_backend.services.insight_text_service import (
+            generate_insight_explanation,
+        )
+
+        pivoted = (
+            prices.pivot_table(
+                index="date", columns="ticker", values="adjusted_close", aggfunc="last",
+            )
+            .sort_index()
+            .ffill()
+        )
+        if pivoted.empty:
+            return
+
+        start_ts = pd.Timestamp(str(account["started_at"])).normalize()
+        today_ts = pd.Timestamp(datetime.now(UTC).date())
+        full_index = pd.date_range(start=pivoted.index.min(), end=today_ts, freq="D")
+        calendar_prices = pivoted.reindex(full_index).ffill()
+        calendar_prices = calendar_prices[calendar_prices.index >= start_ts]
+        calendar_prices = calendar_prices.dropna(how="any")
+        if calendar_prices.empty:
+            return
+
+        total_weight = sum(stock_weights.values())
+        if total_weight <= 0:
+            return
+        target_weights = {t: w / total_weight for t, w in stock_weights.items() if w > 0}
+
+        # Map ticker → sector using stock_allocations
+        stock_allocs = list(account.get("stock_allocations") or [])
+        ticker_to_sector_code: dict[str, str] = {}
+        ticker_to_sector_name: dict[str, str] = {}
+        for alloc in stock_allocs:
+            ticker = str(alloc.get("ticker", "")).upper()
+            ticker_to_sector_code[ticker] = str(alloc.get("sector_code", ""))
+            ticker_to_sector_name[ticker] = str(alloc.get("sector_name", ""))
+
+        # Build holdings over time and check for drift quarterly
+        holdings = {ticker: 0.0 for ticker in target_weights}
+        cash_flow_map: dict[str, float] = {}
+        for cf in cash_flows:
+            d = str(cf["effective_date"])
+            cash_flow_map[d] = cash_flow_map.get(d, 0.0) + float(cf["amount"])
+
+        drift_threshold = 0.10
+        account_id = int(account["id"])
+        last_rebalance_date: str | None = None
+
+        for snapshot_date, row in calendar_prices.iterrows():
+            date_key = snapshot_date.strftime("%Y-%m-%d")
+            flow_amount = cash_flow_map.get(date_key, 0.0)
+            if flow_amount > 0:
+                for ticker, weight in target_weights.items():
+                    price = float(row.get(ticker, 0.0))
+                    if price <= 0:
+                        continue
+                    holdings[ticker] += (flow_amount * weight) / price
+
+            # Check drift on the last day of each quarter
+            if snapshot_date.month % 3 != 0 or snapshot_date != calendar_prices.index[-1]:
+                # Only check at quarter end or on the latest day
+                if snapshot_date != calendar_prices.index[-1]:
+                    continue
+
+            total_value = sum(
+                holdings[t] * float(row.get(t, 0.0)) for t in holdings
+            )
+            if total_value <= 0:
+                continue
+
+            actual_weights = {
+                t: (holdings[t] * float(row.get(t, 0.0))) / total_value
+                for t in holdings
+            }
+
+            max_drift = max(
+                abs(actual_weights.get(t, 0) - target_weights.get(t, 0))
+                / max(target_weights.get(t, 0), 1e-9)
+                for t in target_weights
+            )
+
+            if max_drift < drift_threshold:
+                continue
+
+            # Aggregate to sector level
+            sector_pre: dict[str, float] = {}
+            sector_post: dict[str, float] = {}
+            sector_code_to_name: dict[str, str] = {}
+            for ticker in target_weights:
+                code = ticker_to_sector_code.get(ticker, ticker)
+                name = ticker_to_sector_name.get(ticker, ticker)
+                sector_code_to_name[code] = name
+                sector_pre[code] = sector_pre.get(code, 0.0) + actual_weights.get(ticker, 0.0)
+                sector_post[code] = sector_post.get(code, 0.0) + target_weights.get(ticker, 0.0)
+
+            explanation = generate_insight_explanation(
+                pre_weights=sector_pre,
+                post_weights=sector_post,
+                sector_names=sector_code_to_name,
+            )
+
+            self.repository.upsert_rebalance_insight(
+                account_id=account_id,
+                rebalance_date=date_key,
+                pre_weights=sector_pre,
+                post_weights=sector_post,
+                explanation_text=explanation,
+            )
+            last_rebalance_date = date_key
+
+            # Simulate rebalance: reset holdings to target weights
+            for ticker in holdings:
+                holdings[ticker] = (total_value * target_weights[ticker]) / float(row.get(ticker, 1.0))
 
     def _load_price_history(
         self,

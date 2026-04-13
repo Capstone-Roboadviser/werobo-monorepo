@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../app/debug_page_logger.dart';
 import '../models/mobile_backend_models.dart';
+import '../models/rebalance_insight.dart';
 
 class MobileBackendException implements Exception {
   final String message;
@@ -439,6 +440,53 @@ class MobileBackendApi {
     }
   }
 
+  Future<RebalanceInsightsResponse> fetchRebalanceInsights({
+    required String accessToken,
+  }) async {
+    logApi('start', 'fetchRebalanceInsights');
+    try {
+      final result = await _get(
+        path: '/insights',
+        parser: RebalanceInsightsResponse.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'fetchRebalanceInsights', {
+        'count': result.insights.length,
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'fetchRebalanceInsights', {
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<RebalanceInsight> markInsightRead({
+    required String accessToken,
+    required int insightId,
+  }) async {
+    logApi('start', 'markInsightRead', {'id': insightId});
+    try {
+      final result = await _post(
+        path: '/insights/$insightId/read',
+        body: const <String, dynamic>{},
+        parser: RebalanceInsight.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'markInsightRead', {'id': insightId});
+      return result;
+    } catch (error) {
+      logApi('fail', 'markInsightRead', {
+        'id': insightId,
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
   Future<T> _postWithFallback<T>({
     required String path,
     required Map<String, dynamic> Function(String dataSource) bodyForDataSource,
@@ -621,6 +669,8 @@ class MobileBackendApi {
         return 'createPortfolioAccount';
       case '/account/cash-in':
         return 'cashInPortfolioAccount';
+      case '/insights':
+        return 'fetchRebalanceInsights';
       default:
         return path;
     }
