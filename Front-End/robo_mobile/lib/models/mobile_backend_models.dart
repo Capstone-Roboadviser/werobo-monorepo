@@ -569,6 +569,27 @@ class MobileRecommendationResponse {
     return portfolioByCode(code) ?? recommendedPortfolio;
   }
 
+  double get averageVolatility {
+    if (portfolios.isEmpty) return 0.0;
+    final sum = portfolios.fold<double>(
+      0.0,
+      (acc, p) => acc + p.volatility,
+    );
+    return sum / portfolios.length;
+  }
+
+  ({int percentDiff, bool isRiskier}) marketRiskComparison(
+    MobilePortfolioRecommendation portfolio,
+  ) {
+    final avg = averageVolatility;
+    if (avg == 0.0) return (percentDiff: 0, isRiskier: false);
+    final diff = (portfolio.volatility - avg) / avg;
+    return (
+      percentDiff: (diff.abs() * 100).round(),
+      isRiskier: diff >= 0,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
       'resolved_profile': resolvedProfile.toJson(),

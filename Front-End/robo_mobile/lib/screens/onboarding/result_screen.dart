@@ -188,6 +188,14 @@ class _ResultTypeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final comparison = recommendation.marketRiskComparison(portfolio);
+    final riskColor =
+        comparison.isRiskier ? WeRoboColors.warning : tc.accent;
+    final riskText = comparison.percentDiff == 0
+        ? '시장 평균 수준의 자산'
+        : '시장대비 ${comparison.percentDiff}%\n'
+            '${comparison.isRiskier ? '더 위험한' : '더 안전한'} 자산';
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 24),
@@ -215,17 +223,16 @@ class _ResultTypeCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _StatCard(
-                  label: '예상 수익률',
+                  label: '예상 연 수익률',
                   value: portfolio.expectedReturnLabel,
                   color: tc.accent,
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: _StatCard(
-                  label: '변동성',
-                  value: portfolio.volatilityLabel,
-                  color: WeRoboColors.warning,
+                child: _RiskComparisonCard(
+                  text: riskText,
+                  color: riskColor,
                 ),
               ),
             ],
@@ -328,6 +335,37 @@ class _BlurredTickerSection extends StatelessWidget {
           const Spacer(),
           Text(pct, style: WeRoboTypography.bodySmall.themed(context)),
         ],
+      ),
+    );
+  }
+}
+
+class _RiskComparisonCard extends StatelessWidget {
+  final String text;
+  final Color color;
+
+  const _RiskComparisonCard({
+    required this.text,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 14,
+        vertical: 12,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        text,
+        style: WeRoboTypography.bodySmall.copyWith(
+          color: color,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
