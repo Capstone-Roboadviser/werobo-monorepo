@@ -351,6 +351,48 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     return 24.7 + (_dotT * (31.6 - 24.7));
   }
 
+  ({String text, Color color}) get _riskComparison {
+    final points = _preview.points;
+    if (points.isEmpty) {
+      return (
+        text: '시장 평균 수준',
+        color: WeRoboColors.accent,
+      );
+    }
+    final averageVol =
+        points.map((p) => p.volatility).reduce((a, b) => a + b) /
+        points.length;
+    final selected = _selectedPreviewPoint;
+    if (selected == null || averageVol == 0) {
+      return (
+        text: '시장 평균 수준',
+        color: WeRoboColors.accent,
+      );
+    }
+    final diff =
+        (selected.volatility - averageVol) / averageVol;
+    final percentDiff = (diff.abs() * 100).round();
+    final isRiskier = diff > 0;
+    if (percentDiff == 0) {
+      return (
+        text: '시장 평균 수준',
+        color: WeRoboColors.accent,
+      );
+    }
+    // Smooth green→orange transition based on risk factor
+    final lerpT = isRiskier
+        ? (diff.abs() * 2).clamp(0.0, 1.0)
+        : 0.0;
+    final color = Color.lerp(
+      const Color(0xFF059669),
+      const Color(0xFFF97316),
+      lerpT,
+    )!;
+    final text = '시장대비 약 $percentDiff%\n'
+        '${isRiskier ? '더 위험한' : '더 안전한'} 포트폴리오';
+    return (text: text, color: color);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -485,11 +527,49 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
           ),
           const SizedBox(height: 24),
 
-          // Return display
-          _StatCard(
-            label: '연 기대수익률',
-            value: '${_returnRate.toStringAsFixed(1)}%',
-            color: WeRoboColors.primary,
+          // Return + risk display
+          Row(
+            children: [
+              Expanded(
+                child: _StatCard(
+                  label: '연 기대수익률',
+                  value:
+                      '${_returnRate.toStringAsFixed(1)}%',
+                  color: WeRoboColors.primary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: AnimatedContainer(
+                  duration:
+                      const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _riskComparison.color
+                        .withValues(alpha: 0.08),
+                    borderRadius:
+                        BorderRadius.circular(12),
+                  ),
+                  child: AnimatedDefaultTextStyle(
+                    duration: const Duration(
+                        milliseconds: 300),
+                    style:
+                        WeRoboTypography.caption.copyWith(
+                      color: _riskComparison.color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                    child: Text(
+                      _riskComparison.text,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
 
