@@ -1,9 +1,12 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
+import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
+import '../../services/mobile_backend_api.dart';
 import 'confirmation_screen.dart';
 
 class ComparisonScreen extends StatefulWidget {
@@ -24,20 +27,37 @@ class ComparisonScreen extends StatefulWidget {
 
 class _ComparisonScreenState extends State<ComparisonScreen>
     with TickerProviderStateMixin {
-  late String _selectedCode;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
+
+  // Slider state
+  double _sliderValue = 0.5;
+  String _snappedCode = 'balanced';
+  MobileFrontierSelectionResponse? _currentSelection;
+  int _requestSeqNo = 0;
+  Timer? _debounceTimer;
+
+  // Frontier preview data (cached from onboarding)
+  MobileFrontierPreviewResponse? _frontierPreview;
+  late double _minVol;
+  late double _maxVol;
+  late List<_SnapPoint> _snapPoints;
 
   @override
   void initState() {
     super.initState();
-    _selectedCode = widget.selectedPortfolioCode;
-    logPageEnter('ComparisonScreen', {
-      'selected': _selectedCode,
-    });
+    _snappedCode = widget.selectedPortfolioCode;
+
+    // Read frontier preview from provider
+    _frontierPreview =
+        PortfolioStateProvider.of(context).frontierPreview;
+    _initSliderRange();
+
+    logPageEnter('ComparisonScreen', {'selected': _snappedCode});
     logAction('comparison initial selected', {
-      'portfolio': _selectedCode,
+      'portfolio': _snappedCode,
     });
+
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -46,13 +66,101 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
     );
     _fadeController.forward();
+
+    // Fire initial API call for the selected portfolio
+    _fetchSelection(_sliderToVolatility(_sliderValue));
+  }
+
+  void _initSliderRange() {
+    final portfolios = widget.recommendation.portfolios;
+    final sorted = [...portfolios]
+      ..sort((a, b) => a.volatility.compareTo(b.volatility));
+
+    if (_frontierPreview != null) {
+      _minVol = _frontierPreview!.minVolatility;
+      _maxVol = _frontierPreview!.maxVolatility;
+    } else {
+      _minVol = sorted.first.volatility;
+      _maxVol = sorted.last.volatility;
+    }
+
+    final range = _maxVol - _minVol;
+    _snapPoints = sorted.map((p) {
+      final pos = range > 0 ? (p.volatility - _minVol) / range : 0.5;
+      return _SnapPoint(code: p.code, label: p.label, position: pos);
+    }).toList();
+
+    // Set initial slider position to match selected portfolio
+    final initial = _snapPoints
+        .where((s) => s.code == widget.selectedPortfolioCode)
+        .firstOrNull;
+    _sliderValue = initial?.position ?? 0.5;
   }
 
   @override
   void dispose() {
     logPageExit('ComparisonScreen');
+    _debounceTimer?.cancel();
     _fadeController.dispose();
     super.dispose();
+  }
+
+  double _sliderToVolatility(double t) =>
+      _minVol + t * (_maxVol - _minVol);
+
+  MobileFrontierPreviewPoint? _nearestPreviewPoint(double t) {
+    final points = _frontierPreview?.points;
+    if (points == null || points.isEmpty) return null;
+    final targetVol = _sliderToVolatility(t);
+    MobileFrontierPreviewPoint closest = points.first;
+    double minDist = (closest.volatility - targetVol).abs();
+    for (final p in points) {
+      final dist = (p.volatility - targetVol).abs();
+      if (dist < minDist) {
+        minDist = dist;
+        closest = p;
+      }
+    }
+    return closest;
+  }
+
+  void _onSliderChanged(double value) {
+    setState(() => _sliderValue = value);
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _fetchSelection(_sliderToVolatility(value));
+    });
+  }
+
+  Future<void> _fetchSelection(double targetVol) async {
+    final mySeq = ++_requestSeqNo;
+    // No loading indicator — previous data stays visible during fetch
+    try {
+      final profile = widget.recommendation.resolvedProfile;
+      final result =
+          await MobileBackendApi.instance.fetchFrontierSelection(
+        propensityScore: profile.propensityScore ?? 50,
+        targetVolatility: targetVol,
+        investmentHorizon: profile.investmentHorizon,
+        preferredDataSource: widget.recommendation.dataSource,
+      );
+      if (!mounted || mySeq != _requestSeqNo) return;
+      setState(() {
+        _currentSelection = result;
+        _snappedCode =
+            result.representativeCode ?? _snappedCode;
+      });
+      logAction('slider selection loaded', {
+        'code': _snappedCode,
+        'volatility': targetVol.toStringAsFixed(4),
+      });
+    } on Exception catch (e) {
+      if (!mounted || mySeq != _requestSeqNo) return;
+      logAction('slider selection error', {
+        'error': e.toString(),
+      });
+      // Error handled silently — previous data stays visible
+    }
   }
 
   String _portfolioSummary(String code) {
@@ -82,11 +190,41 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final portfolios = widget.recommendation.portfolios;
-    final selected = _portfolioForCode(_selectedCode);
-    final categories = selected.toCategories();
-    final risk = selected.volatilityLabel;
-    final returnRate = selected.expectedReturnLabel;
+
+    // Instant stats from preview point
+    final previewPoint = _nearestPreviewPoint(_sliderValue);
+    final instantReturn = previewPoint != null
+        ? formatRatioPercent(previewPoint.expectedReturn)
+        : _portfolioForCode(_snappedCode).expectedReturnLabel;
+
+    // Market-relative risk (instant from preview volatility)
+    final avg = widget.recommendation.averageVolatility;
+    final previewVol = previewPoint?.volatility ??
+        _portfolioForCode(_snappedCode).volatility;
+    final riskDiff = avg > 0 ? (previewVol - avg) / avg : 0.0;
+    final riskPct = (riskDiff.abs() * 100).round();
+    final isRiskier = riskDiff >= 0;
+    final riskText = riskPct == 0
+        ? '0%'
+        : isRiskier
+            ? '+$riskPct%'
+            : '-$riskPct%';
+    final riskColor = riskPct == 0
+        ? tc.textPrimary
+        : isRiskier
+            ? WeRoboColors.warning
+            : tc.accent;
+
+    // Donut/sector data from API response or fallback
+    final displayPortfolio = _currentSelection?.portfolio ??
+        _portfolioForCode(_snappedCode);
+    final categories = displayPortfolio.toCategories();
+    final donutLabel = _currentSelection?.representativeLabel ??
+        displayPortfolio.label;
+
+    final divisions = _frontierPreview != null
+        ? _frontierPreview!.points.length - 1
+        : 60;
 
     return Scaffold(
       backgroundColor: tc.surface,
@@ -106,7 +244,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                     ),
                     Expanded(
                       child: Text('포트폴리오 비교',
-                          style: WeRoboTypography.heading2.themed(context),
+                          style:
+                              WeRoboTypography.heading2.themed(context),
                           textAlign: TextAlign.center),
                     ),
                     const SizedBox(width: 48),
@@ -114,85 +253,92 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                 ),
               ),
               const SizedBox(height: 4),
-              Text('${widget.recommendation.resolvedProfile.label} 성향과 비교해 보세요',
-                  style: WeRoboTypography.bodySmall.themed(context)),
-              const SizedBox(height: 20),
-
-              // Portfolio selector chips
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: portfolios.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final portfolio = entry.value;
-                    final isSelected = portfolio.code == _selectedCode;
-                    return Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          left: index == 0 ? 0 : 6,
-                          right: index == portfolios.length - 1 ? 0 : 6,
-                        ),
-                        child: GestureDetector(
-                          onTap: () {
-                            logAction('select comparison portfolio', {
-                              'portfolio': portfolio.code,
-                            });
-                            setState(() => _selectedCode = portfolio.code);
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 250),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color:
-                                  isSelected ? WeRoboColors.primary : tc.card,
-                              borderRadius: BorderRadius.circular(12),
-                              border: isSelected
-                                  ? null
-                                  : Border.all(color: tc.border, width: 1),
-                            ),
-                            child: Text(
-                              portfolio.label,
-                              textAlign: TextAlign.center,
-                              style: WeRoboTypography.bodySmall.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: isSelected
-                                    ? WeRoboColors.white
-                                    : tc.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+              Text(
+                '${widget.recommendation.resolvedProfile.label}'
+                ' 성향과 비교해 보세요',
+                style: WeRoboTypography.bodySmall.themed(context),
               ),
               const SizedBox(height: 20),
 
-              // Stats with rolling number animation
+              // Slider with portfolio labels
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: WeRoboColors.primary,
+                        inactiveTrackColor: tc.border,
+                        thumbColor: WeRoboColors.primary,
+                        overlayColor: WeRoboColors.primary
+                            .withValues(alpha: 0.12),
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 10,
+                        ),
+                      ),
+                      child: Slider(
+                        value: _sliderValue,
+                        divisions: divisions,
+                        onChanged: _onSliderChanged,
+                        semanticFormatterCallback: (value) {
+                          final vol = _sliderToVolatility(value);
+                          return '변동성 ${(vol * 100).toStringAsFixed(1)}%';
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: [
+                          for (int i = 0; i < _snapPoints.length; i++)
+                            ...[
+                              if (i == 0) const SizedBox.shrink(),
+                              if (i > 0) const Spacer(),
+                              Text(
+                                _snapPoints[i].label,
+                                style:
+                                    WeRoboTypography.caption.copyWith(
+                                  color: tc.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Stats: 연 수익률 (left) + 시장 대비 위험도 (right)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Row(
                   children: [
                     Expanded(
                       child: _AnimatedStatChip(
-                        label: '위험도',
-                        value: risk,
-                        color: WeRoboColors.warning,
+                        label: '연 수익률',
+                        value: instantReturn,
+                        labelColor: tc.textPrimary,
+                        valueColor: WeRoboColors.primary,
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: _AnimatedStatChip(
-                        label: '수익률',
-                        value: returnRate,
-                        color: tc.accent,
+                        label: '시장 대비 위험도',
+                        value: riskText,
+                        labelColor: tc.textPrimary,
+                        valueColor: riskColor,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
+
               // Plain-language summary
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -200,11 +346,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: WeRoboColors.primary.withValues(alpha: 0.06),
+                    color: WeRoboColors.primary
+                        .withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    _portfolioSummary(_selectedCode),
+                    _portfolioSummary(_snappedCode),
                     style: WeRoboTypography.caption.copyWith(
                       color: tc.textSecondary,
                       height: 1.5,
@@ -218,7 +365,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
               // Animated donut chart
               _AnimatedDonut(
                 categories: categories,
-                label: selected.label,
+                label: donutLabel,
               ),
               const SizedBox(height: 20),
 
@@ -227,7 +374,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 300),
                   child: _SectorList(
-                    key: ValueKey(_selectedCode),
+                    key: ValueKey(
+                        '${_snappedCode}_${_currentSelection?.selectedPointIndex}'),
                     categories: categories,
                   ),
                 ),
@@ -240,21 +388,26 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                   child: ElevatedButton(
                     onPressed: () {
                       logAction('tap confirm portfolio', {
-                        'selected': _selectedCode,
+                        'selected': _snappedCode,
                       });
                       Navigator.of(context).push(
                         PageRouteBuilder(
-                          pageBuilder: (_, __, ___) => ConfirmationScreen(
+                          pageBuilder: (_, __, ___) =>
+                              ConfirmationScreen(
                             recommendation: widget.recommendation,
-                            selectedPortfolioCode: _selectedCode,
-                            frontierSelection: _selectedCode ==
-                                    widget.frontierSelection?.representativeCode
-                                ? widget.frontierSelection
-                                : null,
+                            selectedPortfolioCode: _snappedCode,
+                            frontierSelection:
+                                _currentSelection?.representativeCode ==
+                                        _snappedCode
+                                    ? _currentSelection
+                                    : null,
                           ),
-                          transitionsBuilder: (_, anim, __, child) =>
-                              FadeTransition(opacity: anim, child: child),
-                          transitionDuration: const Duration(milliseconds: 400),
+                          transitionsBuilder:
+                              (_, anim, __, child) =>
+                                  FadeTransition(
+                                      opacity: anim, child: child),
+                          transitionDuration:
+                              const Duration(milliseconds: 400),
                         ),
                       );
                     },
@@ -270,16 +423,30 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   }
 }
 
+class _SnapPoint {
+  final String code;
+  final String label;
+  final double position;
+
+  const _SnapPoint({
+    required this.code,
+    required this.label,
+    required this.position,
+  });
+}
+
 /// Rolling number stat chip with smooth old→new animation
 class _AnimatedStatChip extends StatefulWidget {
   final String label;
   final String value;
-  final Color color;
+  final Color labelColor;
+  final Color valueColor;
 
   const _AnimatedStatChip({
     required this.label,
     required this.value,
-    required this.color,
+    required this.labelColor,
+    required this.valueColor,
   });
 
   @override
@@ -293,7 +460,7 @@ class _AnimatedStatChipState extends State<_AnimatedStatChip>
   double _currentValue = 0;
 
   static double _parseValue(String v) {
-    return double.tryParse(v.replaceAll('%', '')) ?? 0;
+    return double.tryParse(v.replaceAll(RegExp(r'[%+]'), '')) ?? 0;
   }
 
   @override
@@ -335,7 +502,8 @@ class _AnimatedStatChipState extends State<_AnimatedStatChip>
       child: Column(
         children: [
           Text(widget.label,
-              style: WeRoboTypography.caption.copyWith(color: widget.color)),
+              style: WeRoboTypography.caption
+                  .copyWith(color: widget.labelColor)),
           const SizedBox(height: 4),
           AnimatedBuilder(
             animation: _controller,
@@ -345,7 +513,7 @@ class _AnimatedStatChipState extends State<_AnimatedStatChip>
               return Text(
                 '${val.toStringAsFixed(1)}%',
                 style: WeRoboTypography.number.copyWith(
-                  color: tc.textPrimary,
+                  color: widget.valueColor,
                   fontFamily: WeRoboFonts.english,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),
