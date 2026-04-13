@@ -130,8 +130,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             if (hasInsightBanner) const SizedBox(height: 20),
 
             // Digest entry point
-            if (hasAccount)
-              _stagger(
+            _stagger(
                 ++staggerIdx,
                 _DigestBanner(
                   onTap: () => Navigator.push(
@@ -144,7 +143,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   ),
                 ),
               ),
-            if (hasAccount) const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
             // Recent activity
             _stagger(
