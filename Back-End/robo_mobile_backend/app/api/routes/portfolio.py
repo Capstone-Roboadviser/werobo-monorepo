@@ -32,7 +32,7 @@ from app.api.schemas.response import (
 )
 from app.core.config import DEMO_STOCK_PRICES_PATH, DEMO_STOCK_UNIVERSE_PATH, MINIMUM_HISTORY_ROWS, TARGET_VOLATILITY_MAX, TARGET_VOLATILITY_MIN, TARGET_VOLATILITY_STEP
 from app.engine.comparison import build_comparison
-from app.engine.rebalance import simulate_quarterly_rebalance
+from app.engine.rebalance import simulate_drift_rebalance
 from app.data.stock_repository import StockDataRepository
 from app.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
 from app.domain.models import PortfolioSimulationResult, UserProfile
@@ -464,7 +464,10 @@ def _aggregate_by_sector(
     """Sum ticker-level values into sector-level totals."""
     aggregated: dict[str, float] = {}
     for ticker, value in ticker_values.items():
-        sector = ticker_to_sector.get(ticker, ticker)
+        if ticker == "CASH":
+            sector = "CASH"
+        else:
+            sector = ticker_to_sector.get(ticker, ticker)
         aggregated[sector] = aggregated.get(sector, 0.0) + value
     return {k: round(v, 6) for k, v in aggregated.items()}
 
@@ -490,12 +493,13 @@ def rebalance_simulation(payload: RebalanceSimulationRequest) -> RebalanceSimula
     weight_map = {t: w / total_w for t, w in weight_map.items()}
 
     try:
-        result = simulate_quarterly_rebalance(pivoted, weight_map, payload.investment_amount)
+        result = simulate_drift_rebalance(pivoted, weight_map, payload.investment_amount)
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"리밸런싱 시뮬레이션 중 오류가 발생했습니다: {exc}") from exc
 
     # Build sector aggregation mapping
     ticker_to_sector, sector_to_name = _build_sector_map(payload.data_source)
+    sector_to_name["CASH"] = "현금"
 
     # Aggregate time series asset_values by sector
     aggregated_time_series = []
@@ -529,6 +533,7 @@ def rebalance_simulation(payload: RebalanceSimulationRequest) -> RebalanceSimula
         end_date=result.end_date,
         investment_amount=result.investment_amount,
         target_weights=sector_target_weights,
+        drift_threshold=result.drift_threshold,
         sector_names=sector_to_name,
         time_series=aggregated_time_series,
         rebalance_events=aggregated_events,
