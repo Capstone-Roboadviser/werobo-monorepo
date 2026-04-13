@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from types import SimpleNamespace
 import unittest
 
@@ -59,9 +60,15 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             selected_combination=None,
         )
 
-        def fake_build_context(*, investment_horizon: InvestmentHorizon, data_source: SimulationDataSource):
+        def fake_build_context(
+            *,
+            investment_horizon: InvestmentHorizon,
+            data_source: SimulationDataSource,
+            as_of_date=None,
+        ):
             self.assertEqual(investment_horizon, InvestmentHorizon.MEDIUM)
             self.assertEqual(data_source, SimulationDataSource.STOCK_COMBINATION_DEMO)
+            self.assertIsNone(as_of_date)
             return fake_context
 
         def fake_build_core_user_profile(*, risk_profile: RiskProfile, investment_horizon: InvestmentHorizon, data_source: SimulationDataSource):
@@ -139,12 +146,18 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
 
         original_build_context = adapter._build_context
 
-        def counting_build_context(*, investment_horizon: InvestmentHorizon, data_source: SimulationDataSource):
+        def counting_build_context(
+            *,
+            investment_horizon: InvestmentHorizon,
+            data_source: SimulationDataSource,
+            as_of_date=None,
+        ):
             nonlocal call_count
             call_count += 1
             return original_build_context(
                 investment_horizon=investment_horizon,
                 data_source=data_source,
+                as_of_date=as_of_date,
             )
 
         adapter._build_context = counting_build_context
@@ -208,6 +221,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(response["representative_code"], "balanced")
         self.assertEqual(response["portfolio"]["code"], "selected")
         self.assertEqual(response["portfolio"]["label"], "선택 포트폴리오")
+        self.assertIsNone(response["as_of_date"])
 
     def test_build_frontier_selection_uses_exact_point_index_when_provided(self) -> None:
         adapter, _ = self._build_fake_adapter()
@@ -224,6 +238,37 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(response["selected_point_index"], 2)
         self.assertEqual(response["selected_target_volatility"], 0.16)
         self.assertEqual(response["representative_code"], "growth")
+
+    def test_build_frontier_selection_serializes_historical_as_of_date(self) -> None:
+        adapter, _ = self._build_fake_adapter()
+        original_build_context = adapter._build_context
+
+        def historical_build_context(
+            *,
+            investment_horizon: InvestmentHorizon,
+            data_source: SimulationDataSource,
+            as_of_date=None,
+        ):
+            self.assertEqual(as_of_date, date(2026, 3, 1))
+            return original_build_context(
+                investment_horizon=investment_horizon,
+                data_source=data_source,
+                as_of_date=None,
+            )
+
+        adapter._build_context = historical_build_context
+
+        response = adapter.build_frontier_selection(
+            resolved_profile=RiskProfile.BALANCED,
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+            propensity_score=45.0,
+            target_volatility=0.119,
+            point_index=None,
+            as_of_date=date(2026, 3, 1),
+        )
+
+        self.assertEqual(response["as_of_date"], "2026-03-01")
 
     def test_build_recommendation_uses_materialized_snapshot_when_available(self) -> None:
         adapter, _ = self._build_fake_adapter()

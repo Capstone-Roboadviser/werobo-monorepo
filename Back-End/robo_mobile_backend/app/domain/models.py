@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 
 import pandas as pd
 
@@ -40,6 +41,7 @@ class UserProfile:
     investment_horizon: InvestmentHorizon
     target_volatility: float | None = None
     data_source: SimulationDataSource = SimulationDataSource.MANAGED_UNIVERSE
+    as_of_date: date | None = None
 
 
 @dataclass(frozen=True)

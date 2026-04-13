@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.config import TARGET_VOLATILITY_MAX, TARGET_VOLATILITY_MIN
@@ -13,6 +15,11 @@ class ProfileResolutionRequest(BaseModel):
     data_source: SimulationDataSource = Field(
         default=SimulationDataSource.MANAGED_UNIVERSE,
         description="계산에 사용할 종목 유니버스",
+    )
+    as_of_date: date | None = Field(
+        default=None,
+        description="이 날짜까지의 가격 데이터만 사용해 historical 계산을 수행합니다.",
+        examples=["2026-03-01"],
     )
 
     @model_validator(mode="after")
@@ -117,6 +124,11 @@ class PortfolioAccountCreateRequest(BaseModel):
     volatility: float = Field(..., ge=0, description="연 변동성")
     sharpe_ratio: float = Field(..., description="샤프 비율")
     initial_cash_amount: float = Field(..., gt=0, description="초기 입금 금액")
+    started_at: date | None = Field(
+        default=None,
+        description="자산 추적 시작일. historical selection을 계정에 반영할 때 사용합니다.",
+        examples=["2026-03-01"],
+    )
     sector_allocations: list[PortfolioAccountSectorAllocationRequest] = Field(
         default_factory=list,
         description="자산군 비중 정보",

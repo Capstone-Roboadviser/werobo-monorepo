@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 import logging
 
 from app.services.managed_universe_service import ManagedUniverseService
@@ -75,11 +77,13 @@ class EmbeddedPortfolioEngineAdapter:
         *,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
+        as_of_date: date | None = None,
     ):
         return self.portfolio_service.build_engine_context(
             risk_profile=RiskProfile.BALANCED,
             investment_horizon=investment_horizon,
             data_source=data_source,
+            as_of_date=as_of_date,
         )
 
     def _build_context_bundle(
@@ -87,15 +91,21 @@ class EmbeddedPortfolioEngineAdapter:
         *,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
+        as_of_date: date | None = None,
     ):
         context = self._build_context(
             investment_horizon=investment_horizon,
             data_source=data_source,
+            as_of_date=as_of_date,
         )
         instrument_by_ticker = {
             instrument.ticker.upper(): instrument for instrument in context.instruments
         }
         return context, instrument_by_ticker
+
+    @staticmethod
+    def _serialize_as_of_date(as_of_date: date | None) -> str | None:
+        return None if as_of_date is None else as_of_date.isoformat()
 
     def _build_portfolio_id(
         self,
@@ -348,6 +358,7 @@ class EmbeddedPortfolioEngineAdapter:
             fields.append(f"horizon={investment_horizon.value}")
         for key in (
             "reason",
+            "as_of_date",
             "version_id",
             "version_name",
             "aligned_start_date",
@@ -422,7 +433,10 @@ class EmbeddedPortfolioEngineAdapter:
         *,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
+        as_of_date: date | None = None,
     ) -> tuple[dict[str, object] | None, dict[str, object]]:
+        if as_of_date is not None:
+            return None, {"reason": "historical_as_of_date_requested", "as_of_date": as_of_date.isoformat()}
         snapshot_lookup = self._get_managed_universe_snapshot_payload(
             investment_horizon=investment_horizon,
             data_source=data_source,
@@ -761,10 +775,12 @@ class EmbeddedPortfolioEngineAdapter:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
         propensity_score: float | None,
+        as_of_date: date | None = None,
     ) -> dict[str, object]:
         snapshot_payload, snapshot_lookup = self._resolve_managed_universe_snapshot_lookup(
             investment_horizon=investment_horizon,
             data_source=data_source,
+            as_of_date=as_of_date,
         )
         if snapshot_payload is not None:
             if data_source == SimulationDataSource.MANAGED_UNIVERSE:
@@ -794,6 +810,7 @@ class EmbeddedPortfolioEngineAdapter:
         context, instrument_by_ticker = self._build_context_bundle(
             investment_horizon=investment_horizon,
             data_source=data_source,
+            as_of_date=as_of_date,
         )
         portfolios = [
             self._build_portfolio_snapshot_from_context(
@@ -825,6 +842,7 @@ class EmbeddedPortfolioEngineAdapter:
             ),
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
+            "as_of_date": self._serialize_as_of_date(as_of_date),
             "portfolios": [
                 {
                     key: value
@@ -843,10 +861,12 @@ class EmbeddedPortfolioEngineAdapter:
         data_source: SimulationDataSource,
         propensity_score: float | None,
         sample_points: int,
+        as_of_date: date | None = None,
     ) -> dict[str, object]:
         snapshot_payload, snapshot_lookup = self._resolve_managed_universe_snapshot_lookup(
             investment_horizon=investment_horizon,
             data_source=data_source,
+            as_of_date=as_of_date,
         )
         if snapshot_payload is not None:
             if data_source == SimulationDataSource.MANAGED_UNIVERSE:
@@ -875,6 +895,7 @@ class EmbeddedPortfolioEngineAdapter:
         context, _ = self._build_context_bundle(
             investment_horizon=investment_horizon,
             data_source=data_source,
+            as_of_date=as_of_date,
         )
         representative_indices = self._build_representative_index_map(context)
         recommended_index = representative_indices[resolved_profile]
@@ -896,6 +917,7 @@ class EmbeddedPortfolioEngineAdapter:
             ),
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
+            "as_of_date": self._serialize_as_of_date(as_of_date),
             "total_point_count": len(context.frontier_points),
             "min_volatility": round(float(context.frontier_points[0].volatility), 4),
             "max_volatility": round(float(context.frontier_points[-1].volatility), 4),
@@ -925,10 +947,12 @@ class EmbeddedPortfolioEngineAdapter:
         propensity_score: float | None,
         target_volatility: float | None,
         point_index: int | None,
+        as_of_date: date | None = None,
     ) -> dict[str, object]:
         snapshot_payload, snapshot_lookup = self._resolve_managed_universe_snapshot_lookup(
             investment_horizon=investment_horizon,
             data_source=data_source,
+            as_of_date=as_of_date,
         )
         if snapshot_payload is not None:
             if data_source == SimulationDataSource.MANAGED_UNIVERSE:
@@ -958,6 +982,7 @@ class EmbeddedPortfolioEngineAdapter:
         context, instrument_by_ticker = self._build_context_bundle(
             investment_horizon=investment_horizon,
             data_source=data_source,
+            as_of_date=as_of_date,
         )
         selected_point_index = self._resolve_selected_point_index(
             total_point_count=len(context.frontier_points),
@@ -991,6 +1016,7 @@ class EmbeddedPortfolioEngineAdapter:
                 target_volatility=context.frontier_points[representative_indices[resolved_profile]].volatility,
             ),
             "data_source": data_source.value,
+            "as_of_date": self._serialize_as_of_date(as_of_date),
             "requested_target_volatility": round(
                 float(target_volatility)
                 if target_volatility is not None

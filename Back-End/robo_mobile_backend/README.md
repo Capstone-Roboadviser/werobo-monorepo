@@ -226,7 +226,7 @@ uvicorn mobile_backend.main:app --reload
 현재 모바일 투자 흐름은 아래처럼 나뉩니다.
 
 1. `/api/v1/portfolios/frontier-preview`
-   현재 모바일 온보딩은 기본적으로 이 endpoint를 먼저 호출합니다. 앱은 `sample_points=1000`으로 preview를 받아 efficient frontier 점들을 메모리에 들고, 드래그 중 위험도/기대수익률 라벨을 즉시 갱신합니다.
+   현재 모바일 온보딩은 기본적으로 이 endpoint를 먼저 호출합니다. 앱은 `sample_points=301`로 preview를 받아 efficient frontier 점들을 메모리에 들고, 드래그 중 위험도/기대수익률 라벨을 즉시 갱신합니다.
 2. `/api/v1/portfolios/frontier-selection`
    사용자가 확정한 `selected_point_index`를 그대로 넘겨 exact 포트폴리오를 가져옵니다. 이 시점부터 결과/비교/확정/계정 생성은 선택된 exact 포트폴리오를 기준으로 이어집니다.
 3. `/api/v1/portfolios/recommendation`

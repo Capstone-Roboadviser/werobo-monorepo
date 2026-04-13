@@ -455,7 +455,7 @@ Authorization: Bearer token-string
   "propensity_score": 45,
   "investment_horizon": "medium",
   "data_source": "managed_universe",
-  "sample_points": 1000
+  "sample_points": 301
 }
 ```
 
@@ -480,7 +480,7 @@ Authorization: Bearer token-string
 운영 메모:
 
 - 모바일은 이 응답을 앱 메모리에 들고 있다가, 사용자가 점을 옮길 때마다 위험도와 기대수익률 라벨을 즉시 갱신하면 됩니다.
-- 현재 앱 온보딩은 첫 호출부터 `sample_points=1000`으로 요청해 preview를 메모리/로컬 bootstrap 상태에 유지하고, 이후 선택 확정 시 `selected_point_index`를 그대로 넘깁니다.
+- 현재 앱 온보딩은 첫 호출부터 `sample_points=301`로 요청해 preview를 메모리/로컬 bootstrap 상태에 유지하고, 이후 선택 확정 시 `selected_point_index`를 그대로 넘깁니다.
 - 사용자가 최종 위치를 확정한 뒤에만 상세 포트폴리오 API를 호출하는 구조를 권장합니다.
 - `managed_universe`에서는 가능한 한 materialized snapshot을 재사용하므로, 첫 호출 성능은 admin refresh 완료 여부에 크게 영향을 받습니다.
 

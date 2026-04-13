@@ -12,6 +12,7 @@ class PortfolioLoadingScreen extends StatefulWidget {
   final int? selectedPointIndex;
   final double? targetVolatility;
   final String? previewDataSource;
+  final DateTime? asOfDate;
 
   const PortfolioLoadingScreen({
     super.key,
@@ -19,6 +20,7 @@ class PortfolioLoadingScreen extends StatefulWidget {
     this.selectedPointIndex,
     this.targetVolatility,
     this.previewDataSource,
+    this.asOfDate,
   });
 
   @override
@@ -44,6 +46,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
       'dotT': widget.dotT.toStringAsFixed(2),
       'point_index': widget.selectedPointIndex,
       'target_volatility': widget.targetVolatility?.toStringAsFixed(4),
+      'as_of_date': widget.asOfDate?.toIso8601String().split('T').first,
     });
 
     _progressController = AnimationController(
@@ -101,6 +104,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         pointIndex: widget.selectedPointIndex,
         targetVolatility: widget.targetVolatility,
         preferredDataSource: widget.previewDataSource,
+        asOfDate: widget.asOfDate,
       );
       if (!mounted) {
         return;
@@ -115,6 +119,8 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         'selected_point_index': frontierSelection.selectedPointIndex,
         'target_volatility':
             frontierSelection.selectedTargetVolatility.toStringAsFixed(4),
+        'as_of_date':
+            frontierSelection.asOfDate?.toIso8601String().split('T').first,
       });
       _tryProceed();
     } catch (error) {
@@ -183,6 +189,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         investmentHorizon: 'medium',
       ),
       dataSource: 'fallback',
+      asOfDate: widget.asOfDate,
       requestedTargetVolatility: riskVal,
       selectedTargetVolatility: riskVal,
       selectedPointIndex: widget.selectedPointIndex ?? 0,
@@ -327,9 +334,8 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
               SizedBox(
                 width: 180,
                 child: OutlinedButton(
-                  onPressed: _fallbackSelection == null
-                      ? null
-                      : _continueWithDemo,
+                  onPressed:
+                      _fallbackSelection == null ? null : _continueWithDemo,
                   child: const Text('데모로 계속 보기'),
                 ),
               ),

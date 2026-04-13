@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from itertools import product
 from math import prod
 
@@ -429,12 +430,14 @@ class PortfolioSimulationService:
         risk_profile: RiskProfile,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
+        as_of_date: date | None = None,
     ) -> EngineContext:
         return self._prepare_context(
             UserProfile(
                 risk_profile=risk_profile,
                 investment_horizon=investment_horizon,
                 data_source=data_source,
+                as_of_date=as_of_date,
             )
         )
 
@@ -577,16 +580,18 @@ class PortfolioSimulationService:
 
     def _prepare_context(self, user_profile: UserProfile) -> EngineContext:
         if user_profile.data_source == SimulationDataSource.MANAGED_UNIVERSE:
-            return self._prepare_managed_universe_context()
+            return self._prepare_managed_universe_context(as_of_date=user_profile.as_of_date)
         if user_profile.data_source == SimulationDataSource.STOCK_COMBINATION_DEMO:
-            return self._prepare_demo_stock_universe_context()
-        return self._prepare_assumption_context()
+            return self._prepare_demo_stock_universe_context(as_of_date=user_profile.as_of_date)
+        return self._prepare_assumption_context(as_of_date=user_profile.as_of_date)
 
-    def _prepare_assumption_context(self) -> EngineContext:
+    def _prepare_assumption_context(self, *, as_of_date: date | None = None) -> EngineContext:
         repository = StaticDataRepository()
         assets = repository.load_asset_universe()
         market_assumptions = repository.load_market_assumptions()
         returns = repository.load_sample_returns()
+        if as_of_date is not None:
+            returns = returns[returns.index <= pd.Timestamp(as_of_date).normalize()].copy()
         self._validate_returns(returns)
 
         asset_codes = [asset.code for asset in assets]
@@ -631,7 +636,7 @@ class PortfolioSimulationService:
             data_source_label="자산군 가정값",
         )
 
-    def _prepare_managed_universe_context(self) -> EngineContext:
+    def _prepare_managed_universe_context(self, *, as_of_date: date | None = None) -> EngineContext:
         active_version = self.managed_universe_service.get_active_version()
         if active_version is None:
             raise RuntimeError(
@@ -646,6 +651,7 @@ class PortfolioSimulationService:
         prices = self.managed_universe_service.load_prices_for_instruments(
             instruments,
             version_id=active_version.version_id,
+            end_date=None if as_of_date is None else as_of_date.isoformat(),
         )
         if prices.empty:
             raise RuntimeError(
@@ -677,10 +683,13 @@ class PortfolioSimulationService:
         *,
         source: SimulationDataSource = SimulationDataSource.STOCK_COMBINATION_DEMO,
         label: str = "개별 종목 대표 유니버스",
+        as_of_date: date | None = None,
     ) -> EngineContext:
         assets = self.list_assets()
         instruments = self._load_demo_instruments()
         prices = StockDataRepository().load_stock_prices(str(DEMO_STOCK_PRICES_PATH))
+        if as_of_date is not None:
+            prices = prices[pd.to_datetime(prices["date"]).dt.normalize() <= pd.Timestamp(as_of_date).normalize()].copy()
         representative_context = self._select_sector_representatives(
             assets=assets,
             instruments=instruments,

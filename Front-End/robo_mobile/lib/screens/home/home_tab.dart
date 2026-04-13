@@ -11,6 +11,7 @@ import '../../models/portfolio_data.dart';
 import '../../models/rebalance_insight.dart';
 import '../../services/mobile_backend_api.dart';
 import 'insight_detail_page.dart';
+import 'projection_screen.dart';
 import 'widgets/insight_transition_chart.dart';
 
 class HomeTab extends StatefulWidget {
@@ -211,8 +212,8 @@ class _PortfolioHeroChart extends StatefulWidget {
 
 class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     with SingleTickerProviderStateMixin {
-  static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
-  static const _rangeDays = [7, 90, 365, 1825, 99999];
+  static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체', '미래'];
+  static const _rangeDays = [7, 90, 365, 1825, 99999, -1];
   static const _baseInvestment = 10000000.0;
   static const _defaultCashInAmount = 500000.0;
 
@@ -329,6 +330,16 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   }
 
   void _selectRange(int idx) {
+    // "미래" tab navigates to ProjectionScreen
+    if (idx == _rangeLabels.length - 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ProjectionScreen(),
+        ),
+      );
+      return;
+    }
     if (idx == _range) return;
     setState(() {
       _range = idx;
