@@ -1,0 +1,371 @@
+"""Portfolio digest service: attribution engine + LLM narrative generation."""
+from __future__ import annotations
+
+import json
+import logging
+import os
+from datetime import datetime, timedelta, timezone
+
+from app.data.managed_universe_repository import ManagedUniverseRepository
+from mobile_backend.data.account_repository import PortfolioAccountRepository
+from mobile_backend.data.digest_repository import DigestRepository
+from mobile_backend.services.news_aggregator import (
+    fetch_news_for_tickers,
+    get_sources_used,
+)
+
+logger = logging.getLogger(__name__)
+
+DIGEST_PERIOD_DAYS = 7
+TOP_N = 3
+
+
+class DigestError(Exception):
+    pass
+
+
+class InsufficientDataError(DigestError):
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Attribution engine (deterministic math)
+# ---------------------------------------------------------------------------
+
+def compute_attribution(
+    stock_allocations: list[dict],
+    prices_by_ticker: dict[str, dict[str, float]],
+    portfolio_value: float,
+    period_days: int = DIGEST_PERIOD_DAYS,
+) -> list[dict]:
+    """Compute Brinson-style return attribution for each ticker.
+
+    Args:
+        stock_allocations: list of {ticker, name, sector_code, sector_name, weight}
+        prices_by_ticker: {ticker: {date_str: price}} with at least start and end dates
+        portfolio_value: portfolio value at start of period (won)
+        period_days: lookback period in days
+
+    Returns:
+        list of attribution dicts sorted by contribution_won descending.
+    """
+    attributions = []
+    for alloc in stock_allocations:
+        ticker = alloc.get("ticker", "")
+        weight = float(alloc.get("weight", 0))
+        name = alloc.get("name", ticker)
+        sector_code = alloc.get("sector_code", "")
+        sector_name = alloc.get("sector_name", "")
+
+        prices = prices_by_ticker.get(ticker)
+        if not prices:
+            continue
+
+        sorted_dates = sorted(prices.keys())
+        if len(sorted_dates) < 2:
+            continue
+
+        price_end = prices[sorted_dates[-1]]
+        price_start = prices[sorted_dates[0]]
+        if price_start <= 0:
+            continue
+
+        ticker_return = (price_end / price_start) - 1
+        contribution_won = weight * ticker_return * portfolio_value
+
+        attributions.append({
+            "ticker": ticker,
+            "name_ko": sector_name or name,
+            "sector_code": sector_code,
+            "weight_pct": round(weight * 100, 1),
+            "return_pct": round(ticker_return * 100, 2),
+            "contribution_won": round(contribution_won),
+        })
+
+    attributions.sort(key=lambda x: x["contribution_won"], reverse=True)
+    return attributions
+
+
+def top_drivers_detractors(
+    attributions: list[dict],
+    n: int = TOP_N,
+) -> tuple[list[dict], list[dict]]:
+    drivers = [a for a in attributions if a["contribution_won"] > 0][:n]
+    detractors = [a for a in attributions if a["contribution_won"] < 0]
+    detractors.sort(key=lambda x: x["contribution_won"])
+    return drivers, detractors[:n]
+
+
+# ---------------------------------------------------------------------------
+# LLM synthesis (Gemini Flash)
+# ---------------------------------------------------------------------------
+
+GEMINI_MODEL = "gemini-2.0-flash"
+LLM_TIMEOUT_SECONDS = 5
+
+SYSTEM_PROMPT = """\
+You are a Korean financial summary writer for a robo-advisor app called WeRobo.
+Your job is to explain portfolio performance to young Korean investors in plain language.
+
+Rules:
+- Write in Korean (한국어)
+- Never recommend buying, selling, or holding any investment
+- Only state facts supported by the data provided
+- Frame normal market fluctuations as "정상적인 변동 범위"
+- If a rebalance was triggered, mention it
+- Keep the tone calm and reassuring, like a patient financial advisor
+- Use the investor's actual won amounts to make it personal
+"""
+
+
+def _build_user_prompt(
+    total_return_pct: float,
+    total_return_won: float,
+    portfolio_type: str,
+    drivers: list[dict],
+    detractors: list[dict],
+    news: dict[str, list[str]],
+    rebalance_triggered: bool = False,
+) -> str:
+    lines = [
+        f"총 수익률: {total_return_pct:.1f}% ({total_return_won:+,.0f}원)",
+        f"포트폴리오 유형: {portfolio_type}",
+        "",
+        "상승 기여 종목:",
+    ]
+    for d in drivers:
+        lines.append(
+            f"  - {d['ticker']} ({d['name_ko']}): 비중 {d['weight_pct']}%, "
+            f"수익률 {d['return_pct']:+.1f}%, 기여 {d['contribution_won']:+,}원"
+        )
+    lines.append("")
+    lines.append("하락 기여 종목:")
+    for d in detractors:
+        lines.append(
+            f"  - {d['ticker']} ({d['name_ko']}): 비중 {d['weight_pct']}%, "
+            f"수익률 {d['return_pct']:+.1f}%, 기여 {d['contribution_won']:+,}원"
+        )
+
+    if news:
+        lines.append("")
+        lines.append("관련 뉴스:")
+        for ticker, headlines in news.items():
+            for h in headlines[:2]:
+                lines.append(f"  - [{ticker}] {h}")
+
+    if rebalance_triggered:
+        lines.append("")
+        lines.append("이번 주에 리밸런싱이 실행되었습니다.")
+
+    lines.append("")
+    lines.append(
+        "위 데이터를 바탕으로:\n"
+        "1. 요약 문단 (3~5문장): 주간 성과를 설명하고, 상위 상승/하락 종목을 원화 금액과 "
+        "함께 언급하며, 관련 뉴스 맥락을 포함하고, 정상 변동인지 평가해주세요.\n"
+        "2. 각 상승/하락 기여 종목에 대해 2~3문장의 한국어 설명을 작성해주세요."
+    )
+    lines.append("")
+    lines.append(
+        'JSON으로 응답해주세요: {"narrative_ko": "...", "explanations": {"TICKER": "...", ...}}'
+    )
+    return "\n".join(lines)
+
+
+def generate_narrative(
+    total_return_pct: float,
+    total_return_won: float,
+    portfolio_type: str,
+    drivers: list[dict],
+    detractors: list[dict],
+    news: dict[str, list[str]],
+    rebalance_triggered: bool = False,
+) -> dict[str, str] | None:
+    """Call Gemini Flash to generate Korean narrative + per-ticker explanations.
+
+    Returns {"narrative_ko": "...", "explanations": {"TICKER": "..."}} or None on failure.
+    """
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        logger.warning("GOOGLE_API_KEY not set, skipping LLM narrative")
+        return None
+
+    try:
+        import google.generativeai as genai
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(
+            GEMINI_MODEL,
+            system_instruction=SYSTEM_PROMPT,
+        )
+
+        user_prompt = _build_user_prompt(
+            total_return_pct=total_return_pct,
+            total_return_won=total_return_won,
+            portfolio_type=portfolio_type,
+            drivers=drivers,
+            detractors=detractors,
+            news=news,
+            rebalance_triggered=rebalance_triggered,
+        )
+
+        response = model.generate_content(
+            user_prompt,
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                temperature=0.3,
+            ),
+            request_options={"timeout": LLM_TIMEOUT_SECONDS},
+        )
+
+        text = response.text.strip()
+        return json.loads(text)
+    except Exception:
+        logger.warning("Gemini narrative generation failed", exc_info=True)
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
+
+class DigestService:
+    def __init__(self) -> None:
+        self.account_repo = PortfolioAccountRepository()
+        self.universe_repo = ManagedUniverseRepository()
+        self.digest_repo = DigestRepository()
+
+    def initialize_storage(self) -> None:
+        self.digest_repo.initialize()
+
+    def generate(self, account: dict) -> dict:
+        """Generate or return cached digest for an account.
+
+        Returns a dict matching DigestResponse schema.
+        Raises InsufficientDataError if not enough data.
+        """
+        account_id = int(account["id"])
+
+        # Check cache (with read-time rebalance bust)
+        cached = self.digest_repo.get_cached(account_id)
+        if cached is not None:
+            logger.info("digest.cache.hit account_id=%s", account_id)
+            return cached
+
+        logger.info("digest.cache.miss account_id=%s", account_id)
+
+        # Get allocations
+        stock_allocations = account.get("stock_allocations") or []
+        if not stock_allocations:
+            raise InsufficientDataError("포트폴리오에 종목이 없습니다.")
+
+        # Get portfolio value from latest snapshot
+        snapshots = self.account_repo.list_snapshots(account_id)
+        if not snapshots:
+            raise InsufficientDataError("아직 충분한 데이터가 없습니다.")
+
+        latest_snapshot = snapshots[-1]
+        portfolio_value = float(latest_snapshot.get("portfolio_value", 0))
+
+        # Compute date range
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=DIGEST_PERIOD_DAYS)
+
+        # Load prices
+        tickers = [a["ticker"] for a in stock_allocations]
+        prices_df = self.universe_repo.load_prices_for_tickers(
+            tickers=tickers,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+        )
+
+        if prices_df is None or prices_df.empty:
+            raise InsufficientDataError("아직 충분한 데이터가 없습니다.")
+
+        # Build prices_by_ticker: {ticker: {date_str: price}}
+        prices_by_ticker: dict[str, dict[str, float]] = {}
+        for _, row in prices_df.iterrows():
+            ticker = str(row.get("ticker", ""))
+            date_str = str(row.get("date", ""))
+            price = float(row.get("adjusted_close", 0))
+            if ticker not in prices_by_ticker:
+                prices_by_ticker[ticker] = {}
+            prices_by_ticker[ticker][date_str] = price
+
+        # Attribution
+        attributions = compute_attribution(
+            stock_allocations=stock_allocations,
+            prices_by_ticker=prices_by_ticker,
+            portfolio_value=portfolio_value,
+        )
+
+        if not attributions:
+            raise InsufficientDataError("수익률 데이터가 부족합니다.")
+
+        total_return_won = sum(a["contribution_won"] for a in attributions)
+        total_weight = sum(float(a.get("weight", 0)) for a in stock_allocations)
+        total_return_pct = round(
+            (total_return_won / portfolio_value * 100) if portfolio_value > 0 else 0,
+            2,
+        )
+
+        drivers, detractors = top_drivers_detractors(attributions)
+
+        # Fetch news (parallel, 3s timeout per source)
+        driver_tickers = [d["ticker"] for d in drivers]
+        detractor_tickers = [d["ticker"] for d in detractors]
+        all_tickers = driver_tickers + detractor_tickers
+        news = fetch_news_for_tickers(all_tickers)
+        sources_used = get_sources_used(news)
+
+        # LLM narrative
+        portfolio_type = account.get("portfolio_label", "균형형")
+        llm_result = generate_narrative(
+            total_return_pct=total_return_pct,
+            total_return_won=total_return_won,
+            portfolio_type=portfolio_type,
+            drivers=drivers,
+            detractors=detractors,
+            news=news,
+        )
+
+        narrative_ko = None
+        explanations = {}
+        degradation_level = 0
+
+        if llm_result is None:
+            degradation_level = 2  # LLM failed
+        else:
+            narrative_ko = llm_result.get("narrative_ko")
+            explanations = llm_result.get("explanations", {})
+            if not news:
+                degradation_level = 1  # News failed
+
+        # Attach explanations to drivers/detractors
+        for item in drivers + detractors:
+            item["explanation_ko"] = explanations.get(item["ticker"])
+
+        now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        digest = {
+            "digest_date": end_date.isoformat(),
+            "period_start": start_date.isoformat(),
+            "period_end": end_date.isoformat(),
+            "total_return_pct": total_return_pct,
+            "total_return_won": total_return_won,
+            "narrative_ko": narrative_ko,
+            "has_narrative": narrative_ko is not None,
+            "drivers": drivers,
+            "detractors": detractors,
+            "sources_used": sources_used,
+            "disclaimer": "이 내용은 투자 조언이 아닙니다. AI가 생성한 요약이며 투자 결정의 근거로 사용하지 마세요.",
+            "generated_at": now_utc,
+            "degradation_level": degradation_level,
+        }
+
+        # Cache the result
+        self.digest_repo.cache(account_id, digest)
+        logger.info(
+            "digest.generate.end account_id=%s degradation_level=%s",
+            account_id,
+            degradation_level,
+        )
+        return digest

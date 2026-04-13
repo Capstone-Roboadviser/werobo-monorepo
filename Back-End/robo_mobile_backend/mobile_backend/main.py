@@ -6,6 +6,7 @@ from mobile_backend.api.router import api_router
 from mobile_backend.core.config import APP_DESCRIPTION, APP_NAME, APP_VERSION
 from mobile_backend.services.account_service import PortfolioAccountService
 from mobile_backend.services.auth_service import AuthService
+from mobile_backend.services.digest_service import DigestService
 
 app = FastAPI(
     title=APP_NAME,
@@ -36,3 +37,4 @@ def initialize_managed_universe_storage() -> None:
     ManagedUniverseService().initialize_storage()
     AuthService().initialize_storage()
     PortfolioAccountService().initialize_storage()
+    DigestService().initialize_storage()

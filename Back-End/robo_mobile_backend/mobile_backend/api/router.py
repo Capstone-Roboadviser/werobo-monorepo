@@ -4,6 +4,7 @@ from mobile_backend.api.routes.account import router as account_router
 from mobile_backend.api.routes.admin import router as admin_router
 from mobile_backend.api.routes.admin_web import router as admin_web_router
 from mobile_backend.api.routes.auth import router as auth_router
+from mobile_backend.api.routes.digest import router as digest_router
 from mobile_backend.api.routes.health import router as health_router
 from mobile_backend.api.routes.insights import router as insights_router
 from mobile_backend.api.routes.mobile import router as mobile_router
@@ -14,6 +15,7 @@ api_router.include_router(admin_web_router)
 api_router.include_router(admin_router)
 api_router.include_router(auth_router)
 api_router.include_router(account_router)
+api_router.include_router(digest_router)
 api_router.include_router(health_router)
 api_router.include_router(insights_router)
 api_router.include_router(mobile_router)

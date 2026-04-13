@@ -10,6 +10,7 @@ import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
 import '../../models/rebalance_insight.dart';
 import '../../services/mobile_backend_api.dart';
+import 'digest_screen.dart';
 import 'insight_detail_page.dart';
 import 'projection_screen.dart';
 import 'widgets/insight_transition_chart.dart';
@@ -125,6 +126,23 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 ),
               ),
             if (hasInsightBanner) const SizedBox(height: 20),
+
+            // Digest entry point
+            if (hasAccount)
+              _stagger(
+                ++staggerIdx,
+                _DigestBanner(
+                  onTap: () => Navigator.push(
+                    context,
+                    PageRouteBuilder<void>(
+                      pageBuilder: (_, __, ___) => const DigestScreen(),
+                      transitionsBuilder: (_, animation, __, child) =>
+                          FadeTransition(opacity: animation, child: child),
+                    ),
+                  ),
+                ),
+              ),
+            if (hasAccount) const SizedBox(height: 20),
 
             // Recent activity
             _stagger(
@@ -1131,6 +1149,75 @@ class _ActivityCard extends StatelessWidget {
                 color: valueColor ?? tc.textPrimary,
                 fontFamily: WeRoboFonts.english,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Digest banner ──────────────────────────────────────────
+
+class _DigestBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _DigestBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [WeRoboColors.sky1, Color(0xFFE8F4FD)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(WeRoboColors.radiusXL),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: WeRoboColors.surface,
+              ),
+              child: const Icon(
+                Icons.auto_awesome,
+                color: WeRoboColors.primary,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '주간 다이제스트',
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: WeRoboColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'AI가 분석한 이번 주 포트폴리오 리포트',
+                    style: WeRoboTypography.caption.copyWith(
+                      color: WeRoboColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right,
+              color: WeRoboColors.textTertiary,
+              size: 20,
             ),
           ],
         ),
