@@ -40,7 +40,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   bool _isLoadingCharts = true;
   String? _chartError;
   List<ChartPoint>? _volatilityPoints;
-  List<ChartPoint>? _performancePoints;
+  List<ChartPoint>? _benchmarkVolatilityPoints;
   List<ChartLine>? _comparisonLines;
   List<DateTime>? _rebalanceDates;
   MobileComparisonBacktestResponse? _backtestResponse;
@@ -123,6 +123,14 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
               ),
             )
             .toList();
+        _benchmarkVolatilityPoints = volatilityHistory.benchmarkPoints
+            ?.map(
+              (point) => ChartPoint(
+                date: point.date,
+                value: point.volatility,
+              ),
+            )
+            .toList();
       }
 
       if (comparisonBacktest != null) {
@@ -146,21 +154,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
               ),
             )
             .toList();
-
-        // Extract performance points from the portfolio's
-        // return line in comparison-backtest.
-        final code = _portfolio.code;
-        for (final line in comparisonBacktest.lines) {
-          if (line.key == code) {
-            _performancePoints = line.points
-                .map((p) => ChartPoint(
-                      date: p.date,
-                      value: p.returnPct,
-                    ))
-                .toList();
-            break;
-          }
-        }
       }
     });
   }
@@ -232,7 +225,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     }
 
     if (_volatilityPoints == null &&
-        _performancePoints == null &&
         _comparisonLines == null) {
       return _ChartErrorState(
         message: _chartError ?? '차트 데이터를 불러오지 못했어요.',
@@ -264,7 +256,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
           child: PortfolioCharts(
             type: _portfolio.investmentType,
             volatilityPoints: _volatilityPoints,
-            performancePoints: _performancePoints,
+            benchmarkVolatilityPoints: _benchmarkVolatilityPoints,
             comparisonLines: _comparisonLines,
             rebalanceDates: _rebalanceDates,
             useFallbackMock: false,

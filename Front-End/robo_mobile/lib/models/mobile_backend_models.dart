@@ -788,6 +788,7 @@ class MobileVolatilityHistoryResponse {
   final DateTime earliestDataDate;
   final DateTime latestDataDate;
   final List<MobileVolatilityPoint> points;
+  final List<MobileVolatilityPoint>? benchmarkPoints;
 
   const MobileVolatilityHistoryResponse({
     required this.portfolioCode,
@@ -796,9 +797,11 @@ class MobileVolatilityHistoryResponse {
     required this.earliestDataDate,
     required this.latestDataDate,
     required this.points,
+    this.benchmarkPoints,
   });
 
   factory MobileVolatilityHistoryResponse.fromJson(Map<String, dynamic> json) {
+    final rawBenchmark = json['benchmark_points'] as List<dynamic>?;
     return MobileVolatilityHistoryResponse(
       portfolioCode: json['portfolio_code']?.toString() ?? '',
       portfolioLabel: json['portfolio_label']?.toString() ?? '',
@@ -807,6 +810,10 @@ class MobileVolatilityHistoryResponse {
       latestDataDate: _parseDate(json['latest_data_date']),
       points: (json['points'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
+          .map(MobileVolatilityPoint.fromJson)
+          .toList(),
+      benchmarkPoints: rawBenchmark
+          ?.whereType<Map<String, dynamic>>()
           .map(MobileVolatilityPoint.fromJson)
           .toList(),
     );
