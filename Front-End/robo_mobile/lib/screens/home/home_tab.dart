@@ -99,8 +99,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   _WelcomeBanner(
                     type: type,
                     onDismiss: () => setState(() => _showWelcome = false),
-                  )),
-            if (_showWelcome) const SizedBox(height: 16),
+                  ))
+            else
+              const SizedBox.shrink(),
+            if (_showWelcome) const SizedBox(height: 16) else const SizedBox.shrink(),
 
             // Hero: value + chart + time range
             _stagger(
