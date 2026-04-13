@@ -14,6 +14,7 @@
 - 모바일 전용 FastAPI 앱 골격
 - Swagger/OpenAPI 문서가 정리된 모바일 API 라우트
 - 투자성향 판정 API
+- 이메일 회원가입 / 로그인 API
 - 3개 대표 포트폴리오 추천 API
 - efficient frontier preview API
 - 선택 frontier 포트폴리오 상세 API
@@ -65,11 +66,43 @@ robo_mobile_backend/
 - `POST /admin/api/prices/refresh/active`
 - `GET /admin/api/universe/readiness`
 - `POST /api/v1/profile/resolve`
+- `POST /api/v1/auth/signup`
+- `POST /api/v1/auth/login`
+- `GET /api/v1/auth/me`
 - `POST /api/v1/portfolios/recommendation`
 - `POST /api/v1/portfolios/frontier-preview`
 - `POST /api/v1/portfolios/frontier-selection`
 - `POST /api/v1/portfolios/volatility-history`
 - `POST /api/v1/portfolios/comparison-backtest`
+
+## 이메일 인증
+
+모바일 앱은 이제 소셜 로그인과 별도로 직접 회원가입/로그인을 지원합니다.
+
+- 저장소: 기존 `DATABASE_URL` Postgres를 재사용
+- 사용자 테이블: `auth_users`
+- 세션 테이블: `auth_sessions`
+- 비밀번호 저장 방식: `PBKDF2-HMAC-SHA256` + 개별 salt
+- 세션 토큰: 30일 유효 bearer token
+
+현재 제공 엔드포인트:
+
+1. `POST /api/v1/auth/signup`
+   이름, 이메일, 비밀번호로 계정을 만들고 즉시 로그인 세션을 발급합니다.
+2. `POST /api/v1/auth/login`
+   이메일과 비밀번호를 검증하고 로그인 세션을 발급합니다.
+3. `GET /api/v1/auth/me`
+   `Authorization: Bearer <token>` 헤더로 현재 세션과 사용자 정보를 조회합니다.
+4. `POST /api/v1/auth/logout`
+   현재 bearer 세션을 revoke 합니다.
+
+모바일 앱은 로그인 성공 시 access token과 사용자 정보를 로컬에 저장해 재실행 후에도 세션을 유지합니다.
+
+추가 구조:
+
+- `auth_provider` / `provider_user_id` 컬럼을 미리 두어 이후 Google, Kakao, Naver, Apple 계정을 바로 같은 테이블에 수용할 수 있습니다.
+- 현재 직접 회원가입 계정은 `provider=password`로 저장됩니다.
+- social 계정은 추후 `password_salt` / `password_hash` 없이 provider identity 기반으로 같은 세션 시스템을 재사용할 수 있게 설계되어 있습니다.
 
 ## 관리자 refresh와 snapshot
 

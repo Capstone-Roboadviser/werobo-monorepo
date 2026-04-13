@@ -5,25 +5,32 @@ import 'app/theme.dart';
 import 'app/theme_state.dart';
 import 'screens/onboarding/splash_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   logAction('app boot');
-  runApp(const WeRoboApp());
+  final portfolioState = PortfolioState();
+  await portfolioState.restorePersistedState();
+  runApp(WeRoboApp(portfolioState: portfolioState));
 }
 
 class WeRoboApp extends StatefulWidget {
-  const WeRoboApp({super.key});
+  final PortfolioState portfolioState;
+
+  const WeRoboApp({
+    super.key,
+    required this.portfolioState,
+  });
 
   @override
   State<WeRoboApp> createState() => _WeRoboAppState();
 }
 
 class _WeRoboAppState extends State<WeRoboApp> {
-  final _portfolioState = PortfolioState();
   final _themeNotifier = ThemeNotifier();
 
   @override
   void dispose() {
-    _portfolioState.dispose();
+    widget.portfolioState.dispose();
     _themeNotifier.dispose();
     super.dispose();
   }
@@ -31,7 +38,7 @@ class _WeRoboAppState extends State<WeRoboApp> {
   @override
   Widget build(BuildContext context) {
     return PortfolioStateProvider(
-      state: _portfolioState,
+      state: widget.portfolioState,
       child: ThemeStateProvider(
         notifier: _themeNotifier,
         child: ListenableBuilder(

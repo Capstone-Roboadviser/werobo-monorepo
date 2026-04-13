@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.config import TARGET_VOLATILITY_MAX, TARGET_VOLATILITY_MIN
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
@@ -53,3 +53,24 @@ class ComparisonBacktestRequest(BaseModel):
         default=SimulationDataSource.MANAGED_UNIVERSE,
         description="비교 백테스트에 사용할 종목 유니버스",
     )
+
+
+class SignupRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=40, description="사용자 이름")
+    email: str = Field(..., description="로그인에 사용할 이메일")
+    password: str = Field(..., min_length=8, max_length=72, description="로그인 비밀번호")
+
+    @field_validator("name", "email", "password")
+    @classmethod
+    def strip_text_fields(cls, value: str) -> str:
+        return value.strip()
+
+
+class LoginRequest(BaseModel):
+    email: str = Field(..., description="로그인 이메일")
+    password: str = Field(..., min_length=8, max_length=72, description="로그인 비밀번호")
+
+    @field_validator("email", "password")
+    @classmethod
+    def strip_login_fields(cls, value: str) -> str:
+        return value.strip()

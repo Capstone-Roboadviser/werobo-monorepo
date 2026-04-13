@@ -37,6 +37,49 @@ String formatRatioPercent(double value, {int fractionDigits = 1}) {
   return '${(value * 100).toStringAsFixed(fractionDigits)}%';
 }
 
+enum AuthProviderType {
+  password,
+  google,
+  kakao,
+  naver,
+  apple,
+  unknown,
+}
+
+AuthProviderType authProviderTypeFromApi(String value) {
+  switch (value) {
+    case 'password':
+      return AuthProviderType.password;
+    case 'google':
+      return AuthProviderType.google;
+    case 'kakao':
+      return AuthProviderType.kakao;
+    case 'naver':
+      return AuthProviderType.naver;
+    case 'apple':
+      return AuthProviderType.apple;
+    default:
+      return AuthProviderType.unknown;
+  }
+}
+
+String authProviderTypeToApi(AuthProviderType value) {
+  switch (value) {
+    case AuthProviderType.password:
+      return 'password';
+    case AuthProviderType.google:
+      return 'google';
+    case AuthProviderType.kakao:
+      return 'kakao';
+    case AuthProviderType.naver:
+      return 'naver';
+    case AuthProviderType.apple:
+      return 'apple';
+    case AuthProviderType.unknown:
+      return 'unknown';
+  }
+}
+
 InvestmentType investmentTypeFromRiskCode(String code) {
   switch (code) {
     case 'conservative':
@@ -88,6 +131,98 @@ Color _categoryColorForCode(String code, int index) {
   }
 }
 
+class MobileAuthUser {
+  final int id;
+  final String email;
+  final String name;
+  final AuthProviderType provider;
+  final String createdAt;
+
+  const MobileAuthUser({
+    required this.id,
+    required this.email,
+    required this.name,
+    required this.provider,
+    required this.createdAt,
+  });
+
+  factory MobileAuthUser.fromJson(Map<String, dynamic> json) {
+    return MobileAuthUser(
+      id: int.tryParse(json['id']?.toString() ?? '') ?? 0,
+      email: json['email']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      provider: authProviderTypeFromApi(json['provider']?.toString() ?? ''),
+      createdAt: json['created_at']?.toString() ?? '',
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'email': email,
+      'name': name,
+      'provider': authProviderTypeToApi(provider),
+      'created_at': createdAt,
+    };
+  }
+}
+
+class MobileAuthSession {
+  final String accessToken;
+  final String tokenType;
+  final String expiresAt;
+  final MobileAuthUser user;
+
+  const MobileAuthSession({
+    required this.accessToken,
+    required this.tokenType,
+    required this.expiresAt,
+    required this.user,
+  });
+
+  factory MobileAuthSession.fromJson(Map<String, dynamic> json) {
+    return MobileAuthSession(
+      accessToken: json['access_token']?.toString() ?? '',
+      tokenType: json['token_type']?.toString() ?? 'bearer',
+      expiresAt: json['expires_at']?.toString() ?? '',
+      user: MobileAuthUser.fromJson(
+        (json['user'] as Map<String, dynamic>? ?? const <String, dynamic>{}),
+      ),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'access_token': accessToken,
+      'token_type': tokenType,
+      'expires_at': expiresAt,
+      'user': user.toJson(),
+    };
+  }
+}
+
+class MobileCurrentAuthSession {
+  final bool authenticated;
+  final String expiresAt;
+  final MobileAuthUser user;
+
+  const MobileCurrentAuthSession({
+    required this.authenticated,
+    required this.expiresAt,
+    required this.user,
+  });
+
+  factory MobileCurrentAuthSession.fromJson(Map<String, dynamic> json) {
+    return MobileCurrentAuthSession(
+      authenticated: json['authenticated'] == true,
+      expiresAt: json['expires_at']?.toString() ?? '',
+      user: MobileAuthUser.fromJson(
+        (json['user'] as Map<String, dynamic>? ?? const <String, dynamic>{}),
+      ),
+    );
+  }
+}
+
 class MobileResolvedProfile {
   final String code;
   final String label;
@@ -116,6 +251,16 @@ class MobileResolvedProfile {
   }
 
   InvestmentType get investmentType => investmentTypeFromRiskCode(code);
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'label': label,
+      'propensity_score': propensityScore,
+      'target_volatility': targetVolatility,
+      'investment_horizon': investmentHorizon,
+    };
+  }
 }
 
 class MobileSectorAllocation {
@@ -146,6 +291,15 @@ class MobileSectorAllocation {
       percentage: weight * 100,
       color: _categoryColorForCode(assetCode, index),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'asset_code': assetCode,
+      'asset_name': assetName,
+      'weight': weight,
+      'risk_contribution': riskContribution,
+    };
   }
 }
 
@@ -180,6 +334,16 @@ class MobileStockAllocation {
       name: name,
       percentage: weight * 100,
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'ticker': ticker,
+      'name': name,
+      'sector_code': sectorCode,
+      'sector_name': sectorName,
+      'weight': weight,
+    };
   }
 }
 
@@ -226,6 +390,22 @@ class MobilePortfolioRecommendation {
               .map(MobileStockAllocation.fromJson)
               .toList(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'code': code,
+      'label': label,
+      'portfolio_id': portfolioId,
+      'target_volatility': targetVolatility,
+      'expected_return': expectedReturn,
+      'volatility': volatility,
+      'sharpe_ratio': sharpeRatio,
+      'sector_allocations':
+          sectorAllocations.map((allocation) => allocation.toJson()).toList(),
+      'stock_allocations':
+          stockAllocations.map((allocation) => allocation.toJson()).toList(),
+    };
   }
 
   InvestmentType get investmentType => investmentTypeFromRiskCode(code);
@@ -388,6 +568,15 @@ class MobileRecommendationResponse {
   MobilePortfolioRecommendation portfolioByCodeOrRecommended(String code) {
     return portfolioByCode(code) ?? recommendedPortfolio;
   }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'resolved_profile': resolvedProfile.toJson(),
+      'recommended_portfolio_code': recommendedPortfolioCode,
+      'data_source': dataSource,
+      'portfolios': portfolios.map((portfolio) => portfolio.toJson()).toList(),
+    };
+  }
 }
 
 class MobileFrontierPreviewPoint {
@@ -416,6 +605,17 @@ class MobileFrontierPreviewPoint {
       representativeCode: json['representative_code']?.toString(),
       representativeLabel: json['representative_label']?.toString(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'index': index,
+      'volatility': volatility,
+      'expected_return': expectedReturn,
+      'is_recommended': isRecommended,
+      'representative_code': representativeCode,
+      'representative_label': representativeLabel,
+    };
   }
 }
 
@@ -473,6 +673,18 @@ class MobileFrontierPreviewResponse {
     }
     return points[recommendedPreviewPosition];
   }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'resolved_profile': resolvedProfile.toJson(),
+      'recommended_portfolio_code': recommendedPortfolioCode,
+      'data_source': dataSource,
+      'total_point_count': totalPointCount,
+      'min_volatility': minVolatility,
+      'max_volatility': maxVolatility,
+      'points': points.map((point) => point.toJson()).toList(),
+    };
+  }
 }
 
 class MobileFrontierSelectionResponse {
@@ -514,6 +726,20 @@ class MobileFrontierSelectionResponse {
         json['portfolio'] as Map<String, dynamic>? ?? const {},
       ),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'resolved_profile': resolvedProfile.toJson(),
+      'data_source': dataSource,
+      'requested_target_volatility': requestedTargetVolatility,
+      'selected_target_volatility': selectedTargetVolatility,
+      'selected_point_index': selectedPointIndex,
+      'total_point_count': totalPointCount,
+      'representative_code': representativeCode,
+      'representative_label': representativeLabel,
+      'portfolio': portfolio.toJson(),
+    };
   }
 }
 
@@ -841,7 +1067,6 @@ class MobileRebalanceSimulationResponse {
   final String endDate;
   final double investmentAmount;
   final Map<String, double> targetWeights;
-  final double? driftThreshold;
   final Map<String, String> sectorNames;
   final List<MobileRebalanceTimePoint> timeSeries;
   final List<MobileRebalanceEvent> rebalanceEvents;
@@ -855,7 +1080,6 @@ class MobileRebalanceSimulationResponse {
     required this.endDate,
     required this.investmentAmount,
     required this.targetWeights,
-    this.driftThreshold,
     required this.sectorNames,
     required this.timeSeries,
     required this.rebalanceEvents,
@@ -874,9 +1098,6 @@ class MobileRebalanceSimulationResponse {
       endDate: json['end_date']?.toString() ?? '',
       investmentAmount: _asDouble(json['investment_amount']),
       targetWeights: tw.map((k, v) => MapEntry(k, _asDouble(v))),
-      driftThreshold: json['drift_threshold'] != null
-          ? _asDouble(json['drift_threshold'])
-          : null,
       sectorNames: sn.map((k, v) => MapEntry(k, v?.toString() ?? '')),
       timeSeries: (json['time_series'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()

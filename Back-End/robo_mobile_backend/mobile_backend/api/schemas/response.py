@@ -13,6 +13,31 @@ class ErrorResponse(BaseModel):
     detail: str = Field(..., description="오류 상세 메시지", examples=["propensity_score 또는 risk_profile 중 하나는 반드시 제공해야 합니다."])
 
 
+class AuthUserResponse(BaseModel):
+    id: int = Field(..., description="내부 사용자 식별자", examples=[1])
+    email: str = Field(..., description="사용자 이메일", examples=["investor@werobo.app"])
+    name: str = Field(..., description="표시 이름", examples=["홍길동"])
+    provider: str = Field(..., description="인증 제공자", examples=["password"])
+    created_at: str = Field(..., description="가입 시각(UTC)", examples=["2026-04-13T08:30:00Z"])
+
+
+class AuthCurrentSessionResponse(BaseModel):
+    authenticated: bool = Field(..., description="현재 토큰 유효 여부", examples=[True])
+    expires_at: str = Field(..., description="현재 세션 만료 시각(UTC)", examples=["2026-05-13T08:30:00Z"])
+    user: AuthUserResponse = Field(..., description="현재 로그인 사용자")
+
+
+class AuthSessionResponse(BaseModel):
+    access_token: str = Field(..., description="Bearer 인증 토큰")
+    token_type: str = Field(..., description="토큰 타입", examples=["bearer"])
+    expires_at: str = Field(..., description="세션 만료 시각(UTC)", examples=["2026-05-13T08:30:00Z"])
+    user: AuthUserResponse = Field(..., description="로그인/회원가입 완료 사용자")
+
+
+class AuthLogoutResponse(BaseModel):
+    status: str = Field(..., description="로그아웃 처리 결과", examples=["ok"])
+
+
 class ResolvedProfileItemResponse(BaseModel):
     code: str = Field(..., description="판정된 위험 유형 코드", examples=["balanced"])
     label: str = Field(..., description="위험 유형 표시 이름", examples=["균형형"])

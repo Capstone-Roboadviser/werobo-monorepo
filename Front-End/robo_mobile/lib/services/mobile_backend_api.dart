@@ -184,6 +184,116 @@ class MobileBackendApi {
     );
   }
 
+  Future<MobileAuthSession> signup({
+    required String name,
+    required String email,
+    required String password,
+  }) async {
+    const path = '/auth/signup';
+    final body = <String, dynamic>{
+      'name': name.trim(),
+      'email': email.trim(),
+      'password': password,
+    };
+    logApi('start', 'signup', {
+      'email': body['email'],
+    });
+    try {
+      final result = await _post(
+        path: path,
+        body: body,
+        parser: MobileAuthSession.fromJson,
+        timeout: _defaultTimeout,
+      );
+      logApi('success', 'signup', {
+        'email': body['email'],
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'signup', {
+        'email': body['email'],
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<MobileAuthSession> login({
+    required String email,
+    required String password,
+  }) async {
+    const path = '/auth/login';
+    final body = <String, dynamic>{
+      'email': email.trim(),
+      'password': password,
+    };
+    logApi('start', 'login', {
+      'email': body['email'],
+    });
+    try {
+      final result = await _post(
+        path: path,
+        body: body,
+        parser: MobileAuthSession.fromJson,
+        timeout: _defaultTimeout,
+      );
+      logApi('success', 'login', {
+        'email': body['email'],
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'login', {
+        'email': body['email'],
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<MobileCurrentAuthSession> fetchCurrentAuthSession({
+    required String accessToken,
+  }) async {
+    logApi('start', 'fetchCurrentAuthSession');
+    try {
+      final result = await _get(
+        path: '/auth/me',
+        parser: MobileCurrentAuthSession.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'fetchCurrentAuthSession', {
+        'provider': authProviderTypeToApi(result.user.provider),
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'fetchCurrentAuthSession', {
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<void> logout({
+    required String accessToken,
+  }) async {
+    logApi('start', 'logout');
+    try {
+      await _post(
+        path: '/auth/logout',
+        body: const <String, dynamic>{},
+        parser: (_) => null,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'logout');
+    } catch (error) {
+      logApi('fail', 'logout', {
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
   Future<T> _postWithFallback<T>({
     required String path,
     required Map<String, dynamic> Function(String dataSource) bodyForDataSource,
@@ -253,16 +363,51 @@ class MobileBackendApi {
     required Map<String, dynamic> body,
     required T Function(Map<String, dynamic> json) parser,
     required Duration timeout,
+    Map<String, String> headers = const <String, String>{},
   }) async {
     final response = await _client
         .post(
           Uri.parse('$baseUrl/api/v1$path'),
-          headers: const <String, String>{
+          headers: <String, String>{
             'Content-Type': 'application/json',
+            ...headers,
           },
           body: jsonEncode(body),
         )
         .timeout(timeout);
+    final responseBody = response.body;
+    final decoded = responseBody.isEmpty
+        ? const <String, dynamic>{}
+        : jsonDecode(responseBody);
+
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      if (decoded is! Map<String, dynamic>) {
+        throw const MobileBackendException('응답 형식을 해석할 수 없습니다.');
+      }
+      return parser(decoded);
+    }
+
+    final detail =
+        decoded is Map<String, dynamic> ? decoded['detail']?.toString() : null;
+    throw MobileBackendException(
+      detail ?? '서버 요청에 실패했습니다.',
+      statusCode: response.statusCode,
+    );
+  }
+
+  Future<T> _get<T>({
+    required String path,
+    required T Function(Map<String, dynamic> json) parser,
+    required Duration timeout,
+    Map<String, String> headers = const <String, String>{},
+  }) async {
+    final response = await _client.get(
+      Uri.parse('$baseUrl/api/v1$path'),
+      headers: <String, String>{
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+    ).timeout(timeout);
     final responseBody = response.body;
     final decoded = responseBody.isEmpty
         ? const <String, dynamic>{}
@@ -316,6 +461,10 @@ class MobileBackendApi {
         return 'fetchRebalanceSimulation';
       case '/portfolios/comparison-backtest':
         return 'fetchComparisonBacktest';
+      case '/auth/me':
+        return 'fetchCurrentAuthSession';
+      case '/auth/logout':
+        return 'logout';
       default:
         return path;
     }
@@ -325,5 +474,11 @@ class MobileBackendApi {
     return body.entries
         .map((entry) => '${entry.key}=${entry.value}')
         .join(', ');
+  }
+
+  Map<String, String> _authHeaders(String accessToken) {
+    return <String, String>{
+      'Authorization': 'Bearer $accessToken',
+    };
   }
 }

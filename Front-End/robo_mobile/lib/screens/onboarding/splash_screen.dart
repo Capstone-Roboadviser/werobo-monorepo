@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../app/debug_page_logger.dart';
+import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
+import '../home/home_shell.dart';
 import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -19,6 +21,7 @@ class _SplashScreenState extends State<SplashScreen>
   late Animation<double> _fadeIn;
   late Animation<double> _scale;
   Timer? _navigationTimer;
+  bool _didScheduleNavigation = false;
 
   @override
   void initState() {
@@ -44,22 +47,16 @@ class _SplashScreenState extends State<SplashScreen>
     );
 
     _controller.forward();
+  }
 
-    _navigationTimer = Timer(const Duration(milliseconds: 2000), () {
-      if (mounted) {
-        Navigator.of(context).pushReplacement(
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const OnboardingScreen(),
-            transitionsBuilder:
-                (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 500),
-          ),
-        );
-      }
-    });
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didScheduleNavigation) {
+      return;
+    }
+    _didScheduleNavigation = true;
+    _scheduleNavigation();
   }
 
   @override
@@ -68,6 +65,32 @@ class _SplashScreenState extends State<SplashScreen>
     _navigationTimer?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  Future<void> _scheduleNavigation() async {
+    final state = PortfolioStateProvider.of(context);
+    await state.validateAuthSession();
+    _navigationTimer = Timer(const Duration(milliseconds: 2000), () {
+      if (!mounted) {
+        return;
+      }
+      final destination =
+          state.canAutoEnterHome ? const HomeShell() : const OnboardingScreen();
+      logAction('route from splash', {
+        'target': state.canAutoEnterHome ? 'home' : 'onboarding',
+        'loggedIn': state.isLoggedIn,
+        'hasPortfolio': state.hasCompletedPortfolioSetup,
+      });
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => destination,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+      );
+    });
   }
 
   @override

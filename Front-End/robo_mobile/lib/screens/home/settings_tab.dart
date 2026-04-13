@@ -1,14 +1,35 @@
 import 'package:flutter/material.dart';
+import '../../app/debug_page_logger.dart';
+import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../app/theme_state.dart';
+import '../onboarding/splash_screen.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
+
+  Future<void> _handleLogout(
+    BuildContext context,
+    PortfolioState portfolioState,
+  ) async {
+    logAction('tap logout');
+    await portfolioState.logout();
+    if (!context.mounted) {
+      return;
+    }
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => const SplashScreen(),
+      ),
+      (_) => false,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final themeNotifier = ThemeStateProvider.of(context);
+    final portfolioState = PortfolioStateProvider.of(context);
     final isDark = themeNotifier.mode == ThemeMode.dark;
 
     return SafeArea(
@@ -18,14 +39,12 @@ class SettingsTab extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 20),
-            Text('설정',
-                style: WeRoboTypography.heading2.themed(context)),
+            Text('설정', style: WeRoboTypography.heading2.themed(context)),
             const SizedBox(height: 24),
 
             // Dark mode toggle
             Container(
-              padding: const EdgeInsets.symmetric(
-                  vertical: 16, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(
@@ -36,15 +55,17 @@ class SettingsTab extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(isDark
-                      ? Icons.dark_mode_rounded
-                      : Icons.light_mode_rounded,
-                      size: 22, color: tc.textSecondary),
+                  Icon(
+                      isDark
+                          ? Icons.dark_mode_rounded
+                          : Icons.light_mode_rounded,
+                      size: 22,
+                      color: tc.textSecondary),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Text('다크 모드',
-                        style: WeRoboTypography.body.copyWith(
-                            color: tc.textPrimary)),
+                        style: WeRoboTypography.body
+                            .copyWith(color: tc.textPrimary)),
                   ),
                   Switch.adaptive(
                     value: isDark,
@@ -57,8 +78,7 @@ class SettingsTab extends StatelessWidget {
 
             // Auto-rebalancing toggle
             Container(
-              padding: const EdgeInsets.symmetric(
-                  vertical: 16, horizontal: 16),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
               decoration: BoxDecoration(
                 border: Border(
                   bottom: BorderSide(
@@ -69,21 +89,17 @@ class SettingsTab extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.sync_rounded,
-                      size: 22, color: tc.textSecondary),
+                  Icon(Icons.sync_rounded, size: 22, color: tc.textSecondary),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('자동 리밸런싱',
                             style: WeRoboTypography.body
-                                .copyWith(
-                                    color: tc.textPrimary)),
+                                .copyWith(color: tc.textPrimary)),
                         Text('분기별 자동 포트폴리오 조정',
-                            style: WeRoboTypography.caption
-                                .themed(context)),
+                            style: WeRoboTypography.caption.themed(context)),
                       ],
                     ),
                   ),
@@ -98,7 +114,9 @@ class SettingsTab extends StatelessWidget {
 
             _SettingsItem(
               icon: Icons.person_outline_rounded,
-              label: '프로필',
+              label: portfolioState.currentUser == null
+                  ? '프로필'
+                  : '${portfolioState.currentUser!.name} (${portfolioState.currentUser!.email})',
               onTap: () {},
             ),
             _SettingsItem(
@@ -121,6 +139,14 @@ class SettingsTab extends StatelessWidget {
               label: '앱 정보',
               onTap: () {},
             ),
+            if (portfolioState.isLoggedIn)
+              _SettingsItem(
+                icon: Icons.logout_rounded,
+                label: '로그아웃',
+                onTap: () {
+                  _handleLogout(context, portfolioState);
+                },
+              ),
             const Spacer(),
             Center(
               child: Text(
@@ -170,29 +196,29 @@ class _SettingsItemState extends State<_SettingsItem> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          border: Border(
-            bottom: BorderSide(
-              color: tc.border.withValues(alpha: 0.4),
-              width: 0.5,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: tc.border.withValues(alpha: 0.4),
+                width: 0.5,
+              ),
             ),
           ),
+          child: Row(
+            children: [
+              Icon(widget.icon, size: 22, color: tc.textSecondary),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Text(widget.label,
+                    style:
+                        WeRoboTypography.body.copyWith(color: tc.textPrimary)),
+              ),
+              Icon(Icons.chevron_right_rounded,
+                  size: 20, color: tc.textTertiary),
+            ],
+          ),
         ),
-        child: Row(
-          children: [
-            Icon(widget.icon, size: 22, color: tc.textSecondary),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(widget.label,
-                  style: WeRoboTypography.body.copyWith(
-                      color: tc.textPrimary)),
-            ),
-            Icon(Icons.chevron_right_rounded,
-                size: 20, color: tc.textTertiary),
-          ],
-        ),
-      ),
       ),
     );
   }

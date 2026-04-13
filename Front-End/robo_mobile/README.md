@@ -20,6 +20,24 @@ Flutter 기반 WeRobo 모바일 앱입니다.
 
 현재 온보딩 2/2 차트는 `frontier-preview` 응답을 사용해 위험도와 기대수익률 라벨을 실제 backend preview point와 맞춰서 표시합니다.
 
+로그인 화면은 이제 직접 회원가입/로그인도 지원합니다.
+
+- 회원가입 API: `/api/v1/auth/signup`
+- 로그인 API: `/api/v1/auth/login`
+- 현재 세션 조회 API: `/api/v1/auth/me`
+- 로그아웃 API: `/api/v1/auth/logout`
+- 세션 저장: 앱 로컬 `shared_preferences`
+- 포트폴리오 bootstrap 저장: 추천 결과 + 선택 포트폴리오 상태를 로컬에 저장
+
+자동로그인 규칙:
+
+1. 앱 시작 시 저장된 세션과 포트폴리오 bootstrap을 함께 복원합니다.
+2. 세션이 남아 있으면 `/api/v1/auth/me`로 유효성을 확인합니다.
+3. 세션과 bootstrap이 모두 유효하면 `SplashScreen` 이후 바로 `HomeShell`로 진입합니다.
+4. 세션이 만료되었거나 `401`이면 저장 상태를 비우고 다시 온보딩으로 돌아갑니다.
+
+간편로그인 버튼은 현재 placeholder이며, backend user/session 구조는 `provider` 기반으로 이미 일반화되어 있어 이후 붙일 때 direct login과 같은 세션 시스템을 재사용할 수 있습니다.
+
 ## 실행
 
 ```bash

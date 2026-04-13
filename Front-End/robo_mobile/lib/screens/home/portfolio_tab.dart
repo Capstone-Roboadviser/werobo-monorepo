@@ -32,7 +32,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
   bool _backtestFetched = false;
 
   // Rebalance simulation API data (falls back to mock)
-  List<MobileRebalanceEvent>? _apiRebalanceEvents;
   bool _rebalanceFetched = false;
 
   @override
@@ -83,12 +82,10 @@ class _PortfolioTabState extends State<PortfolioTab> {
       for (final s in portfolio.stockAllocations) {
         weights[s.ticker] = s.weight;
       }
-      final result = await MobileBackendApi.instance.fetchRebalanceSimulation(
+      await MobileBackendApi.instance.fetchRebalanceSimulation(
         weights: weights,
         startDate: '2025-03-03',
       );
-      if (!mounted) return;
-      setState(() => _apiRebalanceEvents = result.rebalanceEvents);
     } catch (_) {
       // Endpoint not deployed yet, mock data used as fallback
     }
@@ -735,7 +732,6 @@ class _ContributionSection extends StatelessWidget {
     final tc = WeRoboThemeColors.of(context);
     final summary = MockEarningsData.summaryFor(riskCode);
     final commentary = MockEarningsData.commentaryFor(riskCode);
-    final totalPct = MockEarningsData.totalReturnPctFor(riskCode);
     final sorted = [...summary]
       ..sort((a, b) => b.earnings.compareTo(a.earnings));
 

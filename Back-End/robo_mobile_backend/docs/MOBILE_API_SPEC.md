@@ -16,7 +16,9 @@
 
 - Base path: `/api/v1`
 - Content-Type: `application/json`
-- 인증: 현재 없음
+- 인증:
+  - 회원가입/로그인 자체는 인증 없이 호출합니다.
+  - `GET /api/v1/auth/me`는 `Authorization: Bearer <token>` 헤더가 필요합니다.
 - 날짜 형식: `YYYY-MM-DD`
 - 비율 값:
   - `propensity_score`는 `0`부터 `100` 사이 점수입니다.
@@ -94,6 +96,10 @@
 
 | Method | Path | 목적 |
 |---|---|---|
+| `POST` | `/api/v1/auth/signup` | 이메일 회원가입 후 세션 발급 |
+| `POST` | `/api/v1/auth/login` | 이메일 로그인 후 세션 발급 |
+| `GET` | `/api/v1/auth/me` | 현재 로그인 세션 조회 |
+| `POST` | `/api/v1/auth/logout` | 현재 로그인 세션 종료 |
 | `POST` | `/api/v1/profile/resolve` | 투자성향 판정 |
 | `POST` | `/api/v1/portfolios/recommendation` | 안정형/균형형/성장형 3개 포트폴리오 추천 |
 | `POST` | `/api/v1/portfolios/frontier-preview` | 드래그용 efficient frontier preview 포인트 |
@@ -101,7 +107,121 @@
 | `POST` | `/api/v1/portfolios/volatility-history` | 선택 위험유형 포트폴리오의 변동성 추이 |
 | `POST` | `/api/v1/portfolios/comparison-backtest` | 유형별 비교 백테스트 |
 
-## 1. 투자성향 판정
+## 1. 이메일 인증
+
+### `POST /api/v1/auth/signup`
+
+설명:
+
+- 이메일 기반 기본 계정을 생성합니다.
+- 성공하면 즉시 bearer access token을 함께 반환합니다.
+
+요청 예시:
+
+```json
+{
+  "name": "홍길동",
+  "email": "investor@werobo.app",
+  "password": "securepass1"
+}
+```
+
+응답 예시:
+
+```json
+{
+  "access_token": "token-string",
+  "token_type": "bearer",
+  "expires_at": "2026-05-13T08:30:00Z",
+  "user": {
+    "id": 1,
+    "email": "investor@werobo.app",
+    "name": "홍길동",
+    "created_at": "2026-04-13T08:30:00Z"
+  }
+}
+```
+
+에러:
+
+- `400`: 이메일 형식/비밀번호 길이/이름 길이 오류
+- `409`: 이미 가입된 이메일
+- `503`: `DATABASE_URL` 미설정으로 인증 저장소 미구성
+
+### `POST /api/v1/auth/login`
+
+설명:
+
+- 이메일과 비밀번호를 검증하고 새 세션을 발급합니다.
+
+요청 예시:
+
+```json
+{
+  "email": "investor@werobo.app",
+  "password": "securepass1"
+}
+```
+
+응답 형식:
+
+- `POST /api/v1/auth/signup`과 동일
+
+에러:
+
+- `400`: 입력 형식 오류
+- `401`: 이메일 또는 비밀번호 불일치
+- `503`: 인증 저장소 미구성
+
+### `GET /api/v1/auth/me`
+
+설명:
+
+- bearer 토큰으로 현재 로그인 세션과 사용자를 조회합니다.
+
+헤더 예시:
+
+```text
+Authorization: Bearer token-string
+```
+
+응답 예시:
+
+```json
+{
+  "authenticated": true,
+  "expires_at": "2026-05-13T08:30:00Z",
+  "user": {
+    "id": 1,
+    "email": "investor@werobo.app",
+    "name": "홍길동",
+    "provider": "password",
+    "created_at": "2026-04-13T08:30:00Z"
+  }
+}
+```
+
+에러:
+
+- `401`: 헤더 없음, 형식 오류, 만료/무효 토큰
+- `503`: 인증 저장소 미구성
+
+### `POST /api/v1/auth/logout`
+
+설명:
+
+- 현재 bearer 토큰에 해당하는 세션을 종료합니다.
+- 모바일 앱은 logout 성공 후 로컬에 저장한 세션과 bootstrap snapshot을 함께 지우는 것을 권장합니다.
+
+응답 예시:
+
+```json
+{
+  "status": "ok"
+}
+```
+
+## 2. 투자성향 판정
 
 ### `POST /api/v1/profile/resolve`
 
@@ -134,7 +254,7 @@
 }
 ```
 
-## 2. 대표 포트폴리오 추천
+## 3. 대표 포트폴리오 추천
 
 ### `POST /api/v1/portfolios/recommendation`
 
@@ -171,7 +291,7 @@
 
 대표 포트폴리오 3개는 내부 efficient frontier 전체 포인트 중 대표 지점만 잘라낸 결과입니다. 모바일 UX를 단순하게 유지하기 위해 전체 frontier를 한 번에 모두 내려주지 않습니다.
 
-## 3. 드래그용 frontier preview
+## 4. 드래그용 frontier preview
 
 ### `POST /api/v1/portfolios/frontier-preview`
 
@@ -216,7 +336,7 @@
 - 사용자가 최종 위치를 확정한 뒤에만 상세 포트폴리오 API를 호출하는 구조를 권장합니다.
 - `managed_universe`에서는 가능한 한 materialized snapshot을 재사용하므로, 첫 호출 성능은 admin refresh 완료 여부에 크게 영향을 받습니다.
 
-## 4. 선택 frontier 포트폴리오 상세
+## 5. 선택 frontier 포트폴리오 상세
 
 ### `POST /api/v1/portfolios/frontier-selection`
 
@@ -249,7 +369,7 @@
 
 `portfolio` 구조는 `/portfolios/recommendation`의 각 포트폴리오 항목과 동일합니다.
 
-## 5. 포트폴리오 변동성 추이
+## 6. 포트폴리오 변동성 추이
 
 ### `POST /api/v1/portfolios/volatility-history`
 
