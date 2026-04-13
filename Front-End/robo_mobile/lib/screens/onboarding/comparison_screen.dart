@@ -43,20 +43,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
   late double _maxVol;
   late List<_SnapPoint> _snapPoints;
 
+  bool _didInit = false;
+
   @override
   void initState() {
     super.initState();
     _snappedCode = widget.selectedPortfolioCode;
-
-    // Read frontier preview from provider
-    _frontierPreview =
-        PortfolioStateProvider.of(context).frontierPreview;
-    _initSliderRange();
-
-    logPageEnter('ComparisonScreen', {'selected': _snappedCode});
-    logAction('comparison initial selected', {
-      'portfolio': _snappedCode,
-    });
 
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 500),
@@ -66,9 +58,27 @@ class _ComparisonScreenState extends State<ComparisonScreen>
       CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
     );
     _fadeController.forward();
+  }
 
-    // Fire initial API call for the selected portfolio
-    _fetchSelection(_sliderToVolatility(_sliderValue));
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInit) {
+      _didInit = true;
+
+      // Read frontier preview from provider
+      _frontierPreview =
+          PortfolioStateProvider.of(context).frontierPreview;
+      _initSliderRange();
+
+      logPageEnter('ComparisonScreen', {'selected': _snappedCode});
+      logAction('comparison initial selected', {
+        'portfolio': _snappedCode,
+      });
+
+      // Fire initial API call for the selected portfolio
+      _fetchSelection(_sliderToVolatility(_sliderValue));
+    }
   }
 
   void _initSliderRange() {
