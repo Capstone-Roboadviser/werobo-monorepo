@@ -336,12 +336,9 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
 
     def test_get_comparison_backtest_accepts_tuple_points(self) -> None:
         adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
-        adapter.CoreSimulationDataSource = lambda value: value
-        adapter.CoreComparisonBacktestRequest = (
-            lambda data_source: SimpleNamespace(data_source=data_source)
-        )
-        adapter.core_portfolio_routes = SimpleNamespace(
-            comparison_backtest=lambda request: SimpleNamespace(
+        adapter._to_core_data_source = lambda value: value
+        adapter.portfolio_analytics_service = SimpleNamespace(
+            build_comparison_backtest=lambda **kwargs: SimpleNamespace(
                 train_start_date="2024-01-01",
                 train_end_date="2024-12-31",
                 test_start_date="2025-01-01",
