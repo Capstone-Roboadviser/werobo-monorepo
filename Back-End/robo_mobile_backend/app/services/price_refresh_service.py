@@ -8,6 +8,7 @@ import yfinance as yf
 
 from app.domain.enums import PriceRefreshMode
 from app.domain.models import ManagedPriceRefreshResult, ManagedUniverseVersion, StockInstrument
+from app.services.dividend_yield_service import LiveDividendYieldProvider
 from app.services.managed_universe_service import ManagedUniverseService
 
 
@@ -19,9 +20,11 @@ class PriceRefreshService:
         managed_universe_service: ManagedUniverseService | None = None,
         *,
         extra_ticker_provider: Callable[[ManagedUniverseVersion], Iterable[str]] | None = None,
+        dividend_yield_provider: LiveDividendYieldProvider | None = None,
     ) -> None:
         self.managed_universe_service = managed_universe_service or ManagedUniverseService()
         self.extra_ticker_provider = extra_ticker_provider
+        self.dividend_yield_provider = dividend_yield_provider or LiveDividendYieldProvider()
 
     def refresh_prices(
         self,
@@ -65,6 +68,7 @@ class PriceRefreshService:
                 )
                 frame = self._fetch_ticker_history(ticker, start_date)
                 rows_upserted = self.managed_universe_service.repository.upsert_prices(frame, source="yfinance")
+                self._refresh_dividend_yield_estimate(ticker)
                 self.managed_universe_service.repository.record_refresh_job_item(
                     job_id=job.job_id,
                     ticker=ticker,
@@ -161,6 +165,14 @@ class PriceRefreshService:
                 if ticker:
                     tickers.add(ticker)
         return sorted(tickers)
+
+    def _refresh_dividend_yield_estimate(self, ticker: str) -> None:
+        try:
+            estimate = self.dividend_yield_provider.fetch_estimate(ticker)
+            self.managed_universe_service.repository.upsert_dividend_yield_estimate(estimate)
+        except Exception:
+            # Dividend metadata should not block price refresh success.
+            return
 
     def _fetch_ticker_history(self, ticker: str, start_date: date) -> pd.DataFrame:
         frame = yf.download(

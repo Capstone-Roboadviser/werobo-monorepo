@@ -8,6 +8,7 @@ import pandas as pd
 from app.core.config import DATABASE_URL
 from app.domain.enums import InvestmentHorizon, PriceRefreshMode, SimulationDataSource
 from app.domain.models import (
+    DividendYieldEstimate,
     ManagedComparisonBacktestSnapshot,
     ManagedFrontierSnapshot,
     ManagedPriceRefreshJob,
@@ -167,6 +168,20 @@ class ManagedUniverseRepository:
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         UNIQUE (version_id, data_source)
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS dividend_yield_estimates (
+                        ticker TEXT PRIMARY KEY,
+                        annualized_dividend DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        annual_yield DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        payments_per_year INTEGER NOT NULL DEFAULT 0,
+                        frequency_label TEXT NOT NULL DEFAULT 'unknown',
+                        last_payment_date DATE,
+                        source TEXT NOT NULL DEFAULT 'unknown',
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                     """
                 )
@@ -873,6 +888,97 @@ class ManagedUniverseRepository:
                 rows = cursor.fetchall()
         return [self._refresh_job_item_from_row(row) for row in rows]
 
+    def upsert_dividend_yield_estimate(
+        self,
+        estimate: DividendYieldEstimate,
+    ) -> DividendYieldEstimate:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO dividend_yield_estimates (
+                        ticker,
+                        annualized_dividend,
+                        annual_yield,
+                        payments_per_year,
+                        frequency_label,
+                        last_payment_date,
+                        source,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (ticker) DO UPDATE
+                    SET annualized_dividend = EXCLUDED.annualized_dividend,
+                        annual_yield = EXCLUDED.annual_yield,
+                        payments_per_year = EXCLUDED.payments_per_year,
+                        frequency_label = EXCLUDED.frequency_label,
+                        last_payment_date = EXCLUDED.last_payment_date,
+                        source = EXCLUDED.source,
+                        updated_at = NOW()
+                    RETURNING
+                        ticker,
+                        annualized_dividend,
+                        annual_yield,
+                        payments_per_year,
+                        frequency_label,
+                        last_payment_date::TEXT AS last_payment_date,
+                        source,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    """,
+                    (
+                        estimate.ticker,
+                        estimate.annualized_dividend,
+                        estimate.annual_yield,
+                        estimate.payments_per_year,
+                        estimate.frequency_label,
+                        estimate.last_payment_date,
+                        estimate.source,
+                    ),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            raise RuntimeError("dividend yield estimate 저장 결과를 다시 읽지 못했습니다.")
+        return self._dividend_yield_estimate_from_row(row)
+
+    def get_dividend_yield_estimate(self, ticker: str) -> DividendYieldEstimate | None:
+        normalized = str(ticker).strip().upper()
+        return self.get_dividend_yield_estimates([normalized]).get(normalized)
+
+    def get_dividend_yield_estimates(
+        self,
+        tickers: list[str],
+    ) -> dict[str, DividendYieldEstimate]:
+        self._ensure_ready()
+        normalized_tickers = sorted({str(ticker).strip().upper() for ticker in tickers if str(ticker).strip()})
+        if not normalized_tickers:
+            return {}
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        ticker,
+                        annualized_dividend,
+                        annual_yield,
+                        payments_per_year,
+                        frequency_label,
+                        last_payment_date::TEXT AS last_payment_date,
+                        source,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    FROM dividend_yield_estimates
+                    WHERE ticker = ANY(%s)
+                    """,
+                    (normalized_tickers,),
+                )
+                rows = cursor.fetchall()
+        return {
+            estimate.ticker.upper(): estimate
+            for estimate in (self._dividend_yield_estimate_from_row(row) for row in rows)
+        }
+
     def upsert_frontier_snapshot(
         self,
         *,
@@ -1149,6 +1255,18 @@ class ManagedUniverseRepository:
             error_message=None if row["error_message"] is None else str(row["error_message"]),
             started_at=None if row["started_at"] is None else str(row["started_at"]),
             finished_at=None if row["finished_at"] is None else str(row["finished_at"]),
+        )
+
+    def _dividend_yield_estimate_from_row(self, row: dict) -> DividendYieldEstimate:
+        return DividendYieldEstimate(
+            ticker=str(row["ticker"]).upper(),
+            annualized_dividend=float(row["annualized_dividend"] or 0.0),
+            annual_yield=float(row["annual_yield"] or 0.0),
+            payments_per_year=int(row["payments_per_year"] or 0),
+            frequency_label=str(row["frequency_label"]),
+            last_payment_date=None if row["last_payment_date"] is None else str(row["last_payment_date"]),
+            source=str(row["source"]),
+            updated_at=None if row["updated_at"] is None else str(row["updated_at"]),
         )
 
     def _price_window_from_row(self, row: dict) -> ManagedUniversePriceWindow:

@@ -6,6 +6,7 @@ import pandas as pd
 
 from app.domain.enums import PriceRefreshMode
 from app.domain.models import (
+    DividendYieldEstimate,
     ManagedPriceRefreshJob,
     ManagedPriceStats,
     ManagedUniversePriceWindow,
@@ -21,6 +22,7 @@ class FakeManagedUniverseRepository:
         self.created_jobs: list[dict[str, object]] = []
         self.recorded_items: list[dict[str, object]] = []
         self.upserted_tickers: list[str] = []
+        self.upserted_dividend_estimates: list[DividendYieldEstimate] = []
         self.price_stats_requests: list[dict[str, object]] = []
 
     def get_instruments_for_version(self, version_id: int) -> list[StockInstrument]:
@@ -85,6 +87,10 @@ class FakeManagedUniverseRepository:
         assert source == "yfinance"
         self.upserted_tickers.append(str(frame["ticker"].iloc[0]))
         return len(frame)
+
+    def upsert_dividend_yield_estimate(self, estimate: DividendYieldEstimate) -> DividendYieldEstimate:
+        self.upserted_dividend_estimates.append(estimate)
+        return estimate
 
     def record_refresh_job_item(
         self,
@@ -201,11 +207,25 @@ class StubPriceRefreshService(PriceRefreshService):
         )
 
 
+class StubDividendYieldProvider:
+    def fetch_estimate(self, ticker: str) -> DividendYieldEstimate:
+        return DividendYieldEstimate(
+            ticker=ticker,
+            annualized_dividend=2.4,
+            annual_yield=0.024,
+            payments_per_year=4,
+            frequency_label="quarterly",
+            last_payment_date="2026-03-31",
+            source="yfinance",
+        )
+
+
 def test_refresh_prices_includes_managed_account_holdings() -> None:
     managed_universe_service = FakeManagedUniverseService()
     service = StubPriceRefreshService(
         managed_universe_service,
         extra_ticker_provider=lambda version: ["old", "QQQ"] if version.is_active else [],
+        dividend_yield_provider=StubDividendYieldProvider(),
     )
 
     result = service.refresh_prices(refresh_mode=PriceRefreshMode.INCREMENTAL)
@@ -222,6 +242,11 @@ def test_refresh_prices_includes_managed_account_holdings() -> None:
         ["BND", "OLD", "QQQ"]
     ]
     assert managed_universe_service.repository.upserted_tickers == ["BND", "OLD", "QQQ"]
+    assert [estimate.ticker for estimate in managed_universe_service.repository.upserted_dividend_estimates] == [
+        "BND",
+        "OLD",
+        "QQQ",
+    ]
     assert [item["ticker"] for item in managed_universe_service.repository.recorded_items] == [
         "BND",
         "OLD",

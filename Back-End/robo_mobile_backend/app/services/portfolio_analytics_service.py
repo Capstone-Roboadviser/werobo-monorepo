@@ -5,7 +5,7 @@ import math
 import numpy as np
 import pandas as pd
 
-from app.core.config import DEMO_STOCK_PRICES_PATH, MINIMUM_HISTORY_ROWS
+from app.core.config import DEMO_STOCK_PRICES_PATH, ENABLE_LIVE_MARKET_DATA_FETCH, MINIMUM_HISTORY_ROWS
 from app.data.stock_repository import StockDataRepository
 from app.domain.enums import SimulationDataSource
 from app.domain.models import PortfolioHistoryPoint, PortfolioHistorySeries
@@ -286,6 +286,8 @@ class PortfolioAnalyticsService:
 
     def _fetch_benchmark_prices(self, start_date: str) -> dict[str, pd.Series]:
         benchmarks: dict[str, pd.Series] = {}
+        if not ENABLE_LIVE_MARKET_DATA_FETCH:
+            return benchmarks
         try:
             import yfinance as yf
 

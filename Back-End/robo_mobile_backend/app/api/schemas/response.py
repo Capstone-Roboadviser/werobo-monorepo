@@ -30,7 +30,7 @@ class AssetUniverseResponse(BaseModel):
 
 
 class AssetRoleTemplateResponse(BaseModel):
-    key: str = Field(..., description="role key", examples=["equal_weight_basket"])
+    key: str = Field(..., description="role key", examples=["equal_weight_dividend_basket"])
     name: str = Field(..., description="role 이름", examples=["동일비중 바스켓"])
     description: str = Field(..., description="role 설명")
     selection_mode: str = Field(..., description="후보 선택 방식", examples=["all_members"])
@@ -156,7 +156,7 @@ class ManagedUniverseItemResponse(BaseModel):
 class ManagedUniverseAssetRoleResponse(BaseModel):
     asset_code: str = Field(..., description="자산군 코드", examples=["gold"])
     asset_name: str = Field(..., description="자산군 이름", examples=["금"])
-    role_key: str = Field(..., description="적용된 role key", examples=["equal_weight_basket"])
+    role_key: str = Field(..., description="적용된 role key", examples=["equal_weight_dividend_basket"])
     role_name: str = Field(..., description="적용된 role 이름", examples=["동일비중 바스켓"])
     role_description: str = Field(..., description="role 설명")
     selection_mode: str = Field(..., description="선택 방식", examples=["all_members"])

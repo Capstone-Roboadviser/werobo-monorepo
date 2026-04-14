@@ -165,6 +165,18 @@ class ManagedPriceRefreshJobItem:
 
 
 @dataclass(frozen=True)
+class DividendYieldEstimate:
+    ticker: str
+    annualized_dividend: float
+    annual_yield: float
+    payments_per_year: int
+    frequency_label: str
+    last_payment_date: str | None
+    source: str = "unknown"
+    updated_at: str | None = None
+
+
+@dataclass(frozen=True)
 class ManagedFrontierSnapshot:
     snapshot_id: int
     version_id: int
