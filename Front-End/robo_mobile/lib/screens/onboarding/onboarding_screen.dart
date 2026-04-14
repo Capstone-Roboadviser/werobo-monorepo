@@ -91,21 +91,53 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _goToLoading() {
+    final resolvedSelection =
+        _frontierSelection ?? _selectionFromCachedPreview();
+    if (resolvedSelection != null && _frontierSelection == null) {
+      logAction('hydrate initial frontier selection', {
+        'selected_point_index': resolvedSelection.selectedPointIndex,
+        'target_volatility':
+            resolvedSelection.targetVolatility.toStringAsFixed(4),
+        'dataSource': resolvedSelection.dataSource,
+      });
+    }
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
             PortfolioLoadingScreen(
           dotT: _selectedDotT,
-          selectedPointIndex: _frontierSelection?.selectedPointIndex,
-          targetVolatility: _frontierSelection?.targetVolatility,
-          previewDataSource: _frontierSelection?.dataSource,
-          asOfDate: _frontierSelection?.asOfDate ?? widget.asOfDate,
+          selectedPointIndex: resolvedSelection?.selectedPointIndex,
+          targetVolatility: resolvedSelection?.targetVolatility,
+          previewDataSource: resolvedSelection?.dataSource,
+          asOfDate: resolvedSelection?.asOfDate ?? widget.asOfDate,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
         transitionDuration: const Duration(milliseconds: 400),
       ),
+    );
+  }
+
+  OnboardingFrontierSelection? _selectionFromCachedPreview() {
+    final preview = PortfolioStateProvider.of(context).frontierPreview;
+    if (preview == null || preview.points.isEmpty) {
+      return null;
+    }
+    final previewPosition = preview.points.length <= 1
+        ? 0
+        : (_selectedDotT * (preview.points.length - 1))
+            .round()
+            .clamp(0, preview.points.length - 1);
+    final point = preview.points[previewPosition];
+    return OnboardingFrontierSelection(
+      normalizedT: preview.points.length <= 1
+          ? _selectedDotT
+          : previewPosition / (preview.points.length - 1),
+      selectedPointIndex: point.index,
+      targetVolatility: point.volatility,
+      dataSource: preview.dataSource,
+      asOfDate: preview.asOfDate ?? widget.asOfDate,
     );
   }
 
@@ -585,6 +617,9 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         ? _initialDotT
         : rec / (_embeddedPreview.points.length - 1);
     widget.onPositionChanged?.call(_dotT);
+    widget.onFrontierSelectionChanged?.call(
+      _selectionForPreviewPosition(rec),
+    );
     _loadFrontierPreview();
   }
 
@@ -653,40 +688,43 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       });
     }
     widget.onPositionChanged?.call(_dotT);
-    final previewPoint = preview.recommendedPoint;
-    if (previewPoint != null) {
-      widget.onFrontierSelectionChanged?.call(
-        OnboardingFrontierSelection(
-          normalizedT: normalizedT,
-          selectedPointIndex: previewPoint.index,
-          targetVolatility: previewPoint.volatility,
-          dataSource: preview.dataSource,
-          asOfDate: preview.asOfDate ?? widget.asOfDate,
-        ),
-      );
-    }
+    widget.onFrontierSelectionChanged?.call(
+      _selectionForPreviewPosition(recommendedPosition),
+    );
   }
 
   void _handlePreviewPositionChanged(int previewPosition) {
-    if (_preview.points.isEmpty) {
+    final selection = _selectionForPreviewPosition(previewPosition);
+    if (selection == null) {
       return;
     }
+    setState(() {
+      _selectedPreviewPosition = _preview.positionForPointIndex(
+        selection.selectedPointIndex,
+      );
+      _dotT = selection.normalizedT;
+    });
+    widget.onPositionChanged?.call(selection.normalizedT);
+    widget.onFrontierSelectionChanged?.call(selection);
+  }
+
+  OnboardingFrontierSelection? _selectionForPreviewPosition(
+      int previewPosition) {
+    if (_preview.points.isEmpty ||
+        previewPosition < 0 ||
+        previewPosition >= _preview.points.length) {
+      return null;
+    }
+    final point = _preview.points[previewPosition];
     final normalizedT = _preview.points.length <= 1
         ? _initialDotT
         : previewPosition / (_preview.points.length - 1);
-    setState(() {
-      _selectedPreviewPosition = previewPosition;
-      _dotT = normalizedT;
-    });
-    widget.onPositionChanged?.call(normalizedT);
-    widget.onFrontierSelectionChanged?.call(
-      OnboardingFrontierSelection(
-        normalizedT: normalizedT,
-        selectedPointIndex: _preview.points[previewPosition].index,
-        targetVolatility: _preview.points[previewPosition].volatility,
-        dataSource: _preview.dataSource,
-        asOfDate: _preview.asOfDate ?? widget.asOfDate,
-      ),
+    return OnboardingFrontierSelection(
+      normalizedT: normalizedT,
+      selectedPointIndex: point.index,
+      targetVolatility: point.volatility,
+      dataSource: _preview.dataSource,
+      asOfDate: _preview.asOfDate ?? widget.asOfDate,
     );
   }
 
@@ -699,14 +737,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         : (normalizedT * (_preview.points.length - 1))
             .round()
             .clamp(0, _preview.points.length - 1);
-    final point = _preview.points[previewPosition];
-    return OnboardingFrontierSelection(
-      normalizedT: normalizedT,
-      selectedPointIndex: point.index,
-      targetVolatility: point.volatility,
-      dataSource: _preview.dataSource,
-      asOfDate: _preview.asOfDate ?? widget.asOfDate,
-    );
+    return _selectionForPreviewPosition(previewPosition);
   }
 
   @override
