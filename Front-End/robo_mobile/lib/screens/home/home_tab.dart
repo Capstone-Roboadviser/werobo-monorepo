@@ -584,7 +584,11 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  color: active ? WeRoboColors.primary : Colors.transparent,
+                  color: active && !isFuture
+                      ? WeRoboColors.white
+                      : active
+                          ? WeRoboColors.primary
+                          : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                   boxShadow: isFuture
                       ? [
@@ -606,8 +610,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     color: isFuture
                         ? WeRoboColors.primary
                         : active
-                            ? WeRoboColors.white
-                            : WeRoboColors.white,
+                            ? WeRoboColors.black
+                            : Colors.white.withValues(alpha: 0.45),
                   ),
                 ),
               ),
