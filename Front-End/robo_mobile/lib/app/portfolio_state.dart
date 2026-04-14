@@ -14,6 +14,8 @@ class PortfolioState extends ChangeNotifier {
   static const String _authSessionStorageKey = 'werobo.auth_session';
   static const String _portfolioBootstrapStorageKey =
       'werobo.portfolio_bootstrap';
+  static const String _digestSeenDateKey =
+      'werobo.digest_seen_date';
 
   InvestmentType _type = InvestmentType.balanced;
   MobileRecommendationResponse? _recommendation;
@@ -23,6 +25,7 @@ class PortfolioState extends ChangeNotifier {
   MobileAuthSession? _authSession;
   MobileAccountDashboard? _accountDashboard;
   List<RebalanceInsight> _insights = [];
+  String? _digestSeenDate;
 
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
@@ -42,6 +45,8 @@ class PortfolioState extends ChangeNotifier {
       _insights.where((i) => !i.isRead).toList();
   int get unreadInsightCount =>
       _insights.where((i) => !i.isRead).length;
+  String? get digestSeenDate => _digestSeenDate;
+  bool get hasSeenCurrentDigest => _digestSeenDate != null;
 
   bool get isLoggedIn => _authSession != null;
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
@@ -128,6 +133,7 @@ class PortfolioState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await _restoreAuthSessionFromPrefs(prefs);
     await _restorePortfolioBootstrapFromPrefs(prefs);
+    _digestSeenDate = prefs.getString(_digestSeenDateKey);
   }
 
   Future<bool> validateAuthSession() async {
@@ -335,6 +341,13 @@ class PortfolioState extends ChangeNotifier {
     // Fall back to mock insights based on current portfolio
     _insights = MockInsightData.insightsFor(categories);
     if (notify) notifyListeners();
+  }
+
+  Future<void> markDigestSeen(String digestDate) async {
+    _digestSeenDate = digestDate;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_digestSeenDateKey, digestDate);
   }
 
   Future<void> markInsightAsRead(int insightId) async {

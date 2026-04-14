@@ -10,8 +10,10 @@ import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
 import '../../models/rebalance_insight.dart';
 import '../../services/mobile_backend_api.dart';
+import 'activity_hub_page.dart';
 import 'digest_screen.dart';
 import 'insight_detail_page.dart';
+import 'widgets/glowing_border.dart';
 import 'projection_screen.dart';
 import 'widgets/insight_transition_chart.dart';
 
@@ -82,6 +84,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final activities = state.accountActivities;
     final hasAccount = state.hasPrototypeAccount;
     final hasInsightBanner = state.unreadInsightCount > 0;
+    final hasDigestBanner = !state.hasSeenCurrentDigest;
     int staggerIdx = 0;
 
     return SafeArea(
@@ -91,7 +94,16 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
+
+            // Notification icon (persistent access)
+            Align(
+              alignment: Alignment.centerRight,
+              child: _NotificationIconButton(
+                hasUnread: state.unreadInsightCount > 0,
+              ),
+            ),
+            const SizedBox(height: 8),
 
             // Welcome banner (first visit only)
             if (_showWelcome)
@@ -129,21 +141,28 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               ),
             if (hasInsightBanner) const SizedBox(height: 20),
 
-            // Digest entry point
-            _stagger(
+            // Digest entry point (hidden after user has seen it)
+            if (hasDigestBanner)
+              _stagger(
                 ++staggerIdx,
                 _DigestBanner(
                   onTap: () => Navigator.push(
                     context,
                     PageRouteBuilder<void>(
-                      pageBuilder: (_, __, ___) => const DigestScreen(),
-                      transitionsBuilder: (_, animation, __, child) =>
-                          FadeTransition(opacity: animation, child: child),
+                      pageBuilder: (_, __, ___) =>
+                          const DigestScreen(),
+                      transitionsBuilder:
+                          (_, animation, __, child) =>
+                              FadeTransition(
+                        opacity: animation,
+                        child: child,
+                      ),
                     ),
                   ),
                 ),
               ),
-            const SizedBox(height: 20),
+            if (hasDigestBanner)
+              const SizedBox(height: 20),
 
             // Recent activity
             _stagger(
@@ -1166,60 +1185,117 @@ class _DigestBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [WeRoboColors.sky1, Color(0xFFE8F4FD)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(WeRoboColors.radiusXL),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: WeRoboColors.surface,
+    final tc = WeRoboThemeColors.of(context);
+    return GlowingBorder(
+      borderRadius: WeRoboColors.radiusXL,
+      child: SizedBox(
+        height: 60,
+        child: Pressable(
+          onTap: onTap,
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: WeRoboColors.primary
+                      .withValues(alpha: 0.08),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: WeRoboColors.primary,
+                  size: 20,
+                ),
               ),
-              child: const Icon(
-                Icons.auto_awesome,
-                color: WeRoboColors.primary,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '주간 다이제스트',
+                      style: WeRoboTypography.bodySmall
+                          .copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: tc.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'AI가 분석한 이번 주 포트폴리오 리포트',
+                      style:
+                          WeRoboTypography.caption.copyWith(
+                        color: tc.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: tc.textTertiary,
                 size: 20,
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '주간 다이제스트',
-                    style: WeRoboTypography.bodySmall.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: WeRoboColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'AI가 분석한 이번 주 포트폴리오 리포트',
-                    style: WeRoboTypography.caption.copyWith(
-                      color: WeRoboColors.textSecondary,
-                    ),
-                  ),
-                ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Notification icon ──────────────────────────────────────
+
+class _NotificationIconButton extends StatelessWidget {
+  final bool hasUnread;
+  const _NotificationIconButton({this.hasUnread = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: () => Navigator.push(
+        context,
+        PageRouteBuilder<void>(
+          pageBuilder: (_, __, ___) =>
+              const ActivityHubPage(),
+          transitionsBuilder: (_, anim, __, child) =>
+              FadeTransition(opacity: anim, child: child),
+        ),
+      ),
+      child: SizedBox(
+        width: 36,
+        height: 36,
+        child: Stack(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: tc.card,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.notifications_none_rounded,
+                size: 20,
+                color: tc.textSecondary,
               ),
             ),
-            const Icon(
-              Icons.chevron_right,
-              color: WeRoboColors.textTertiary,
-              size: 20,
-            ),
+            if (hasUnread)
+              Positioned(
+                right: 2,
+                top: 2,
+                child: Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: WeRoboColors.primary,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              ),
           ],
         ),
       ),
