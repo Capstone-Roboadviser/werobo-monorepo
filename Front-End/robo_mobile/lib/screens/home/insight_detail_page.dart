@@ -32,7 +32,7 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
     final insight = widget.insight;
 
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: Column(
           children: [

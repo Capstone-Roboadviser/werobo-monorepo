@@ -216,7 +216,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     final divisions = previewCount > 1 ? previewCount - 1 : null;
 
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,

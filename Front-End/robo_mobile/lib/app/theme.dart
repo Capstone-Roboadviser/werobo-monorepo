@@ -317,7 +317,7 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
   );
 
   static const dark = WeRoboThemeColors(
-    background: Color(0xFF0F0F0F),
+    background: Color(0xFF141414),
     surface: Color(0xFF1A1A1A),
     card: Color(0xFF232528),
     border: Color(0xFF363840),
