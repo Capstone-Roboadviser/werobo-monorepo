@@ -5,6 +5,35 @@ import 'package:robo_mobile/models/portfolio_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  MobileSectorAllocation sector({
+    required String code,
+    required String name,
+    required double weight,
+  }) {
+    return MobileSectorAllocation(
+      assetCode: code,
+      assetName: name,
+      weight: weight,
+      riskContribution: weight,
+    );
+  }
+
+  MobileStockAllocation stock({
+    required String ticker,
+    required String name,
+    required String sectorCode,
+    required String sectorName,
+    required double weight,
+  }) {
+    return MobileStockAllocation(
+      ticker: ticker,
+      name: name,
+      sectorCode: sectorCode,
+      sectorName: sectorName,
+      weight: weight,
+    );
+  }
+
   group('PortfolioState', () {
     late PortfolioState state;
 
@@ -107,6 +136,90 @@ void main() {
 
       expect(state.recommendation?.recommendedPortfolioCode, 'balanced');
       expect(state.frontierPreview, isNull);
+    });
+
+    test('selectedPortfolio prefers account dashboard over cached selection',
+        () {
+      state.setFrontierSelection(
+        MobileFrontierSelectionResponse(
+          resolvedProfile: const MobileResolvedProfile(
+            code: 'balanced',
+            label: '균형형',
+            propensityScore: 45,
+            targetVolatility: 0.12,
+            investmentHorizon: 'medium',
+          ),
+          dataSource: 'managed_universe',
+          asOfDate: null,
+          requestedTargetVolatility: 0.12,
+          selectedTargetVolatility: 0.12,
+          selectedPointIndex: 30,
+          totalPointCount: 61,
+          representativeCode: 'balanced',
+          representativeLabel: '균형형',
+          portfolio: const MobilePortfolioRecommendation(
+            code: 'balanced',
+            label: '균형형',
+            portfolioId: 'cached-portfolio',
+            targetVolatility: 0.12,
+            expectedReturn: 0.08,
+            volatility: 0.11,
+            sharpeRatio: 0.7,
+            sectorAllocations: [],
+            stockAllocations: [],
+          ),
+        ),
+      );
+
+      state.setAccountDashboard(
+        MobileAccountDashboard(
+          hasAccount: true,
+          summary: MobileAccountSummary(
+            portfolioCode: 'balanced',
+            portfolioLabel: '균형형',
+            portfolioId: 'account-portfolio',
+            dataSource: 'managed_universe',
+            investmentHorizon: 'medium',
+            targetVolatility: 0.12,
+            expectedReturn: 0.08,
+            volatility: 0.11,
+            sharpeRatio: 0.7,
+            startedAt: '2026-03-01',
+            lastSnapshotDate: '2026-04-15',
+            currentValue: 10500000,
+            investedAmount: 10000000,
+            profitLoss: 500000,
+            profitLossPct: 0.05,
+            sectorAllocations: [
+              sector(code: 'us_value', name: '미국 가치주', weight: 0.6),
+              sector(code: 'gold', name: '금', weight: 0.4),
+            ],
+            stockAllocations: [
+              stock(
+                ticker: 'VTV',
+                name: 'Vanguard Value ETF',
+                sectorCode: 'us_value',
+                sectorName: '미국 가치주',
+                weight: 0.6,
+              ),
+              stock(
+                ticker: 'GLD',
+                name: 'SPDR Gold Shares',
+                sectorCode: 'gold',
+                sectorName: '금',
+                weight: 0.4,
+              ),
+            ],
+          ),
+          history: const [],
+          recentActivity: const [],
+        ),
+      );
+
+      expect(state.selectedPortfolio, isNotNull);
+      expect(state.selectedPortfolio?.portfolioId, 'account-portfolio');
+      expect(state.categories, isNotEmpty);
+      expect(state.categoryDetails, isNotEmpty);
     });
   });
 }

@@ -57,6 +57,11 @@ class PortfolioState extends ChangeNotifier {
 
   /// The selected portfolio from the API recommendation.
   MobilePortfolioRecommendation? get selectedPortfolio {
+    final accountPortfolio =
+        _portfolioFromAccountSummary(_accountDashboard?.summary);
+    if (accountPortfolio != null) {
+      return accountPortfolio;
+    }
     if (_frontierSelection != null) {
       return _frontierSelection!.portfolio;
     }
@@ -64,24 +69,7 @@ class PortfolioState extends ChangeNotifier {
     for (final p in _recommendation!.portfolios) {
       if (p.investmentType == _type) return p;
     }
-    final accountSummary = _accountDashboard?.summary;
-    if (accountSummary == null) {
-      return null;
-    }
-    if (investmentTypeFromRiskCode(accountSummary.portfolioCode) != _type) {
-      return null;
-    }
-    return MobilePortfolioRecommendation(
-      code: accountSummary.portfolioCode,
-      label: accountSummary.portfolioLabel,
-      portfolioId: accountSummary.portfolioId,
-      targetVolatility: accountSummary.targetVolatility,
-      expectedReturn: accountSummary.expectedReturn,
-      volatility: accountSummary.volatility,
-      sharpeRatio: accountSummary.sharpeRatio,
-      sectorAllocations: accountSummary.sectorAllocations,
-      stockAllocations: accountSummary.stockAllocations,
-    );
+    return null;
   }
 
   List<PortfolioCategory> get categories {
@@ -97,6 +85,28 @@ class PortfolioState extends ChangeNotifier {
 
   /// Annual volatility for Monte Carlo projection.
   double? get portfolioVolatility => selectedPortfolio?.volatility;
+
+  MobilePortfolioRecommendation? _portfolioFromAccountSummary(
+    MobileAccountSummary? summary,
+  ) {
+    if (summary == null) {
+      return null;
+    }
+    if (summary.sectorAllocations.isEmpty && summary.stockAllocations.isEmpty) {
+      return null;
+    }
+    return MobilePortfolioRecommendation(
+      code: summary.portfolioCode,
+      label: summary.portfolioLabel,
+      portfolioId: summary.portfolioId,
+      targetVolatility: summary.targetVolatility,
+      expectedReturn: summary.expectedReturn,
+      volatility: summary.volatility,
+      sharpeRatio: summary.sharpeRatio,
+      sectorAllocations: summary.sectorAllocations,
+      stockAllocations: summary.stockAllocations,
+    );
+  }
 
   void setType(InvestmentType newType) {
     if (_type != newType) {
@@ -259,24 +269,14 @@ class PortfolioState extends ChangeNotifier {
   }) async {
     final accessToken = _authSession?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
-      _accountDashboard = null;
-      if (notify) {
-        notifyListeners();
-      }
+      setAccountDashboard(null, notify: notify);
       return null;
     }
 
     try {
       final dashboard = await MobileBackendApi.instance
           .fetchPortfolioAccountDashboard(accessToken: accessToken);
-      _accountDashboard = dashboard;
-      final summary = dashboard.summary;
-      if (summary != null) {
-        _type = investmentTypeFromRiskCode(summary.portfolioCode);
-      }
-      if (notify) {
-        notifyListeners();
-      }
+      setAccountDashboard(dashboard, notify: notify);
       return dashboard;
     } on MobileBackendException catch (error) {
       if (error.statusCode == 401) {
@@ -306,12 +306,7 @@ class PortfolioState extends ChangeNotifier {
       initialCashAmount: initialCashAmount,
       startedAt: selection.asOfDate,
     );
-    _accountDashboard = dashboard;
-    final summary = dashboard.summary;
-    if (summary != null) {
-      _type = investmentTypeFromRiskCode(summary.portfolioCode);
-    }
-    notifyListeners();
+    setAccountDashboard(dashboard);
     return dashboard;
   }
 
@@ -326,13 +321,22 @@ class PortfolioState extends ChangeNotifier {
       accessToken: accessToken,
       amount: amount,
     );
+    setAccountDashboard(dashboard);
+    return dashboard;
+  }
+
+  void setAccountDashboard(
+    MobileAccountDashboard? dashboard, {
+    bool notify = true,
+  }) {
     _accountDashboard = dashboard;
-    final summary = dashboard.summary;
+    final summary = dashboard?.summary;
     if (summary != null) {
       _type = investmentTypeFromRiskCode(summary.portfolioCode);
     }
-    notifyListeners();
-    return dashboard;
+    if (notify) {
+      notifyListeners();
+    }
   }
 
   Future<void> refreshInsights({bool notify = true}) async {
