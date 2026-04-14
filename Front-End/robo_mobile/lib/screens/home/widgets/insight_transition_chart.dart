@@ -115,7 +115,9 @@ class _TransitionPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = ringWidth
         ..strokeCap = StrokeCap.butt
-        ..color = alloc.color;
+        ..color = alloc.hasChanged
+            ? alloc.color
+            : const Color(0xFF444444);
 
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
@@ -188,7 +190,9 @@ class _ThumbnailPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = ringWidth
         ..strokeCap = StrokeCap.butt
-        ..color = alloc.color;
+        ..color = alloc.hasChanged
+            ? alloc.color
+            : const Color(0xFF444444);
 
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),

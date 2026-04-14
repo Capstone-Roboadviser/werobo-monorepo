@@ -1014,9 +1014,9 @@ class _InsightBanner extends StatelessWidget {
     if (pct == 0) return '포트폴리오 비중을 조정했어요.';
 
     if (biggest.delta > 0) {
-      return '${biggest.assetName} 비중을 $pct% 늘렸어요.';
+      return '${biggest.displayName} 비중을 $pct% 늘렸어요.';
     }
-    return '${biggest.assetName} 비중을 $pct% 줄였어요.';
+    return '${biggest.displayName} 비중을 $pct% 줄였어요.';
   }
 
   @override

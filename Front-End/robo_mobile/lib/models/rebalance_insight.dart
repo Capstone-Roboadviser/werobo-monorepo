@@ -20,6 +20,43 @@ class RebalanceInsightAllocation {
 
   double get delta => afterPct - beforePct;
 
+  /// Whether this allocation changed during rebalancing.
+  bool get hasChanged =>
+      (delta.abs() * 1000).round() > 0;
+
+  /// Korean display name for the asset category.
+  String get displayName =>
+      _assetKoreanNames[assetCode] ??
+      _assetKoreanNames[assetName] ??
+      assetName;
+
+  static const _assetKoreanNames = <String, String>{
+    'us_value': '미국 가치주',
+    'value_stock': '미국 가치주',
+    'us_growth': '미국 성장주',
+    'growth_stock': '미국 성장주',
+    'new_growth': '신성장주',
+    'innovation': '신성장주',
+    'short_term_bond': '단기 채권',
+    'bond': '단기 채권',
+    'cash_equivalents': '현금성자산',
+    'cash': '현금성자산',
+    'cash_equivalent': '현금성자산',
+    'gold': '금',
+    'commodity_gold': '금',
+    'infra_bond': '인프라 채권',
+    'infra': '인프라 채권',
+    'infrastructure': '인프라 채권',
+    'infrastructure_bond': '인프라 채권',
+    '미국 가치주': '미국 가치주',
+    '미국 성장주': '미국 성장주',
+    '신성장주': '신성장주',
+    '단기 채권': '단기 채권',
+    '현금성자산': '현금성자산',
+    '금': '금',
+    '인프라 채권': '인프라 채권',
+  };
+
   factory RebalanceInsightAllocation.fromJson(Map<String, dynamic> json) {
     return RebalanceInsightAllocation(
       assetCode: json['asset_code']?.toString() ?? '',

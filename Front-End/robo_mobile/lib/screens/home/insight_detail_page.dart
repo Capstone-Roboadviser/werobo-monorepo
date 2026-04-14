@@ -142,10 +142,13 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
                       ),
                     const SizedBox(height: 24),
 
-                    // Allocation changes list
-                    ...insight.allocations.map(
-                      (alloc) => _AllocationChangeRow(allocation: alloc),
-                    ),
+                    // Allocation changes list (skip 0% delta)
+                    ...insight.allocations
+                        .where((a) => a.hasChanged)
+                        .map(
+                          (alloc) =>
+                              _AllocationChangeRow(allocation: alloc),
+                        ),
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -168,10 +171,11 @@ class _AllocationChangeRow extends StatelessWidget {
     final tc = WeRoboThemeColors.of(context);
     final delta = allocation.delta;
     final deltaText = delta >= 0
-        ? '+${(delta * 100).toStringAsFixed(1)}%'
-        : '${(delta * 100).toStringAsFixed(1)}%';
-    final deltaColor =
-        delta >= 0 ? tc.accent : const Color(0xFFE57373);
+        ? '(+${(delta * 100).toStringAsFixed(1)}%)'
+        : '(${(delta * 100).toStringAsFixed(1)}%)';
+    final deltaColor = delta > 0
+        ? tc.accent
+        : const Color(0xFFE57373);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -188,7 +192,7 @@ class _AllocationChangeRow extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              allocation.assetName,
+              allocation.displayName,
               style: WeRoboTypography.bodySmall.copyWith(
                 color: tc.textPrimary,
               ),
@@ -211,14 +215,14 @@ class _AllocationChangeRow extends StatelessWidget {
           Text(
             '${(allocation.afterPct * 100).toStringAsFixed(1)}%',
             style: WeRoboTypography.bodySmall.copyWith(
-              color: tc.textPrimary,
+              color: deltaColor,
               fontWeight: FontWeight.w600,
             ),
           ),
           const SizedBox(width: 8),
           Text(
             deltaText,
-            style: WeRoboTypography.caption.copyWith(
+            style: WeRoboTypography.bodySmall.copyWith(
               color: deltaColor,
               fontWeight: FontWeight.w600,
             ),
