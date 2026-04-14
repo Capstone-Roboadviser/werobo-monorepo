@@ -91,6 +91,7 @@ class _DigestScreenState extends State<DigestScreen> {
       appBar: AppBar(
         backgroundColor: tc.surface,
         elevation: 0,
+        scrolledUnderElevation: 0,
         leading: IconButton(
           icon: Icon(Icons.arrow_back, color: tc.textSecondary),
           onPressed: () => Navigator.pop(context),
