@@ -719,16 +719,20 @@ class _AreaChartPainter extends CustomPainter {
 
     // Benchmark dashed line (7-asset average volatility)
     if (bp != null && bp.length >= 2) {
-      final benchPath = Path();
-      final benchCount = (bp.length * progress).ceil().clamp(0, bp.length);
-      if (benchCount >= 2) {
-        for (int i = 0; i < benchCount; i++) {
-          final x = padL + w * i / (bp.length - 1);
-          final y = h - ((bp[i].value - minY) / rangeY) * h;
+      final benchPts = _interpolatedPathPoints(
+        n: bp.length,
+        progress: progress,
+        xAt: (i) => padL + w * i / (bp.length - 1),
+        yAt: (i) => h - ((bp[i].value - minY) / rangeY) * h,
+      );
+      if (benchPts != null) {
+        final benchPath = Path();
+        for (int i = 0; i < benchPts.length; i++) {
+          final pt = benchPts[i];
           if (i == 0) {
-            benchPath.moveTo(x, y);
+            benchPath.moveTo(pt.dx, pt.dy);
           } else {
-            benchPath.lineTo(x, y);
+            benchPath.lineTo(pt.dx, pt.dy);
           }
         }
         final benchPaint = Paint()
@@ -740,29 +744,32 @@ class _AreaChartPainter extends CustomPainter {
       }
     }
 
-    // Build path
-    final drawCount = (points.length * progress).ceil().clamp(0, points.length);
-    if (drawCount < 2) return;
+    // Build path with smooth interpolation
+    final pathPoints = _interpolatedPathPoints(
+      n: points.length,
+      progress: progress,
+      xAt: (i) => padL + w * i / (points.length - 1),
+      yAt: (i) => h - ((values[i] - minY) / rangeY) * h,
+    );
+    if (pathPoints == null) return;
 
     final linePath = Path();
     final areaPath = Path();
 
-    for (int i = 0; i < drawCount; i++) {
-      final x = padL + w * i / (points.length - 1);
-      final y = h - ((values[i] - minY) / rangeY) * h;
+    for (int i = 0; i < pathPoints.length; i++) {
+      final pt = pathPoints[i];
       if (i == 0) {
-        linePath.moveTo(x, y);
-        areaPath.moveTo(x, h); // bottom
-        areaPath.lineTo(x, y);
+        linePath.moveTo(pt.dx, pt.dy);
+        areaPath.moveTo(pt.dx, h); // bottom
+        areaPath.lineTo(pt.dx, pt.dy);
       } else {
-        linePath.lineTo(x, y);
-        areaPath.lineTo(x, y);
+        linePath.lineTo(pt.dx, pt.dy);
+        areaPath.lineTo(pt.dx, pt.dy);
       }
     }
 
     // Area fill gradient
-    final lastX = padL + w * (drawCount - 1) / (points.length - 1);
-    areaPath.lineTo(lastX, h);
+    areaPath.lineTo(pathPoints.last.dx, h);
     areaPath.close();
 
     final gradient = LinearGradient(
@@ -957,17 +964,21 @@ class _MultiLineChartPainter extends CustomPainter {
     for (final line in lines) {
       final pts = line.points;
       final count = pts.length;
-      final drawCount = (count * progress).ceil().clamp(0, count);
-      if (drawCount < 2) continue;
+      final pathPoints = _interpolatedPathPoints(
+        n: count,
+        progress: progress,
+        xAt: (i) => padL + w * i / (count - 1),
+        yAt: (i) => h - ((pts[i].value - minY) / rangeY) * h,
+      );
+      if (pathPoints == null) continue;
 
       final path = Path();
-      for (int i = 0; i < drawCount; i++) {
-        final x = padL + w * i / (count - 1);
-        final y = h - ((pts[i].value - minY) / rangeY) * h;
+      for (int i = 0; i < pathPoints.length; i++) {
+        final pt = pathPoints[i];
         if (i == 0) {
-          path.moveTo(x, y);
+          path.moveTo(pt.dx, pt.dy);
         } else {
-          path.lineTo(x, y);
+          path.lineTo(pt.dx, pt.dy);
         }
       }
 
@@ -1081,6 +1092,34 @@ class _MultiLineChartPainter extends CustomPainter {
 }
 
 // ── Shared helpers ──
+
+/// Compute canvas offsets for a smoothly animated line.
+/// Returns null when there is nothing to draw yet.
+List<Offset>? _interpolatedPathPoints({
+  required int n,
+  required double progress,
+  required double Function(int i) xAt,
+  required double Function(int i) yAt,
+}) {
+  if (n < 2 || progress <= 0) return null;
+
+  final fIdx = (n - 1) * progress.clamp(0.0, 1.0);
+  final complete = fIdx.floor();
+  final frac = fIdx - complete;
+
+  final result = <Offset>[];
+  for (int i = 0; i <= complete; i++) {
+    result.add(Offset(xAt(i), yAt(i)));
+  }
+
+  if (frac > 0 && complete < n - 1) {
+    final fx = xAt(complete), fy = yAt(complete);
+    final tx = xAt(complete + 1), ty = yAt(complete + 1);
+    result.add(Offset(fx + frac * (tx - fx), fy + frac * (ty - fy)));
+  }
+
+  return result.length < 2 ? null : result;
+}
 
 /// Draw a path as a dashed line using PathMetrics.
 /// Dash pattern: 6px on, 10px gap.
