@@ -5,11 +5,16 @@ import math
 import numpy as np
 import pandas as pd
 
-from app.core.config import DEMO_STOCK_PRICES_PATH, ENABLE_LIVE_MARKET_DATA_FETCH, MINIMUM_HISTORY_ROWS
+from app.core.config import (
+    DEMO_STOCK_PRICES_PATH,
+    ENABLE_LIVE_MARKET_DATA_FETCH,
+    MINIMUM_HISTORY_ROWS,
+    RISK_FREE_RATE,
+)
 from app.data.stock_repository import StockDataRepository
 from app.domain.enums import SimulationDataSource
-from app.domain.models import PortfolioHistoryPoint, PortfolioHistorySeries
-from app.engine.comparison import ComparisonResult, build_comparison
+from app.domain.models import PortfolioHistoryPoint, PortfolioHistorySeries, StockInstrument
+from app.engine.comparison import ComparisonLine, ComparisonResult, build_comparison
 from app.services.portfolio_service import PortfolioSimulationService
 
 
@@ -185,6 +190,7 @@ class PortfolioAnalyticsService:
         *,
         data_source: SimulationDataSource,
     ) -> ComparisonResult:
+        assets = self._load_comparison_assets(data_source)
         instruments, prices, combination_prefix = self._load_comparison_universe(data_source)
         prices = prices.copy()
         prices["date"] = pd.to_datetime(prices["date"]).dt.normalize()
@@ -221,6 +227,12 @@ class PortfolioAnalyticsService:
         portfolios = {name: weights for name, (weights, _) in profile_data.items()}
         expected_returns = {name: expected_return for name, (_, expected_return) in profile_data.items()}
         benchmark_series = self._fetch_benchmark_prices(test_start_date.strftime("%Y-%m-%d"))
+        extra_lines = self._build_comparison_extra_lines(
+            assets=assets,
+            instruments=instruments,
+            prices=test_prices,
+            date_index=pivoted.index,
+        )
 
         try:
             return build_comparison(
@@ -228,12 +240,24 @@ class PortfolioAnalyticsService:
                 portfolios,
                 expected_returns,
                 benchmark_series,
+                extra_lines=extra_lines,
                 train_start_date=train_start_date.strftime("%Y-%m-%d"),
                 train_end_date=train_end_date.strftime("%Y-%m-%d"),
                 split_ratio=0.9,
             )
         except Exception as exc:
             raise RuntimeError(f"비교 백테스트 계산 중 오류: {exc}") from exc
+
+    def _load_comparison_assets(
+        self,
+        data_source: SimulationDataSource,
+    ) -> list:
+        if data_source == SimulationDataSource.MANAGED_UNIVERSE:
+            active_version = self.portfolio_service.managed_universe_service.get_active_version()
+            if active_version is None:
+                raise RuntimeError("활성화된 관리자 유니버스 버전이 없습니다.")
+            return self.portfolio_service.list_assets(version_id=active_version.version_id)
+        return self.portfolio_service.list_assets()
 
     def _load_comparison_universe(
         self,
@@ -307,3 +331,186 @@ class PortfolioAnalyticsService:
         except ImportError:
             pass
         return benchmarks
+
+    def _build_comparison_extra_lines(
+        self,
+        *,
+        assets: list,
+        instruments: list[StockInstrument],
+        prices: pd.DataFrame,
+        date_index: pd.DatetimeIndex,
+    ) -> list[ComparisonLine]:
+        lines: list[ComparisonLine] = []
+
+        benchmark_line = self._build_equal_weight_asset_benchmark_line(
+            assets=assets,
+            instruments=instruments,
+            prices=prices,
+            date_index=date_index,
+        )
+        if benchmark_line is not None:
+            lines.append(benchmark_line)
+
+        bond_line = self._build_fixed_bond_line(
+            date_index=date_index,
+            annual_yield=RISK_FREE_RATE,
+        )
+        if bond_line is not None:
+            lines.append(bond_line)
+
+        return lines
+
+    def _build_equal_weight_asset_benchmark_line(
+        self,
+        *,
+        assets: list,
+        instruments: list[StockInstrument],
+        prices: pd.DataFrame,
+        date_index: pd.DatetimeIndex,
+    ) -> ComparisonLine | None:
+        if prices.empty or len(date_index) < 2:
+            return None
+
+        grouped: dict[str, list[StockInstrument]] = {}
+        for instrument in instruments:
+            grouped.setdefault(instrument.sector_code, []).append(instrument)
+
+        price_table = (
+            prices.assign(
+                ticker=prices["ticker"].astype(str).str.upper(),
+                date=pd.to_datetime(prices["date"]).dt.normalize(),
+            )
+            .pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
+            .sort_index()
+        )
+
+        if price_table.empty:
+            return None
+
+        sector_paths: dict[str, pd.Series] = {}
+        for sector_code, sector_instruments in grouped.items():
+            sector_path = self._build_sector_basket_path(
+                sector_instruments=sector_instruments,
+                price_table=price_table,
+                date_index=date_index,
+            )
+            if sector_path is None:
+                continue
+            sector_paths[sector_code] = sector_path
+
+        expected_asset_codes = [asset.code for asset in assets]
+        if not expected_asset_codes:
+            return None
+        if any(asset_code not in sector_paths for asset_code in expected_asset_codes):
+            return None
+
+        benchmark_path = pd.DataFrame(
+            {
+                asset_code: sector_paths[asset_code]
+                for asset_code in expected_asset_codes
+            }
+        ).mean(axis=1)
+        benchmark_path = benchmark_path.replace([np.inf, -np.inf], np.nan).dropna()
+        if benchmark_path.empty:
+            return None
+
+        return ComparisonLine(
+            key="benchmark_avg",
+            label="7자산 단순평균",
+            color="#999999",
+            style="dashed",
+            points=[
+                (
+                    date.strftime("%Y-%m-%d"),
+                    round((float(value) - 1.0) * 100, 4),
+                )
+                for date, value in benchmark_path.items()
+            ],
+        )
+
+    def _build_sector_basket_path(
+        self,
+        *,
+        sector_instruments: list[StockInstrument],
+        price_table: pd.DataFrame,
+        date_index: pd.DatetimeIndex,
+    ) -> pd.Series | None:
+        tickers = [
+            instrument.ticker.upper()
+            for instrument in sector_instruments
+            if instrument.ticker.upper() in price_table.columns
+        ]
+        if not tickers:
+            return None
+
+        aligned = price_table.reindex(index=date_index, columns=tickers).ffill().bfill()
+        aligned = aligned.dropna(axis=1, how="all")
+        if aligned.empty:
+            return None
+
+        aligned = aligned.loc[:, aligned.notna().all(axis=0)]
+        if aligned.empty:
+            return None
+
+        weights = self._normalize_sector_member_weights(
+            sector_instruments=sector_instruments,
+            tickers=list(aligned.columns),
+        )
+        base = aligned.iloc[0].replace(0.0, np.nan)
+        if base.isna().any():
+            return None
+
+        relative = aligned.divide(base, axis=1)
+        path = relative.mul(weights.reindex(relative.columns), axis=1).sum(axis=1)
+        path = path.replace([np.inf, -np.inf], np.nan).dropna()
+        if path.empty:
+            return None
+        return path.astype(float)
+
+    def _normalize_sector_member_weights(
+        self,
+        *,
+        sector_instruments: list[StockInstrument],
+        tickers: list[str],
+    ) -> pd.Series:
+        weights = pd.Series(
+            {
+                instrument.ticker.upper(): (
+                    float(instrument.base_weight)
+                    if instrument.base_weight is not None
+                    else 0.0
+                )
+                for instrument in sector_instruments
+                if instrument.ticker.upper() in tickers
+            },
+            dtype=float,
+        ).clip(lower=0.0)
+        total = float(weights.sum())
+        if total <= 0:
+            equal_weight = 1.0 / len(tickers)
+            return pd.Series({ticker: equal_weight for ticker in tickers}, dtype=float)
+        return (weights / total).reindex(tickers).fillna(0.0).astype(float)
+
+    def _build_fixed_bond_line(
+        self,
+        *,
+        date_index: pd.DatetimeIndex,
+        annual_yield: float,
+    ) -> ComparisonLine | None:
+        if len(date_index) < 2:
+            return None
+
+        start_date = date_index[0]
+        points = []
+        for date in date_index:
+            years_elapsed = (date - start_date).days / 365.25
+            cumulative_return = annual_yield * years_elapsed * 100
+            points.append((date.strftime("%Y-%m-%d"), round(float(cumulative_return), 4)))
+
+        return ComparisonLine(
+            key="treasury",
+            label="채권 수익률",
+            color="#78716c",
+            style="dashed",
+            points=points,
+        )

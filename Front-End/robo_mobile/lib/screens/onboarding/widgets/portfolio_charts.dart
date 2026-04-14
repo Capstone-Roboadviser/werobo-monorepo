@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../../../app/chart_point_filters.dart';
 import '../../../app/theme.dart';
 import '../../../models/chart_data.dart';
 import '../../../models/portfolio_data.dart';
@@ -71,8 +72,7 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
                     key: const ValueKey('volret'),
                     type: widget.type,
                     volatilityPoints: widget.volatilityPoints,
-                    benchmarkVolatilityPoints:
-                        widget.benchmarkVolatilityPoints,
+                    benchmarkVolatilityPoints: widget.benchmarkVolatilityPoints,
                     useFallbackMock: widget.useFallbackMock,
                   )
                 : _ComparisonView(
@@ -215,11 +215,10 @@ class _VolReturnViewState extends State<_VolReturnView>
                 child: GestureDetector(
                   onTap: () => setState(() => _range = i),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color:
-                          active ? WeRoboColors.primary : Colors.transparent,
+                      color: active ? WeRoboColors.primary : Colors.transparent,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -227,9 +226,7 @@ class _VolReturnViewState extends State<_VolReturnView>
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        color: active
-                            ? WeRoboColors.white
-                            : tc.textTertiary,
+                        color: active ? WeRoboColors.white : tc.textTertiary,
                       ),
                     ),
                   ),
@@ -326,11 +323,6 @@ class _ComparisonViewState extends State<_ComparisonView>
 
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
   static const _rangeDays = [7, 90, 365, 1825, 99999];
-  static const _portfolioKeys = {
-    'conservative',
-    'balanced',
-    'growth',
-  };
 
   @override
   void initState() {
@@ -358,36 +350,14 @@ class _ComparisonViewState extends State<_ComparisonView>
     return result;
   }
 
-  /// Build a 7-asset simple-average benchmark line from all
-  /// portfolio lines (approximation until backend provides it).
+  /// Use the explicit 7-asset-class benchmark line from the backend.
   ChartLine? _buildBenchmarkLine(List<ChartLine> rawLines) {
-    final portfolioLines = rawLines
-        .where((l) => _portfolioKeys.contains(l.key))
-        .toList();
-    if (portfolioLines.isEmpty) return null;
-    final minLen = portfolioLines
-        .map((l) => l.points.length)
-        .reduce(min);
-    if (minLen < 2) return null;
-
-    final avgPoints = <ChartPoint>[];
-    for (int i = 0; i < minLen; i++) {
-      double sum = 0;
-      for (final line in portfolioLines) {
-        sum += line.points[i].value;
+    for (final line in rawLines) {
+      if (line.key == 'benchmark_avg') {
+        return line;
       }
-      avgPoints.add(ChartPoint(
-        date: portfolioLines.first.points[i].date,
-        value: sum / portfolioLines.length,
-      ));
     }
-    return ChartLine(
-      key: 'benchmark_avg',
-      label: '7자산 단순평균',
-      color: const Color(0xFF999999),
-      dashed: true,
-      points: avgPoints,
-    );
+    return null;
   }
 
   List<ChartLine> _filterByType(List<ChartLine> rawLines) {
@@ -473,17 +443,18 @@ class _ComparisonViewState extends State<_ComparisonView>
   }
 
   List<ChartLine> _filterByRange(List<ChartLine> rawLines) {
-    final cutoff =
-        DateTime.now().subtract(Duration(days: _rangeDays[_range]));
+    final cutoff = DateTime.now().subtract(Duration(days: _rangeDays[_range]));
     return rawLines.map((line) {
       final filtered =
           line.points.where((p) => p.date.isAfter(cutoff)).toList();
+      final rangedPoints = filtered.isNotEmpty ? filtered : line.points;
+      final rebasedPoints = rebaseChartPointsToFirstValue(rangedPoints);
       return ChartLine(
         key: line.key,
         label: line.label,
         color: line.color,
         dashed: line.dashed,
-        points: filtered.isNotEmpty ? filtered : line.points,
+        points: rebasedPoints,
       );
     }).toList();
   }
@@ -495,10 +466,8 @@ class _ComparisonViewState extends State<_ComparisonView>
         (widget.useFallbackMock
             ? _allMockComparisonLines()
             : const <ChartLine>[]);
-    final typedLines =
-        allLines.isEmpty ? allLines : _filterByType(allLines);
-    final lines =
-        typedLines.isEmpty ? typedLines : _filterByRange(typedLines);
+    final typedLines = allLines.isEmpty ? allLines : _filterByType(allLines);
+    final lines = typedLines.isEmpty ? typedLines : _filterByRange(typedLines);
     final rebalanceDates = widget.rebalanceDates ??
         (widget.useFallbackMock
             ? MockChartData.rebalanceDates
@@ -547,12 +516,10 @@ class _ComparisonViewState extends State<_ComparisonView>
                     _drawCtrl.forward(from: 0);
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: active
-                          ? WeRoboColors.primary
-                          : Colors.transparent,
+                      color: active ? WeRoboColors.primary : Colors.transparent,
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
@@ -560,9 +527,7 @@ class _ComparisonViewState extends State<_ComparisonView>
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        color: active
-                            ? WeRoboColors.white
-                            : tc.textTertiary,
+                        color: active ? WeRoboColors.white : tc.textTertiary,
                       ),
                     ),
                   ),

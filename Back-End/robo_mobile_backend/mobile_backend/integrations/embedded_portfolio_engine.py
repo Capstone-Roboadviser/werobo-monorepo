@@ -533,6 +533,9 @@ class EmbeddedPortfolioEngineAdapter:
         if snapshot.aligned_end_date != price_window.aligned_end_date:
             lookup["reason"] = "aligned_end_date_mismatch"
             return None, lookup
+        if not self._comparison_backtest_snapshot_has_required_lines(snapshot.payload):
+            lookup["reason"] = "comparison_backtest_snapshot_missing_required_lines"
+            return None, lookup
         lookup["reason"] = "comparison_backtest_snapshot_reused"
         return snapshot.payload, lookup
 
@@ -553,6 +556,20 @@ class EmbeddedPortfolioEngineAdapter:
         if snapshot_lookup is None:
             return None, {"reason": "comparison_backtest_snapshot_missing"}
         return snapshot_lookup, {"reason": "comparison_backtest_snapshot_reused"}
+
+    def _comparison_backtest_snapshot_has_required_lines(
+        self,
+        snapshot_payload: dict[str, object],
+    ) -> bool:
+        raw_lines = snapshot_payload.get("lines", [])
+        if not isinstance(raw_lines, list):
+            return False
+        line_keys = {
+            str(line.get("key"))
+            for line in raw_lines
+            if isinstance(line, dict) and line.get("key") is not None
+        }
+        return {"benchmark_avg", "treasury"}.issubset(line_keys)
 
     def _build_snapshot_portfolio_response(
         self,

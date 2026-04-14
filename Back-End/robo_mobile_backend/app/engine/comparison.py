@@ -47,6 +47,7 @@ def build_comparison(
     portfolios: dict[str, dict[str, float]],
     expected_returns: dict[str, float],
     benchmark_series: dict[str, pd.Series] | None = None,
+    extra_lines: list[ComparisonLine] | None = None,
     *,
     train_start_date: str,
     train_end_date: str,
@@ -151,6 +152,9 @@ def build_comparison(
                 style="solid",
                 points=bm_points,
             ))
+
+    if extra_lines:
+        lines.extend(extra_lines)
 
     # --- Subsample all lines to ~250 points ---
     n = len(dates)

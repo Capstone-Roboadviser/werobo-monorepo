@@ -606,6 +606,13 @@ Authorization: Bearer token-string
 - `style`
 - `points[]`
 
+주요 `key` 예시:
+
+- `conservative`, `balanced`, `growth`: 대표 포트폴리오 실현 백테스트
+- `conservative_expected`, `balanced_expected`, `growth_expected`: 대표 포트폴리오 기대수익 경로
+- `benchmark_avg`: 7개 자산군을 동일비중으로 평균한 비교선
+- `treasury`: 고정 연수익률 기준의 직선형 채권 비교선
+
 ## 구현 메모
 
 - 모바일 API는 [mobile_portfolio_service.py](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/mobile_backend/services/mobile_portfolio_service.py) 를 통해 계산 코어를 호출합니다.

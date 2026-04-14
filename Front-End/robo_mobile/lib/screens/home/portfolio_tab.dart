@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/chart_point_filters.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
@@ -67,8 +68,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
     try {
       final state = PortfolioStateProvider.of(context);
       final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
-        preferredDataSource:
-            state.frontierSelection?.dataSource ?? state.accountSummary?.dataSource,
+        preferredDataSource: state.frontierSelection?.dataSource ??
+            state.accountSummary?.dataSource,
       );
       if (!mounted) return;
       PortfolioStateProvider.of(context).setBacktest(bt);
@@ -105,8 +106,11 @@ class _PortfolioTabState extends State<PortfolioTab> {
     final state = PortfolioStateProvider.of(context);
     final rec = state.recommendation;
     final selection = state.frontierSelection;
-    final portfolio = state.selectedPortfolio ?? rec?.portfolioByCode(type.riskCode);
+    final portfolio =
+        state.selectedPortfolio ?? rec?.portfolioByCode(type.riskCode);
     final accountSummary = state.accountSummary;
+    final portfolioStartedAt =
+        DateTime.tryParse(accountSummary?.startedAt ?? '');
     final horizon = selection?.resolvedProfile.investmentHorizon ??
         accountSummary?.investmentHorizon ??
         rec?.resolvedProfile.investmentHorizon ??
@@ -121,7 +125,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
           await MobileBackendApi.instance.fetchVolatilityHistory(
         riskProfile: riskProfile,
         investmentHorizon: horizon,
-        preferredDataSource: selection?.dataSource ?? accountSummary?.dataSource,
+        preferredDataSource:
+            selection?.dataSource ?? accountSummary?.dataSource,
         stockWeights: portfolio?.stockWeights,
       );
       volPoints = volResponse.points
@@ -130,6 +135,10 @@ class _PortfolioTabState extends State<PortfolioTab> {
                 value: p.volatility,
               ))
           .toList();
+      volPoints = filterChartPointsFromStartDate(
+        volPoints,
+        startDate: portfolioStartedAt,
+      );
     } catch (_) {}
 
     if (!mounted) return;
@@ -144,10 +153,19 @@ class _PortfolioTabState extends State<PortfolioTab> {
     final tc = WeRoboThemeColors.of(context);
     final portfolioState = PortfolioStateProvider.of(context);
     final type = portfolioState.type;
+    final portfolioStartedAt =
+        DateTime.tryParse(portfolioState.accountSummary?.startedAt ?? '');
     final categories = portfolioState.categories;
     final details = portfolioState.categoryDetails;
-    final lines = portfolioState.comparisonLines;
-    final rebalanceDates = portfolioState.rebalanceDates;
+    final lines = filterChartLinesFromStartDate(
+      portfolioState.comparisonLines,
+      startDate: portfolioStartedAt,
+      rebaseToZero: true,
+    );
+    final rebalanceDates = filterDatesFromStartDate(
+      portfolioState.rebalanceDates,
+      startDate: portfolioStartedAt,
+    );
     final rebalanceEvents = MockRebalanceData.eventsFor(type);
 
     return SafeArea(

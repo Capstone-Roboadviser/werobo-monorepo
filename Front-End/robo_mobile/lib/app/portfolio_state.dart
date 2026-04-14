@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'debug_page_logger.dart';
 import '../models/chart_data.dart';
 import '../models/mobile_backend_models.dart';
 import '../models/portfolio_data.dart';
@@ -113,6 +114,14 @@ class PortfolioState extends ChangeNotifier {
 
   void setBacktest(MobileComparisonBacktestResponse bt) {
     _backtest = bt;
+    logApi(
+      'success',
+      'fetchComparisonBacktest',
+      {
+        'lineKeys': bt.lines.map((line) => line.key).join(','),
+        'lineCount': bt.lines.length,
+      },
+    );
     notifyListeners();
   }
 

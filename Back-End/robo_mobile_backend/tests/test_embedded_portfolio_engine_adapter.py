@@ -518,7 +518,27 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
                             {"date": "2025-01-01", "return_pct": 0.0},
                             {"date": "2025-01-31", "return_pct": 1.25},
                         ],
-                    }
+                    },
+                    {
+                        "key": "benchmark_avg",
+                        "label": "7자산 단순평균",
+                        "color": "#999999",
+                        "style": "dashed",
+                        "points": [
+                            {"date": "2025-01-01", "return_pct": 0.0},
+                            {"date": "2025-01-31", "return_pct": 0.75},
+                        ],
+                    },
+                    {
+                        "key": "treasury",
+                        "label": "채권 수익률",
+                        "color": "#78716c",
+                        "style": "dashed",
+                        "points": [
+                            {"date": "2025-01-01", "return_pct": 0.0},
+                            {"date": "2025-01-31", "return_pct": 0.15},
+                        ],
+                    },
                 ],
             },
             {"reason": "comparison_backtest_snapshot_reused"},
@@ -538,6 +558,67 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(
             response["rebalance_policy"]["strategy"],
             "scheduled_plus_drift_guard",
+        )
+
+    def test_get_comparison_backtest_ignores_stale_snapshot_without_required_lines(self) -> None:
+        adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
+        adapter._resolve_managed_universe_comparison_backtest_snapshot_lookup = lambda **kwargs: (
+            None,
+            {"reason": "comparison_backtest_snapshot_missing_required_lines"},
+        )
+        adapter._log_managed_universe_snapshot_lookup = lambda **kwargs: None
+        adapter._to_core_data_source = lambda value: value
+        adapter.portfolio_analytics_service = SimpleNamespace(
+            build_comparison_backtest=lambda **kwargs: SimpleNamespace(
+                train_start_date="2024-01-01",
+                train_end_date="2024-12-31",
+                test_start_date="2025-01-01",
+                start_date="2025-01-01",
+                end_date="2025-03-31",
+                split_ratio=0.9,
+                rebalance_dates=["2025-02-01"],
+                lines=[
+                    SimpleNamespace(
+                        key="balanced",
+                        label="균형형",
+                        color="#3b82f6",
+                        style="solid",
+                        points=[
+                            ("2025-01-01", 0.0),
+                            ("2025-01-31", 1.25),
+                        ],
+                    ),
+                    SimpleNamespace(
+                        key="benchmark_avg",
+                        label="7자산 단순평균",
+                        color="#999999",
+                        style="dashed",
+                        points=[
+                            ("2025-01-01", 0.0),
+                            ("2025-01-31", 0.75),
+                        ],
+                    ),
+                    SimpleNamespace(
+                        key="treasury",
+                        label="채권 수익률",
+                        color="#78716c",
+                        style="dashed",
+                        points=[
+                            ("2025-01-01", 0.0),
+                            ("2025-01-31", 0.15),
+                        ],
+                    ),
+                ],
+            )
+        )
+
+        response = adapter.get_comparison_backtest(
+            data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        )
+
+        self.assertEqual(
+            [line["key"] for line in response["lines"]],
+            ["balanced", "benchmark_avg", "treasury"],
         )
 
 
