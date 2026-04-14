@@ -468,10 +468,6 @@ class _ComparisonViewState extends State<_ComparisonView>
             : const <ChartLine>[]);
     final typedLines = allLines.isEmpty ? allLines : _filterByType(allLines);
     final lines = typedLines.isEmpty ? typedLines : _filterByRange(typedLines);
-    final rebalanceDates = widget.rebalanceDates ??
-        (widget.useFallbackMock
-            ? MockChartData.rebalanceDates
-            : const <DateTime>[]);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -568,7 +564,6 @@ class _ComparisonViewState extends State<_ComparisonView>
                               painter: _MultiLineChartPainter(
                                 lines: lines,
                                 progress: _drawCtrl.value,
-                                rebalanceDates: rebalanceDates,
                                 touchIndex: _touchIndex,
                                 gridColor: tc.border,
                                 textTertiaryColor: tc.textTertiary,
@@ -902,7 +897,6 @@ class _AreaChartPainter extends CustomPainter {
 class _MultiLineChartPainter extends CustomPainter {
   final List<ChartLine> lines;
   final double progress;
-  final List<DateTime> rebalanceDates;
   final int? touchIndex;
   final Color gridColor;
   final Color textTertiaryColor;
@@ -913,7 +907,6 @@ class _MultiLineChartPainter extends CustomPainter {
   _MultiLineChartPainter({
     required this.lines,
     required this.progress,
-    required this.rebalanceDates,
     this.touchIndex,
     required this.gridColor,
     required this.textTertiaryColor,
@@ -958,27 +951,6 @@ class _MultiLineChartPainter extends CustomPainter {
       final val = minY + rangeY * i / 4;
       _drawText(canvas, '${(val * 100).toStringAsFixed(1)}%', Offset(0, y - 6),
           labelStyle);
-    }
-
-    // Rebalance vertical dashed lines
-    if (lines.isNotEmpty && lines[0].points.length > 1) {
-      final firstDate = lines[0].points.first.date;
-      final lastDate = lines[0].points.last.date;
-      final totalDays = lastDate.difference(firstDate).inDays.clamp(1, 99999);
-
-      for (final rd in rebalanceDates) {
-        final dayOff = rd.difference(firstDate).inDays;
-        if (dayOff < 0 || dayOff > totalDays) continue;
-        final x = padL + w * dayOff / totalDays;
-        final dashPaint = Paint()
-          ..color = const Color(0xFFFBBF24).withValues(alpha: 0.5)
-          ..strokeWidth = 1;
-        // Simple dashed line
-        for (double y0 = 0; y0 < h; y0 += 6) {
-          canvas.drawLine(
-              Offset(x, y0), Offset(x, (y0 + 3).clamp(0, h)), dashPaint);
-        }
-      }
     }
 
     // Draw lines
