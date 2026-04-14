@@ -254,6 +254,7 @@ class MobileAccountSummary {
   final double currentValue;
   final double investedAmount;
   final double profitLoss;
+  final double cashBalance;
   final double profitLossPct;
   final List<MobileSectorAllocation> sectorAllocations;
   final List<MobileStockAllocation> stockAllocations;
@@ -273,6 +274,7 @@ class MobileAccountSummary {
     required this.currentValue,
     required this.investedAmount,
     required this.profitLoss,
+    required this.cashBalance,
     required this.profitLossPct,
     required this.sectorAllocations,
     required this.stockAllocations,
@@ -294,6 +296,7 @@ class MobileAccountSummary {
       currentValue: _asDouble(json['current_value']),
       investedAmount: _asDouble(json['invested_amount']),
       profitLoss: _asDouble(json['profit_loss']),
+      cashBalance: _asDouble(json['cash_balance']),
       profitLossPct: _asDouble(json['profit_loss_pct']),
       sectorAllocations:
           (json['sector_allocations'] as List<dynamic>? ?? const [])
@@ -1515,13 +1518,11 @@ class MobileDigestResponse {
       narrativeKo: json['narrative_ko']?.toString(),
       hasNarrative: json['has_narrative'] == true,
       drivers: (json['drivers'] as List<dynamic>?)
-              ?.map((e) =>
-                  DigestDriver.fromJson(e as Map<String, dynamic>))
+              ?.map((e) => DigestDriver.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
       detractors: (json['detractors'] as List<dynamic>?)
-              ?.map((e) =>
-                  DigestDriver.fromJson(e as Map<String, dynamic>))
+              ?.map((e) => DigestDriver.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
       sourcesUsed: (json['sources_used'] as List<dynamic>?)
@@ -1531,14 +1532,12 @@ class MobileDigestResponse {
       disclaimer: json['disclaimer']?.toString() ?? '',
       generatedAt: json['generated_at']?.toString() ?? '',
       degradationLevel: (json['degradation_level'] as num?)?.toInt() ?? 0,
-      benchmark7assetReturnPct:
-          json['benchmark_7asset_return_pct'] != null
-              ? _asDouble(json['benchmark_7asset_return_pct'])
-              : null,
-      benchmarkBondReturnPct:
-          json['benchmark_bond_return_pct'] != null
-              ? _asDouble(json['benchmark_bond_return_pct'])
-              : null,
+      benchmark7assetReturnPct: json['benchmark_7asset_return_pct'] != null
+          ? _asDouble(json['benchmark_7asset_return_pct'])
+          : null,
+      benchmarkBondReturnPct: json['benchmark_bond_return_pct'] != null
+          ? _asDouble(json['benchmark_bond_return_pct'])
+          : null,
     );
   }
 }
