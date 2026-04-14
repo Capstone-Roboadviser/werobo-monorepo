@@ -6,7 +6,10 @@ import logging
 
 from app.engine.rebalance import build_two_stage_rebalance_policy, serialize_rebalance_policy
 from app.services.managed_universe_service import ManagedUniverseService
-from mobile_backend.core.config import PROFILE_LABELS
+from mobile_backend.core.config import (
+    MOBILE_REQUIRE_MANAGED_UNIVERSE_SNAPSHOTS,
+    PROFILE_LABELS,
+)
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
 from mobile_backend.services.profile_service import ProfileService
 
@@ -22,6 +25,7 @@ class EmbeddedPortfolioEngineAdapter:
     """
 
     FRONTIER_SNAPSHOT_SCHEMA_VERSION = 3
+    REQUIRE_MANAGED_UNIVERSE_SNAPSHOTS = MOBILE_REQUIRE_MANAGED_UNIVERSE_SNAPSHOTS
     COMPARISON_BACKTEST_POLICY = serialize_rebalance_policy(
         build_two_stage_rebalance_policy()
     )
@@ -571,6 +575,39 @@ class EmbeddedPortfolioEngineAdapter:
         }
         return {"benchmark_avg", "treasury"}.issubset(line_keys)
 
+    def _raise_if_managed_universe_snapshot_required(
+        self,
+        *,
+        snapshot_name: str,
+        lookup: dict[str, object],
+        data_source: SimulationDataSource,
+        as_of_date: date | None = None,
+    ) -> None:
+        if data_source != SimulationDataSource.MANAGED_UNIVERSE:
+            return
+        if as_of_date is not None:
+            return
+        if not self.REQUIRE_MANAGED_UNIVERSE_SNAPSHOTS:
+            return
+
+        reason = str(lookup.get("reason") or "snapshot_unavailable")
+        if reason in {"frontier_snapshot_missing", "comparison_backtest_snapshot_missing"}:
+            guidance = "admin 가격 refresh를 먼저 실행해주세요."
+        elif reason in {
+            "aligned_start_date_mismatch",
+            "aligned_end_date_mismatch",
+            "frontier_snapshot_schema_mismatch",
+            "comparison_backtest_snapshot_missing_required_lines",
+        }:
+            guidance = "admin 가격 refresh를 다시 실행해주세요."
+        else:
+            guidance = "관리자 유니버스 설정과 refresh 상태를 점검해주세요."
+
+        raise RuntimeError(
+            f"관리자 유니버스 {snapshot_name} snapshot이 준비되지 않았습니다. "
+            f"{guidance} (reason={reason})"
+        )
+
     def _build_snapshot_portfolio_response(
         self,
         *,
@@ -865,6 +902,12 @@ class EmbeddedPortfolioEngineAdapter:
                 status="miss",
                 lookup=snapshot_lookup,
             )
+            self._raise_if_managed_universe_snapshot_required(
+                snapshot_name="frontier",
+                lookup=snapshot_lookup,
+                data_source=data_source,
+                as_of_date=as_of_date,
+            )
 
         # Recommendation cards share the same universe/context. Only the target
         # volatility selection changes per risk profile, so reuse the context once.
@@ -948,6 +991,12 @@ class EmbeddedPortfolioEngineAdapter:
                 investment_horizon=investment_horizon,
                 status="miss",
                 lookup=snapshot_lookup,
+            )
+            self._raise_if_managed_universe_snapshot_required(
+                snapshot_name="frontier",
+                lookup=snapshot_lookup,
+                data_source=data_source,
+                as_of_date=as_of_date,
             )
 
         context, _ = self._build_context_bundle(
@@ -1041,6 +1090,12 @@ class EmbeddedPortfolioEngineAdapter:
                 investment_horizon=investment_horizon,
                 status="miss",
                 lookup=snapshot_lookup,
+            )
+            self._raise_if_managed_universe_snapshot_required(
+                snapshot_name="frontier",
+                lookup=snapshot_lookup,
+                data_source=data_source,
+                as_of_date=as_of_date,
             )
 
         context, instrument_by_ticker = self._build_context_bundle(
@@ -1207,6 +1262,11 @@ class EmbeddedPortfolioEngineAdapter:
                 investment_horizon=None,
                 status="miss",
                 lookup=snapshot_lookup,
+            )
+            self._raise_if_managed_universe_snapshot_required(
+                snapshot_name="comparison backtest",
+                lookup=snapshot_lookup,
+                data_source=data_source,
             )
         return self.build_materialized_comparison_backtest(
             data_source=data_source,

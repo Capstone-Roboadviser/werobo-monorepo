@@ -519,6 +519,7 @@ def render_admin_page() -> HTMLResponse:
     let isRefreshingPrices = false;
     let refreshLoadingTimer = null;
     let refreshLoadingStartedAt = null;
+    let refreshLoadingTargetLabel = 'active 버전';
 
     function showMessage(selector, text, isError = false) {
       const el = $(selector);
@@ -549,6 +550,7 @@ def render_admin_page() -> HTMLResponse:
         '#refresh-result',
         [
           '가격 갱신 실행 중입니다.',
+          `대상: ${refreshLoadingTargetLabel}`,
           `모드: ${refreshMode}`,
           `경과 시간: ${formatElapsedSeconds(elapsedSeconds)}`,
           '중복 실행을 막기 위해 버튼이 잠겨 있습니다.',
@@ -556,11 +558,15 @@ def render_admin_page() -> HTMLResponse:
       );
     }
 
-    function setRefreshLoadingState(isLoading) {
+    function setRefreshLoadingState(isLoading, targetLabel = 'active 버전') {
       isRefreshingPrices = isLoading;
+      refreshLoadingTargetLabel = targetLabel;
       $('#refresh-prices').disabled = isLoading;
       $('#refresh-mode').disabled = isLoading;
       $('#lookback-years').disabled = isLoading;
+      $$('.version-refresh-btn').forEach((button) => {
+        button.disabled = isLoading;
+      });
 
       if (isLoading) {
         refreshLoadingStartedAt = Date.now();
@@ -572,10 +578,21 @@ def render_admin_page() -> HTMLResponse:
 
       $('#refresh-prices').textContent = '가격 갱신 실행';
       refreshLoadingStartedAt = null;
+      refreshLoadingTargetLabel = 'active 버전';
       if (refreshLoadingTimer) {
         window.clearInterval(refreshLoadingTimer);
         refreshLoadingTimer = null;
       }
+    }
+
+    function buildRefreshResultMessage(result, targetLabel) {
+      const snapshotMessage = result.frontier_snapshot
+        ? `\\nsnapshot: ${result.frontier_snapshot.status} (${result.frontier_snapshot.snapshot_count})\\nsnapshot message: ${result.frontier_snapshot.message || '-'}`
+        : '';
+      const comparisonSnapshotMessage = result.comparison_backtest_snapshot
+        ? `\\ncomparison snapshot: ${result.comparison_backtest_snapshot.status} (${result.comparison_backtest_snapshot.snapshot_count})\\ncomparison snapshot message: ${result.comparison_backtest_snapshot.message || '-'}`
+        : '';
+      return `갱신 완료\\n대상: ${targetLabel}\\njob: ${result.job.status}\\nmessage: ${result.job.message || '-'}\\nrows: ${result.price_stats.total_rows}${snapshotMessage}${comparisonSnapshotMessage}`;
     }
 
     function normalizeTicker(value) {
@@ -983,12 +1000,14 @@ def render_admin_page() -> HTMLResponse:
             <button class="secondary detail-btn">상세</button>
             <button class="ghost edit-btn">수정</button>
             <button class="secondary activate-btn">활성화</button>
+            <button class="secondary version-refresh-btn">리프레시</button>
             <button class="danger delete-btn">삭제</button>
           </div>
         `;
         wrap.querySelector('.detail-btn').addEventListener('click', () => loadVersionDetail(version.version_id));
         wrap.querySelector('.edit-btn').addEventListener('click', () => startEditVersion(version.version_id));
         wrap.querySelector('.activate-btn').addEventListener('click', () => activateVersion(version.version_id));
+        wrap.querySelector('.version-refresh-btn').addEventListener('click', () => refreshPrices(version.version_id, version.version_name));
         wrap.querySelector('.delete-btn').addEventListener('click', () => deleteVersion(version.version_id));
         host.appendChild(wrap);
       });
@@ -1172,13 +1191,14 @@ def render_admin_page() -> HTMLResponse:
       }
     }
 
-    async function refreshPrices() {
+    async function refreshPrices(versionId = null, targetLabel = 'active 버전') {
       if (isRefreshingPrices) return;
       hideMessage('#refresh-result');
-      setRefreshLoadingState(true);
+      if (!confirm(`"${targetLabel}" 기준으로 가격 갱신과 snapshot 재생성을 실행할까요?`)) return;
+      setRefreshLoadingState(true, targetLabel);
       try {
         const payload = {
-          version_id: null,
+          version_id: versionId,
           refresh_mode: $('#refresh-mode').value,
           full_lookback_years: Number($('#lookback-years').value || '5'),
         };
@@ -1186,13 +1206,7 @@ def render_admin_page() -> HTMLResponse:
           method: 'POST',
           body: JSON.stringify(payload),
         });
-        const snapshotMessage = result.frontier_snapshot
-          ? `\\nsnapshot: ${result.frontier_snapshot.status} (${result.frontier_snapshot.snapshot_count})\\nsnapshot message: ${result.frontier_snapshot.message || '-'}`
-          : '';
-        const comparisonSnapshotMessage = result.comparison_backtest_snapshot
-          ? `\\ncomparison snapshot: ${result.comparison_backtest_snapshot.status} (${result.comparison_backtest_snapshot.snapshot_count})\\ncomparison snapshot message: ${result.comparison_backtest_snapshot.message || '-'}`
-          : '';
-        showMessage('#refresh-result', `갱신 완료\\njob: ${result.job.status}\\nmessage: ${result.job.message || '-'}\\nrows: ${result.price_stats.total_rows}${snapshotMessage}${comparisonSnapshotMessage}`);
+        showMessage('#refresh-result', buildRefreshResultMessage(result, targetLabel));
         await reloadAll();
       } catch (error) {
         showMessage('#refresh-result', error.message, true);

@@ -17,6 +17,7 @@ class OnboardingFrontierSelection {
   final double targetVolatility;
   final String dataSource;
   final DateTime? asOfDate;
+  final bool isAuthoritative;
 
   const OnboardingFrontierSelection({
     required this.normalizedT,
@@ -24,6 +25,7 @@ class OnboardingFrontierSelection {
     required this.targetVolatility,
     required this.dataSource,
     required this.asOfDate,
+    required this.isAuthoritative,
   });
 }
 
@@ -45,6 +47,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _chartDragging = false;
   double _selectedDotT = 0.45;
   OnboardingFrontierSelection? _frontierSelection;
+  late final Future<MobileFrontierPreviewResponse?> _frontierPreviewFuture;
 
   static const int _pageCount = 2;
 
@@ -53,22 +56,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.initState();
     logPageEnter('OnboardingScreen');
     logPageEnter('onboarding step 1/2');
-    _prefetchFrontierPreview();
+    _frontierPreviewFuture = _fetchFrontierPreview();
   }
 
   /// Start fetching the frontier preview while the user is still on page 1
   /// so it's cached by the time they swipe to the frontier page.
-  Future<void> _prefetchFrontierPreview() async {
+  Future<MobileFrontierPreviewResponse?> _fetchFrontierPreview() async {
     try {
       final preview = await MobileBackendApi.instance.fetchFrontierPreview(
         propensityScore: 45.0,
         samplePoints: _frontierPreviewSamplePoints,
         asOfDate: widget.asOfDate,
       );
-      if (!mounted) return;
+      if (!mounted) {
+        return preview;
+      }
       PortfolioStateProvider.of(context).setFrontierPreview(preview);
+      return preview;
     } catch (_) {
-      // Frontier page will retry on its own if the prefetch fails.
+      return null;
     }
   }
 
@@ -106,10 +112,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         pageBuilder: (context, animation, secondaryAnimation) =>
             PortfolioLoadingScreen(
           dotT: _selectedDotT,
-          selectedPointIndex: resolvedSelection?.selectedPointIndex,
+          selectedPointIndex: resolvedSelection?.isAuthoritative == true
+              ? resolvedSelection?.selectedPointIndex
+              : null,
           targetVolatility: resolvedSelection?.targetVolatility,
-          previewDataSource: resolvedSelection?.dataSource,
+          previewDataSource: resolvedSelection?.isAuthoritative == true
+              ? resolvedSelection?.dataSource
+              : null,
           asOfDate: resolvedSelection?.asOfDate ?? widget.asOfDate,
+          previewFuture: _frontierPreviewFuture,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
@@ -138,6 +149,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       targetVolatility: point.volatility,
       dataSource: preview.dataSource,
       asOfDate: preview.asOfDate ?? widget.asOfDate,
+      isAuthoritative: true,
     );
   }
 
@@ -164,6 +176,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   const _ServiceDescriptionPage(),
                   _EfficientFrontierPage(
                     asOfDate: widget.asOfDate,
+                    frontierPreviewFuture: _frontierPreviewFuture,
                     onDragStateChanged: (dragging) {
                       setState(() => _chartDragging = dragging);
                     },
@@ -304,12 +317,14 @@ class _LegendItem extends StatelessWidget {
 /// Page 2: Efficient Frontier explanation
 class _EfficientFrontierPage extends StatefulWidget {
   final DateTime? asOfDate;
+  final Future<MobileFrontierPreviewResponse?> frontierPreviewFuture;
   final ValueChanged<bool>? onDragStateChanged;
   final ValueChanged<double>? onPositionChanged;
   final ValueChanged<OnboardingFrontierSelection?>? onFrontierSelectionChanged;
 
   const _EfficientFrontierPage({
     this.asOfDate,
+    required this.frontierPreviewFuture,
     this.onDragStateChanged,
     this.onPositionChanged,
     this.onFrontierSelectionChanged,
@@ -321,7 +336,6 @@ class _EfficientFrontierPage extends StatefulWidget {
 
 class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
   static const double _initialDotT = 0.45;
-  static const double _previewPropensityScore = 45.0;
 
   /// Embedded frontier preview so the real curve renders instantly.
   /// Silently replaced when the live API responds.
@@ -547,6 +561,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
   bool _previewLoading = false;
   bool _previewUnavailable = false;
   bool _didUseInitialCache = false;
+  bool _previewIsAuthoritative = false;
 
   MobileFrontierPreviewPoint? get _selectedPreviewPoint {
     final selectedPreviewPosition = _selectedPreviewPosition;
@@ -620,7 +635,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     widget.onFrontierSelectionChanged?.call(
       _selectionForPreviewPosition(rec),
     );
-    _loadFrontierPreview();
+    _bindFrontierPreviewFuture();
   }
 
   @override
@@ -637,20 +652,13 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     _applyPreview(cachedPreview, fromCache: true);
   }
 
-  Future<void> _loadFrontierPreview() async {
-    try {
-      final preview = await MobileBackendApi.instance.fetchFrontierPreview(
-        propensityScore: _previewPropensityScore,
-        samplePoints: _frontierPreviewSamplePoints,
-        asOfDate: widget.asOfDate,
-      );
-      if (!mounted) {
-        return;
-      }
-      PortfolioStateProvider.of(context).setFrontierPreview(preview);
-      _applyPreview(preview);
-    } catch (_) {
-      if (!mounted) {
+  Future<void> _bindFrontierPreviewFuture() async {
+    final preview = await widget.frontierPreviewFuture;
+    if (!mounted) {
+      return;
+    }
+    if (preview == null || preview.points.isEmpty) {
+      if (_previewIsAuthoritative) {
         return;
       }
       // Keep the embedded preview — it's better than showing nothing.
@@ -658,7 +666,9 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         _previewLoading = false;
         _previewUnavailable = true;
       });
+      return;
     }
+    _applyPreview(preview);
   }
 
   void _applyPreview(
@@ -674,6 +684,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       _selectedPreviewPosition = recommendedPosition;
       _previewLoading = false;
       _previewUnavailable = false;
+      _previewIsAuthoritative = true;
       _dotT = normalizedT;
     });
     if (fromCache) {
@@ -725,6 +736,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       targetVolatility: point.volatility,
       dataSource: _preview.dataSource,
       asOfDate: _preview.asOfDate ?? widget.asOfDate,
+      isAuthoritative: _previewIsAuthoritative,
     );
   }
 
