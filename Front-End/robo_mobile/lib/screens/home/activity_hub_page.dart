@@ -195,10 +195,10 @@ class _InsightCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final text = insight.explanationText != null &&
-            insight.explanationText!.length > 60
-        ? '${insight.explanationText!.substring(0, 60)}...'
-        : insight.explanationText ?? '';
+    final explanation = insight.generatedExplanation;
+    final text = explanation.length > 60
+        ? '${explanation.substring(0, 60)}...'
+        : explanation;
 
     return Pressable(
       onTap: () => Navigator.push(

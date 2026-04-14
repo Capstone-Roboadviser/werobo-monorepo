@@ -31,6 +31,11 @@ def color_for_sector(asset_code: str, index: int = 0) -> str:
     return SECTOR_COLOR_MAP.get(asset_code, _FALLBACK_COLORS[index % len(_FALLBACK_COLORS)])
 
 
+NO_CHANGE_EXPLANATION = (
+    "포트폴리오 비중이 목표와 일치하여 조정이 필요하지 않았어요."
+)
+
+
 def generate_insight_explanation(
     pre_weights: dict[str, float],
     post_weights: dict[str, float],
@@ -47,14 +52,14 @@ def generate_insight_explanation(
         before = pre_weights.get(code, 0.0)
         after = post_weights.get(code, 0.0)
         delta = after - before
-        if abs(delta) > 0.001:
+        if abs(delta) >= 0.001:
             name = (sector_names or {}).get(code, code)
             deltas.append((name, before, after, delta))
 
     deltas.sort(key=lambda x: abs(x[3]), reverse=True)
 
     if not deltas:
-        return "포트폴리오 비중이 목표와 일치하여 조정이 필요하지 않았어요."
+        return NO_CHANGE_EXPLANATION
 
     parts: list[str] = []
     for name, before, after, delta in deltas[:2]:

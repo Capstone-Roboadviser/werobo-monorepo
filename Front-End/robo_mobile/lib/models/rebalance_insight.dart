@@ -18,11 +18,18 @@ class RebalanceInsightAllocation {
     required this.afterPct,
   });
 
-  double get delta => afterPct - beforePct;
+  /// Rounded display percentages (one decimal place).
+  double get beforeDisplay =>
+      double.parse((beforePct * 100).toStringAsFixed(1));
+  double get afterDisplay =>
+      double.parse((afterPct * 100).toStringAsFixed(1));
 
-  /// Whether this allocation changed during rebalancing.
-  bool get hasChanged =>
-      (delta.abs() * 1000).round() > 0;
+  /// Delta derived from rounded display values so that
+  /// "5.1% → 5.1%" never shows a non-zero change.
+  double get displayDelta => afterDisplay - beforeDisplay;
+
+  /// Whether the rounded before/after percentages differ.
+  bool get hasChanged => displayDelta.abs() >= 0.05;
 
   /// Korean display name for the asset category.
   String get displayName =>
@@ -75,6 +82,33 @@ class RebalanceInsight {
   final String? explanationText;
   final bool isRead;
   final String createdAt;
+
+  /// True when at least one allocation has a visible change.
+  bool get hasRealChanges => allocations.any((a) => a.hasChanged);
+
+  /// Explanation derived from rounded display values so it always
+  /// matches the visible allocation rows.
+  String get generatedExplanation {
+    final changed = allocations.where((a) => a.hasChanged).toList()
+      ..sort((a, b) =>
+          b.displayDelta.abs().compareTo(a.displayDelta.abs()));
+    if (changed.isEmpty) {
+      return '포트폴리오 비중이 목표와 일치하여 '
+          '조정이 필요하지 않았어요.';
+    }
+    final parts = changed.take(2).map((a) {
+      final before =
+          '${a.beforeDisplay.toStringAsFixed(1)}%';
+      final after =
+          '${a.afterDisplay.toStringAsFixed(1)}%';
+      final verb =
+          a.displayDelta > 0 ? '늘렸어요' : '줄였어요';
+      return '${a.displayName} 비중을 '
+          '$before에서 $after로 $verb';
+    });
+    return '${parts.join(", ")}. '
+        '시장 변동으로 목표 비중에서 벗어난 자산군을 조정했어요.';
+  }
 
   const RebalanceInsight({
     required this.id,
