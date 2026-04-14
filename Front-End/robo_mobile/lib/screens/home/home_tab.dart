@@ -6,7 +6,6 @@ import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
-import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
 import '../../models/rebalance_insight.dart';
@@ -81,8 +80,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final tc = WeRoboThemeColors.of(context);
     final state = PortfolioStateProvider.of(context);
     final type = state.type;
-    final activities = state.accountActivities;
-    final hasAccount = state.hasPrototypeAccount;
     final hasInsightBanner = state.unreadInsightCount > 0;
     final hasDigestBanner = !state.hasSeenCurrentDigest;
     int staggerIdx = 0;
@@ -161,46 +158,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   ),
                 ),
               ),
-            if (hasDigestBanner)
-              const SizedBox(height: 20),
-
-            // Recent activity
-            _stagger(
-                ++staggerIdx,
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('최근 활동',
-                        style: WeRoboTypography.heading3.themed(context)),
-                    const SizedBox(height: 12),
-                    if (hasAccount && activities.isNotEmpty)
-                      ...activities.map(_buildAccountActivityCard)
-                    else ...[
-                      _ActivityCard(
-                        icon: Icons.sync_alt_rounded,
-                        iconColor: WeRoboColors.primary,
-                        title: '리밸런싱 완료',
-                        date: '2026-04-01',
-                        value: '₩15,826,400',
-                      ),
-                      _ActivityCard(
-                        icon: Icons.arrow_downward_rounded,
-                        iconColor: tc.accent,
-                        title: '입금',
-                        date: '2026-03-15',
-                        value: '+₩500,000',
-                        valueColor: tc.accent,
-                      ),
-                      _ActivityCard(
-                        icon: Icons.sync_alt_rounded,
-                        iconColor: WeRoboColors.primary,
-                        title: '리밸런싱 완료',
-                        date: '2026-01-02',
-                        value: '₩15,120,000',
-                      ),
-                    ],
-                  ],
-                )),
             const SizedBox(height: 32),
           ],
         ),
@@ -208,34 +165,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _buildAccountActivityCard(MobileAccountActivity activity) {
-    final tc = WeRoboThemeColors.of(context);
-    IconData icon = Icons.account_balance_wallet_rounded;
-    Color iconColor = WeRoboColors.primary;
-    String value = activity.description ?? '';
-    Color? valueColor;
-
-    if (activity.type == 'cash_in' || activity.type == 'initial_deposit') {
-      icon = Icons.arrow_downward_rounded;
-      iconColor = tc.accent;
-      final amount = activity.amount ?? 0;
-      value = '+₩${_formatCurrency(amount.round())}';
-      valueColor = tc.accent;
-    } else if (activity.type == 'portfolio_created') {
-      icon = Icons.pie_chart_rounded;
-      iconColor = WeRoboColors.primary;
-      value = '추적 시작';
-    }
-
-    return _ActivityCard(
-      icon: icon,
-      iconColor: iconColor,
-      title: activity.title,
-      date: activity.date,
-      value: value,
-      valueColor: valueColor,
-    );
-  }
 }
 
 // ─── Hero chart: value + dual-line chart + time range ─────────
@@ -1158,76 +1087,6 @@ class _WelcomeBanner extends StatelessWidget {
   }
 }
 
-// ─── Activity card ────────────────────────────────────────────
-
-class _ActivityCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String date;
-  final String value;
-  final Color? valueColor;
-
-  const _ActivityCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.date,
-    required this.value,
-    this.valueColor,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Pressable(
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: tc.card,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, size: 20, color: iconColor),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: WeRoboTypography.bodySmall.copyWith(
-                          color: tc.textPrimary, fontWeight: FontWeight.w500)),
-                  Text(date,
-                      style: WeRoboTypography.caption
-                          .copyWith(fontFamily: WeRoboFonts.english)
-                          .themed(context)),
-                ],
-              ),
-            ),
-            Text(
-              value,
-              style: WeRoboTypography.bodySmall.copyWith(
-                fontWeight: FontWeight.w600,
-                color: valueColor ?? tc.textPrimary,
-                fontFamily: WeRoboFonts.english,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 // ─── Digest banner ──────────────────────────────────────────
 
