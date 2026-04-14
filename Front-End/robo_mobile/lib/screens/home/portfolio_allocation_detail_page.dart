@@ -48,7 +48,7 @@ class _PortfolioAllocationDetailPageState
     final totalPercentage = detail.category.percentage;
 
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,147 +93,95 @@ class _PortfolioAllocationDetailPageState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 20),
-                    Text(
-                      '현재 포트폴리오 안에서 선택한 자산군이 어떻게 구성되어 있는지 확인할 수 있습니다.',
-                      style: WeRoboTypography.body.copyWith(
-                        color: tc.textSecondary,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            detail.category.name,
+                            style: WeRoboTypography.heading3
+                                .themed(context)
+                                .copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        _DetailValueToggle(
+                          showAmounts: _showAmounts,
+                          onChanged: (showAmounts) {
+                            setState(() => _showAmounts = showAmounts);
+                          },
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: tc.card,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Container(
-                                width: 14,
-                                height: 14,
-                                margin: const EdgeInsets.only(top: 4),
-                                decoration: BoxDecoration(
-                                  color: detail.category.color,
-                                  borderRadius: BorderRadius.circular(4),
+                              Text(
+                                _showAmounts ? '평가 금액' : '총 비중',
+                                style: WeRoboTypography.caption.copyWith(
+                                  color: tc.textSecondary,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      detail.category.name,
-                                      style: WeRoboTypography.heading3
-                                          .themed(context)
-                                          .copyWith(
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      '포트폴리오 내 비중과 대표 종목을 함께 보여줍니다.',
-                                      style:
-                                          WeRoboTypography.bodySmall.copyWith(
-                                        color: tc.textSecondary,
-                                        height: 1.45,
-                                      ),
-                                    ),
-                                  ],
+                              const SizedBox(height: 6),
+                              Text(
+                                _showAmounts
+                                    ? _formatWonValue(
+                                        widget.baseValue,
+                                        totalPercentage,
+                                      )
+                                    : _formatPercent(totalPercentage),
+                                style: WeRoboTypography.heading3.copyWith(
+                                  color: tc.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                  fontFamily: WeRoboFonts.english,
                                 ),
-                              ),
-                              const SizedBox(width: 12),
-                              _DetailValueToggle(
-                                showAmounts: _showAmounts,
-                                onChanged: (showAmounts) {
-                                  setState(() => _showAmounts = showAmounts);
-                                },
                               ),
                             ],
                           ),
-                          const SizedBox(height: 18),
-                          Row(
+                        ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: _SummaryMetricCard(
-                                  label: _showAmounts ? '평가 금액' : '총 비중',
-                                  value: _showAmounts
-                                      ? _formatWonValue(
-                                          widget.baseValue,
-                                          totalPercentage,
-                                        )
-                                      : _formatPercent(totalPercentage),
+                              Text(
+                                '구성 종목 수',
+                                style: WeRoboTypography.caption.copyWith(
+                                  color: tc.textSecondary,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: _SummaryMetricCard(
-                                  label: '구성 종목 수',
-                                  value: '${tickers.length}개',
+                              const SizedBox(height: 6),
+                              Text(
+                                '${tickers.length}개',
+                                style: WeRoboTypography.heading3.copyWith(
+                                  color: tc.textPrimary,
+                                  fontWeight: FontWeight.w700,
+                                  fontFamily: WeRoboFonts.english,
                                 ),
                               ),
                             ],
                           ),
-                          if (tickers.isNotEmpty) ...[
-                            const SizedBox(height: 16),
-                            Text(
-                              '대표 종목',
-                              style: WeRoboTypography.caption.copyWith(
-                                color: tc.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: tickers
-                                  .take(3)
-                                  .map(
-                                    (ticker) => Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 10,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: tc.surface,
-                                        borderRadius:
-                                            BorderRadius.circular(999),
-                                      ),
-                                      child: Text(
-                                        ticker.symbol,
-                                        style:
-                                            WeRoboTypography.caption.copyWith(
-                                          color: tc.textPrimary,
-                                          fontFamily: WeRoboFonts.english,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                  .toList(),
-                            ),
-                          ],
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 24),
+                    Divider(
+                      color: tc.border.withValues(alpha: 0.4),
+                      height: 1,
+                      thickness: 0.5,
+                    ),
+                    const SizedBox(height: 16),
                     Text(
                       '구성 종목',
-                      style: WeRoboTypography.heading3.themed(context),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _showAmounts
-                          ? '각 종목의 현재 평가 금액 기준 배분을 보여줍니다.'
-                          : '각 종목이 포트폴리오 전체에서 차지하는 비중을 보여줍니다.',
-                      style: WeRoboTypography.bodySmall.copyWith(
-                        color: tc.textSecondary,
+                      style: WeRoboTypography.body.copyWith(
+                        color: tc.textPrimary,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -250,14 +198,24 @@ class _PortfolioAllocationDetailPageState
                         ),
                       )
                     else
-                      ...tickers.map(
-                        (ticker) => _TickerAllocationCard(
-                          ticker: ticker,
-                          categoryPercentage: totalPercentage,
-                          baseValue: widget.baseValue,
-                          showAmounts: _showAmounts,
-                        ),
-                      ),
+                      ...List.generate(tickers.length, (index) {
+                        final ticker = tickers[index];
+                        return Column(
+                          children: [
+                            _TickerAllocationRow(
+                              ticker: ticker,
+                              baseValue: widget.baseValue,
+                              showAmounts: _showAmounts,
+                            ),
+                            if (index != tickers.length - 1)
+                              Divider(
+                                color: tc.border.withValues(alpha: 0.4),
+                                height: 1,
+                                thickness: 0.5,
+                              ),
+                          ],
+                        );
+                      }),
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -279,123 +237,88 @@ class _DetailValueToggle extends StatelessWidget {
     required this.onChanged,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: tc.background,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _DetailValueToggleChip(
-            label: '%',
-            isActive: !showAmounts,
-            onTap: () => onChanged(false),
-          ),
-          const SizedBox(width: 6),
-          _DetailValueToggleChip(
-            label: '₩',
-            isActive: showAmounts,
-            onTap: () => onChanged(true),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailValueToggleChip extends StatelessWidget {
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _DetailValueToggleChip({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
+  static const double _chipSize = 36.0;
+  static const double _padding = 3.0;
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    const totalWidth = _chipSize * 2 + _padding * 2 + 4;
     return Pressable(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      onTap: () => onChanged(!showAmounts),
+      child: Container(
+        width: totalWidth,
+        height: _chipSize + _padding * 2,
+        padding: const EdgeInsets.all(_padding),
         decoration: BoxDecoration(
-          color: isActive ? tc.surface : Colors.transparent,
+          color: tc.surface,
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(
-          label,
-          style: WeRoboTypography.bodySmall.copyWith(
-            color: tc.textPrimary.withValues(alpha: isActive ? 1 : 0.58),
-            fontWeight: FontWeight.w700,
-            fontFamily: WeRoboFonts.english,
-          ),
+        child: Stack(
+          children: [
+            AnimatedAlign(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              alignment: showAmounts
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+              child: Container(
+                width: _chipSize,
+                height: _chipSize,
+                decoration: BoxDecoration(
+                  color: tc.card,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                SizedBox(
+                  width: _chipSize + 2,
+                  child: Center(
+                    child: Text(
+                      '%',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: !showAmounts
+                            ? tc.textPrimary
+                            : tc.textTertiary,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: WeRoboFonts.english,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: _chipSize + 2,
+                  child: Center(
+                    child: Text(
+                      '₩',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: showAmounts
+                            ? tc.textPrimary
+                            : tc.textTertiary,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: WeRoboFonts.english,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-class _SummaryMetricCard extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _SummaryMetricCard({
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: tc.background,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: WeRoboTypography.caption.copyWith(
-              color: tc.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: WeRoboTypography.heading3.copyWith(
-              color: tc.textPrimary,
-              fontWeight: FontWeight.w700,
-              fontFamily: WeRoboFonts.english,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TickerAllocationCard extends StatelessWidget {
+class _TickerAllocationRow extends StatelessWidget {
   final TickerHolding ticker;
-  final double categoryPercentage;
   final double? baseValue;
   final bool showAmounts;
 
-  const _TickerAllocationCard({
+  const _TickerAllocationRow({
     required this.ticker,
-    required this.categoryPercentage,
     required this.baseValue,
     required this.showAmounts,
   });
@@ -403,91 +326,41 @@ class _TickerAllocationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final portfolioRatio = ticker.percentage;
-    final withinCategoryRatio = categoryPercentage <= 0
-        ? 0.0
-        : (portfolioRatio / categoryPercentage).clamp(0.0, 1.0);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: tc.card,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Row(
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      ticker.symbol,
-                      style: WeRoboTypography.bodySmall.copyWith(
-                        color: tc.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontFamily: WeRoboFonts.english,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      ticker.name,
-                      style: WeRoboTypography.caption.copyWith(
-                        color: tc.textSecondary,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  ticker.symbol,
+                  style: WeRoboTypography.bodySmall.copyWith(
+                    color: tc.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: WeRoboFonts.english,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    showAmounts
-                        ? _formatWonValue(baseValue, portfolioRatio)
-                        : _formatPercent(portfolioRatio),
-                    style: WeRoboTypography.heading3.copyWith(
-                      color: tc.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      fontFamily: WeRoboFonts.english,
-                    ),
+                const SizedBox(height: 3),
+                Text(
+                  ticker.name,
+                  style: WeRoboTypography.caption.copyWith(
+                    color: tc.textSecondary,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '포트폴리오 기준 ${_formatPercent(portfolioRatio)}',
-                    style: WeRoboTypography.caption.copyWith(
-                      color: tc.textSecondary,
-                      fontFamily: WeRoboFonts.english,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              value: withinCategoryRatio,
-              minHeight: 8,
-              backgroundColor: tc.surface,
-              valueColor: AlwaysStoppedAnimation<Color>(WeRoboColors.primary),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: Text(
-              '자산군 내 ${(withinCategoryRatio * 100).toStringAsFixed(1)}%',
-              style: WeRoboTypography.caption.copyWith(
-                color: tc.textSecondary,
-                fontFamily: WeRoboFonts.english,
-              ),
+          const SizedBox(width: 12),
+          Text(
+            showAmounts
+                ? _formatWonValue(baseValue, ticker.percentage)
+                : _formatPercent(ticker.percentage),
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontFamily: WeRoboFonts.english,
             ),
           ),
         ],
