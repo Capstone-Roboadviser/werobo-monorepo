@@ -388,10 +388,16 @@ class _ComparisonViewState extends State<_ComparisonView>
   List<ChartLine> _filterByType(List<ChartLine> rawLines) {
     final result = <ChartLine>[];
 
-    // Selected portfolio line
+    // Selected portfolio line — relabel to generic "포트폴리오"
     final portfolioLine = _buildPortfolioLine(rawLines);
     if (portfolioLine != null) {
-      result.add(portfolioLine);
+      result.add(ChartLine(
+        key: portfolioLine.key,
+        label: '포트폴리오',
+        color: portfolioLine.color,
+        dashed: portfolioLine.dashed,
+        points: portfolioLine.points,
+      ));
     }
 
     // 7-asset average benchmark (toggle-controlled)
@@ -400,10 +406,14 @@ class _ComparisonViewState extends State<_ComparisonView>
       if (bench != null) result.add(bench);
     }
 
-    // Bond trend: straight line from treasury start to end
+    // Include raw treasury so bond trend can be built after range filter
     if (_showBondTrend) {
-      final bond = _buildBondTrendLine(rawLines);
-      if (bond != null) result.add(bond);
+      for (final line in rawLines) {
+        if (line.key == 'treasury') {
+          result.add(line);
+          break;
+        }
+      }
     }
 
     return result;
@@ -442,28 +452,6 @@ class _ComparisonViewState extends State<_ComparisonView>
     );
   }
 
-  /// Build a straight line from the first to last point of the
-  /// treasury (IEF) comparison line.
-  ChartLine? _buildBondTrendLine(List<ChartLine> rawLines) {
-    ChartLine? treasury;
-    for (final line in rawLines) {
-      if (line.key == 'treasury') {
-        treasury = line;
-        break;
-      }
-    }
-    if (treasury == null || treasury.points.length < 2) return null;
-    final first = treasury.points.first;
-    final last = treasury.points.last;
-    return ChartLine(
-      key: 'bond_trend',
-      label: '채권 수익률',
-      color: treasury.color,
-      dashed: true,
-      points: [first, last],
-    );
-  }
-
   List<ChartLine> _filterByRange(List<ChartLine> rawLines) {
     final cutoff = DateTime.now().subtract(Duration(days: _rangeDays[_range]));
     return rawLines.map((line) {
@@ -488,11 +476,34 @@ class _ComparisonViewState extends State<_ComparisonView>
         (widget.useFallbackMock
             ? _allMockComparisonLines()
             : const <ChartLine>[]);
-    // Filter by range before deriving comparison overlays so the bond trend
-    // keeps the selected window's start/end points instead of collapsing.
-    final rangedLines = allLines.isEmpty ? allLines : _filterByRange(allLines);
-    final lines =
-        rangedLines.isEmpty ? rangedLines : _filterByType(rangedLines);
+    final typedLines = allLines.isEmpty ? allLines : _filterByType(allLines);
+    var lines = typedLines.isEmpty ? typedLines : _filterByRange(typedLines);
+
+    // Build bond trend from range-filtered treasury, then replace treasury
+    if (_showBondTrend) {
+      final rangedTreasury =
+          lines.where((l) => l.key == 'treasury').firstOrNull;
+      if (rangedTreasury != null &&
+          rangedTreasury.points.length >= 2) {
+        final first = rangedTreasury.points.first;
+        final last = rangedTreasury.points.last;
+        lines = [
+          ...lines.where((l) => l.key != 'treasury'),
+          ChartLine(
+            key: 'bond_trend',
+            label: '채권 수익률',
+            color: const Color(0xFF999999)
+                .withValues(alpha: 0.4),
+            dashed: true,
+            points: [first, last],
+          ),
+        ];
+      } else {
+        lines = lines
+            .where((l) => l.key != 'treasury')
+            .toList();
+      }
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
