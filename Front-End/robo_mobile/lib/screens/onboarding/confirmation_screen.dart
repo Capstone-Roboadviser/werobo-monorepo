@@ -39,7 +39,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   bool _isLoadingCharts = true;
   String? _chartError;
   List<ChartPoint>? _volatilityPoints;
-  List<ChartPoint>? _benchmarkVolatilityPoints;
   List<ChartLine>? _comparisonLines;
   List<DateTime>? _rebalanceDates;
   MobileComparisonBacktestResponse? _backtestResponse;
@@ -103,6 +102,8 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       comparisonBacktest =
           await MobileBackendApi.instance.fetchComparisonBacktest(
         preferredDataSource: widget.frontierSelection.dataSource,
+        stockWeights: _portfolio.stockWeights,
+        portfolioCode: _portfolio.code,
       );
     } catch (error) {
       errors.add(_friendlyError(error));
@@ -125,14 +126,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
               ),
             )
             .toList();
-        _benchmarkVolatilityPoints = volatilityHistory.benchmarkPoints
-            ?.map(
-              (point) => ChartPoint(
-                date: point.date,
-                value: point.volatility,
-              ),
-            )
-            .toList();
       }
 
       if (comparisonBacktest != null) {
@@ -141,16 +134,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
         _comparisonLines = comparisonChartLinesFromResponse(comparisonBacktest);
       }
     });
-  }
-
-  Future<List<ChartLine>> _fetchComparisonLinesForStartDate(
-    DateTime? startDate,
-  ) async {
-    final response = await MobileBackendApi.instance.fetchComparisonBacktest(
-      preferredDataSource: widget.frontierSelection.dataSource,
-      startDate: startDate,
-    );
-    return comparisonChartLinesFromResponse(response);
   }
 
   String _friendlyError(Object error) {
@@ -250,10 +233,8 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
           child: PortfolioCharts(
             type: _portfolio.investmentType,
             volatilityPoints: _volatilityPoints,
-            benchmarkVolatilityPoints: _benchmarkVolatilityPoints,
             comparisonLines: _comparisonLines,
             rebalanceDates: _rebalanceDates,
-            onComparisonRangeRequested: _fetchComparisonLinesForStartDate,
             useFallbackMock: false,
           ),
         ),

@@ -211,13 +211,16 @@ class MobileBackendApi {
 
   Future<MobileComparisonBacktestResponse> fetchComparisonBacktest({
     String? preferredDataSource,
-    DateTime? startDate,
+    Map<String, double>? stockWeights,
+    String? portfolioCode,
   }) {
     return _postWithFallback(
       path: '/portfolios/comparison-backtest',
       bodyForDataSource: (dataSource) => <String, dynamic>{
         'data_source': dataSource,
-        if (startDate != null) 'start_date': _formatDate(startDate),
+        if (stockWeights != null) 'stock_weights': stockWeights,
+        if (portfolioCode != null && portfolioCode.isNotEmpty)
+          'portfolio_code': portfolioCode,
       },
       parser: MobileComparisonBacktestResponse.fromJson,
       timeout: _defaultTimeout,

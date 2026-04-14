@@ -13,7 +13,7 @@ from app.core.config import (
 )
 from app.data.stock_repository import StockDataRepository
 from app.domain.enums import SimulationDataSource
-from app.domain.models import PortfolioHistoryPoint, PortfolioHistorySeries, StockInstrument
+from app.domain.models import AssetClass, PortfolioHistoryPoint, PortfolioHistorySeries, StockInstrument
 from app.engine.comparison import ComparisonLine, ComparisonResult, build_comparison
 from app.services.portfolio_service import PortfolioSimulationService
 
@@ -189,8 +189,16 @@ class PortfolioAnalyticsService:
         self,
         *,
         data_source: SimulationDataSource,
-        start_date: str | None = None,
+        stock_weights: dict[str, float] | None = None,
+        portfolio_code: str | None = None,
     ) -> ComparisonResult:
+        if stock_weights:
+            return self._build_fixed_weight_comparison_backtest(
+                data_source=data_source,
+                stock_weights=stock_weights,
+                portfolio_code=portfolio_code,
+            )
+
         assets = self._load_comparison_assets(data_source)
         instruments, prices, combination_prefix = self._load_comparison_universe(data_source)
         prices = prices.copy()
@@ -198,10 +206,9 @@ class PortfolioAnalyticsService:
         if prices.empty:
             raise ValueError("비교 백테스트에 사용할 가격 데이터가 없습니다.")
 
-        train_prices, test_prices, train_end_date, test_start_date, effective_split_ratio = self._split_prices_train_test(
+        train_prices, test_prices, train_end_date, test_start_date = self._split_prices_train_test(
             prices,
             split_ratio=0.9,
-            requested_start_date=start_date,
         )
         train_start_date = pd.Timestamp(train_prices["date"].min()).normalize()
 
@@ -245,10 +252,85 @@ class PortfolioAnalyticsService:
                 extra_lines=extra_lines,
                 train_start_date=train_start_date.strftime("%Y-%m-%d"),
                 train_end_date=train_end_date.strftime("%Y-%m-%d"),
-                split_ratio=effective_split_ratio,
+                split_ratio=0.9,
             )
         except Exception as exc:
             raise RuntimeError(f"비교 백테스트 계산 중 오류: {exc}") from exc
+
+    def _build_fixed_weight_comparison_backtest(
+        self,
+        *,
+        data_source: SimulationDataSource,
+        stock_weights: dict[str, float],
+        portfolio_code: str | None = None,
+    ) -> ComparisonResult:
+        assets = self._load_comparison_assets(data_source)
+        instruments, prices, _ = self._load_comparison_universe(data_source)
+        prices = prices.copy()
+        prices["date"] = pd.to_datetime(prices["date"]).dt.normalize()
+        if prices.empty:
+            raise ValueError("비교 백테스트에 사용할 가격 데이터가 없습니다.")
+
+        normalized_weights = {
+            str(ticker).upper(): float(weight)
+            for ticker, weight in stock_weights.items()
+            if float(weight) > 0
+        }
+        if not normalized_weights:
+            raise ValueError("stock_weights에 0보다 큰 비중이 하나 이상 있어야 합니다.")
+
+        pivoted = (
+            prices[prices["ticker"].astype(str).str.upper().isin(normalized_weights.keys())]
+            .assign(
+                ticker=lambda frame: frame["ticker"].astype(str).str.upper(),
+                date=lambda frame: pd.to_datetime(frame["date"]).dt.normalize(),
+            )
+            .pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
+            .sort_index()
+            .ffill()
+            .dropna(how="any")
+        )
+        if pivoted.empty:
+            raise RuntimeError("선택 포트폴리오의 공통 가격 데이터를 만들지 못했습니다.")
+
+        available_weights = {
+            ticker: weight
+            for ticker, weight in normalized_weights.items()
+            if ticker in pivoted.columns
+        }
+        if not available_weights:
+            raise RuntimeError("선택 포트폴리오의 가격 데이터가 없습니다.")
+        total_weight = sum(available_weights.values())
+        portfolio_weights = {
+            ticker: weight / total_weight
+            for ticker, weight in available_weights.items()
+        }
+
+        benchmark_series = self._fetch_benchmark_prices(
+            pivoted.index[0].strftime("%Y-%m-%d"),
+        )
+        extra_lines = self._build_comparison_extra_lines(
+            assets=assets,
+            instruments=instruments,
+            prices=prices,
+            date_index=pivoted.index,
+        )
+
+        line_key = str(portfolio_code or "selected").strip() or "selected"
+        try:
+            start_date = pivoted.index[0].strftime("%Y-%m-%d")
+            return build_comparison(
+                pivoted,
+                {line_key: portfolio_weights},
+                {},
+                benchmark_series,
+                extra_lines=extra_lines,
+                train_start_date=start_date,
+                train_end_date=start_date,
+                split_ratio=1.0,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"선택 포트폴리오 비교 백테스트 계산 중 오류: {exc}") from exc
 
     def _load_comparison_assets(
         self,
@@ -290,27 +372,17 @@ class PortfolioAnalyticsService:
         prices: pd.DataFrame,
         *,
         split_ratio: float,
-        requested_start_date: str | None = None,
-    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.Timestamp, float]:
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.Timestamp]:
         if prices.empty:
             raise ValueError("비교 백테스트에 사용할 가격 데이터가 없습니다.")
 
         unique_dates = pd.Index(sorted(pd.to_datetime(prices["date"]).dt.normalize().unique()))
-        minimum_test_rows = 2
-        required_rows = max(MINIMUM_HISTORY_ROWS + minimum_test_rows, 30)
+        required_rows = max(MINIMUM_HISTORY_ROWS + 1, 30)
         if len(unique_dates) < required_rows:
             raise RuntimeError(f"비교 백테스트를 위해서는 최소 {required_rows}영업일 이상의 가격 이력이 필요합니다.")
 
-        latest_split_index = len(unique_dates) - minimum_test_rows
-        if requested_start_date is None:
-            split_index = int(len(unique_dates) * split_ratio)
-        else:
-            try:
-                requested_timestamp = pd.Timestamp(requested_start_date).normalize()
-            except Exception as exc:
-                raise ValueError("start_date는 YYYY-MM-DD 형식이어야 합니다.") from exc
-            split_index = int(unique_dates.searchsorted(requested_timestamp, side="left"))
-        split_index = min(max(split_index, MINIMUM_HISTORY_ROWS), latest_split_index)
+        split_index = int(len(unique_dates) * split_ratio)
+        split_index = min(max(split_index, MINIMUM_HISTORY_ROWS), len(unique_dates) - 1)
         train_end_date = pd.Timestamp(unique_dates[split_index - 1]).normalize()
         test_start_date = pd.Timestamp(unique_dates[split_index]).normalize()
 
@@ -318,13 +390,7 @@ class PortfolioAnalyticsService:
         test_prices = prices[pd.to_datetime(prices["date"]).dt.normalize() >= test_start_date].copy()
         if train_prices.empty or test_prices.empty:
             raise RuntimeError("train/test 분할 후 사용할 가격 데이터가 부족합니다.")
-        return (
-            train_prices,
-            test_prices,
-            train_end_date,
-            test_start_date,
-            split_index / len(unique_dates),
-        )
+        return train_prices, test_prices, train_end_date, test_start_date
 
     def _fetch_benchmark_prices(self, start_date: str) -> dict[str, pd.Series]:
         benchmarks: dict[str, pd.Series] = {}
@@ -381,7 +447,7 @@ class PortfolioAnalyticsService:
     def _build_equal_weight_asset_benchmark_line(
         self,
         *,
-        assets: list,
+        assets: list[AssetClass],
         instruments: list[StockInstrument],
         prices: pd.DataFrame,
         date_index: pd.DatetimeIndex,
@@ -406,20 +472,19 @@ class PortfolioAnalyticsService:
             return None
 
         sector_paths: dict[str, pd.Series] = {}
-        for sector_code, sector_instruments in grouped.items():
+        for asset in assets:
             sector_path = self._build_sector_basket_path(
-                sector_instruments=sector_instruments,
+                asset=asset,
+                sector_instruments=grouped.get(asset.code, []),
                 price_table=price_table,
                 date_index=date_index,
             )
             if sector_path is None:
-                continue
-            sector_paths[sector_code] = sector_path
+                return None
+            sector_paths[asset.code] = sector_path
 
         expected_asset_codes = [asset.code for asset in assets]
         if not expected_asset_codes:
-            return None
-        if any(asset_code not in sector_paths for asset_code in expected_asset_codes):
             return None
 
         benchmark_path = pd.DataFrame(
@@ -449,6 +514,40 @@ class PortfolioAnalyticsService:
     def _build_sector_basket_path(
         self,
         *,
+        asset: AssetClass,
+        sector_instruments: list[StockInstrument],
+        price_table: pd.DataFrame,
+        date_index: pd.DatetimeIndex,
+    ) -> pd.Series | None:
+        realized_path = self._build_realized_sector_basket_path(
+            asset=asset,
+            sector_instruments=sector_instruments,
+            price_table=price_table,
+            date_index=date_index,
+        )
+        if realized_path is None:
+            return None
+
+        if not self._uses_fixed_five_percent_conservative_return(asset):
+            return realized_path
+
+        conservative_cap_path = self._build_conservative_cap_path(
+            date_index=realized_path.index,
+        )
+        capped_path = pd.concat(
+            [realized_path.astype(float), conservative_cap_path.astype(float)],
+            axis=1,
+            join="inner",
+        ).min(axis=1)
+        capped_path = capped_path.replace([np.inf, -np.inf], np.nan).dropna()
+        if capped_path.empty:
+            return None
+        return capped_path.astype(float)
+
+    def _build_realized_sector_basket_path(
+        self,
+        *,
+        asset: AssetClass,
         sector_instruments: list[StockInstrument],
         price_table: pd.DataFrame,
         date_index: pd.DatetimeIndex,
@@ -471,6 +570,7 @@ class PortfolioAnalyticsService:
             return None
 
         weights = self._normalize_sector_member_weights(
+            asset=asset,
             sector_instruments=sector_instruments,
             tickers=list(aligned.columns),
         )
@@ -485,12 +585,39 @@ class PortfolioAnalyticsService:
             return None
         return path.astype(float)
 
+    def _build_conservative_cap_path(
+        self,
+        *,
+        date_index: pd.DatetimeIndex,
+    ) -> pd.Series:
+        annual_return = (
+            self.portfolio_service
+            .fixed_five_percent_role_return_service
+            .conservative_expected_return()
+        )
+        trading_years = np.arange(len(date_index), dtype=float) / 252.0
+        cumulative = np.power(1.0 + annual_return, trading_years)
+        return pd.Series(cumulative, index=pd.DatetimeIndex(date_index), dtype=float)
+
+    def _uses_fixed_five_percent_conservative_return(self, asset: AssetClass) -> bool:
+        return (
+            asset.role_key == "fixed_five_percent_equal_weight"
+            or asset.weighting_mode == self.portfolio_service.FIXED_TOTAL_WEIGHTING_MODE
+            or asset.return_mode
+            == self.portfolio_service.fixed_five_percent_role_return_service.RETURN_MODE
+        )
+
     def _normalize_sector_member_weights(
         self,
         *,
+        asset: AssetClass,
         sector_instruments: list[StockInstrument],
         tickers: list[str],
     ) -> pd.Series:
+        if asset.weighting_mode == self.portfolio_service.FIXED_TOTAL_WEIGHTING_MODE:
+            equal_weight = 1.0 / len(tickers)
+            return pd.Series({ticker: equal_weight for ticker in tickers}, dtype=float)
+
         weights = pd.Series(
             {
                 instrument.ticker.upper(): (

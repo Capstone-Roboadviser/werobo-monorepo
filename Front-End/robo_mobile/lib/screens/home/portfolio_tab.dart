@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../app/chart_point_filters.dart';
-import '../../app/comparison_backtest_chart_mapper.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
@@ -28,7 +27,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
   List<ChartPoint>? _volatilityPoints;
 
   // Card 7 backtest fetch guard
-  bool _backtestFetched = false;
+  String? _loadedBacktestSignature;
 
   @override
   void initState() {
@@ -50,34 +49,44 @@ class _PortfolioTabState extends State<PortfolioTab> {
     if (_loadedHistoryType != type) {
       _fetchHistoryForType(type);
     }
-    if (!_backtestFetched && state.backtest == null) {
-      _fetchBacktest();
+    final desiredPortfolio = state.selectedPortfolio ??
+        state.recommendation?.portfolioByCode(type.riskCode);
+    final desiredSignature = _backtestSignature(desiredPortfolio);
+    if (_loadedBacktestSignature != desiredSignature) {
+      _fetchBacktest(desiredPortfolio);
     }
   }
 
-  Future<void> _fetchBacktest() async {
-    _backtestFetched = true;
+  String _backtestSignature(MobilePortfolioRecommendation? portfolio) {
+    if (portfolio == null) {
+      return 'generic';
+    }
+    final sortedKeys = portfolio.stockWeights.keys.toList()..sort();
+    final pairs = sortedKeys
+        .map((key) => '$key:${portfolio.stockWeights[key]}')
+        .join(',');
+    return '${portfolio.code}|$pairs';
+  }
+
+  Future<void> _fetchBacktest(MobilePortfolioRecommendation? portfolio) async {
+    final signature = _backtestSignature(portfolio);
+    _loadedBacktestSignature = signature;
     try {
       final state = PortfolioStateProvider.of(context);
       final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
         preferredDataSource: state.frontierSelection?.dataSource ??
             state.accountSummary?.dataSource,
+        stockWeights: portfolio?.stockWeights,
+        portfolioCode: portfolio?.code,
       );
       if (!mounted) return;
+      if (_loadedBacktestSignature != signature) return;
       PortfolioStateProvider.of(context).setBacktest(bt);
-    } catch (_) {}
-  }
-
-  Future<List<ChartLine>> _fetchComparisonLinesForStartDate(
-    DateTime? startDate,
-  ) async {
-    final state = PortfolioStateProvider.of(context);
-    final response = await MobileBackendApi.instance.fetchComparisonBacktest(
-      preferredDataSource: state.frontierSelection?.dataSource ??
-          state.accountSummary?.dataSource,
-      startDate: startDate,
-    );
-    return comparisonChartLinesFromResponse(response);
+    } catch (_) {
+      if (_loadedBacktestSignature == signature) {
+        _loadedBacktestSignature = null;
+      }
+    }
   }
 
   Future<void> _fetchHistoryForType(InvestmentType type) async {
@@ -227,8 +236,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
                       volatilityPoints: _volatilityPoints,
                       comparisonLines: lines,
                       rebalanceDates: rebalanceDates,
-                      onComparisonRangeRequested:
-                          _fetchComparisonLinesForStartDate,
                       isLoading: _isLoadingHistory,
                     ),
             ),
@@ -559,7 +566,6 @@ class _TrendView extends StatelessWidget {
   final List<ChartPoint>? volatilityPoints;
   final List<ChartLine> comparisonLines;
   final List<DateTime> rebalanceDates;
-  final ComparisonRangeLoader? onComparisonRangeRequested;
   final bool isLoading;
 
   const _TrendView({
@@ -568,7 +574,6 @@ class _TrendView extends StatelessWidget {
     this.volatilityPoints,
     required this.comparisonLines,
     required this.rebalanceDates,
-    this.onComparisonRangeRequested,
     this.isLoading = false,
   });
 
@@ -592,7 +597,6 @@ class _TrendView extends StatelessWidget {
         volatilityPoints: volatilityPoints,
         comparisonLines: comparisonLines.isNotEmpty ? comparisonLines : null,
         rebalanceDates: rebalanceDates.isNotEmpty ? rebalanceDates : null,
-        onComparisonRangeRequested: onComparisonRangeRequested,
         useFallbackMock: false,
       ),
     );

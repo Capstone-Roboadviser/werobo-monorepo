@@ -57,7 +57,14 @@ class _HomeShellState extends State<HomeShell> {
 
   Future<void> _fetchBacktest() async {
     try {
-      final bt = await MobileBackendApi.instance.fetchComparisonBacktest();
+      final state = PortfolioStateProvider.of(context);
+      final portfolio = state.selectedPortfolio;
+      final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
+        preferredDataSource: state.frontierSelection?.dataSource ??
+            state.accountSummary?.dataSource,
+        stockWeights: portfolio?.stockWeights,
+        portfolioCode: portfolio?.code,
+      );
       if (!mounted) return;
       PortfolioStateProvider.of(context).setBacktest(bt);
     } catch (_) {}

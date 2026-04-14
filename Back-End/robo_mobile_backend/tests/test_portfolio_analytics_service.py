@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import pandas as pd
 
-from app.core.config import MINIMUM_HISTORY_ROWS
+from app.domain.enums import SimulationDataSource
 from app.domain.models import AssetClass, StockInstrument
 from app.services.portfolio_analytics_service import PortfolioAnalyticsService
 
 
-def _asset(code: str, name: str) -> AssetClass:
+def _asset(
+    code: str,
+    name: str,
+    *,
+    role_key: str = "single_representative",
+    weighting_mode: str = "single",
+    return_mode: str = "black_litterman",
+) -> AssetClass:
     return AssetClass(
         code=code,
         name=name,
@@ -16,12 +23,12 @@ def _asset(code: str, name: str) -> AssetClass:
         color="#000000",
         min_weight=0.0,
         max_weight=0.3,
-        role_key="single_representative",
+        role_key=role_key,
         role_name="",
         role_description="",
         selection_mode="single_representative",
-        weighting_mode="single",
-        return_mode="black_litterman",
+        weighting_mode=weighting_mode,
+        return_mode=return_mode,
     )
 
 
@@ -108,6 +115,133 @@ def test_build_equal_weight_asset_benchmark_line_requires_all_asset_classes() ->
     assert line is None
 
 
+def test_build_equal_weight_asset_benchmark_line_caps_fixed_five_percent_role_upside() -> None:
+    service = PortfolioAnalyticsService()
+    date_index = pd.to_datetime(["2026-03-01", "2026-03-02", "2026-03-03"])
+    prices = pd.DataFrame(
+        [
+            {"date": "2026-03-01", "ticker": "AAA", "adjusted_close": 100.0},
+            {"date": "2026-03-02", "ticker": "AAA", "adjusted_close": 200.0},
+            {"date": "2026-03-03", "ticker": "AAA", "adjusted_close": 400.0},
+            {"date": "2026-03-01", "ticker": "BBB", "adjusted_close": 100.0},
+            {"date": "2026-03-02", "ticker": "BBB", "adjusted_close": 100.0},
+            {"date": "2026-03-03", "ticker": "BBB", "adjusted_close": 100.0},
+        ]
+    )
+    instruments = [
+        StockInstrument(
+            ticker="AAA",
+            name="Thematic",
+            sector_code="new_growth",
+            sector_name="신성장주",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+        StockInstrument(
+            ticker="BBB",
+            name="Gold",
+            sector_code="gold",
+            sector_name="금",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+    ]
+    assets = [
+        _asset(
+            "new_growth",
+            "신성장주",
+            role_key="fixed_five_percent_equal_weight",
+            weighting_mode="equal_weight_fixed_total_5pct",
+            return_mode=(
+                service.portfolio_service.fixed_five_percent_role_return_service.RETURN_MODE
+            ),
+        ),
+        _asset("gold", "금"),
+    ]
+
+    line = service._build_equal_weight_asset_benchmark_line(
+        assets=assets,
+        instruments=instruments,
+        prices=prices,
+        date_index=date_index,
+    )
+
+    conservative_path = service._build_conservative_cap_path(date_index=date_index)
+    expected_points = [
+        (
+            date.strftime("%Y-%m-%d"),
+            round((((float(capped_value) + 1.0) / 2.0) - 1.0) * 100, 4),
+        )
+        for date, capped_value in conservative_path.items()
+    ]
+
+    assert line is not None
+    assert line.points == expected_points
+
+
+def test_build_equal_weight_asset_benchmark_line_keeps_fixed_five_percent_role_drawdown() -> None:
+    service = PortfolioAnalyticsService()
+    date_index = pd.to_datetime(["2026-03-01", "2026-03-02", "2026-03-03"])
+    prices = pd.DataFrame(
+        [
+            {"date": "2026-03-01", "ticker": "AAA", "adjusted_close": 100.0},
+            {"date": "2026-03-02", "ticker": "AAA", "adjusted_close": 90.0},
+            {"date": "2026-03-03", "ticker": "AAA", "adjusted_close": 80.0},
+            {"date": "2026-03-01", "ticker": "BBB", "adjusted_close": 100.0},
+            {"date": "2026-03-02", "ticker": "BBB", "adjusted_close": 100.0},
+            {"date": "2026-03-03", "ticker": "BBB", "adjusted_close": 100.0},
+        ]
+    )
+    instruments = [
+        StockInstrument(
+            ticker="AAA",
+            name="Thematic",
+            sector_code="new_growth",
+            sector_name="신성장주",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+        StockInstrument(
+            ticker="BBB",
+            name="Gold",
+            sector_code="gold",
+            sector_name="금",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+    ]
+    assets = [
+        _asset(
+            "new_growth",
+            "신성장주",
+            role_key="fixed_five_percent_equal_weight",
+            weighting_mode="equal_weight_fixed_total_5pct",
+            return_mode=(
+                service.portfolio_service.fixed_five_percent_role_return_service.RETURN_MODE
+            ),
+        ),
+        _asset("gold", "금"),
+    ]
+
+    line = service._build_equal_weight_asset_benchmark_line(
+        assets=assets,
+        instruments=instruments,
+        prices=prices,
+        date_index=date_index,
+    )
+
+    assert line is not None
+    assert line.points == [
+        ("2026-03-01", 0.0),
+        ("2026-03-02", -5.0),
+        ("2026-03-03", -10.0),
+    ]
+
+
 def test_build_fixed_bond_line_is_linear() -> None:
     service = PortfolioAnalyticsService()
     date_index = pd.to_datetime(["2026-03-01", "2026-09-01", "2027-03-01"])
@@ -123,48 +257,56 @@ def test_build_fixed_bond_line_is_linear() -> None:
     assert 1.99 <= line.points[-1][1] <= 2.01
 
 
-def test_split_prices_train_test_respects_requested_start_date() -> None:
+def test_build_comparison_backtest_uses_current_fixed_stock_weights() -> None:
     service = PortfolioAnalyticsService()
-    dates = pd.bdate_range("2024-01-01", periods=400)
+    dates = pd.to_datetime(["2026-03-01", "2026-03-02", "2026-03-03"])
     prices = pd.DataFrame(
-        {
-            "date": dates,
-            "ticker": ["AAA"] * len(dates),
-            "adjusted_close": [100.0 + float(index) for index, _ in enumerate(dates)],
-        }
+        [
+            {"date": "2026-03-01", "ticker": "AAA", "adjusted_close": 100.0},
+            {"date": "2026-03-02", "ticker": "AAA", "adjusted_close": 110.0},
+            {"date": "2026-03-03", "ticker": "AAA", "adjusted_close": 120.0},
+            {"date": "2026-03-01", "ticker": "BBB", "adjusted_close": 200.0},
+            {"date": "2026-03-02", "ticker": "BBB", "adjusted_close": 220.0},
+            {"date": "2026-03-03", "ticker": "BBB", "adjusted_close": 240.0},
+        ]
     )
-    requested_start_date = dates[320].strftime("%Y-%m-%d")
+    instruments = [
+        StockInstrument(
+            ticker="AAA",
+            name="Asset A",
+            sector_code="us_value",
+            sector_name="미국 가치주",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+        StockInstrument(
+            ticker="BBB",
+            name="Asset B",
+            sector_code="gold",
+            sector_name="금",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+    ]
+    assets = [
+        _asset("us_value", "미국 가치주"),
+        _asset("gold", "금"),
+    ]
+    service._load_comparison_assets = lambda data_source: assets
+    service._load_comparison_universe = lambda data_source: (instruments, prices, "demo")
+    service._fetch_benchmark_prices = lambda start_date: {}
 
-    train_prices, test_prices, train_end_date, test_start_date, split_ratio = service._split_prices_train_test(
-        prices,
-        split_ratio=0.9,
-        requested_start_date=requested_start_date,
+    result = service.build_comparison_backtest(
+        data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+        stock_weights={"AAA": 0.6, "BBB": 0.4},
+        portfolio_code="balanced",
     )
 
-    assert train_end_date == dates[319]
-    assert test_start_date == dates[320]
-    assert pd.Timestamp(train_prices["date"].max()).normalize() == dates[319]
-    assert pd.Timestamp(test_prices["date"].min()).normalize() == dates[320]
-    assert split_ratio == 320 / len(dates)
-
-
-def test_split_prices_train_test_clamps_requested_start_to_minimum_history() -> None:
-    service = PortfolioAnalyticsService()
-    dates = pd.bdate_range("2024-01-01", periods=400)
-    prices = pd.DataFrame(
-        {
-            "date": dates,
-            "ticker": ["AAA"] * len(dates),
-            "adjusted_close": [100.0 + float(index) for index, _ in enumerate(dates)],
-        }
-    )
-
-    _, _, train_end_date, test_start_date, split_ratio = service._split_prices_train_test(
-        prices,
-        split_ratio=0.9,
-        requested_start_date=dates[10].strftime("%Y-%m-%d"),
-    )
-
-    assert train_end_date == dates[MINIMUM_HISTORY_ROWS - 1]
-    assert test_start_date == dates[MINIMUM_HISTORY_ROWS]
-    assert split_ratio == MINIMUM_HISTORY_ROWS / len(dates)
+    assert result.split_ratio == 1.0
+    assert result.start_date == "2026-03-01"
+    assert result.train_start_date == "2026-03-01"
+    assert result.train_end_date == "2026-03-01"
+    assert [line.key for line in result.lines] == ["balanced", "benchmark_avg", "treasury"]
+    assert result.lines[0].points[0] == ("2026-03-01", 0.0)

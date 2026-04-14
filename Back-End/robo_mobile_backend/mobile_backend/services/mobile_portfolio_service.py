@@ -120,9 +120,11 @@ class MobilePortfolioService:
         self,
         *,
         data_source: SimulationDataSource,
-        start_date: str | None = None,
+        stock_weights: dict[str, float] | None = None,
+        portfolio_code: str | None = None,
     ) -> dict[str, object]:
         return self.calculation_adapter.get_comparison_backtest(
             data_source=data_source,
-            start_date=start_date,
+            stock_weights=stock_weights,
+            portfolio_code=portfolio_code,
         )
