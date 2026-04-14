@@ -77,7 +77,7 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
     final preview = PortfolioStateProvider.of(context).frontierPreview;
 
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: Column(
           children: [

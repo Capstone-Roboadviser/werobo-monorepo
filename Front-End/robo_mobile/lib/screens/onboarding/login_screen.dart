@@ -255,7 +255,7 @@ class _LoginScreenState extends State<LoginScreen>
     final currentUser = state.currentUser;
     final hasActiveSession = currentUser != null;
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {

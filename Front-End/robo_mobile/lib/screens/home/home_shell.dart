@@ -90,21 +90,13 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: IndexedStack(
         index: _currentTab,
         children: _tabs,
       ),
       bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: tc.surface,
-          border: Border(
-            top: BorderSide(
-              color: tc.border.withValues(alpha: 0.5),
-              width: 0.5,
-            ),
-          ),
-        ),
+        color: tc.background,
         child: SafeArea(
           top: false,
           child: Padding(
@@ -173,7 +165,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final color = isActive ? WeRoboColors.primary : tc.textTertiary;
+    final color = isActive ? Colors.white : tc.textSecondary;
 
     return Pressable(
       onTap: onTap,
@@ -181,31 +173,7 @@ class _NavItem extends StatelessWidget {
       duration: const Duration(milliseconds: 100),
       child: SizedBox(
         width: 64,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: isActive
-                    ? WeRoboColors.primary.withValues(alpha: 0.1)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(icon, size: 22, color: color),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                color: color,
-              ),
-            ),
-          ],
-        ),
+        child: Icon(icon, size: 28, color: color),
       ),
     );
   }

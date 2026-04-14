@@ -318,7 +318,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     final hasError = _errorMessage != null;
 
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
