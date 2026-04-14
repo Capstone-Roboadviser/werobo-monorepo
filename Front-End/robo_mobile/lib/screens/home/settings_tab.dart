@@ -76,42 +76,6 @@ class SettingsTab extends StatelessWidget {
               ),
             ),
 
-            // Auto-rebalancing toggle
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-              decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(
-                    color: tc.border.withValues(alpha: 0.4),
-                    width: 0.5,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.sync_rounded, size: 22, color: tc.textSecondary),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('자동 리밸런싱',
-                            style: WeRoboTypography.body
-                                .copyWith(color: tc.textPrimary)),
-                        Text('분기 점검 + 10% 편차 조정',
-                            style: WeRoboTypography.caption.themed(context)),
-                      ],
-                    ),
-                  ),
-                  Switch.adaptive(
-                    value: true,
-                    activeTrackColor: WeRoboColors.primary,
-                    onChanged: (_) {},
-                  ),
-                ],
-              ),
-            ),
-
             _SettingsItem(
               icon: Icons.person_outline_rounded,
               label: portfolioState.currentUser == null
