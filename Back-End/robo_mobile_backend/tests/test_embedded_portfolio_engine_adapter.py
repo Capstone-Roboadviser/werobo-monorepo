@@ -341,6 +341,30 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(recommended_point["volatility"], 0.12)
         self.assertEqual(response["resolved_profile"]["target_volatility"], 0.12)
 
+    def test_build_frontier_selection_requires_snapshot_for_managed_universe_by_default(self) -> None:
+        adapter, _ = self._build_fake_adapter()
+        adapter._resolve_managed_universe_snapshot_lookup = lambda **kwargs: (
+            None,
+            {"reason": "frontier_snapshot_missing"},
+        )
+        adapter._log_managed_universe_snapshot_lookup = lambda **kwargs: None
+        adapter._build_context = lambda **kwargs: self.fail(
+            "managed_universe snapshot miss should not rebuild context on mobile by default"
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "관리자 유니버스 frontier snapshot이 준비되지 않았습니다",
+        ):
+            adapter.build_frontier_selection(
+                resolved_profile=RiskProfile.BALANCED,
+                investment_horizon=InvestmentHorizon.MEDIUM,
+                data_source=SimulationDataSource.MANAGED_UNIVERSE,
+                propensity_score=45.0,
+                target_volatility=0.119,
+                point_index=None,
+            )
+
     def test_managed_universe_snapshot_payload_ignores_stale_schema(self) -> None:
         adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
         adapter.FRONTIER_SNAPSHOT_SCHEMA_VERSION = 2
@@ -562,6 +586,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
 
     def test_get_comparison_backtest_ignores_stale_snapshot_without_required_lines(self) -> None:
         adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
+        adapter.REQUIRE_MANAGED_UNIVERSE_SNAPSHOTS = False
         adapter._resolve_managed_universe_comparison_backtest_snapshot_lookup = lambda **kwargs: (
             None,
             {"reason": "comparison_backtest_snapshot_missing_required_lines"},
@@ -620,6 +645,25 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             [line["key"] for line in response["lines"]],
             ["balanced", "benchmark_avg", "treasury"],
         )
+
+    def test_get_comparison_backtest_requires_snapshot_by_default(self) -> None:
+        adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
+        adapter._resolve_managed_universe_comparison_backtest_snapshot_lookup = lambda **kwargs: (
+            None,
+            {"reason": "comparison_backtest_snapshot_missing"},
+        )
+        adapter._log_managed_universe_snapshot_lookup = lambda **kwargs: None
+        adapter.build_materialized_comparison_backtest = lambda **kwargs: self.fail(
+            "managed_universe comparison backtest snapshot miss should not rebuild on mobile by default"
+        )
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "관리자 유니버스 comparison backtest snapshot이 준비되지 않았습니다",
+        ):
+            adapter.get_comparison_backtest(
+                data_source=SimulationDataSource.MANAGED_UNIVERSE,
+            )
 
 
 if __name__ == "__main__":

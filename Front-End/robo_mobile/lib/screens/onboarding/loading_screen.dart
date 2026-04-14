@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
+import 'frontier_selection_resolver.dart';
 import '../../models/portfolio_data.dart';
 import '../../services/mobile_backend_api.dart';
 import 'result_screen.dart';
@@ -13,6 +14,7 @@ class PortfolioLoadingScreen extends StatefulWidget {
   final double? targetVolatility;
   final String? previewDataSource;
   final DateTime? asOfDate;
+  final Future<MobileFrontierPreviewResponse?>? previewFuture;
 
   const PortfolioLoadingScreen({
     super.key,
@@ -21,6 +23,7 @@ class PortfolioLoadingScreen extends StatefulWidget {
     this.targetVolatility,
     this.previewDataSource,
     this.asOfDate,
+    this.previewFuture,
   });
 
   @override
@@ -29,6 +32,7 @@ class PortfolioLoadingScreen extends StatefulWidget {
 
 class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     with TickerProviderStateMixin {
+  static const Duration _previewResolutionTimeout = Duration(seconds: 2);
   late AnimationController _progressController;
   late AnimationController _rotationController;
   late Animation<double> _progressAnimation;
@@ -98,13 +102,17 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     _requestFinished = false;
 
     try {
+      final selectionRequest = await _resolveSelectionRequest();
+      if (!mounted) {
+        return;
+      }
       final frontierSelection =
           await MobileBackendApi.instance.fetchFrontierSelection(
         propensityScore: widget.dotT * 100,
-        pointIndex: widget.selectedPointIndex,
-        targetVolatility: widget.targetVolatility,
-        preferredDataSource: widget.previewDataSource,
-        asOfDate: widget.asOfDate,
+        pointIndex: selectionRequest.pointIndex,
+        targetVolatility: selectionRequest.targetVolatility,
+        preferredDataSource: selectionRequest.preferredDataSource,
+        asOfDate: selectionRequest.asOfDate,
       );
       if (!mounted) {
         return;
@@ -119,6 +127,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         'selected_point_index': frontierSelection.selectedPointIndex,
         'target_volatility':
             frontierSelection.selectedTargetVolatility.toStringAsFixed(4),
+        'dataSource': frontierSelection.dataSource,
         'as_of_date':
             frontierSelection.asOfDate?.toIso8601String().split('T').first,
       });
@@ -137,6 +146,44 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         'error': error.toString(),
       });
     }
+  }
+
+  Future<OnboardingSelectionRequest> _resolveSelectionRequest() async {
+    if (widget.previewDataSource != null || widget.previewFuture == null) {
+      return resolveOnboardingSelectionRequest(
+        normalizedT: widget.dotT,
+        selectedPointIndex: widget.selectedPointIndex,
+        targetVolatility: widget.targetVolatility,
+        preferredDataSource: widget.previewDataSource,
+        asOfDate: widget.asOfDate,
+      );
+    }
+
+    final preview = await widget.previewFuture!.timeout(
+      _previewResolutionTimeout,
+      onTimeout: () {
+        logAction('frontier preview future timed out before selection', {
+          'timeout_ms': _previewResolutionTimeout.inMilliseconds,
+        });
+        return null;
+      },
+    );
+    final request = resolveOnboardingSelectionRequest(
+      normalizedT: widget.dotT,
+      selectedPointIndex: widget.selectedPointIndex,
+      targetVolatility: widget.targetVolatility,
+      preferredDataSource: widget.previewDataSource,
+      asOfDate: widget.asOfDate,
+      preview: preview,
+    );
+    if (preview != null && request.preferredDataSource != null) {
+      logAction('resolved frontier selection from preview', {
+        'dataSource': request.preferredDataSource,
+        'point_index': request.pointIndex,
+        'target_volatility': request.targetVolatility?.toStringAsFixed(4),
+      });
+    }
+    return request;
   }
 
   MobileFrontierSelectionResponse _buildFallbackSelection() {
