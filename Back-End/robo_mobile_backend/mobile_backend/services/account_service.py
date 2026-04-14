@@ -213,6 +213,9 @@ class PortfolioAccountService:
     def _build_dashboard(self, account: dict[str, object]) -> dict[str, object]:
         snapshots = self.repository.list_snapshots(int(account["id"]))
         cash_flows = self.repository.list_cash_flows(int(account["id"]))
+        rebalance_cash_entries = self.repository.list_rebalance_cash_entries(
+            int(account["id"])
+        )
 
         summary = None
         if snapshots:
@@ -255,29 +258,11 @@ class PortfolioAccountService:
             for snapshot in snapshots
         ]
 
-        recent_activity = [
-            {
-                "type": "portfolio_created",
-                "title": "포트폴리오 시작",
-                "date": account["started_at"],
-                "amount": None,
-                "description": f"{account['portfolio_label']} 포트폴리오로 자산 추적 시작",
-            }
-        ]
-        for cash_flow in reversed(cash_flows):
-            flow_type = str(cash_flow["flow_type"])
-            title = "초기 입금" if flow_type == "initial_deposit" else "입금"
-            recent_activity.append(
-                {
-                    "type": flow_type,
-                    "title": title,
-                    "date": cash_flow["effective_date"],
-                    "amount": cash_flow["amount"],
-                    "description": None,
-                }
-            )
-
-        recent_activity.sort(key=lambda item: str(item["date"]), reverse=True)
+        recent_activity = self._build_recent_activity(
+            account=account,
+            cash_flows=cash_flows,
+            rebalance_cash_entries=rebalance_cash_entries,
+        )
         return {
             "has_account": True,
             "summary": summary,
@@ -411,6 +396,10 @@ class PortfolioAccountService:
             started_at=str(account["started_at"]),
         )
         self.repository.replace_snapshots(int(account["id"]), snapshots)
+        self.repository.replace_rebalance_cash_entries(
+            int(account["id"]),
+            self._build_rebalance_cash_entries(rebalance_events),
+        )
         self._replace_rebalance_insights(
             account=account,
             rebalance_events=rebalance_events,
@@ -613,6 +602,126 @@ class PortfolioAccountService:
             )
 
         return snapshots, simulation.rebalance_events
+
+    def _build_recent_activity(
+        self,
+        *,
+        account: dict[str, object],
+        cash_flows: list[dict[str, object]],
+        rebalance_cash_entries: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        recent_activity = [
+            {
+                "type": "portfolio_created",
+                "title": "포트폴리오 시작",
+                "date": account["started_at"],
+                "amount": None,
+                "description": f"{account['portfolio_label']} 포트폴리오로 자산 추적 시작",
+            }
+        ]
+
+        for cash_flow in reversed(cash_flows):
+            flow_type = str(cash_flow["flow_type"])
+            title = "초기 입금" if flow_type == "initial_deposit" else "입금"
+            recent_activity.append(
+                {
+                    "type": flow_type,
+                    "title": title,
+                    "date": cash_flow["effective_date"],
+                    "amount": cash_flow["amount"],
+                    "description": None,
+                }
+            )
+
+        for entry in rebalance_cash_entries:
+            recent_activity.append(
+                {
+                    "type": "rebalance_cash",
+                    "title": self._rebalance_activity_title(str(entry["trigger"])),
+                    "date": entry["rebalance_date"],
+                    "amount": float(entry["cash_after"]),
+                    "description": self._rebalance_activity_description(entry),
+                }
+            )
+
+        recent_activity.sort(
+            key=lambda item: (
+                str(item["date"]),
+                self._activity_priority(str(item["type"])),
+            ),
+            reverse=True,
+        )
+        return recent_activity
+
+    def _build_rebalance_cash_entries(
+        self,
+        rebalance_events: list[RebalanceEvent],
+    ) -> list[dict[str, object]]:
+        entries: list[dict[str, object]] = []
+        for event in rebalance_events:
+            total_value = float(event.total_value)
+            cash_before = round(float(event.pre_weights.get("CASH", 0.0)) * total_value, 2)
+            cash_after = round(float(event.post_weights.get("CASH", 0.0)) * total_value, 2)
+            cash_from_sales = round(
+                sum(
+                    max(0.0, -float(amount))
+                    for ticker, amount in event.trades.items()
+                    if str(ticker).upper() != "CASH"
+                ),
+                2,
+            )
+            cash_to_buys = round(
+                sum(
+                    max(0.0, float(amount))
+                    for ticker, amount in event.trades.items()
+                    if str(ticker).upper() != "CASH"
+                ),
+                2,
+            )
+            entries.append(
+                {
+                    "rebalance_date": event.date,
+                    "trigger": event.trigger,
+                    "cash_before": cash_before,
+                    "cash_from_sales": cash_from_sales,
+                    "cash_to_buys": cash_to_buys,
+                    "cash_after": cash_after,
+                    "net_cash_change": round(cash_after - cash_before, 2),
+                    "trades": {
+                        str(ticker).upper(): round(float(amount), 2)
+                        for ticker, amount in event.trades.items()
+                    },
+                }
+            )
+        return entries
+
+    def _rebalance_activity_title(self, trigger: str) -> str:
+        if trigger == "scheduled":
+            return "정기 리밸런싱"
+        if trigger == "drift_guard":
+            return "드리프트 리밸런싱"
+        return "리밸런싱"
+
+    def _rebalance_activity_description(
+        self,
+        entry: dict[str, object],
+    ) -> str:
+        sales = self._format_krw_amount(float(entry["cash_from_sales"]))
+        buys = self._format_krw_amount(float(entry["cash_to_buys"]))
+        reserve_cash = self._format_krw_amount(float(entry["cash_after"]))
+        return f"매도 {sales} · 매수 {buys} · 예비현금 {reserve_cash}"
+
+    def _activity_priority(self, activity_type: str) -> int:
+        if activity_type == "rebalance_cash":
+            return 3
+        if activity_type in {"cash_in", "initial_deposit"}:
+            return 2
+        if activity_type == "portfolio_created":
+            return 1
+        return 0
+
+    def _format_krw_amount(self, amount: float) -> str:
+        return f"₩{int(round(amount)):,}"
 
     def _normalize_stock_weights(
         self,

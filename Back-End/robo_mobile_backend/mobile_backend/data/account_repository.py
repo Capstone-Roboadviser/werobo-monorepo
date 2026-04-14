@@ -81,6 +81,25 @@ class PortfolioAccountRepository:
                 )
                 cursor.execute(
                     """
+                    CREATE TABLE IF NOT EXISTS portfolio_rebalance_cash_ledger (
+                        id BIGSERIAL PRIMARY KEY,
+                        account_id BIGINT NOT NULL REFERENCES portfolio_accounts(id) ON DELETE CASCADE,
+                        rebalance_date DATE NOT NULL,
+                        trigger TEXT NOT NULL,
+                        cash_before DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        cash_from_sales DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        cash_to_buys DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        cash_after DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        net_cash_change DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        trades JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE(account_id, rebalance_date)
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
                     ALTER TABLE portfolio_daily_snapshots
                     ADD COLUMN IF NOT EXISTS cash_balance DOUBLE PRECISION NOT NULL DEFAULT 0
                     """
@@ -102,6 +121,18 @@ class PortfolioAccountRepository:
                 )
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_portfolio_daily_snapshots_snapshot_date ON portfolio_daily_snapshots(snapshot_date)"
+                )
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_portfolio_rebalance_cash_ledger_account_id
+                    ON portfolio_rebalance_cash_ledger(account_id)
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE INDEX IF NOT EXISTS idx_portfolio_rebalance_cash_ledger_rebalance_date
+                    ON portfolio_rebalance_cash_ledger(rebalance_date)
+                    """
                 )
                 cursor.execute(
                     """
@@ -393,6 +424,86 @@ class PortfolioAccountRepository:
                 rows = cursor.fetchall()
         return [self._snapshot_from_row(row) for row in rows]
 
+    def replace_rebalance_cash_entries(
+        self,
+        account_id: int,
+        entries: list[dict[str, object]],
+    ) -> None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM portfolio_rebalance_cash_ledger WHERE account_id = %s",
+                    (account_id,),
+                )
+                for entry in entries:
+                    cursor.execute(
+                        """
+                        INSERT INTO portfolio_rebalance_cash_ledger (
+                            account_id,
+                            rebalance_date,
+                            trigger,
+                            cash_before,
+                            cash_from_sales,
+                            cash_to_buys,
+                            cash_after,
+                            net_cash_change,
+                            trades
+                        )
+                        VALUES (
+                            %s,
+                            %s::date,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s,
+                            %s::jsonb
+                        )
+                        """,
+                        (
+                            account_id,
+                            entry["rebalance_date"],
+                            entry["trigger"],
+                            entry["cash_before"],
+                            entry["cash_from_sales"],
+                            entry["cash_to_buys"],
+                            entry["cash_after"],
+                            entry["net_cash_change"],
+                            json.dumps(entry["trades"]),
+                        ),
+                    )
+            connection.commit()
+
+    def list_rebalance_cash_entries(self, account_id: int) -> list[dict[str, object]]:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        account_id,
+                        TO_CHAR(rebalance_date, 'YYYY-MM-DD') AS rebalance_date,
+                        trigger,
+                        cash_before,
+                        cash_from_sales,
+                        cash_to_buys,
+                        cash_after,
+                        net_cash_change,
+                        trades,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    FROM portfolio_rebalance_cash_ledger
+                    WHERE account_id = %s
+                    ORDER BY rebalance_date DESC, id DESC
+                    """,
+                    (account_id,),
+                )
+                rows = cursor.fetchall()
+        return [self._rebalance_cash_entry_from_row(row) for row in rows]
+
     def upsert_rebalance_insight(
         self,
         *,
@@ -592,4 +703,29 @@ class PortfolioAccountRepository:
             "explanation_text": row["explanation_text"],
             "is_read": row["read_at"] is not None,
             "created_at": str(row["created_at"]),
+        }
+
+    def _rebalance_cash_entry_from_row(
+        self,
+        row: dict[str, object],
+    ) -> dict[str, object]:
+        trades = row["trades"]
+        if isinstance(trades, str):
+            trades = json.loads(trades)
+        return {
+            "id": int(row["id"]),
+            "account_id": int(row["account_id"]),
+            "rebalance_date": str(row["rebalance_date"]),
+            "trigger": str(row["trigger"]),
+            "cash_before": float(row["cash_before"]),
+            "cash_from_sales": float(row["cash_from_sales"]),
+            "cash_to_buys": float(row["cash_to_buys"]),
+            "cash_after": float(row["cash_after"]),
+            "net_cash_change": float(row["net_cash_change"]),
+            "trades": {
+                str(key): float(value)
+                for key, value in dict(trades or {}).items()
+            },
+            "created_at": str(row["created_at"]),
+            "updated_at": str(row["updated_at"]),
         }
