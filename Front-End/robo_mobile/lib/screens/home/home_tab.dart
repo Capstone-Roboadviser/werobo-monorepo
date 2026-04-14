@@ -1188,10 +1188,10 @@ class _DigestBanner extends StatelessWidget {
     final tc = WeRoboThemeColors.of(context);
     return GlowingBorder(
       borderRadius: WeRoboColors.radiusXL,
-      child: SizedBox(
-        height: 60,
-        child: Pressable(
-          onTap: onTap,
+      child: Pressable(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Row(
             children: [
               Container(
