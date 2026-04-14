@@ -172,7 +172,7 @@ class _DigestContent extends StatelessWidget {
             drivers: digest.drivers,
             detractors: digest.detractors,
           ),
-          const SizedBox(height: WeRoboSpacing.xl),
+          const SizedBox(height: WeRoboSpacing.xxl),
         ],
 
         // Drivers
@@ -293,8 +293,8 @@ class _SummaryCard extends StatelessWidget {
           ),
           if (digest.hasNarrative && digest.narrativeKo != null) ...[
             const SizedBox(height: 12),
-            Text(
-              _buildNarrativeWithBenchmark(digest),
+            Text.rich(
+              _buildNarrativeSpans(digest, tc),
               style: WeRoboTypography.bodySmall.copyWith(
                 color: tc.textPrimary,
                 height: 1.7,
@@ -323,7 +323,50 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 
-  String _buildNarrativeWithBenchmark(MobileDigestResponse d) {
+  TextSpan _buildNarrativeSpans(
+    MobileDigestResponse d,
+    WeRoboThemeColors tc,
+  ) {
+    final narrative = _insertBenchmarkSentence(d);
+
+    // Collect asset names to bold (tickers + Korean names)
+    final names = <String>{};
+    for (final driver in [...d.drivers, ...d.detractors]) {
+      names.add(driver.ticker);
+      if (driver.nameKo.isNotEmpty) names.add(driver.nameKo);
+    }
+    if (names.isEmpty) return TextSpan(text: narrative);
+
+    // Build regex matching any asset name
+    final escaped = names
+        .map((n) => RegExp.escape(n))
+        .toList()
+      ..sort((a, b) => b.length.compareTo(a.length));
+    final pattern = RegExp(escaped.join('|'));
+
+    final spans = <InlineSpan>[];
+    var lastEnd = 0;
+    for (final match in pattern.allMatches(narrative)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(
+          text: narrative.substring(lastEnd, match.start),
+        ));
+      }
+      spans.add(TextSpan(
+        text: match.group(0),
+        style: const TextStyle(fontWeight: FontWeight.w600),
+      ));
+      lastEnd = match.end;
+    }
+    if (lastEnd < narrative.length) {
+      spans.add(TextSpan(
+        text: narrative.substring(lastEnd),
+      ));
+    }
+    return TextSpan(children: spans);
+  }
+
+  String _insertBenchmarkSentence(MobileDigestResponse d) {
     final narrative = d.narrativeKo!;
     if (d.benchmark7assetReturnPct == null) return narrative;
 
@@ -331,21 +374,20 @@ class _SummaryCard extends StatelessWidget {
     final excess7 = d.totalReturnPct - asset7;
     final sign7 = excess7 >= 0 ? '+' : '';
     final parts = <String>[
-      '7자산 균등배분 대비 $sign7${excess7.toStringAsFixed(1)}%p',
+      '7자산 균등배분 대비 $sign7${excess7.toStringAsFixed(1)}%',
     ];
     if (d.benchmarkBondReturnPct != null) {
       final excessBond =
           d.totalReturnPct - d.benchmarkBondReturnPct!;
       final signBond = excessBond >= 0 ? '+' : '';
       parts.add(
-        '채권 대비 $signBond${excessBond.toStringAsFixed(1)}%p',
+        '채권 대비 $signBond${excessBond.toStringAsFixed(1)}%',
       );
     }
     final verb = excess7 >= 0 ? '초과 수익' : '하회';
     final benchmarkSentence =
         '${parts.join(", ")} $verb을 기록했습니다.';
 
-    // Insert as 2nd sentence
     final dotIdx = narrative.indexOf('. ');
     if (dotIdx >= 0) {
       final first = narrative.substring(0, dotIdx + 1);

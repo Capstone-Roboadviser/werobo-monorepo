@@ -85,12 +85,24 @@ class _BarArea extends StatelessWidget {
   Widget build(BuildContext context) {
     const maxBarHeight = 80.0;
     const labelHeight = 18.0;
-    final hasPos = items.any((d) => d.returnPct > 0);
-    final hasNeg = items.any((d) => d.returnPct < 0);
-    final posZoneHeight =
-        hasPos ? maxBarHeight + labelHeight : 0.0;
-    final negZoneHeight =
-        hasNeg ? maxBarHeight + labelHeight : 0.0;
+    final posItems = items.where((d) => d.returnPct > 0);
+    final negItems = items.where((d) => d.returnPct < 0);
+    final hasPos = posItems.isNotEmpty;
+    final hasNeg = negItems.isNotEmpty;
+
+    // Scale each zone to its own max, not the global max
+    final maxPos = hasPos
+        ? posItems.map((d) => d.returnPct).reduce(math.max)
+        : 0.0;
+    final maxNeg = hasNeg
+        ? negItems.map((d) => d.returnPct.abs()).reduce(math.max)
+        : 0.0;
+    final posZoneHeight = hasPos
+        ? (maxPos / maxAbs) * maxBarHeight + labelHeight
+        : 0.0;
+    final negZoneHeight = hasNeg
+        ? (maxNeg / maxAbs) * maxBarHeight + labelHeight
+        : 0.0;
 
     return SizedBox(
       height: posZoneHeight + 1 + negZoneHeight,
