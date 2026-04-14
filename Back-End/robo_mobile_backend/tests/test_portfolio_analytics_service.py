@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
+from app.core.config import MINIMUM_HISTORY_ROWS
 from app.domain.models import AssetClass, StockInstrument
 from app.services.portfolio_analytics_service import PortfolioAnalyticsService
 
@@ -120,3 +121,50 @@ def test_build_fixed_bond_line_is_linear() -> None:
     assert line.key == "treasury"
     assert line.points[0] == ("2026-03-01", 0.0)
     assert 1.99 <= line.points[-1][1] <= 2.01
+
+
+def test_split_prices_train_test_respects_requested_start_date() -> None:
+    service = PortfolioAnalyticsService()
+    dates = pd.bdate_range("2024-01-01", periods=400)
+    prices = pd.DataFrame(
+        {
+            "date": dates,
+            "ticker": ["AAA"] * len(dates),
+            "adjusted_close": [100.0 + float(index) for index, _ in enumerate(dates)],
+        }
+    )
+    requested_start_date = dates[320].strftime("%Y-%m-%d")
+
+    train_prices, test_prices, train_end_date, test_start_date, split_ratio = service._split_prices_train_test(
+        prices,
+        split_ratio=0.9,
+        requested_start_date=requested_start_date,
+    )
+
+    assert train_end_date == dates[319]
+    assert test_start_date == dates[320]
+    assert pd.Timestamp(train_prices["date"].max()).normalize() == dates[319]
+    assert pd.Timestamp(test_prices["date"].min()).normalize() == dates[320]
+    assert split_ratio == 320 / len(dates)
+
+
+def test_split_prices_train_test_clamps_requested_start_to_minimum_history() -> None:
+    service = PortfolioAnalyticsService()
+    dates = pd.bdate_range("2024-01-01", periods=400)
+    prices = pd.DataFrame(
+        {
+            "date": dates,
+            "ticker": ["AAA"] * len(dates),
+            "adjusted_close": [100.0 + float(index) for index, _ in enumerate(dates)],
+        }
+    )
+
+    _, _, train_end_date, test_start_date, split_ratio = service._split_prices_train_test(
+        prices,
+        split_ratio=0.9,
+        requested_start_date=dates[10].strftime("%Y-%m-%d"),
+    )
+
+    assert train_end_date == dates[MINIMUM_HISTORY_ROWS - 1]
+    assert test_start_date == dates[MINIMUM_HISTORY_ROWS]
+    assert split_ratio == MINIMUM_HISTORY_ROWS / len(dates)

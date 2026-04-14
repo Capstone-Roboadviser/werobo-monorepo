@@ -168,6 +168,7 @@ def get_comparison_backtest(
     try:
         response = mobile_portfolio_service.build_comparison_backtest(
             data_source=payload.data_source,
+            start_date=payload.start_date,
         )
         return ComparisonBacktestResponse(**response)
     except Exception as exc:

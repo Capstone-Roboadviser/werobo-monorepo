@@ -1242,8 +1242,9 @@ class EmbeddedPortfolioEngineAdapter:
         self,
         *,
         data_source: SimulationDataSource,
+        start_date: str | None = None,
     ) -> dict[str, object]:
-        if data_source == SimulationDataSource.MANAGED_UNIVERSE:
+        if data_source == SimulationDataSource.MANAGED_UNIVERSE and start_date is None:
             snapshot_payload, snapshot_lookup = self._resolve_managed_universe_comparison_backtest_snapshot_lookup(
                 data_source=data_source,
             )
@@ -1268,17 +1269,30 @@ class EmbeddedPortfolioEngineAdapter:
                 lookup=snapshot_lookup,
                 data_source=data_source,
             )
+        elif data_source == SimulationDataSource.MANAGED_UNIVERSE and start_date is not None:
+            self._log_managed_universe_snapshot_lookup(
+                operation="comparison_backtest",
+                investment_horizon=None,
+                status="bypass",
+                lookup={
+                    "reason": "requested_start_date",
+                    "as_of_date": start_date,
+                },
+            )
         return self.build_materialized_comparison_backtest(
             data_source=data_source,
+            start_date=start_date,
         )
 
     def build_materialized_comparison_backtest(
         self,
         *,
         data_source: SimulationDataSource,
+        start_date: str | None = None,
     ) -> dict[str, object]:
         response = self.portfolio_analytics_service.build_comparison_backtest(
             data_source=self._to_core_data_source(data_source),
+            start_date=start_date,
         )
         return {
             "train_start_date": response.train_start_date,

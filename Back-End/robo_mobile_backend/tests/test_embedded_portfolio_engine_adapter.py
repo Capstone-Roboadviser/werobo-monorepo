@@ -665,6 +665,24 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
                 data_source=SimulationDataSource.MANAGED_UNIVERSE,
             )
 
+    def test_get_comparison_backtest_bypasses_snapshot_for_requested_start_date(self) -> None:
+        adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
+        captured: dict[str, object] = {}
+        adapter._resolve_managed_universe_comparison_backtest_snapshot_lookup = lambda **kwargs: self.fail(
+            "requested start date should bypass snapshot lookup"
+        )
+        adapter._log_managed_universe_snapshot_lookup = lambda **kwargs: captured.update(kwargs)
+        adapter.build_materialized_comparison_backtest = lambda **kwargs: {"ok": True, **kwargs}
+
+        response = adapter.get_comparison_backtest(
+            data_source=SimulationDataSource.MANAGED_UNIVERSE,
+            start_date="2025-01-01",
+        )
+
+        self.assertEqual(response["data_source"], SimulationDataSource.MANAGED_UNIVERSE)
+        self.assertEqual(response["start_date"], "2025-01-01")
+        self.assertEqual(captured["status"], "bypass")
+
 
 if __name__ == "__main__":
     unittest.main()

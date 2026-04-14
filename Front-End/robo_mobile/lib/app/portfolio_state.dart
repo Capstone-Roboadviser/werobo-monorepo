@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'comparison_backtest_chart_mapper.dart';
 import 'debug_page_logger.dart';
 import '../models/chart_data.dart';
 import '../models/mobile_backend_models.dart';
@@ -420,17 +421,7 @@ class PortfolioState extends ChangeNotifier {
 
   List<ChartLine> get comparisonLines {
     if (_backtest == null) return const [];
-    return _backtest!.lines
-        .map((line) => ChartLine(
-              key: line.key,
-              label: line.label,
-              color: parseBackendHexColor(line.color),
-              dashed: line.style != 'solid',
-              points: line.points
-                  .map((p) => ChartPoint(date: p.date, value: p.returnPct))
-                  .toList(),
-            ))
-        .toList();
+    return comparisonChartLinesFromResponse(_backtest!);
   }
 
   List<DateTime> get rebalanceDates => _backtest?.rebalanceDates ?? const [];
