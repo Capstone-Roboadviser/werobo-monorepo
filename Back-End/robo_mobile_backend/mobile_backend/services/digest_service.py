@@ -101,7 +101,7 @@ def top_drivers_detractors(
 # ---------------------------------------------------------------------------
 
 GEMINI_MODEL = "gemini-2.5-flash"
-LLM_TIMEOUT_SECONDS = 5
+LLM_TIMEOUT_SECONDS = 15
 
 SYSTEM_PROMPT = """\
 You are a Korean financial summary writer for a robo-advisor app called WeRobo.
