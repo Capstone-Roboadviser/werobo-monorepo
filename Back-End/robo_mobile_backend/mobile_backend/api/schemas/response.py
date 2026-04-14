@@ -293,6 +293,13 @@ class RebalanceInsightResponse(BaseModel):
         default_factory=list,
         description="자산군별 리밸런싱 전후 비중",
     )
+    trigger: str | None = Field(default=None, description="리밸런싱 트리거", examples=["drift_guard"])
+    trade_count: int = Field(default=0, description="실제 매매가 발생한 종목 수", examples=[3])
+    cash_before: float | None = Field(default=None, description="리밸런싱 전 현금 잔액", examples=[0])
+    cash_from_sales: float | None = Field(default=None, description="매도로 확보한 현금", examples=[700000])
+    cash_to_buys: float | None = Field(default=None, description="매수에 사용한 현금", examples=[520000])
+    cash_after: float | None = Field(default=None, description="리밸런싱 후 예비현금", examples=[180000])
+    net_cash_change: float | None = Field(default=None, description="리밸런싱 전후 순현금 변화", examples=[180000])
     explanation_text: str | None = Field(default=None, description="리밸런싱 설명 텍스트")
     is_read: bool = Field(..., description="읽음 여부", examples=[False])
     created_at: str = Field(..., description="생성 시각(UTC)", examples=["2026-04-01T08:30:00Z"])

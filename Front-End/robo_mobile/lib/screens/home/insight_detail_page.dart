@@ -21,8 +21,7 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!widget.insight.isRead) {
-      PortfolioStateProvider.of(context)
-          .markInsightAsRead(widget.insight.id);
+      PortfolioStateProvider.of(context).markInsightAsRead(widget.insight.id);
     }
   }
 
@@ -95,13 +94,30 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
                     const SizedBox(height: 32),
 
                     // Animated transition chart
-                    Center(
-                      child: InsightTransitionChart(
-                        allocations: insight.allocations,
-                        size: 220,
-                        ringWidth: 28,
+                    if (insight.allocations.isEmpty)
+                      Center(
+                        child: Container(
+                          width: 220,
+                          height: 220,
+                          decoration: BoxDecoration(
+                            color: tc.card,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.sync_alt_rounded,
+                            color: WeRoboColors.primary,
+                            size: 48,
+                          ),
+                        ),
+                      )
+                    else
+                      Center(
+                        child: InsightTransitionChart(
+                          allocations: insight.allocations,
+                          size: 220,
+                          ringWidth: 28,
+                        ),
                       ),
-                    ),
                     const SizedBox(height: 24),
 
                     // Date
@@ -132,14 +148,35 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
                         height: 1.6,
                       ),
                     ),
+                    if (insight.hasCashActivity) ...[
+                      const SizedBox(height: 24),
+                      Text(
+                        '현금 흐름',
+                        style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _CashFlowRow(
+                        label: '매도로 확보',
+                        value: insight.cashFromSales,
+                      ),
+                      _CashFlowRow(
+                        label: '매수에 사용',
+                        value: insight.cashToBuys,
+                      ),
+                      _CashFlowRow(
+                        label: '예비현금',
+                        value: insight.cashAfter,
+                        highlight: true,
+                      ),
+                    ],
                     const SizedBox(height: 24),
 
                     // Allocation changes list (skip 0% delta)
-                    ...insight.allocations
-                        .where((a) => a.hasChanged)
-                        .map(
-                          (alloc) =>
-                              _AllocationChangeRow(allocation: alloc),
+                    ...insight.allocations.where((a) => a.hasChanged).map(
+                          (alloc) => _AllocationChangeRow(allocation: alloc),
                         ),
                     const SizedBox(height: 32),
                   ],
@@ -148,6 +185,44 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CashFlowRow extends StatelessWidget {
+  final String label;
+  final double value;
+  final bool highlight;
+
+  const _CashFlowRow({
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textSecondary,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            _formatWon(value),
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: highlight ? WeRoboColors.primary : tc.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -165,9 +240,7 @@ class _AllocationChangeRow extends StatelessWidget {
     final deltaText = delta >= 0
         ? '(+${delta.toStringAsFixed(1)}%)'
         : '(${delta.toStringAsFixed(1)}%)';
-    final deltaColor = delta > 0
-        ? tc.accent
-        : const Color(0xFFE57373);
+    final deltaColor = delta > 0 ? tc.accent : const Color(0xFFE57373);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -223,4 +296,16 @@ class _AllocationChangeRow extends StatelessWidget {
       ),
     );
   }
+}
+
+String _formatWon(double amount) {
+  final value = amount.round().abs().toString();
+  final buffer = StringBuffer();
+  for (int i = 0; i < value.length; i++) {
+    if (i > 0 && (value.length - i) % 3 == 0) {
+      buffer.write(',');
+    }
+    buffer.write(value[i]);
+  }
+  return '₩$buffer';
 }

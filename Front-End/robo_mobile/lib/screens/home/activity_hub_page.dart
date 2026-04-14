@@ -53,8 +53,7 @@ class ActivityHubPage extends StatelessWidget {
                   const SizedBox(width: 12),
                   Text(
                     '알림 & 리포트',
-                    style:
-                        WeRoboTypography.heading2.themed(context),
+                    style: WeRoboTypography.heading2.themed(context),
                   ),
                 ],
               ),
@@ -72,7 +71,18 @@ class ActivityHubPage extends StatelessWidget {
                   _DigestCard(
                     onTap: () => Navigator.push(
                       context,
+<<<<<<< HEAD
                       WeRoboMotion.fadeRoute<void>(const DigestScreen()),
+=======
+                      PageRouteBuilder<void>(
+                        pageBuilder: (_, __, ___) => const DigestScreen(),
+                        transitionsBuilder: (_, anim, __, child) =>
+                            FadeTransition(
+                          opacity: anim,
+                          child: child,
+                        ),
+                      ),
+>>>>>>> 3b7c902 (fix: sync rebalance cash history)
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -80,8 +90,7 @@ class ActivityHubPage extends StatelessWidget {
                   // Insights section
                   Text(
                     '리밸런싱 히스토리',
-                    style: WeRoboTypography.heading3
-                        .themed(context),
+                    style: WeRoboTypography.heading3.themed(context),
                   ),
                   const SizedBox(height: 12),
 
@@ -91,8 +100,7 @@ class ActivityHubPage extends StatelessWidget {
                       child: Center(
                         child: Text(
                           '아직 리밸런싱 인사이트가 없습니다.',
-                          style:
-                              WeRoboTypography.body.copyWith(
+                          style: WeRoboTypography.body.copyWith(
                             color: tc.textTertiary,
                           ),
                         ),
@@ -108,15 +116,13 @@ class ActivityHubPage extends StatelessWidget {
                   // Activities section
                   Text(
                     '최근 활동',
-                    style: WeRoboTypography.heading3
-                        .themed(context),
+                    style: WeRoboTypography.heading3.themed(context),
                   ),
                   const SizedBox(height: 12),
 
                   if (hasAccount && activities.isNotEmpty)
                     ...activities.map(
-                      (a) => _buildActivityCard(
-                          context, a),
+                      (a) => _buildActivityCard(context, a),
                     )
                   else ...[
                     _ActivityCard(
@@ -175,8 +181,7 @@ class _DigestCard extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: WeRoboColors.primary
-                      .withValues(alpha: 0.08),
+                  color: WeRoboColors.primary.withValues(alpha: 0.08),
                 ),
                 child: const Icon(
                   Icons.auto_awesome,
@@ -187,13 +192,11 @@ class _DigestCard extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       '주간 다이제스트',
-                      style: WeRoboTypography.bodySmall
-                          .copyWith(
+                      style: WeRoboTypography.bodySmall.copyWith(
                         fontWeight: FontWeight.w600,
                         color: tc.textPrimary,
                       ),
@@ -201,8 +204,7 @@ class _DigestCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       'AI가 분석한 이번 주 포트폴리오 리포트',
-                      style:
-                          WeRoboTypography.caption.copyWith(
+                      style: WeRoboTypography.caption.copyWith(
                         color: tc.textSecondary,
                       ),
                     ),
@@ -229,7 +231,7 @@ class _InsightCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final explanation = insight.generatedExplanation;
+    final explanation = insight.historySummary;
     final text = explanation.length > 60
         ? '${explanation.substring(0, 60)}...'
         : explanation;
@@ -238,7 +240,8 @@ class _InsightCard extends StatelessWidget {
       onTap: () => Navigator.push(
         context,
         WeRoboMotion.fadeRoute<void>(
-            InsightDetailPage(insight: insight)),
+          InsightDetailPage(insight: insight),
+        ),
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
@@ -249,15 +252,29 @@ class _InsightCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            InsightDonutThumbnail(
-              allocations: insight.allocations,
-              size: 48,
-            ),
+            if (insight.allocations.isEmpty)
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: WeRoboColors.primary.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.sync_alt_rounded,
+                  color: WeRoboColors.primary,
+                  size: 20,
+                ),
+              )
+            else
+              InsightDonutThumbnail(
+                allocations: insight.allocations,
+                size: 48,
+              ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
@@ -265,8 +282,7 @@ class _InsightCard extends StatelessWidget {
                         Container(
                           width: 8,
                           height: 8,
-                          margin:
-                              const EdgeInsets.only(right: 6),
+                          margin: const EdgeInsets.only(right: 6),
                           decoration: const BoxDecoration(
                             color: WeRoboColors.primary,
                             shape: BoxShape.circle,
@@ -274,8 +290,7 @@ class _InsightCard extends StatelessWidget {
                         ),
                       Text(
                         insight.rebalanceDate,
-                        style: WeRoboTypography.caption
-                            .copyWith(
+                        style: WeRoboTypography.caption.copyWith(
                           color: WeRoboColors.primary,
                           fontWeight: FontWeight.w500,
                         ),
@@ -285,8 +300,7 @@ class _InsightCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     text,
-                    style:
-                        WeRoboTypography.bodySmall.copyWith(
+                    style: WeRoboTypography.bodySmall.copyWith(
                       color: tc.textSecondary,
                     ),
                     maxLines: 2,
@@ -319,8 +333,7 @@ Widget _buildActivityCard(
   String value = activity.description ?? '';
   Color? valueColor;
 
-  if (activity.type == 'cash_in' ||
-      activity.type == 'initial_deposit') {
+  if (activity.type == 'cash_in' || activity.type == 'initial_deposit') {
     icon = Icons.arrow_downward_rounded;
     iconColor = tc.accent;
     final amount = activity.amount ?? 0;
@@ -399,13 +412,11 @@ class _ActivityCard extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style:
-                        WeRoboTypography.bodySmall.copyWith(
+                    style: WeRoboTypography.bodySmall.copyWith(
                       color: tc.textPrimary,
                       fontWeight: FontWeight.w500,
                     ),
@@ -413,9 +424,7 @@ class _ActivityCard extends StatelessWidget {
                   Text(
                     date,
                     style: WeRoboTypography.caption
-                        .copyWith(
-                            fontFamily:
-                                WeRoboFonts.english)
+                        .copyWith(fontFamily: WeRoboFonts.english)
                         .themed(context),
                   ),
                 ],

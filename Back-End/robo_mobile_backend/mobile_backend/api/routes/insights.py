@@ -59,14 +59,99 @@ def _build_insight_response(insight: dict[str, object]) -> RebalanceInsightRespo
             )
         )
 
+    trades = dict(insight.get("trades") or {})
+    trade_count = sum(
+        1
+        for ticker, amount in trades.items()
+        if str(ticker).upper() != "CASH" and abs(float(amount)) > 0.0
+    )
+
     return RebalanceInsightResponse(
         id=int(insight["id"]),
         rebalance_date=str(insight["rebalance_date"]),
         allocations=allocations,
+        trigger=None if insight.get("trigger") is None else str(insight["trigger"]),
+        trade_count=trade_count,
+        cash_before=(
+            None if insight.get("cash_before") is None else float(insight["cash_before"])
+        ),
+        cash_from_sales=(
+            None
+            if insight.get("cash_from_sales") is None
+            else float(insight["cash_from_sales"])
+        ),
+        cash_to_buys=(
+            None if insight.get("cash_to_buys") is None else float(insight["cash_to_buys"])
+        ),
+        cash_after=None if insight.get("cash_after") is None else float(insight["cash_after"]),
+        net_cash_change=(
+            None
+            if insight.get("net_cash_change") is None
+            else float(insight["net_cash_change"])
+        ),
         explanation_text=insight.get("explanation_text"),
         is_read=bool(insight.get("is_read", False)),
         created_at=str(insight["created_at"]),
     )
+
+
+def _merge_insight_rows(
+    *,
+    raw_insights: list[dict[str, object]],
+    cash_entries: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    insights_by_date = {
+        str(row["rebalance_date"]): dict(row)
+        for row in raw_insights
+    }
+    cash_by_date = {
+        str(entry["rebalance_date"]): dict(entry)
+        for entry in cash_entries
+    }
+
+    merged_rows: list[dict[str, object]] = []
+    for rebalance_date in sorted(
+        set(insights_by_date.keys()) | set(cash_by_date.keys()),
+        reverse=True,
+    ):
+        base_row = insights_by_date.get(rebalance_date)
+        if base_row is None:
+            cash_entry = cash_by_date[rebalance_date]
+            synthetic_id = -int(rebalance_date.replace("-", ""))
+            base_row = {
+                "id": synthetic_id,
+                "rebalance_date": rebalance_date,
+                "pre_weights": {},
+                "post_weights": {},
+                "explanation_text": None,
+                # Legacy cash-ledger rows do not have a persisted insight record,
+                # so expose them in history without surfacing them as unread items.
+                "is_read": True,
+                "created_at": str(
+                    cash_entry.get("created_at")
+                    or f"{rebalance_date}T00:00:00Z"
+                ),
+            }
+
+        cash_entry = cash_by_date.get(rebalance_date)
+        merged_rows.append(
+            {
+                **base_row,
+                "trigger": None if cash_entry is None else cash_entry.get("trigger"),
+                "cash_before": None if cash_entry is None else cash_entry.get("cash_before"),
+                "cash_from_sales": (
+                    None if cash_entry is None else cash_entry.get("cash_from_sales")
+                ),
+                "cash_to_buys": None if cash_entry is None else cash_entry.get("cash_to_buys"),
+                "cash_after": None if cash_entry is None else cash_entry.get("cash_after"),
+                "net_cash_change": (
+                    None if cash_entry is None else cash_entry.get("net_cash_change")
+                ),
+                "trades": {} if cash_entry is None else dict(cash_entry.get("trades") or {}),
+            }
+        )
+
+    return merged_rows
 
 
 @router.get(
@@ -86,7 +171,12 @@ def list_insights(
             return RebalanceInsightsListResponse(insights=[], unread_count=0)
 
         raw_insights = account_service.repository.list_rebalance_insights(int(account["id"]))
-        insights = [_build_insight_response(row) for row in raw_insights]
+        cash_entries = account_service.repository.list_rebalance_cash_entries(int(account["id"]))
+        merged_rows = _merge_insight_rows(
+            raw_insights=raw_insights,
+            cash_entries=cash_entries,
+        )
+        insights = [_build_insight_response(row) for row in merged_rows]
         unread_count = sum(1 for i in insights if not i.is_read)
         return RebalanceInsightsListResponse(insights=insights, unread_count=unread_count)
     except PortfolioAccountNotFoundError as exc:

@@ -18,8 +18,7 @@ class PortfolioState extends ChangeNotifier {
       'werobo.portfolio_bootstrap';
   static const int _frontierPreviewStorageVersion = 2;
   static const String _digestSeenDateKey = 'werobo.digest_seen_date';
-  static const String _welcomeBannerSeenKey =
-      'werobo.welcome_banner_seen';
+  static const String _welcomeBannerSeenKey = 'werobo.welcome_banner_seen';
 
   InvestmentType _type = InvestmentType.balanced;
   MobileRecommendationResponse? _recommendation;
@@ -159,8 +158,7 @@ class PortfolioState extends ChangeNotifier {
     await _restoreAuthSessionFromPrefs(prefs);
     await _restorePortfolioBootstrapFromPrefs(prefs);
     _digestSeenDate = prefs.getString(_digestSeenDateKey);
-    _welcomeBannerSeen =
-        prefs.getBool(_welcomeBannerSeenKey) ?? false;
+    _welcomeBannerSeen = prefs.getBool(_welcomeBannerSeenKey) ?? false;
   }
 
   Future<bool> validateAuthSession() async {
@@ -379,7 +377,7 @@ class PortfolioState extends ChangeNotifier {
   }
 
   Future<void> markInsightAsRead(int insightId) async {
-    // For mock insights (negative IDs), just update locally
+    // For mock or synthetic insights (negative IDs), just update locally.
     if (insightId < 0) {
       _markInsightReadLocally(insightId);
       return;
@@ -403,6 +401,13 @@ class PortfolioState extends ChangeNotifier {
         id: old.id,
         rebalanceDate: old.rebalanceDate,
         allocations: old.allocations,
+        trigger: old.trigger,
+        tradeCount: old.tradeCount,
+        cashBefore: old.cashBefore,
+        cashFromSales: old.cashFromSales,
+        cashToBuys: old.cashToBuys,
+        cashAfter: old.cashAfter,
+        netCashChange: old.netCashChange,
         explanationText: old.explanationText,
         isRead: true,
         createdAt: old.createdAt,

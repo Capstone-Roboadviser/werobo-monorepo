@@ -97,7 +97,7 @@ class _InsightHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final explanation = insight.generatedExplanation;
+    final explanation = insight.historySummary;
     final truncatedText = explanation.length > 60
         ? '${explanation.substring(0, 60)}...'
         : explanation;
@@ -107,7 +107,8 @@ class _InsightHistoryCard extends StatelessWidget {
         Navigator.push(
           context,
           WeRoboMotion.fadeRoute<void>(
-              InsightDetailPage(insight: insight)),
+            InsightDetailPage(insight: insight),
+          ),
         );
       },
       child: Container(
@@ -120,10 +121,25 @@ class _InsightHistoryCard extends StatelessWidget {
         child: Row(
           children: [
             // Donut thumbnail
-            InsightDonutThumbnail(
-              allocations: insight.allocations,
-              size: 48,
-            ),
+            if (insight.allocations.isEmpty)
+              Container(
+                width: 48,
+                height: 48,
+                decoration: BoxDecoration(
+                  color: WeRoboColors.primary.withValues(alpha: 0.08),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.sync_alt_rounded,
+                  color: WeRoboColors.primary,
+                  size: 20,
+                ),
+              )
+            else
+              InsightDonutThumbnail(
+                allocations: insight.allocations,
+                size: 48,
+              ),
             const SizedBox(width: 14),
 
             // Text content

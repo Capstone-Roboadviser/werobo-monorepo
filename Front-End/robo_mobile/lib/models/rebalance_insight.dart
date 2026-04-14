@@ -21,8 +21,7 @@ class RebalanceInsightAllocation {
   /// Rounded display percentages (one decimal place).
   double get beforeDisplay =>
       double.parse((beforePct * 100).toStringAsFixed(1));
-  double get afterDisplay =>
-      double.parse((afterPct * 100).toStringAsFixed(1));
+  double get afterDisplay => double.parse((afterPct * 100).toStringAsFixed(1));
 
   /// Delta derived from rounded display values so that
   /// "5.1% → 5.1%" never shows a non-zero change.
@@ -33,9 +32,7 @@ class RebalanceInsightAllocation {
 
   /// Korean display name for the asset category.
   String get displayName =>
-      _assetKoreanNames[assetCode] ??
-      _assetKoreanNames[assetName] ??
-      assetName;
+      _assetKoreanNames[assetCode] ?? _assetKoreanNames[assetName] ?? assetName;
 
   static const _assetKoreanNames = <String, String>{
     'us_value': '미국 가치주',
@@ -79,30 +76,86 @@ class RebalanceInsight {
   final int id;
   final String rebalanceDate;
   final List<RebalanceInsightAllocation> allocations;
+  final String? trigger;
+  final int tradeCount;
+  final double cashBefore;
+  final double cashFromSales;
+  final double cashToBuys;
+  final double cashAfter;
+  final double netCashChange;
   final String? explanationText;
   final bool isRead;
   final String createdAt;
 
   /// True when at least one allocation has a visible change.
-  bool get hasRealChanges => allocations.any((a) => a.hasChanged);
+  bool get hasReserveCash => cashAfter.abs() >= 0.5;
+
+  bool get hasCashActivity =>
+      cashFromSales.abs() >= 0.5 ||
+      cashToBuys.abs() >= 0.5 ||
+      netCashChange.abs() >= 0.5;
+
+  bool get hasTradeActivity => tradeCount > 0;
+
+  bool get hasRealChanges =>
+      allocations.any((a) => a.hasChanged) ||
+      hasCashActivity ||
+      hasTradeActivity;
+
+  String get cashFlowSummary {
+    if (!hasCashActivity && !hasTradeActivity) {
+      return '';
+    }
+
+    final parts = <String>[];
+    if (cashFromSales.abs() >= 0.5) {
+      parts.add('매도 ${_formatWon(cashFromSales)}');
+    }
+    if (cashToBuys.abs() >= 0.5) {
+      parts.add('매수 ${_formatWon(cashToBuys)}');
+    }
+    if (hasReserveCash || hasCashActivity) {
+      parts.add('예비현금 ${_formatWon(cashAfter)}');
+    }
+
+    if (parts.isEmpty && hasTradeActivity) {
+      return '종목 $tradeCount개를 다시 맞췄어요.';
+    }
+    return parts.join(' · ');
+  }
+
+  String get historySummary {
+    if (hasCashActivity) {
+      return cashFlowSummary;
+    }
+    if (allocations.any((a) => a.hasChanged)) {
+      return generatedExplanation;
+    }
+    if (hasTradeActivity) {
+      return '리밸런싱으로 종목 $tradeCount개 구성을 다시 맞췄어요.';
+    }
+    return generatedExplanation;
+  }
 
   /// Explanation derived from rounded display values so it always
   /// matches the visible allocation rows.
   String get generatedExplanation {
     final changed = allocations.where((a) => a.hasChanged).toList()
-      ..sort((a, b) =>
-          b.displayDelta.abs().compareTo(a.displayDelta.abs()));
+      ..sort((a, b) => b.displayDelta.abs().compareTo(a.displayDelta.abs()));
     if (changed.isEmpty) {
+      if (hasCashActivity) {
+        return '$cashFlowSummary. 리밸런싱 결과가 예비현금에 반영됐어요.';
+      }
+      if (hasTradeActivity) {
+        return '리밸런싱으로 종목 구성을 다시 맞췄어요.';
+      }
       return '포트폴리오 비중이 목표와 일치하여 '
           '조정이 필요하지 않았어요.';
     }
     final parts = changed.take(2).map((a) {
-      final before =
-          '${a.beforeDisplay.toStringAsFixed(1)}%';
-      final after =
-          '${a.afterDisplay.toStringAsFixed(1)}%';
-      final verb =
-          a.displayDelta > 0 ? '늘렸어요' : '줄였어요';
+      final before = '${a.beforeDisplay.toStringAsFixed(1)}%';
+      final after = '${a.afterDisplay.toStringAsFixed(1)}%';
+      final verb = a.displayDelta > 0 ? '늘렸어요' : '줄였어요';
       return '${a.displayName} 비중을 '
           '$before에서 $after로 $verb';
     });
@@ -114,6 +167,13 @@ class RebalanceInsight {
     required this.id,
     required this.rebalanceDate,
     required this.allocations,
+    required this.trigger,
+    required this.tradeCount,
+    required this.cashBefore,
+    required this.cashFromSales,
+    required this.cashToBuys,
+    required this.cashAfter,
+    required this.netCashChange,
     this.explanationText,
     required this.isRead,
     required this.createdAt,
@@ -133,6 +193,13 @@ class RebalanceInsight {
       id: (json['id'] as num?)?.toInt() ?? 0,
       rebalanceDate: json['rebalance_date']?.toString() ?? '',
       allocations: allocations,
+      trigger: json['trigger']?.toString(),
+      tradeCount: (json['trade_count'] as num?)?.toInt() ?? 0,
+      cashBefore: _asDouble(json['cash_before']),
+      cashFromSales: _asDouble(json['cash_from_sales']),
+      cashToBuys: _asDouble(json['cash_to_buys']),
+      cashAfter: _asDouble(json['cash_after']),
+      netCashChange: _asDouble(json['net_cash_change']),
       explanationText: json['explanation_text']?.toString(),
       isRead: json['is_read'] == true,
       createdAt: json['created_at']?.toString() ?? '',
@@ -241,6 +308,13 @@ class MockInsightData {
         id: -(i + 1),
         rebalanceDate: _dates[i],
         allocations: allocations,
+        trigger: 'scheduled',
+        tradeCount: allocations.length,
+        cashBefore: 0,
+        cashFromSales: 0,
+        cashToBuys: 0,
+        cashAfter: 0,
+        netCashChange: 0,
         explanationText: _explanations[i],
         isRead: i > 0,
         createdAt: '${_dates[i]}T09:00:00Z',
@@ -250,3 +324,14 @@ class MockInsightData {
   }
 }
 
+String _formatWon(double amount) {
+  final value = amount.round().abs().toString();
+  final buffer = StringBuffer();
+  for (int i = 0; i < value.length; i++) {
+    if (i > 0 && (value.length - i) % 3 == 0) {
+      buffer.write(',');
+    }
+    buffer.write(value[i]);
+  }
+  return '₩$buffer';
+}

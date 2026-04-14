@@ -5,6 +5,7 @@ from datetime import UTC, date, datetime, timedelta
 import pandas as pd
 import pytest
 
+from mobile_backend.api.routes import insights as insights_route
 from mobile_backend.domain.enums import SimulationDataSource
 from mobile_backend.services.account_service import PortfolioAccountService
 
@@ -14,6 +15,7 @@ class FakePortfolioAccountRepository:
         self.ready = True
         self.initialized = False
         self.next_account_id = 1
+        self.next_insight_id = 1
         self.accounts_by_user_id: dict[int, dict[str, object]] = {}
         self.cash_flows_by_account_id: dict[int, list[dict[str, object]]] = {}
         self.snapshots_by_account_id: dict[int, list[dict[str, object]]] = {}
@@ -137,18 +139,26 @@ class FakePortfolioAccountRepository:
         explanation_text: str | None = None,
     ) -> dict[str, object]:
         existing = self.rebalance_insights_by_account_id.setdefault(account_id, [])
+        created_at = f"{rebalance_date}T00:00:00Z"
         insight = {
+            "id": self.next_insight_id,
             "account_id": account_id,
             "rebalance_date": rebalance_date,
             "pre_weights": dict(pre_weights),
             "post_weights": dict(post_weights),
             "explanation_text": explanation_text,
+            "is_read": False,
+            "created_at": created_at,
         }
         for idx, current in enumerate(existing):
             if current["rebalance_date"] == rebalance_date:
+                insight["id"] = current["id"]
+                insight["is_read"] = current.get("is_read", False)
+                insight["created_at"] = current.get("created_at", created_at)
                 existing[idx] = insight
                 return insight
         existing.append(insight)
+        self.next_insight_id += 1
         existing.sort(key=lambda item: str(item["rebalance_date"]), reverse=True)
         return insight
 
@@ -273,6 +283,18 @@ class ReserveCashPortfolioAccountService(PortfolioAccountService):
                 ]
             )
         return pd.DataFrame(rows)
+
+
+class StubInsightsAuthService:
+    def __init__(self, user_id: int) -> None:
+        self.user_id = user_id
+
+    def get_current_session(self, access_token: str) -> dict[str, object]:
+        return {
+            "user": {
+                "id": self.user_id,
+            }
+        }
 
 
 def test_create_account_builds_dashboard_and_snapshots() -> None:
@@ -554,6 +576,150 @@ def test_dashboard_allocations_exclude_reserve_cash_from_weights() -> None:
     assert rebalance_activity["amount"] == pytest.approx(summary["cash_balance"], abs=2.0)
     assert rebalance_activity["title"] == "드리프트 리밸런싱"
     assert "예비현금" in str(rebalance_activity["description"])
+
+
+def test_insights_route_includes_rebalance_cash_flow(monkeypatch: pytest.MonkeyPatch) -> None:
+    repository = FakePortfolioAccountRepository()
+    service = ReserveCashPortfolioAccountService(repository)
+    started_at = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+
+    dashboard = service.create_or_replace_account(
+        user_id=13,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[
+            {
+                "asset_code": "us_value",
+                "asset_name": "미국 가치주",
+                "weight": 0.5,
+                "risk_contribution": 0.4,
+            },
+            {
+                "asset_code": "bond",
+                "asset_name": "채권",
+                "weight": 0.3,
+                "risk_contribution": 0.35,
+            },
+            {
+                "asset_code": "gold",
+                "asset_name": "금",
+                "weight": 0.2,
+                "risk_contribution": 0.25,
+            },
+        ],
+        stock_allocations=[
+            {
+                "ticker": "AAA",
+                "name": "Alpha Asset",
+                "sector_code": "us_value",
+                "sector_name": "미국 가치주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "BBB",
+                "name": "Beta Bond",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.3,
+            },
+            {
+                "ticker": "CCC",
+                "name": "Core Gold",
+                "sector_code": "gold",
+                "sector_name": "금",
+                "weight": 0.2,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+        started_at=started_at,
+    )
+
+    monkeypatch.setattr(insights_route, "account_service", service)
+    monkeypatch.setattr(insights_route, "auth_service", StubInsightsAuthService(13))
+
+    response = insights_route.list_insights(authorization="Bearer test-token")
+
+    assert len(response.insights) == 1
+    insight = response.insights[0]
+    assert insight.cash_after == pytest.approx(
+        float(dashboard["summary"]["cash_balance"]),
+        abs=2.0,
+    )
+    assert insight.cash_from_sales is not None and insight.cash_from_sales > 0
+    assert insight.cash_to_buys is not None and insight.cash_to_buys > 0
+    assert insight.trade_count > 0
+
+
+def test_insights_route_falls_back_to_cash_ledger_when_legacy_insight_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = FakePortfolioAccountRepository()
+    service = ReserveCashPortfolioAccountService(repository)
+    started_at = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+
+    dashboard = service.create_or_replace_account(
+        user_id=15,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "AAA",
+                "name": "Alpha Asset",
+                "sector_code": "us_value",
+                "sector_name": "미국 가치주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "BBB",
+                "name": "Beta Bond",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.3,
+            },
+            {
+                "ticker": "CCC",
+                "name": "Core Gold",
+                "sector_code": "gold",
+                "sector_name": "금",
+                "weight": 0.2,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+        started_at=started_at,
+    )
+
+    account_id = int(repository.get_account_by_user_id(15)["id"])
+    repository.rebalance_insights_by_account_id[account_id] = []
+
+    monkeypatch.setattr(insights_route, "account_service", service)
+    monkeypatch.setattr(insights_route, "auth_service", StubInsightsAuthService(15))
+
+    response = insights_route.list_insights(authorization="Bearer test-token")
+
+    assert len(response.insights) == 1
+    insight = response.insights[0]
+    assert insight.id < 0
+    assert insight.allocations == []
+    assert insight.is_read is True
+    assert insight.cash_after == pytest.approx(
+        float(dashboard["summary"]["cash_balance"]),
+        abs=2.0,
+    )
 
 
 def test_refresh_managed_universe_accounts_filters_target_accounts() -> None:
