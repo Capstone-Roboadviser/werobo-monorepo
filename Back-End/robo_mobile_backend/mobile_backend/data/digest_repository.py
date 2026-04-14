@@ -92,6 +92,17 @@ class DigestRepository:
                 )
             connection.commit()
 
+    def bust_cache(self, account_id: int) -> None:
+        if not self.is_configured():
+            return
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM digest_cache WHERE account_id = %s",
+                    (account_id,),
+                )
+            connection.commit()
+
     @contextmanager
     def _connect(self):
         conn = psycopg.connect(self.database_url, row_factory=dict_row)
