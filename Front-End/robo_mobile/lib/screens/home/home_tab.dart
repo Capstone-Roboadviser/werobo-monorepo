@@ -217,6 +217,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   static const _baseInvestment = 10000000.0;
 
   late AnimationController _drawCtrl;
+  late CurvedAnimation _drawCurve;
   late AnimationController _glowCtrl;
   int _range = 4; // 전체
   int? _touchIndex;
@@ -259,9 +260,13 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   void initState() {
     super.initState();
     _drawCtrl = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 700),
       vsync: this,
     )..forward();
+    _drawCurve = CurvedAnimation(
+      parent: _drawCtrl,
+      curve: Curves.linear,
+    );
     _glowCtrl = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
@@ -280,6 +285,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   @override
   void dispose() {
     _glowCtrl.dispose();
+    _drawCurve.dispose();
     _drawCtrl.dispose();
     super.dispose();
   }
@@ -465,14 +471,14 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     setState(() => _touchIndex = null);
                   },
                   child: AnimatedBuilder(
-                    animation: Listenable.merge([_drawCtrl, _glowCtrl]),
+                    animation: Listenable.merge([_drawCurve, _glowCtrl]),
                     builder: (context, _) {
                       return CustomPaint(
                         size: Size(fullWidth, 320),
                         painter: _PortfolioValuePainter(
                           valuePts: valuePts,
                           costPts: costPts,
-                          progress: _drawCtrl.value,
+                          progress: _drawCurve.value,
                           touchIndex: _touchIndex,
                           glowPhase: _glowCtrl.value,
                           dateLabel: dateLabel,
@@ -655,8 +661,12 @@ class _PortfolioValuePainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
     }
 
-    final drawCount =
-        (valuePts.length * progress).ceil().clamp(2, valuePts.length);
+    // Fractional index for smooth interpolation between data points
+    final fIdx =
+        (valuePts.length - 1) * progress.clamp(0.0, 1.0);
+    final complete = fIdx.floor();
+    final frac = fIdx - complete;
+    final drawCount = (complete + 1).clamp(2, valuePts.length);
     final ti =
         isDragging ? touchIndex!.clamp(0, valuePts.length - 1) : drawCount - 1;
 
@@ -790,9 +800,9 @@ class _PortfolioValuePainter extends CustomPainter {
         );
       }
     } else {
-      // Not dragging: draw full line
+      // Not dragging: draw line with smooth interpolated tip
       final fullPath = Path();
-      for (int i = 0; i < drawCount; i++) {
+      for (int i = 0; i <= complete; i++) {
         final x = toX(i, valuePts.length);
         final y = toY(valuePts[i].value);
         if (i == 0) {
@@ -800,6 +810,17 @@ class _PortfolioValuePainter extends CustomPainter {
         } else {
           fullPath.lineTo(x, y);
         }
+      }
+      // Interpolate between complete and next point for smooth tip
+      if (frac > 0 && complete < valuePts.length - 1) {
+        final x0 = toX(complete, valuePts.length);
+        final y0 = toY(valuePts[complete].value);
+        final x1 = toX(complete + 1, valuePts.length);
+        final y1 = toY(valuePts[complete + 1].value);
+        fullPath.lineTo(
+          x0 + frac * (x1 - x0),
+          y0 + frac * (y1 - y0),
+        );
       }
       canvas.drawPath(
           fullPath,
