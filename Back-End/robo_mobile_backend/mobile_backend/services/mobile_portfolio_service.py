@@ -120,7 +120,9 @@ class MobilePortfolioService:
         self,
         *,
         data_source: SimulationDataSource,
+        start_date: str | None = None,
     ) -> dict[str, object]:
         return self.calculation_adapter.get_comparison_backtest(
             data_source=data_source,
+            start_date=start_date,
         )

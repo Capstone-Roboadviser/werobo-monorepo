@@ -128,6 +128,10 @@ class ComparisonBacktestRequest(BaseModel):
         default=SimulationDataSource.MANAGED_UNIVERSE,
         description="가격 데이터 소스",
     )
+    start_date: str | None = Field(
+        default=None,
+        description="비교 백테스트 시작일 (YYYY-MM-DD). 주어지면 해당 시점 기준 포트폴리오 구성으로 현재까지를 다시 계산합니다.",
+    )
 
 
 class RebalanceSimulationRequest(BaseModel):

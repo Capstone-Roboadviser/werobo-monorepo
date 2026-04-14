@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../app/chart_point_filters.dart';
+import '../../app/comparison_backtest_chart_mapper.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
@@ -65,6 +66,18 @@ class _PortfolioTabState extends State<PortfolioTab> {
       if (!mounted) return;
       PortfolioStateProvider.of(context).setBacktest(bt);
     } catch (_) {}
+  }
+
+  Future<List<ChartLine>> _fetchComparisonLinesForStartDate(
+    DateTime? startDate,
+  ) async {
+    final state = PortfolioStateProvider.of(context);
+    final response = await MobileBackendApi.instance.fetchComparisonBacktest(
+      preferredDataSource: state.frontierSelection?.dataSource ??
+          state.accountSummary?.dataSource,
+      startDate: startDate,
+    );
+    return comparisonChartLinesFromResponse(response);
   }
 
   Future<void> _fetchHistoryForType(InvestmentType type) async {
@@ -214,6 +227,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
                       volatilityPoints: _volatilityPoints,
                       comparisonLines: lines,
                       rebalanceDates: rebalanceDates,
+                      onComparisonRangeRequested:
+                          _fetchComparisonLinesForStartDate,
                       isLoading: _isLoadingHistory,
                     ),
             ),
@@ -544,6 +559,7 @@ class _TrendView extends StatelessWidget {
   final List<ChartPoint>? volatilityPoints;
   final List<ChartLine> comparisonLines;
   final List<DateTime> rebalanceDates;
+  final ComparisonRangeLoader? onComparisonRangeRequested;
   final bool isLoading;
 
   const _TrendView({
@@ -552,6 +568,7 @@ class _TrendView extends StatelessWidget {
     this.volatilityPoints,
     required this.comparisonLines,
     required this.rebalanceDates,
+    this.onComparisonRangeRequested,
     this.isLoading = false,
   });
 
@@ -575,6 +592,7 @@ class _TrendView extends StatelessWidget {
         volatilityPoints: volatilityPoints,
         comparisonLines: comparisonLines.isNotEmpty ? comparisonLines : null,
         rebalanceDates: rebalanceDates.isNotEmpty ? rebalanceDates : null,
+        onComparisonRangeRequested: onComparisonRangeRequested,
         useFallbackMock: false,
       ),
     );

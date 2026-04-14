@@ -189,6 +189,7 @@ class PortfolioAnalyticsService:
         self,
         *,
         data_source: SimulationDataSource,
+        start_date: str | None = None,
     ) -> ComparisonResult:
         assets = self._load_comparison_assets(data_source)
         instruments, prices, combination_prefix = self._load_comparison_universe(data_source)
@@ -197,9 +198,10 @@ class PortfolioAnalyticsService:
         if prices.empty:
             raise ValueError("비교 백테스트에 사용할 가격 데이터가 없습니다.")
 
-        train_prices, test_prices, train_end_date, test_start_date = self._split_prices_train_test(
+        train_prices, test_prices, train_end_date, test_start_date, effective_split_ratio = self._split_prices_train_test(
             prices,
             split_ratio=0.9,
+            requested_start_date=start_date,
         )
         train_start_date = pd.Timestamp(train_prices["date"].min()).normalize()
 
@@ -243,7 +245,7 @@ class PortfolioAnalyticsService:
                 extra_lines=extra_lines,
                 train_start_date=train_start_date.strftime("%Y-%m-%d"),
                 train_end_date=train_end_date.strftime("%Y-%m-%d"),
-                split_ratio=0.9,
+                split_ratio=effective_split_ratio,
             )
         except Exception as exc:
             raise RuntimeError(f"비교 백테스트 계산 중 오류: {exc}") from exc
@@ -288,17 +290,27 @@ class PortfolioAnalyticsService:
         prices: pd.DataFrame,
         *,
         split_ratio: float,
-    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.Timestamp]:
+        requested_start_date: str | None = None,
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp, pd.Timestamp, float]:
         if prices.empty:
             raise ValueError("비교 백테스트에 사용할 가격 데이터가 없습니다.")
 
         unique_dates = pd.Index(sorted(pd.to_datetime(prices["date"]).dt.normalize().unique()))
-        required_rows = max(MINIMUM_HISTORY_ROWS + 1, 30)
+        minimum_test_rows = 2
+        required_rows = max(MINIMUM_HISTORY_ROWS + minimum_test_rows, 30)
         if len(unique_dates) < required_rows:
             raise RuntimeError(f"비교 백테스트를 위해서는 최소 {required_rows}영업일 이상의 가격 이력이 필요합니다.")
 
-        split_index = int(len(unique_dates) * split_ratio)
-        split_index = min(max(split_index, MINIMUM_HISTORY_ROWS), len(unique_dates) - 1)
+        latest_split_index = len(unique_dates) - minimum_test_rows
+        if requested_start_date is None:
+            split_index = int(len(unique_dates) * split_ratio)
+        else:
+            try:
+                requested_timestamp = pd.Timestamp(requested_start_date).normalize()
+            except Exception as exc:
+                raise ValueError("start_date는 YYYY-MM-DD 형식이어야 합니다.") from exc
+            split_index = int(unique_dates.searchsorted(requested_timestamp, side="left"))
+        split_index = min(max(split_index, MINIMUM_HISTORY_ROWS), latest_split_index)
         train_end_date = pd.Timestamp(unique_dates[split_index - 1]).normalize()
         test_start_date = pd.Timestamp(unique_dates[split_index]).normalize()
 
@@ -306,7 +318,13 @@ class PortfolioAnalyticsService:
         test_prices = prices[pd.to_datetime(prices["date"]).dt.normalize() >= test_start_date].copy()
         if train_prices.empty or test_prices.empty:
             raise RuntimeError("train/test 분할 후 사용할 가격 데이터가 부족합니다.")
-        return train_prices, test_prices, train_end_date, test_start_date
+        return (
+            train_prices,
+            test_prices,
+            train_end_date,
+            test_start_date,
+            split_index / len(unique_dates),
+        )
 
     def _fetch_benchmark_prices(self, start_date: str) -> dict[str, pd.Series]:
         benchmarks: dict[str, pd.Series] = {}
