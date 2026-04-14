@@ -104,6 +104,7 @@ class PortfolioSimulationService:
             periods_per_year=252,
             min_obs=MINIMUM_HISTORY_ROWS,
             risk_aversion=BLACK_LITTERMAN_RISK_AVERSION,
+            risk_free_rate=RISK_FREE_RATE,
             allow_equal_weight_fallback=True,
         )
         self.stock_return_model = self.black_litterman_stock_return_model
