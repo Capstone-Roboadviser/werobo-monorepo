@@ -171,22 +171,39 @@ class WeRoboElevation {
 }
 
 /// Animation duration and curve constants.
+///
+/// Custom curves use steeper slopes than Flutter built-ins for a snappier,
+/// more intentional feel (Emil Kowalski / Vercel / Linear style).
 class WeRoboMotion {
   WeRoboMotion._();
 
   // Durations
   static const Duration micro = Duration(milliseconds: 75);
-  static const Duration short = Duration(milliseconds: 200);
-  static const Duration medium = Duration(milliseconds: 350);
-  static const Duration long = Duration(milliseconds: 500);
-  static const Duration pageTransition = Duration(milliseconds: 400);
-  static const Duration stagger = Duration(milliseconds: 80);
-  static const Duration chartDraw = Duration(milliseconds: 1000);
+  static const Duration short = Duration(milliseconds: 150);
+  static const Duration medium = Duration(milliseconds: 250);
+  static const Duration long = Duration(milliseconds: 400);
+  static const Duration pageTransition = Duration(milliseconds: 300);
+  static const Duration stagger = Duration(milliseconds: 50);
+  static const Duration chartDraw = Duration(milliseconds: 800);
 
-  // Curves
-  static const Curve enter = Curves.easeOut;
-  static const Curve exit = Curves.easeIn;
-  static const Curve move = Curves.easeInOut;
+  // Curves — custom cubics with punchier initial slopes
+  static const Curve enter = Cubic(0.16, 1, 0.3, 1);
+  static const Curve exit = Cubic(0.4, 0, 1, 1);
+  static const Curve move = Cubic(0.4, 0, 0.2, 1);
+  static const Curve emphasize = Cubic(0.34, 1.56, 0.64, 1);
+  static const Curve chartReveal = Cubic(0.65, 0, 0.35, 1);
+
+  /// Standard page route with curved fade transition.
+  static Route<T> fadeRoute<T>(Widget page) {
+    return PageRouteBuilder<T>(
+      pageBuilder: (_, __, ___) => page,
+      transitionsBuilder: (_, anim, __, child) => FadeTransition(
+        opacity: CurvedAnimation(parent: anim, curve: enter),
+        child: child,
+      ),
+      transitionDuration: pageTransition,
+    );
+  }
 }
 
 /// Font families from Figma:

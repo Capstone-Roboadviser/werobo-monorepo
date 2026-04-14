@@ -18,8 +18,8 @@ class PageIndicator extends StatelessWidget {
       children: List.generate(count, (index) {
         final isActive = index == current;
         return AnimatedContainer(
-          duration: const Duration(milliseconds: 250),
-          curve: Curves.easeInOut,
+          duration: WeRoboMotion.short,
+          curve: WeRoboMotion.move,
           margin: const EdgeInsets.symmetric(horizontal: 4),
           width: isActive ? 24 : 8,
           height: 8,

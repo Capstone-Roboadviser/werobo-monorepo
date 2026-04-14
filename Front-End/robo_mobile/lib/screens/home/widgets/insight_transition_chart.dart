@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../../app/theme.dart';
 import '../../../models/rebalance_insight.dart';
 
 /// Animated donut chart that morphs from before→after allocation weights.
@@ -32,11 +33,11 @@ class _InsightTransitionChartState extends State<InsightTransitionChart>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: WeRoboMotion.chartDraw,
       vsync: this,
     );
     _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
+      CurvedAnimation(parent: _controller, curve: WeRoboMotion.chartReveal),
     );
     _controller.forward();
   }

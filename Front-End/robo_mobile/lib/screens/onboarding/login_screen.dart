@@ -44,11 +44,11 @@ class _LoginScreenState extends State<LoginScreen>
       'selected_point_index': widget.frontierSelection.selectedPointIndex,
     });
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: WeRoboMotion.medium,
       vsync: this,
     );
     _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
+      CurvedAnimation(parent: _fadeController, curve: WeRoboMotion.enter),
     );
     _fadeController.forward();
   }
@@ -66,25 +66,15 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _navigateToComparison() {
     Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => ComparisonScreen(
-          frontierSelection: widget.frontierSelection,
-        ),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
+      WeRoboMotion.fadeRoute(ComparisonScreen(
+        frontierSelection: widget.frontierSelection,
+      )),
     );
   }
 
   void _navigateToHome() {
     Navigator.of(context).pushAndRemoveUntil(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const HomeShell(),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
+      WeRoboMotion.fadeRoute(const HomeShell()),
       (_) => false,
     );
   }
@@ -657,7 +647,8 @@ class _TabButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: WeRoboMotion.short,
+        curve: WeRoboMotion.move,
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: isActive ? WeRoboColors.primary : Colors.transparent,

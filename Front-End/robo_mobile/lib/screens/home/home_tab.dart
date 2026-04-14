@@ -34,7 +34,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     super.initState();
     logPageEnter('HomeTab');
     _staggerCtrl = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     )..forward();
   }
@@ -51,7 +51,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final end = (start + 0.4).clamp(0.0, 1.0);
     return CurvedAnimation(
       parent: _staggerCtrl,
-      curve: Interval(start, end, curve: Curves.easeOut),
+      curve: Interval(start, end, curve: WeRoboMotion.enter),
     );
   }
 
@@ -63,7 +63,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _staggerCtrl,
-      curve: Interval(start, end, curve: Curves.easeOut),
+      curve: Interval(start, end, curve: WeRoboMotion.enter),
     ));
   }
 
@@ -155,14 +155,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 _DigestBanner(
                   onTap: () => Navigator.push(
                     context,
-                    PageRouteBuilder<void>(
-                      pageBuilder: (_, __, ___) => const DigestScreen(),
-                      transitionsBuilder: (_, animation, __, child) =>
-                          FadeTransition(
-                        opacity: animation,
-                        child: child,
-                      ),
-                    ),
+                    WeRoboMotion.fadeRoute<void>(const DigestScreen()),
                   ),
                 ),
               ),
@@ -1093,12 +1086,8 @@ class _InsightBanner extends StatelessWidget {
       onTap: () {
         Navigator.push(
           context,
-          PageRouteBuilder<void>(
-            pageBuilder: (_, __, ___) =>
-                InsightDetailPage(insight: latestInsight),
-            transitionsBuilder: (_, anim, __, child) =>
-                FadeTransition(opacity: anim, child: child),
-          ),
+          WeRoboMotion.fadeRoute<void>(
+              InsightDetailPage(insight: latestInsight)),
         );
       },
       child: Padding(
@@ -1556,17 +1545,11 @@ class _PortfolioAllocationPanel extends StatelessWidget {
   ) {
     Navigator.push(
       context,
-      PageRouteBuilder<void>(
-        transitionDuration: const Duration(milliseconds: 400),
-        reverseTransitionDuration: const Duration(milliseconds: 400),
-        pageBuilder: (_, __, ___) => PortfolioAllocationDetailPage(
-          detail: detail,
-          baseValue: baseValue,
-          initialShowAmounts: showAmounts,
-        ),
-        transitionsBuilder: (_, animation, __, child) =>
-            FadeTransition(opacity: animation, child: child),
-      ),
+      WeRoboMotion.fadeRoute<void>(PortfolioAllocationDetailPage(
+        detail: detail,
+        baseValue: baseValue,
+        initialShowAmounts: showAmounts,
+      )),
     );
   }
 }
@@ -1808,11 +1791,7 @@ class _NotificationIconButton extends StatelessWidget {
     return Pressable(
       onTap: () => Navigator.push(
         context,
-        PageRouteBuilder<void>(
-          pageBuilder: (_, __, ___) => const ActivityHubPage(),
-          transitionsBuilder: (_, anim, __, child) =>
-              FadeTransition(opacity: anim, child: child),
-        ),
+        WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
       ),
       child: Icon(
         hasUnread

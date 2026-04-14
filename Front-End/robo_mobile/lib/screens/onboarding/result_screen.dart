@@ -42,7 +42,7 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
       'expected_return': portfolio.expectedReturn.toStringAsFixed(4),
     });
     _staggerCtrl = AnimationController(
-      duration: const Duration(milliseconds: 700),
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     )..forward();
   }
@@ -59,9 +59,9 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
     final end = (start + 0.5).clamp(0.0, 1.0);
     final fade = CurvedAnimation(
       parent: _staggerCtrl,
-      curve: Interval(start, end, curve: Curves.easeOut),
+      curve: Interval(start, end, curve: WeRoboMotion.enter),
     );
-    final slide = Tween<Offset>(begin: const Offset(0, 0.05), end: Offset.zero)
+    final slide = Tween<Offset>(begin: const Offset(0, 0.08), end: Offset.zero)
         .animate(fade);
     return SlideTransition(
       position: slide,
@@ -125,14 +125,9 @@ class _PortfolioResultScreenState extends State<PortfolioResultScreen>
                         widget.frontierSelection.selectedPointIndex,
                   });
                   Navigator.of(context).pushReplacement(
-                    PageRouteBuilder(
-                      pageBuilder: (_, __, ___) => LoginScreen(
-                        frontierSelection: widget.frontierSelection,
-                      ),
-                      transitionsBuilder: (_, anim, __, child) =>
-                          FadeTransition(opacity: anim, child: child),
-                      transitionDuration: const Duration(milliseconds: 400),
-                    ),
+                    WeRoboMotion.fadeRoute(LoginScreen(
+                      frontierSelection: widget.frontierSelection,
+                    )),
                   );
                 },
                 child: SizedBox(

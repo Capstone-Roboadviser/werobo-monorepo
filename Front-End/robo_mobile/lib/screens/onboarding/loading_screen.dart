@@ -61,7 +61,7 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
     _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _progressController,
-        curve: Curves.easeInOut,
+        curve: WeRoboMotion.enter,
       ),
     );
 
@@ -289,16 +289,9 @@ class _PortfolioLoadingScreenState extends State<PortfolioLoadingScreen>
         return;
       }
       Navigator.of(context).pushReplacement(
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              PortfolioResultScreen(
-            frontierSelection: _frontierSelection!,
-          ),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 400),
-        ),
+        WeRoboMotion.fadeRoute(PortfolioResultScreen(
+          frontierSelection: _frontierSelection!,
+        )),
       );
     });
   }

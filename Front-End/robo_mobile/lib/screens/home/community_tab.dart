@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/pressable.dart';
 import '../../app/theme.dart';
 
 class CommunityTab extends StatelessWidget {
@@ -146,7 +147,7 @@ class _CategoryChip extends StatelessWidget {
   }
 }
 
-class _PostCard extends StatefulWidget {
+class _PostCard extends StatelessWidget {
   final String tag;
   final Color tagColor;
   final String title;
@@ -166,94 +167,74 @@ class _PostCard extends StatefulWidget {
   });
 
   @override
-  State<_PostCard> createState() => _PostCardState();
-}
-
-class _PostCardState extends State<_PostCard> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) => setState(() => _pressed = false),
-      onTapCancel: () => setState(() => _pressed = false),
-      child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 120),
-        curve: Curves.easeOut,
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: tc.card,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Tag + time
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: widget.tagColor.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(widget.tag,
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: widget.tagColor)),
+    return Pressable(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: tc.card,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: tagColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  const Spacer(),
-                  Text(widget.time,
-                      style: WeRoboTypography.caption
-                          .themed(context)),
-                ],
-              ),
-              const SizedBox(height: 10),
-
-              // Title
-              Text(
-                widget.title,
-                style: WeRoboTypography.bodySmall.copyWith(
-                  color: tc.textPrimary,
-                  fontWeight: FontWeight.w500,
-                  height: 1.4,
+                  child: Text(tag,
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: tagColor)),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
+                const Spacer(),
+                Text(time,
+                    style: WeRoboTypography.caption
+                        .themed(context)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w500,
+                height: 1.4,
               ),
-              const SizedBox(height: 10),
-
-              // Author + stats
-              Row(
-                children: [
-                  Text(widget.author,
-                      style: WeRoboTypography.caption.copyWith(
-                          color: tc.textSecondary)),
-                  const Spacer(),
-                  Icon(Icons.favorite_border_rounded,
-                      size: 14, color: tc.textTertiary),
-                  const SizedBox(width: 3),
-                  Text('${widget.likes}',
-                      style: WeRoboTypography.caption
-                          .themed(context)),
-                  const SizedBox(width: 12),
-                  Icon(Icons.chat_bubble_outline_rounded,
-                      size: 14, color: tc.textTertiary),
-                  const SizedBox(width: 3),
-                  Text('${widget.comments}',
-                      style: WeRoboTypography.caption
-                          .themed(context)),
-                ],
-              ),
-            ],
-          ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Text(author,
+                    style: WeRoboTypography.caption.copyWith(
+                        color: tc.textSecondary)),
+                const Spacer(),
+                Icon(Icons.favorite_border_rounded,
+                    size: 14, color: tc.textTertiary),
+                const SizedBox(width: 3),
+                Text('$likes',
+                    style: WeRoboTypography.caption
+                        .themed(context)),
+                const SizedBox(width: 12),
+                Icon(Icons.chat_bubble_outline_rounded,
+                    size: 14, color: tc.textTertiary),
+                const SizedBox(width: 3),
+                Text('$comments',
+                    style: WeRoboTypography.caption
+                        .themed(context)),
+              ],
+            ),
+          ],
         ),
       ),
     );

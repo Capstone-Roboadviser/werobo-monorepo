@@ -45,11 +45,11 @@ class _ComparisonScreenState extends State<ComparisonScreen>
     _currentSelection = widget.frontierSelection;
 
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: WeRoboMotion.medium,
       vsync: this,
     );
     _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
+      CurvedAnimation(parent: _fadeController, curve: WeRoboMotion.enter),
     );
     _fadeController.forward();
   }
@@ -363,7 +363,7 @@ class _ComparisonScreenState extends State<ComparisonScreen>
               // Sector list with fade
               Expanded(
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
+                  duration: WeRoboMotion.medium,
                   child: _SectorList(
                     key: ValueKey(
                         '${displayPortfolio.code}_${_currentSelection?.selectedPointIndex ?? widget.frontierSelection.selectedPointIndex}'),
@@ -384,18 +384,9 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                         'selected_point_index': selection.selectedPointIndex,
                       });
                       Navigator.of(context).push(
-                        PageRouteBuilder(
-                          pageBuilder: (_, __, ___) =>
-                              ConfirmationScreen(
-                            frontierSelection: selection,
-                          ),
-                          transitionsBuilder:
-                              (_, anim, __, child) =>
-                                  FadeTransition(
-                                      opacity: anim, child: child),
-                          transitionDuration:
-                              const Duration(milliseconds: 400),
-                        ),
+                        WeRoboMotion.fadeRoute(ConfirmationScreen(
+                          frontierSelection: selection,
+                        )),
                       );
                     },
                     child: const Text('투자 성향 확정하기'),
