@@ -6,6 +6,7 @@ from mobile_backend.api.routes.auth import _extract_bearer_token
 from mobile_backend.api.schemas.response import (
     ErrorResponse,
     RebalanceInsightAllocationResponse,
+    RebalanceInsightTradeResponse,
     RebalanceInsightResponse,
     RebalanceInsightsListResponse,
 )
@@ -40,7 +41,51 @@ def _current_user_id(authorization: str | None) -> int:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
-def _build_insight_response(insight: dict[str, object]) -> RebalanceInsightResponse:
+def _build_ticker_metadata(account: dict[str, object]) -> dict[str, dict[str, str]]:
+    metadata: dict[str, dict[str, str]] = {}
+    for allocation in list(account.get("stock_allocations") or []):
+        ticker = str(allocation.get("ticker", "")).strip().upper()
+        if not ticker:
+            continue
+        metadata[ticker] = {
+            "ticker_name": str(allocation.get("name", "")).strip(),
+            "asset_code": str(allocation.get("sector_code", "")).strip(),
+            "asset_name": str(allocation.get("sector_name", "")).strip(),
+        }
+    return metadata
+
+
+def _build_trade_details(
+    insight: dict[str, object],
+    *,
+    ticker_metadata: dict[str, dict[str, str]],
+) -> list[RebalanceInsightTradeResponse]:
+    trade_rows: list[RebalanceInsightTradeResponse] = []
+    for ticker, raw_amount in dict(insight.get("trades") or {}).items():
+        normalized_ticker = str(ticker).strip().upper()
+        amount = float(raw_amount)
+        if normalized_ticker == "CASH" or abs(amount) <= 0.0:
+            continue
+        metadata = ticker_metadata.get(normalized_ticker, {})
+        trade_rows.append(
+            RebalanceInsightTradeResponse(
+                ticker=normalized_ticker,
+                ticker_name=metadata.get("ticker_name") or None,
+                asset_code=metadata.get("asset_code") or None,
+                asset_name=metadata.get("asset_name") or None,
+                direction="buy" if amount > 0 else "sell",
+                amount=round(abs(amount), 2),
+            )
+        )
+    trade_rows.sort(key=lambda item: item.amount, reverse=True)
+    return trade_rows
+
+
+def _build_insight_response(
+    insight: dict[str, object],
+    *,
+    ticker_metadata: dict[str, dict[str, str]],
+) -> RebalanceInsightResponse:
     pre_weights = dict(insight.get("pre_weights") or {})
     post_weights = dict(insight.get("post_weights") or {})
     all_codes = list(dict.fromkeys(list(pre_weights.keys()) + list(post_weights.keys())))
@@ -59,19 +104,18 @@ def _build_insight_response(insight: dict[str, object]) -> RebalanceInsightRespo
             )
         )
 
-    trades = dict(insight.get("trades") or {})
-    trade_count = sum(
-        1
-        for ticker, amount in trades.items()
-        if str(ticker).upper() != "CASH" and abs(float(amount)) > 0.0
+    trade_details = _build_trade_details(
+        insight,
+        ticker_metadata=ticker_metadata,
     )
 
     return RebalanceInsightResponse(
         id=int(insight["id"]),
         rebalance_date=str(insight["rebalance_date"]),
         allocations=allocations,
+        trade_details=trade_details,
         trigger=None if insight.get("trigger") is None else str(insight["trigger"]),
-        trade_count=trade_count,
+        trade_count=len(trade_details),
         cash_before=(
             None if insight.get("cash_before") is None else float(insight["cash_before"])
         ),
@@ -172,11 +216,18 @@ def list_insights(
 
         raw_insights = account_service.repository.list_rebalance_insights(int(account["id"]))
         cash_entries = account_service.repository.list_rebalance_cash_entries(int(account["id"]))
+        ticker_metadata = _build_ticker_metadata(account)
         merged_rows = _merge_insight_rows(
             raw_insights=raw_insights,
             cash_entries=cash_entries,
         )
-        insights = [_build_insight_response(row) for row in merged_rows]
+        insights = [
+            _build_insight_response(
+                row,
+                ticker_metadata=ticker_metadata,
+            )
+            for row in merged_rows
+        ]
         unread_count = sum(1 for i in insights if not i.is_read)
         return RebalanceInsightsListResponse(insights=insights, unread_count=unread_count)
     except PortfolioAccountNotFoundError as exc:
@@ -194,8 +245,31 @@ def mark_insight_read(
     insight_id: int,
     authorization: str | None = Header(default=None),
 ) -> RebalanceInsightResponse:
-    _current_user_id(authorization)
+    user_id = _current_user_id(authorization)
+    account = account_service.repository.get_account_by_user_id(user_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="자산 계정을 찾지 못했습니다.")
     result = account_service.repository.mark_insight_read(insight_id)
     if result is None:
         raise HTTPException(status_code=404, detail="인사이트를 찾지 못했거나 이미 읽음 처리되었습니다.")
-    return _build_insight_response(result)
+    cash_entries = account_service.repository.list_rebalance_cash_entries(int(account["id"]))
+    cash_entry_by_date = {
+        str(entry["rebalance_date"]): dict(entry)
+        for entry in cash_entries
+    }
+    rebalance_date = str(result["rebalance_date"])
+    cash_entry = cash_entry_by_date.get(rebalance_date)
+    merged_result = {
+        **result,
+        "trigger": None if cash_entry is None else cash_entry.get("trigger"),
+        "cash_before": None if cash_entry is None else cash_entry.get("cash_before"),
+        "cash_from_sales": None if cash_entry is None else cash_entry.get("cash_from_sales"),
+        "cash_to_buys": None if cash_entry is None else cash_entry.get("cash_to_buys"),
+        "cash_after": None if cash_entry is None else cash_entry.get("cash_after"),
+        "net_cash_change": None if cash_entry is None else cash_entry.get("net_cash_change"),
+        "trades": {} if cash_entry is None else dict(cash_entry.get("trades") or {}),
+    }
+    return _build_insight_response(
+        merged_result,
+        ticker_metadata=_build_ticker_metadata(account),
+    )

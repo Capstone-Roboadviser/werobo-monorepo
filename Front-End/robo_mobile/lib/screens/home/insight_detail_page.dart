@@ -29,6 +29,10 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final insight = widget.insight;
+    final allocationChanges = insight.visibleAllocationChanges;
+    final fallbackTradeDetails = allocationChanges.isEmpty
+        ? insight.visibleTradeDetails
+        : const <RebalanceInsightTrade>[];
 
     return Scaffold(
       backgroundColor: tc.background,
@@ -175,9 +179,23 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
                     const SizedBox(height: 24),
 
                     // Allocation changes list (skip 0% delta)
-                    ...insight.allocations.where((a) => a.hasChanged).map(
-                          (alloc) => _AllocationChangeRow(allocation: alloc),
+                    if (allocationChanges.isNotEmpty)
+                      ...allocationChanges.map(
+                        (alloc) => _AllocationChangeRow(allocation: alloc),
+                      )
+                    else if (fallbackTradeDetails.isNotEmpty) ...[
+                      Text(
+                        '실제 조정 내역',
+                        style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w700,
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...fallbackTradeDetails.map(
+                        (trade) => _TradeDetailRow(trade: trade),
+                      ),
+                    ],
                     const SizedBox(height: 32),
                   ],
                 ),
@@ -290,6 +308,69 @@ class _AllocationChangeRow extends StatelessWidget {
             style: WeRoboTypography.bodySmall.copyWith(
               color: deltaColor,
               fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TradeDetailRow extends StatelessWidget {
+  final RebalanceInsightTrade trade;
+
+  const _TradeDetailRow({required this.trade});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final sideColor = trade.isBuy ? tc.accent : const Color(0xFFE57373);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 12,
+            height: 12,
+            margin: const EdgeInsets.only(top: 3),
+            decoration: BoxDecoration(
+              color: sideColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  trade.displayLabel,
+                  style: WeRoboTypography.bodySmall.copyWith(
+                    color: tc.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (trade.subtitle.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      trade.subtitle,
+                      style: WeRoboTypography.caption.copyWith(
+                        color: tc.textTertiary,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            '${trade.displayDirectionLabel} ${_formatWon(trade.amount)}',
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: sideColor,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],

@@ -670,6 +670,9 @@ def test_insights_route_includes_rebalance_cash_flow(monkeypatch: pytest.MonkeyP
     assert insight.cash_from_sales is not None and insight.cash_from_sales > 0
     assert insight.cash_to_buys is not None and insight.cash_to_buys > 0
     assert insight.trade_count > 0
+    assert len(insight.trade_details) == insight.trade_count
+    assert {item.direction for item in insight.trade_details} == {"buy", "sell"}
+    assert {item.asset_name for item in insight.trade_details} == {"미국 가치주", "금"}
 
 
 def test_insights_route_falls_back_to_cash_ledger_when_legacy_insight_missing(
@@ -730,6 +733,9 @@ def test_insights_route_falls_back_to_cash_ledger_when_legacy_insight_missing(
     insight = response.insights[0]
     assert insight.id < 0
     assert insight.allocations == []
+    assert len(insight.trade_details) == insight.trade_count
+    assert {item.direction for item in insight.trade_details} == {"buy", "sell"}
+    assert {item.asset_name for item in insight.trade_details} == {"미국 가치주", "금"}
     assert insight.is_read is True
     assert insight.cash_after == pytest.approx(
         float(dashboard["summary"]["cash_balance"]),

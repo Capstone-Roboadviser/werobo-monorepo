@@ -286,12 +286,25 @@ class RebalanceInsightAllocationResponse(BaseModel):
     after_pct: float = Field(..., description="리밸런싱 후 비중", examples=[0.200])
 
 
+class RebalanceInsightTradeResponse(BaseModel):
+    ticker: str = Field(..., description="실제 매매된 종목 티커", examples=["QQQ"])
+    ticker_name: str | None = Field(default=None, description="종목명", examples=["Invesco QQQ Trust"])
+    asset_code: str | None = Field(default=None, description="소속 자산군 코드", examples=["us_growth"])
+    asset_name: str | None = Field(default=None, description="소속 자산군 이름", examples=["미국 성장주"])
+    direction: str = Field(..., description="매매 방향", examples=["sell"])
+    amount: float = Field(..., description="매매 금액(절대값)", examples=[5572])
+
+
 class RebalanceInsightResponse(BaseModel):
     id: int = Field(..., description="인사이트 식별자", examples=[1])
     rebalance_date: str = Field(..., description="리밸런싱 발생일", examples=["2026-04-01"])
     allocations: list[RebalanceInsightAllocationResponse] = Field(
         default_factory=list,
         description="자산군별 리밸런싱 전후 비중",
+    )
+    trade_details: list[RebalanceInsightTradeResponse] = Field(
+        default_factory=list,
+        description="실제 매매된 종목 목록",
     )
     trigger: str | None = Field(default=None, description="리밸런싱 트리거", examples=["drift_guard"])
     trade_count: int = Field(default=0, description="실제 매매가 발생한 종목 수", examples=[3])

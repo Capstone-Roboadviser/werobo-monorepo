@@ -401,6 +401,7 @@ class PortfolioState extends ChangeNotifier {
         id: old.id,
         rebalanceDate: old.rebalanceDate,
         allocations: old.allocations,
+        tradeDetails: old.tradeDetails,
         trigger: old.trigger,
         tradeCount: old.tradeCount,
         cashBefore: old.cashBefore,
