@@ -38,7 +38,8 @@
 
 - 프로토타입 자산 계정은 실제 증권 계좌 연동이 아니라 서버 DB에 저장한 입금 이벤트와 종목 비중을 기준으로 계산합니다.
 - 포트폴리오 확정 시 `POST /api/v1/account`로 계정을 생성하면 `portfolio_accounts`, `portfolio_cash_flows`, `portfolio_daily_snapshots`가 채워집니다.
-- `POST /api/v1/account/cash-in`이 호출되면 누적 원금과 보유 수량 기준으로 일별 자산 snapshot을 다시 계산합니다.
+- 자산 snapshot은 분기말 정기 리밸런싱과 일일 10% drift guard를 함께 적용하는 공용 리밸런싱 엔진으로 계산합니다.
+- `POST /api/v1/account/cash-in`이 호출되면 누적 원금과 리밸런싱 정책을 반영해 일별 자산 snapshot을 다시 계산합니다.
 - `managed_universe` 계정은 관리자 가격 refresh cron이 성공할 때마다 snapshot이 자동 재계산됩니다.
 
 ## Enum 값
@@ -568,6 +569,7 @@ Authorization: Bearer token-string
 - 안정형, 균형형, 성장형 대표 포트폴리오와 벤치마크를 같은 기간에서 비교합니다.
 - 학습 구간과 테스트 구간 분할 정보가 함께 반환됩니다.
 - `managed_universe`에서는 관리자 refresh 때 미리 계산해 둔 comparison backtest snapshot을 우선 재사용합니다.
+- 비교선의 리밸런싱 정책은 분기말 정기 리밸런싱 + 일일 10% drift guard 기준으로 계산됩니다.
 - 이 endpoint는 아직 대표 3분류 기준 비교선에 초점을 맞추며, exact selection 1개를 별도 라인으로 추가해 주지는 않습니다.
 
 요청 예시:
@@ -586,7 +588,14 @@ Authorization: Bearer token-string
 - `start_date`
 - `end_date`
 - `split_ratio`
+- `rebalance_policy`
+  - `strategy`
+  - `scheduled_rebalance_frequency`
+  - `force_rebalance_on_schedule`
+  - `drift_check_frequency`
+  - `drift_threshold`
 - `rebalance_dates`
+  - 분기말 정기 리밸런싱과 일일 drift guard 중 실제 조정이 발생한 날짜 목록
 - `lines[]`
 
 `lines[]` 항목:

@@ -488,6 +488,14 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
 
         self.assertEqual(response["lines"][0]["points"][0]["date"], "2025-01-01")
         self.assertEqual(response["lines"][0]["points"][1]["return_pct"], 1.25)
+        self.assertEqual(
+            response["rebalance_policy"]["strategy"],
+            "scheduled_plus_drift_guard",
+        )
+        self.assertEqual(
+            response["rebalance_policy"]["scheduled_rebalance_frequency"],
+            "quarterly",
+        )
 
     def test_get_comparison_backtest_uses_materialized_snapshot_when_available(self) -> None:
         adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
@@ -527,6 +535,10 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
 
         self.assertEqual(response["lines"][0]["key"], "balanced")
         self.assertEqual(response["lines"][0]["points"][1]["return_pct"], 1.25)
+        self.assertEqual(
+            response["rebalance_policy"]["strategy"],
+            "scheduled_plus_drift_guard",
+        )
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ from datetime import date
 
 import logging
 
+from app.engine.rebalance import build_two_stage_rebalance_policy, serialize_rebalance_policy
 from app.services.managed_universe_service import ManagedUniverseService
 from mobile_backend.core.config import PROFILE_LABELS
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
@@ -21,6 +22,9 @@ class EmbeddedPortfolioEngineAdapter:
     """
 
     FRONTIER_SNAPSHOT_SCHEMA_VERSION = 2
+    COMPARISON_BACKTEST_POLICY = serialize_rebalance_policy(
+        build_two_stage_rebalance_policy()
+    )
 
     def __init__(self, managed_universe_service: ManagedUniverseService | None = None) -> None:
         self.managed_universe_service = managed_universe_service or ManagedUniverseService()
@@ -1207,6 +1211,7 @@ class EmbeddedPortfolioEngineAdapter:
             "end_date": response.end_date,
             "split_ratio": response.split_ratio,
             "rebalance_dates": response.rebalance_dates,
+            "rebalance_policy": dict(self.COMPARISON_BACKTEST_POLICY),
             "lines": [
                 {
                     "key": line.key,
@@ -1227,6 +1232,12 @@ class EmbeddedPortfolioEngineAdapter:
         *,
         snapshot_payload: dict[str, object],
     ) -> dict[str, object]:
+        raw_policy = snapshot_payload.get("rebalance_policy")
+        rebalance_policy = (
+            dict(raw_policy)
+            if isinstance(raw_policy, dict)
+            else dict(self.COMPARISON_BACKTEST_POLICY)
+        )
         return {
             "train_start_date": str(snapshot_payload["train_start_date"]),
             "train_end_date": str(snapshot_payload["train_end_date"]),
@@ -1235,6 +1246,7 @@ class EmbeddedPortfolioEngineAdapter:
             "end_date": str(snapshot_payload["end_date"]),
             "split_ratio": float(snapshot_payload["split_ratio"]),
             "rebalance_dates": list(snapshot_payload.get("rebalance_dates", [])),
+            "rebalance_policy": rebalance_policy,
             "lines": [
                 {
                     "key": str(line["key"]),

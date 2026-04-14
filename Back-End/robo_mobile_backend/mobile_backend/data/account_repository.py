@@ -441,6 +441,16 @@ class PortfolioAccountRepository:
                 rows = cursor.fetchall()
         return [self._insight_from_row(row) for row in rows]
 
+    def delete_rebalance_insights(self, account_id: int) -> None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM rebalance_insights WHERE account_id = %s",
+                    (account_id,),
+                )
+            connection.commit()
+
     def mark_insight_read(self, insight_id: int) -> dict[str, object] | None:
         self._ensure_ready()
         with self._connect() as connection:

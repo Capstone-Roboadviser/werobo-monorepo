@@ -89,6 +89,30 @@ class ComparisonLineResponse(BaseModel):
     points: list[ComparisonLinePointResponse]
 
 
+class RebalancePolicyResponse(BaseModel):
+    strategy: str = Field(..., description="리밸런싱 정책 식별자", examples=["scheduled_plus_drift_guard"])
+    scheduled_rebalance_frequency: str | None = Field(
+        default=None,
+        description="정기 리밸런싱 주기",
+        examples=["quarterly"],
+    )
+    force_rebalance_on_schedule: bool = Field(
+        ...,
+        description="정기 점검일에는 drift와 무관하게 리밸런싱을 수행하는지 여부",
+        examples=[True],
+    )
+    drift_check_frequency: str | None = Field(
+        default=None,
+        description="drift guard를 검사하는 빈도",
+        examples=["daily"],
+    )
+    drift_threshold: float | None = Field(
+        default=None,
+        description="drift guard 임계값",
+        examples=[0.10],
+    )
+
+
 class ComparisonBacktestResponse(BaseModel):
     train_start_date: str
     train_end_date: str
@@ -97,6 +121,7 @@ class ComparisonBacktestResponse(BaseModel):
     end_date: str
     split_ratio: float
     rebalance_dates: list[str]
+    rebalance_policy: RebalancePolicyResponse
     lines: list[ComparisonLineResponse]
 
 
@@ -383,6 +408,7 @@ class RebalanceSimulationResponse(BaseModel):
     investment_amount: float
     target_weights: dict[str, float]
     drift_threshold: float = 0.10
+    rebalance_policy: RebalancePolicyResponse
     sector_names: dict[str, str] = {}
     time_series: list[RebalanceTimePointResponse]
     rebalance_events: list[RebalanceEventResponse]

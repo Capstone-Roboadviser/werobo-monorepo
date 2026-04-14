@@ -98,7 +98,7 @@ class SettingsTab extends StatelessWidget {
                         Text('자동 리밸런싱',
                             style: WeRoboTypography.body
                                 .copyWith(color: tc.textPrimary)),
-                        Text('분기별 자동 포트폴리오 조정',
+                        Text('분기 점검 + 10% 편차 조정',
                             style: WeRoboTypography.caption.themed(context)),
                       ],
                     ),

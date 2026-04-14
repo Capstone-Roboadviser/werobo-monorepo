@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from app.engine.rebalance import DRIFT_THRESHOLD_DEFAULT, check_and_rebalance
+from app.engine.rebalance import DRIFT_THRESHOLD_DEFAULT, simulate_two_stage_rebalance
 
 
 @dataclass(frozen=True)
@@ -75,27 +75,21 @@ def build_comparison(
         total_w = sum(w.values())
         w = {t: v / total_w for t, v in w.items()}
 
-        # Run drift-based rebalancing simulation
-        first_prices = prices.iloc[0]
-        holdings = {t: w[t] / first_prices[t] for t in available}
-        cash_balance = 0.0
-        inv_value = 1.0  # normalized to 1.0
-
-        return_points: list[tuple[str, float]] = []
-        for i in range(len(prices)):
-            current_prices = prices.iloc[i]
-            date = dates[i]
-            total_value = sum(holdings[t] * current_prices[t] for t in available) + cash_balance
-            return_pct = (total_value - inv_value) / inv_value * 100
-            return_points.append((date.strftime("%Y-%m-%d"), round(return_pct, 4)))
-
-            if i > 0:
-                price_dict = {t: float(current_prices[t]) for t in available}
-                holdings, cash_balance, trades = check_and_rebalance(
-                    holdings, price_dict, w, cash_balance, DRIFT_THRESHOLD_DEFAULT,
-                )
-                if trades:
-                    rebalance_date_set.add(date.strftime("%Y-%m-%d"))
+        simulation = simulate_two_stage_rebalance(
+            prices[available].copy(),
+            w,
+            1.0,
+            drift_threshold=DRIFT_THRESHOLD_DEFAULT,
+            max_points=None,
+        )
+        rebalance_date_set.update(event.date for event in simulation.rebalance_events)
+        return_points = [
+            (
+                point.date,
+                round((point.total_value - simulation.investment_amount) / simulation.investment_amount * 100, 4),
+            )
+            for point in simulation.time_series
+        ]
 
         color = _PROFILE_COLORS.get(profile_name, "#64748B")
         label = _PROFILE_LABELS.get(profile_name, profile_name)

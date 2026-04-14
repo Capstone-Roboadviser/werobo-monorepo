@@ -253,6 +253,30 @@ class ComparisonLineResponse(BaseModel):
     points: list[ComparisonLinePointResponse] = Field(default_factory=list, description="시계열 포인트")
 
 
+class RebalancePolicyResponse(BaseModel):
+    strategy: str = Field(..., description="리밸런싱 정책 식별자", examples=["scheduled_plus_drift_guard"])
+    scheduled_rebalance_frequency: str | None = Field(
+        default=None,
+        description="정기 리밸런싱 주기",
+        examples=["quarterly"],
+    )
+    force_rebalance_on_schedule: bool = Field(
+        ...,
+        description="정기 점검일에는 drift와 무관하게 리밸런싱을 수행하는지 여부",
+        examples=[True],
+    )
+    drift_check_frequency: str | None = Field(
+        default=None,
+        description="drift guard를 검사하는 빈도",
+        examples=["daily"],
+    )
+    drift_threshold: float | None = Field(
+        default=None,
+        description="drift guard 임계값",
+        examples=[0.10],
+    )
+
+
 class RebalanceInsightAllocationResponse(BaseModel):
     asset_code: str = Field(..., description="자산군 코드", examples=["us_value"])
     asset_name: str = Field(..., description="자산군 이름", examples=["미국 가치주"])
@@ -286,4 +310,5 @@ class ComparisonBacktestResponse(BaseModel):
     end_date: str = Field(..., description="전체 비교 종료일", examples=["2026-03-31"])
     split_ratio: float = Field(..., description="학습/테스트 분할 비율", examples=[0.7])
     rebalance_dates: list[str] = Field(default_factory=list, description="리밸런싱 발생일 목록")
+    rebalance_policy: RebalancePolicyResponse = Field(..., description="비교선 계산에 사용한 리밸런싱 정책")
     lines: list[ComparisonLineResponse] = Field(default_factory=list, description="안정형/균형형/성장형 및 벤치마크 비교 라인")

@@ -1141,6 +1141,36 @@ class MobileComparisonLine {
   }
 }
 
+class MobileRebalancePolicy {
+  final String strategy;
+  final String? scheduledRebalanceFrequency;
+  final bool forceRebalanceOnSchedule;
+  final String? driftCheckFrequency;
+  final double? driftThreshold;
+
+  const MobileRebalancePolicy({
+    required this.strategy,
+    required this.scheduledRebalanceFrequency,
+    required this.forceRebalanceOnSchedule,
+    required this.driftCheckFrequency,
+    required this.driftThreshold,
+  });
+
+  factory MobileRebalancePolicy.fromJson(Map<String, dynamic> json) {
+    return MobileRebalancePolicy(
+      strategy: json['strategy']?.toString() ?? '',
+      scheduledRebalanceFrequency:
+          json['scheduled_rebalance_frequency']?.toString(),
+      forceRebalanceOnSchedule:
+          (json['force_rebalance_on_schedule'] as bool?) ?? false,
+      driftCheckFrequency: json['drift_check_frequency']?.toString(),
+      driftThreshold: json['drift_threshold'] == null
+          ? null
+          : _asDouble(json['drift_threshold']),
+    );
+  }
+}
+
 class MobileComparisonBacktestResponse {
   final DateTime trainStartDate;
   final DateTime trainEndDate;
@@ -1149,6 +1179,7 @@ class MobileComparisonBacktestResponse {
   final DateTime endDate;
   final double splitRatio;
   final List<DateTime> rebalanceDates;
+  final MobileRebalancePolicy? rebalancePolicy;
   final List<MobileComparisonLine> lines;
 
   const MobileComparisonBacktestResponse({
@@ -1159,10 +1190,13 @@ class MobileComparisonBacktestResponse {
     required this.endDate,
     required this.splitRatio,
     required this.rebalanceDates,
+    required this.rebalancePolicy,
     required this.lines,
   });
 
   factory MobileComparisonBacktestResponse.fromJson(Map<String, dynamic> json) {
+    final rebalancePolicyJson =
+        json['rebalance_policy'] as Map<String, dynamic>?;
     return MobileComparisonBacktestResponse(
       trainStartDate: _parseDate(json['train_start_date']),
       trainEndDate: _parseDate(json['train_end_date']),
@@ -1173,6 +1207,9 @@ class MobileComparisonBacktestResponse {
       rebalanceDates: (json['rebalance_dates'] as List<dynamic>? ?? const [])
           .map(_parseDate)
           .toList(),
+      rebalancePolicy: rebalancePolicyJson == null
+          ? null
+          : MobileRebalancePolicy.fromJson(rebalancePolicyJson),
       lines: (json['lines'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(MobileComparisonLine.fromJson)
@@ -1328,6 +1365,7 @@ class MobileRebalanceSimulationResponse {
   final String endDate;
   final double investmentAmount;
   final Map<String, double> targetWeights;
+  final MobileRebalancePolicy? rebalancePolicy;
   final Map<String, String> sectorNames;
   final List<MobileRebalanceTimePoint> timeSeries;
   final List<MobileRebalanceEvent> rebalanceEvents;
@@ -1341,6 +1379,7 @@ class MobileRebalanceSimulationResponse {
     required this.endDate,
     required this.investmentAmount,
     required this.targetWeights,
+    required this.rebalancePolicy,
     required this.sectorNames,
     required this.timeSeries,
     required this.rebalanceEvents,
@@ -1354,11 +1393,16 @@ class MobileRebalanceSimulationResponse {
       Map<String, dynamic> json) {
     final tw = json['target_weights'] as Map<String, dynamic>? ?? {};
     final sn = json['sector_names'] as Map<String, dynamic>? ?? {};
+    final rebalancePolicyJson =
+        json['rebalance_policy'] as Map<String, dynamic>?;
     return MobileRebalanceSimulationResponse(
       startDate: json['start_date']?.toString() ?? '',
       endDate: json['end_date']?.toString() ?? '',
       investmentAmount: _asDouble(json['investment_amount']),
       targetWeights: tw.map((k, v) => MapEntry(k, _asDouble(v))),
+      rebalancePolicy: rebalancePolicyJson == null
+          ? null
+          : MobileRebalancePolicy.fromJson(rebalancePolicyJson),
       sectorNames: sn.map((k, v) => MapEntry(k, v?.toString() ?? '')),
       timeSeries: (json['time_series'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
