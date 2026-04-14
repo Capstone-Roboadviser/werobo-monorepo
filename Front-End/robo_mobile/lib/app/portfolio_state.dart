@@ -41,10 +41,12 @@ class PortfolioState extends ChangeNotifier {
       _accountDashboard?.history ?? const [];
   List<MobileAccountActivity> get accountActivities =>
       _accountDashboard?.recentActivity ?? const [];
-  List<RebalanceInsight> get insights => _insights;
+  List<RebalanceInsight> get insights =>
+      _insights.where((i) => i.hasRealChanges).toList();
   List<RebalanceInsight> get unreadInsights =>
-      _insights.where((i) => !i.isRead).toList();
-  int get unreadInsightCount => _insights.where((i) => !i.isRead).length;
+      _insights.where((i) => !i.isRead && i.hasRealChanges).toList();
+  int get unreadInsightCount =>
+      _insights.where((i) => !i.isRead && i.hasRealChanges).length;
   String? get digestSeenDate => _digestSeenDate;
   bool get hasSeenCurrentDigest => _digestSeenDate != null;
 

@@ -308,6 +308,7 @@ class PortfolioAccountService:
     ) -> None:
         """Replace stored rebalance insights from a shared rebalance simulation."""
         from mobile_backend.services.insight_text_service import (
+            NO_CHANGE_EXPLANATION,
             generate_insight_explanation,
         )
 
@@ -346,6 +347,9 @@ class PortfolioAccountService:
                 post_weights=sector_post,
                 sector_names=sector_code_to_name,
             )
+
+            if explanation == NO_CHANGE_EXPLANATION:
+                continue
 
             self.repository.upsert_rebalance_insight(
                 account_id=account_id,

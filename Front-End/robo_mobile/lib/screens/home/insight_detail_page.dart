@@ -130,16 +130,15 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Explanation text
-                    if (insight.explanationText != null &&
-                        insight.explanationText!.isNotEmpty)
-                      Text(
-                        insight.explanationText!,
-                        style: WeRoboTypography.body.copyWith(
-                          color: tc.textSecondary,
-                          height: 1.6,
-                        ),
+                    // Explanation text (generated from allocation
+                    // data so it always matches visible rows)
+                    Text(
+                      insight.generatedExplanation,
+                      style: WeRoboTypography.body.copyWith(
+                        color: tc.textSecondary,
+                        height: 1.6,
                       ),
+                    ),
                     const SizedBox(height: 24),
 
                     // Allocation changes list (skip 0% delta)
@@ -169,10 +168,10 @@ class _AllocationChangeRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final delta = allocation.delta;
+    final delta = allocation.displayDelta;
     final deltaText = delta >= 0
-        ? '(+${(delta * 100).toStringAsFixed(1)}%)'
-        : '(${(delta * 100).toStringAsFixed(1)}%)';
+        ? '(+${delta.toStringAsFixed(1)}%)'
+        : '(${delta.toStringAsFixed(1)}%)';
     final deltaColor = delta > 0
         ? tc.accent
         : const Color(0xFFE57373);
@@ -199,7 +198,7 @@ class _AllocationChangeRow extends StatelessWidget {
             ),
           ),
           Text(
-            '${(allocation.beforePct * 100).toStringAsFixed(1)}%',
+            '${allocation.beforeDisplay.toStringAsFixed(1)}%',
             style: WeRoboTypography.bodySmall.copyWith(
               color: tc.textTertiary,
             ),
@@ -213,7 +212,7 @@ class _AllocationChangeRow extends StatelessWidget {
             ),
           ),
           Text(
-            '${(allocation.afterPct * 100).toStringAsFixed(1)}%',
+            '${allocation.afterDisplay.toStringAsFixed(1)}%',
             style: WeRoboTypography.bodySmall.copyWith(
               color: deltaColor,
               fontWeight: FontWeight.w600,

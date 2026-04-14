@@ -1079,16 +1079,20 @@ class _InsightBanner extends StatelessWidget {
     final allocs = latestInsight.allocations;
     if (allocs.isEmpty) return '포트폴리오 비중을 조정했어요.';
 
-    // Find the allocation with the largest absolute delta
+    // Find the allocation with the largest absolute display delta
     RebalanceInsightAllocation biggest = allocs.first;
     for (final a in allocs) {
-      if (a.delta.abs() > biggest.delta.abs()) biggest = a;
+      if (a.displayDelta.abs() > biggest.displayDelta.abs()) {
+        biggest = a;
+      }
     }
 
-    final pct = (biggest.delta.abs() * 100).round();
-    if (pct == 0) return '포트폴리오 비중을 조정했어요.';
+    if (!biggest.hasChanged) {
+      return '포트폴리오 비중을 조정했어요.';
+    }
 
-    if (biggest.delta > 0) {
+    final pct = biggest.displayDelta.abs().toStringAsFixed(1);
+    if (biggest.displayDelta > 0) {
       return '${biggest.displayName} 비중을 $pct% 늘렸어요.';
     }
     return '${biggest.displayName} 비중을 $pct% 줄였어요.';
