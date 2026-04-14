@@ -1285,39 +1285,12 @@ class _NotificationIconButton extends StatelessWidget {
               FadeTransition(opacity: anim, child: child),
         ),
       ),
-      child: SizedBox(
-        width: 36,
-        height: 36,
-        child: Stack(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: tc.card,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                Icons.notifications_none_rounded,
-                size: 20,
-                color: tc.textSecondary,
-              ),
-            ),
-            if (hasUnread)
-              Positioned(
-                right: 2,
-                top: 2,
-                child: Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: WeRoboColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ),
-          ],
-        ),
+      child: Icon(
+        hasUnread
+            ? Icons.notifications_rounded
+            : Icons.notifications_none_rounded,
+        size: 24,
+        color: tc.textSecondary,
       ),
     );
   }
