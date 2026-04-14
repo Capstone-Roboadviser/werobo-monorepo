@@ -1822,7 +1822,7 @@ class _DigestBanner extends StatelessWidget {
       child: Pressable(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Row(
             children: [
               Container(
