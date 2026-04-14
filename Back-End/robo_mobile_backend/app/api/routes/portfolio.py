@@ -500,7 +500,8 @@ def comparison_backtest(payload: ComparisonBacktestRequest) -> ComparisonBacktes
     try:
         result = portfolio_analytics_service.build_comparison_backtest(
             data_source=payload.data_source,
-            start_date=payload.start_date,
+            stock_weights=payload.stock_weights,
+            portfolio_code=payload.portfolio_code,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

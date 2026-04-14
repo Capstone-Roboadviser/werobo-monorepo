@@ -1242,9 +1242,33 @@ class EmbeddedPortfolioEngineAdapter:
         self,
         *,
         data_source: SimulationDataSource,
-        start_date: str | None = None,
+        stock_weights: dict[str, float] | None = None,
+        portfolio_code: str | None = None,
     ) -> dict[str, object]:
-        if data_source == SimulationDataSource.MANAGED_UNIVERSE and start_date is None:
+        if stock_weights:
+            normalized_weights = {
+                str(ticker).upper(): float(weight)
+                for ticker, weight in stock_weights.items()
+                if float(weight) > 0
+            }
+            if not normalized_weights:
+                raise ValueError("stock_weights에 0보다 큰 비중이 하나 이상 있어야 합니다.")
+            if data_source == SimulationDataSource.MANAGED_UNIVERSE:
+                self._log_managed_universe_snapshot_lookup(
+                    operation="comparison_backtest",
+                    investment_horizon=None,
+                    status="bypass",
+                    lookup={
+                        "reason": "selected_stock_weights",
+                    },
+                )
+            return self.build_materialized_comparison_backtest(
+                data_source=data_source,
+                stock_weights=normalized_weights,
+                portfolio_code=portfolio_code,
+            )
+
+        if data_source == SimulationDataSource.MANAGED_UNIVERSE:
             snapshot_payload, snapshot_lookup = self._resolve_managed_universe_comparison_backtest_snapshot_lookup(
                 data_source=data_source,
             )
@@ -1269,30 +1293,21 @@ class EmbeddedPortfolioEngineAdapter:
                 lookup=snapshot_lookup,
                 data_source=data_source,
             )
-        elif data_source == SimulationDataSource.MANAGED_UNIVERSE and start_date is not None:
-            self._log_managed_universe_snapshot_lookup(
-                operation="comparison_backtest",
-                investment_horizon=None,
-                status="bypass",
-                lookup={
-                    "reason": "requested_start_date",
-                    "as_of_date": start_date,
-                },
-            )
         return self.build_materialized_comparison_backtest(
             data_source=data_source,
-            start_date=start_date,
         )
 
     def build_materialized_comparison_backtest(
         self,
         *,
         data_source: SimulationDataSource,
-        start_date: str | None = None,
+        stock_weights: dict[str, float] | None = None,
+        portfolio_code: str | None = None,
     ) -> dict[str, object]:
         response = self.portfolio_analytics_service.build_comparison_backtest(
             data_source=self._to_core_data_source(data_source),
-            start_date=start_date,
+            stock_weights=stock_weights,
+            portfolio_code=portfolio_code,
         )
         return {
             "train_start_date": response.train_start_date,

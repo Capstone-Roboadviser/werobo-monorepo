@@ -8,27 +8,19 @@ import '../../../services/mock_chart_data.dart';
 
 // ── Main chart widget ──
 
-typedef ComparisonRangeLoader = Future<List<ChartLine>> Function(
-  DateTime? startDate,
-);
-
 class PortfolioCharts extends StatefulWidget {
   final InvestmentType type;
   final List<ChartPoint>? volatilityPoints;
-  final List<ChartPoint>? benchmarkVolatilityPoints;
   final List<ChartLine>? comparisonLines;
   final List<DateTime>? rebalanceDates;
-  final ComparisonRangeLoader? onComparisonRangeRequested;
   final bool useFallbackMock;
 
   const PortfolioCharts({
     super.key,
     required this.type,
     this.volatilityPoints,
-    this.benchmarkVolatilityPoints,
     this.comparisonLines,
     this.rebalanceDates,
-    this.onComparisonRangeRequested,
     this.useFallbackMock = true,
   });
 
@@ -78,7 +70,6 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
                     key: const ValueKey('volret'),
                     type: widget.type,
                     volatilityPoints: widget.volatilityPoints,
-                    benchmarkVolatilityPoints: widget.benchmarkVolatilityPoints,
                     useFallbackMock: widget.useFallbackMock,
                   )
                 : _ComparisonView(
@@ -86,8 +77,6 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
                     type: widget.type,
                     comparisonLines: widget.comparisonLines,
                     rebalanceDates: widget.rebalanceDates,
-                    onComparisonRangeRequested:
-                        widget.onComparisonRangeRequested,
                     useFallbackMock: widget.useFallbackMock,
                   ),
           ),
@@ -136,14 +125,12 @@ class _ToggleTab extends StatelessWidget {
 class _VolReturnView extends StatefulWidget {
   final InvestmentType type;
   final List<ChartPoint>? volatilityPoints;
-  final List<ChartPoint>? benchmarkVolatilityPoints;
   final bool useFallbackMock;
 
   const _VolReturnView({
     super.key,
     required this.type,
     this.volatilityPoints,
-    this.benchmarkVolatilityPoints,
     required this.useFallbackMock,
   });
 
@@ -188,12 +175,6 @@ class _VolReturnViewState extends State<_VolReturnView>
             ? MockChartData.volatilityHistory(widget.type)
             : const <ChartPoint>[]);
     return _filterByRange(all);
-  }
-
-  List<ChartPoint>? get _benchmarkPoints {
-    final raw = widget.benchmarkVolatilityPoints;
-    if (raw == null || raw.isEmpty) return null;
-    return _filterByRange(raw);
   }
 
   double _expectedVolatility() {
@@ -274,7 +255,6 @@ class _VolReturnViewState extends State<_VolReturnView>
                               ),
                               painter: _AreaChartPainter(
                                 points: points,
-                                benchmarkPoints: _benchmarkPoints,
                                 progress: _drawCtrl.value,
                                 color: WeRoboColors.primary,
                                 touchIndex: _touchIndex,
@@ -307,7 +287,6 @@ class _ComparisonView extends StatefulWidget {
   final InvestmentType type;
   final List<ChartLine>? comparisonLines;
   final List<DateTime>? rebalanceDates;
-  final ComparisonRangeLoader? onComparisonRangeRequested;
   final bool useFallbackMock;
 
   const _ComparisonView({
@@ -315,7 +294,6 @@ class _ComparisonView extends StatefulWidget {
     required this.type,
     this.comparisonLines,
     this.rebalanceDates,
-    this.onComparisonRangeRequested,
     required this.useFallbackMock,
   });
 
@@ -330,9 +308,6 @@ class _ComparisonViewState extends State<_ComparisonView>
   int _range = 4; // index into _ranges
   bool _show7AssetAvg = true;
   bool _showBondTrend = true;
-  bool _isLoadingRange = false;
-  String? _rangeError;
-  final Map<int, List<ChartLine>> _rangeLineCache = <int, List<ChartLine>>{};
 
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
   static const _rangeDays = [7, 90, 365, 1825, 99999];
@@ -344,72 +319,12 @@ class _ComparisonViewState extends State<_ComparisonView>
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     )..forward();
-    _seedFullRangeCache();
   }
 
   @override
   void dispose() {
     _drawCtrl.dispose();
     super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant _ComparisonView oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.comparisonLines != oldWidget.comparisonLines) {
-      _seedFullRangeCache();
-    }
-  }
-
-  bool get _usesRemoteRanges =>
-      widget.onComparisonRangeRequested != null && !widget.useFallbackMock;
-
-  void _seedFullRangeCache() {
-    final fullLines = widget.comparisonLines;
-    if (fullLines == null || fullLines.isEmpty) {
-      return;
-    }
-    _rangeLineCache[4] = fullLines;
-  }
-
-  DateTime? _startDateForRange(int rangeIndex) {
-    if (rangeIndex >= _rangeDays.length - 1) {
-      return null;
-    }
-    return DateTime.now().subtract(Duration(days: _rangeDays[rangeIndex]));
-  }
-
-  Future<void> _selectRange(int nextRange) async {
-    setState(() {
-      _range = nextRange;
-      _rangeError = null;
-    });
-    _drawCtrl.forward(from: 0);
-
-    if (!_usesRemoteRanges || _rangeLineCache.containsKey(nextRange)) {
-      return;
-    }
-
-    setState(() => _isLoadingRange = true);
-    try {
-      final lines = await widget
-          .onComparisonRangeRequested!(_startDateForRange(nextRange));
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _rangeLineCache[nextRange] = lines;
-        _isLoadingRange = false;
-      });
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _isLoadingRange = false;
-        _rangeError = '선택 기간 비교 데이터를 불러오지 못했어요.';
-      });
-    }
   }
 
   static List<ChartLine> _allMockComparisonLines() {
@@ -535,19 +450,12 @@ class _ComparisonViewState extends State<_ComparisonView>
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final allLines = _usesRemoteRanges
-        ? (_rangeLineCache[_range] ??
-            (_range == 4
-                ? (widget.comparisonLines ?? const <ChartLine>[])
-                : const <ChartLine>[]))
-        : (widget.comparisonLines ??
-            (widget.useFallbackMock
-                ? _allMockComparisonLines()
-                : const <ChartLine>[]));
+    final allLines = widget.comparisonLines ??
+        (widget.useFallbackMock
+            ? _allMockComparisonLines()
+            : const <ChartLine>[]);
     final typedLines = allLines.isEmpty ? allLines : _filterByType(allLines);
-    final lines = _usesRemoteRanges
-        ? typedLines
-        : (typedLines.isEmpty ? typedLines : _filterByRange(typedLines));
+    final lines = typedLines.isEmpty ? typedLines : _filterByRange(typedLines);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -587,7 +495,10 @@ class _ComparisonViewState extends State<_ComparisonView>
               return Padding(
                 padding: const EdgeInsets.only(left: 4),
                 child: GestureDetector(
-                  onTap: () => _selectRange(i),
+                  onTap: () {
+                    setState(() => _range = i);
+                    _drawCtrl.forward(from: 0);
+                  },
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -608,69 +519,54 @@ class _ComparisonViewState extends State<_ComparisonView>
               );
             }),
           ),
-          if (_rangeError != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _rangeError!,
-              style: WeRoboTypography.caption.copyWith(
-                color: tc.textTertiary,
-              ),
-            ),
-          ],
           const SizedBox(height: 8),
           // Chart
           Expanded(
-            child: _isLoadingRange && lines.isEmpty
-                ? const Center(
-                    child: CircularProgressIndicator(
-                      color: WeRoboColors.primary,
-                    ),
+            child: lines.isEmpty
+                ? const _EmptyChartState(
+                    message: '비교 백테스트 데이터가 아직 없습니다.',
                   )
-                : lines.isEmpty
-                    ? const _EmptyChartState(
-                        message: '비교 백테스트 데이터가 아직 없습니다.',
-                      )
-                    : LayoutBuilder(
-                        builder: (context, constraints) {
-                          return GestureDetector(
-                            onPanUpdate: (d) {
-                              if (lines.isEmpty || lines[0].points.isEmpty) {
-                                return;
-                              }
-                              final x = d.localPosition.dx - 28;
-                              final chartW = constraints.maxWidth - 28 - 12;
-                              final count = lines[0].points.length;
-                              final idx = ((x / chartW) * (count - 1))
-                                  .round()
-                                  .clamp(0, count - 1);
-                              setState(() => _touchIndex = idx);
-                            },
-                            onPanEnd: (_) => setState(() => _touchIndex = null),
-                            onTapUp: (_) => setState(() => _touchIndex = null),
-                            child: AnimatedBuilder(
-                              animation: _drawCtrl,
-                              builder: (context, _) {
-                                return CustomPaint(
-                                  size: Size(
-                                    constraints.maxWidth,
-                                    constraints.maxHeight,
-                                  ),
-                                  painter: _MultiLineChartPainter(
-                                    lines: lines,
-                                    progress: _drawCtrl.value,
-                                    touchIndex: _touchIndex,
-                                    gridColor: tc.border,
-                                    textTertiaryColor: tc.textTertiary,
-                                    textPrimaryColor: tc.textPrimary,
-                                    tooltipBackground: tc.surface,
-                                    tooltipBorder: tc.border,
-                                  ),
-                                );
-                              },
-                            ),
-                          );
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      return GestureDetector(
+                        onPanUpdate: (d) {
+                          if (lines.isEmpty || lines[0].points.isEmpty) {
+                            return;
+                          }
+                          final x = d.localPosition.dx - 28;
+                          final chartW = constraints.maxWidth - 28 - 12;
+                          final count = lines[0].points.length;
+                          final idx = ((x / chartW) * (count - 1))
+                              .round()
+                              .clamp(0, count - 1);
+                          setState(() => _touchIndex = idx);
                         },
-                      ),
+                        onPanEnd: (_) => setState(() => _touchIndex = null),
+                        onTapUp: (_) => setState(() => _touchIndex = null),
+                        child: AnimatedBuilder(
+                          animation: _drawCtrl,
+                          builder: (context, _) {
+                            return CustomPaint(
+                              size: Size(
+                                constraints.maxWidth,
+                                constraints.maxHeight,
+                              ),
+                              painter: _MultiLineChartPainter(
+                                lines: lines,
+                                progress: _drawCtrl.value,
+                                touchIndex: _touchIndex,
+                                gridColor: tc.border,
+                                textTertiaryColor: tc.textTertiary,
+                                textPrimaryColor: tc.textPrimary,
+                                tooltipBackground: tc.surface,
+                                tooltipBorder: tc.border,
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
           ),
           const SizedBox(height: 8),
           // Legend
@@ -731,7 +627,6 @@ class _EmptyChartState extends StatelessWidget {
 
 class _AreaChartPainter extends CustomPainter {
   final List<ChartPoint> points;
-  final List<ChartPoint>? benchmarkPoints;
   final double progress;
   final Color color;
   final int? touchIndex;
@@ -746,7 +641,6 @@ class _AreaChartPainter extends CustomPainter {
 
   _AreaChartPainter({
     required this.points,
-    this.benchmarkPoints,
     required this.progress,
     required this.color,
     this.touchIndex,
@@ -776,14 +670,6 @@ class _AreaChartPainter extends CustomPainter {
       if (baselineValue! < minY) minY = baselineValue!;
       if (baselineValue! > maxY) maxY = baselineValue!;
     }
-    // Include benchmark values in Y-axis scaling
-    final bp = benchmarkPoints;
-    if (bp != null && bp.isNotEmpty) {
-      for (final p in bp) {
-        if (p.value < minY) minY = p.value;
-        if (p.value > maxY) maxY = p.value;
-      }
-    }
     final rangeY = (maxY - minY).clamp(0.001, double.infinity);
 
     // Grid
@@ -809,33 +695,6 @@ class _AreaChartPainter extends CustomPainter {
       );
       _drawText(
           canvas, baselineLabel ?? '', Offset(padL + 4, y - 14), labelStyle);
-    }
-
-    // Benchmark dashed line (7-asset average volatility)
-    if (bp != null && bp.length >= 2) {
-      final benchPts = _interpolatedPathPoints(
-        n: bp.length,
-        progress: progress,
-        xAt: (i) => padL + w * i / (bp.length - 1),
-        yAt: (i) => h - ((bp[i].value - minY) / rangeY) * h,
-      );
-      if (benchPts != null) {
-        final benchPath = Path();
-        for (int i = 0; i < benchPts.length; i++) {
-          final pt = benchPts[i];
-          if (i == 0) {
-            benchPath.moveTo(pt.dx, pt.dy);
-          } else {
-            benchPath.lineTo(pt.dx, pt.dy);
-          }
-        }
-        final benchPaint = Paint()
-          ..color = const Color(0xFF999999).withValues(alpha: 0.35)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..strokeCap = StrokeCap.round;
-        _drawDashedPath(canvas, benchPath, benchPaint);
-      }
     }
 
     // Build path with smooth interpolation
