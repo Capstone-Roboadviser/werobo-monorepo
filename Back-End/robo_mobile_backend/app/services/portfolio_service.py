@@ -60,6 +60,7 @@ from app.engine.returns import (
 )
 from app.services.explanation_service import ExplanationService
 from app.services.dividend_yield_service import DividendYieldService
+from app.services.fixed_five_percent_role_return_service import FixedFivePercentRoleReturnService
 from app.services.managed_universe_service import ManagedUniverseService
 from app.services.mapping_service import ProfileMappingService
 from app.services.portfolio_component_service import ComponentCandidateMapResult, PortfolioComponentService
@@ -111,6 +112,7 @@ class PortfolioSimulationService:
         self.managed_universe_service = ManagedUniverseService()
         self.component_service = PortfolioComponentService()
         self.dividend_yield_service = DividendYieldService()
+        self.fixed_five_percent_role_return_service = FixedFivePercentRoleReturnService()
         self.covariance_model = ShrinkageCovarianceModel()
         self.constraint_engine = ConstraintEngine()
         self.optimizer = EfficientFrontierOptimizer()
@@ -1363,8 +1365,20 @@ class PortfolioSimulationService:
                 ticker_return_mode[ticker.upper()] = candidate.return_mode
 
         expected_returns: dict[str, float] = {}
+        fixed_total_tickers: set[str] = set()
+        for candidate in selected_candidates.values():
+            if candidate.return_mode != self.fixed_five_percent_role_return_service.RETURN_MODE:
+                continue
+            fixed_total_tickers.update(
+                ticker.upper() for ticker in candidate.member_tickers
+            )
         for ticker in stock_codes:
             return_mode = ticker_return_mode.get(ticker.upper(), "black_litterman")
+            if return_mode == self.fixed_five_percent_role_return_service.RETURN_MODE:
+                expected_returns[ticker] = (
+                    self.fixed_five_percent_role_return_service.conservative_expected_return()
+                )
+                continue
             if return_mode in {"historical_mean", "historical_mean_plus_dividend_yield"}:
                 if historical_expected_returns is None:
                     raise RuntimeError("historical_mean 기대수익률 계산 결과를 찾을 수 없습니다.")
@@ -1381,10 +1395,11 @@ class PortfolioSimulationService:
             stock_codes,
             selected_candidates,
         )
-        return (
+        return self.fixed_five_percent_role_return_service.assign_expected_returns(
             pd.Series(expected_returns, dtype=float)
             .add(dividend_overlay.reindex(stock_codes).fillna(0.0), fill_value=0.0)
-            .astype(float)
+            .astype(float),
+            target_codes=fixed_total_tickers,
         )
 
     def _build_stock_dividend_return_overlay(
@@ -1435,8 +1450,15 @@ class PortfolioSimulationService:
             )
 
         resolved_expected_returns: dict[str, float] = {}
+        fixed_total_asset_codes: set[str] = set()
         for asset_code in asset_codes:
             candidate = selected_candidates[asset_code]
+            if candidate.return_mode == self.fixed_five_percent_role_return_service.RETURN_MODE:
+                fixed_total_asset_codes.add(asset_code)
+                resolved_expected_returns[asset_code] = (
+                    self.fixed_five_percent_role_return_service.conservative_expected_return()
+                )
+                continue
             if candidate.return_mode in {"historical_mean", "historical_mean_plus_dividend_yield"}:
                 if historical_expected_returns is None:
                     raise RuntimeError("historical_mean 기대수익률 계산 결과를 찾을 수 없습니다.")
@@ -1456,7 +1478,13 @@ class PortfolioSimulationService:
             selected_candidates,
             stock_returns=stock_returns,
         )
-        return expected_returns.add(dividend_overlay.reindex(asset_codes).fillna(0.0), fill_value=0.0).astype(float)
+        return self.fixed_five_percent_role_return_service.assign_expected_returns(
+            expected_returns.add(
+                dividend_overlay.reindex(asset_codes).fillna(0.0),
+                fill_value=0.0,
+            ).astype(float),
+            target_codes=fixed_total_asset_codes,
+        )
 
     def _build_component_dividend_return_overlay(
         self,

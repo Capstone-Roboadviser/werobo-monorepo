@@ -93,5 +93,20 @@ void main() {
       expect(raw, isNotNull);
       expect(raw, contains('"provider":"password"'));
     });
+
+    test('restorePersistedState ignores stale cached frontier preview version',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'werobo.portfolio_bootstrap': '''
+{"selected_type":"balanced","recommendation":{"resolved_profile":{"code":"balanced","label":"균형형","propensity_score":45,"target_volatility":0.12,"investment_horizon":"medium"},"recommended_portfolio_code":"balanced","data_source":"managed_universe","portfolios":[{"code":"balanced","label":"균형형","portfolio_id":"p1","target_volatility":0.12,"expected_return":0.08,"volatility":0.11,"sharpe_ratio":0.7,"sector_allocations":[],"stock_allocations":[]}]},"frontier_selection":null,"frontier_preview_version":1,"frontier_preview":{"resolved_profile":{"code":"balanced","label":"균형형","propensity_score":45,"target_volatility":0.12,"investment_horizon":"medium"},"recommended_portfolio_code":"balanced","data_source":"managed_universe","total_point_count":2,"min_volatility":0.05,"max_volatility":0.10,"points":[{"index":0,"volatility":0.05,"expected_return":0.04,"is_recommended":true}]}}
+''',
+      });
+      state = PortfolioState();
+
+      await state.restorePersistedState();
+
+      expect(state.recommendation?.recommendedPortfolioCode, 'balanced');
+      expect(state.frontierPreview, isNull);
+    });
   });
 }

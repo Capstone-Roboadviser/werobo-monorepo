@@ -14,8 +14,8 @@ class PortfolioState extends ChangeNotifier {
   static const String _authSessionStorageKey = 'werobo.auth_session';
   static const String _portfolioBootstrapStorageKey =
       'werobo.portfolio_bootstrap';
-  static const String _digestSeenDateKey =
-      'werobo.digest_seen_date';
+  static const int _frontierPreviewStorageVersion = 2;
+  static const String _digestSeenDateKey = 'werobo.digest_seen_date';
 
   InvestmentType _type = InvestmentType.balanced;
   MobileRecommendationResponse? _recommendation;
@@ -43,8 +43,7 @@ class PortfolioState extends ChangeNotifier {
   List<RebalanceInsight> get insights => _insights;
   List<RebalanceInsight> get unreadInsights =>
       _insights.where((i) => !i.isRead).toList();
-  int get unreadInsightCount =>
-      _insights.where((i) => !i.isRead).length;
+  int get unreadInsightCount => _insights.where((i) => !i.isRead).length;
   String? get digestSeenDate => _digestSeenDate;
   bool get hasSeenCurrentDigest => _digestSeenDate != null;
 
@@ -469,8 +468,14 @@ class PortfolioState extends ChangeNotifier {
           frontierSelectionJson,
         );
       }
+      final previewVersion = switch (decoded['frontier_preview_version']) {
+        int value => value,
+        num value => value.toInt(),
+        _ => 1,
+      };
       final frontierPreviewJson = decoded['frontier_preview'];
-      if (frontierPreviewJson is Map<String, dynamic>) {
+      if (previewVersion == _frontierPreviewStorageVersion &&
+          frontierPreviewJson is Map<String, dynamic>) {
         _frontierPreview = MobileFrontierPreviewResponse.fromJson(
           frontierPreviewJson,
         );
@@ -489,6 +494,7 @@ class PortfolioState extends ChangeNotifier {
       'selected_type': _type.riskCode,
       'recommendation': _recommendation?.toJson(),
       'frontier_selection': _frontierSelection?.toJson(),
+      'frontier_preview_version': _frontierPreviewStorageVersion,
       'frontier_preview': _frontierPreview?.toJson(),
     };
     await prefs.setString(

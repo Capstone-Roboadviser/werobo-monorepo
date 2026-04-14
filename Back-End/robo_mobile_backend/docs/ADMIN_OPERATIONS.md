@@ -64,6 +64,7 @@
 - `fixed_five_percent_equal_weight`
   - 후보 종목 전체를 사용하되 해당 자산군 총합을 항상 5%로 고정
   - 자산군 내부 종목은 동일비중으로 분할
+  - 기대수익률은 과거 실적을 직접 외삽하지 않고 일반 주식 대비 보수적으로 캡된 스프레드를 사용
 
 호환 규칙:
 
@@ -119,7 +120,7 @@
     "role_key": "equal_weight_dividend_basket"
   },
   {
-    "asset_code": "infra_bond",
+    "asset_code": "new_growth",
     "role_key": "fixed_five_percent_equal_weight"
   }
 ]

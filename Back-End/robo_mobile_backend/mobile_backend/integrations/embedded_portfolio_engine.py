@@ -21,7 +21,7 @@ class EmbeddedPortfolioEngineAdapter:
     mobile-focused response contracts.
     """
 
-    FRONTIER_SNAPSHOT_SCHEMA_VERSION = 2
+    FRONTIER_SNAPSHOT_SCHEMA_VERSION = 3
     COMPARISON_BACKTEST_POLICY = serialize_rebalance_policy(
         build_two_stage_rebalance_policy()
     )

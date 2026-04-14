@@ -44,6 +44,25 @@ Canonical role note:
 - `equal_weight_dividend_basket` is the canonical all-members dividend-aware role.
 - Legacy stored/admin input using `equal_weight_basket` is normalized to
   `equal_weight_dividend_basket` for backward compatibility.
+- `fixed_five_percent_equal_weight` is intentionally different:
+  it does not feed the thematic basket's realized return series straight into
+  request-time expected returns. Instead it uses a conservative market-spread
+  cap so the 5% satellite sleeve does not dominate the frontier.
+
+### Fixed 5% role return policy
+
+For the `fixed_five_percent_equal_weight` role:
+
+- broad-equity baseline return starts from a conservative fixed market return
+- bear/base/bull thematic scenarios produce an excess-return spread band
+- only a capped portion of that positive spread is allowed into the optimizer
+- the result is used as the role's total expected return
+
+In practice this means:
+
+- the role still contributes its realized covariance and correlation profile
+- but its expected return is not allowed to balloon just because recent
+  thematic performance was unusually strong
 
 ### Stored dividend estimate
 

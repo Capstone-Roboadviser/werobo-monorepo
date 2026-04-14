@@ -32,6 +32,34 @@ RISK_FREE_RATE = 0.02
 BLACK_LITTERMAN_RISK_AVERSION = 2.5
 FRONTIER_POINT_COUNT = 160
 RANDOM_PORTFOLIO_COUNT = 12000
+FIXED_FIVE_PERCENT_ROLE_MARKET_RETURN_BASELINE = 0.06
+FIXED_FIVE_PERCENT_ROLE_SPREAD_CAPTURE_RATIO = 0.30
+FIXED_FIVE_PERCENT_ROLE_MAX_POSITIVE_SPREAD = 0.02
+FIXED_FIVE_PERCENT_ROLE_SCENARIO_WEIGHTS = {
+    "bear": 0.50,
+    "base": 0.35,
+    "bull": 0.15,
+}
+FIXED_FIVE_PERCENT_ROLE_SPREAD_SCENARIOS = {
+    "bear": {
+        "p_success": 0.25,
+        "return_success": 0.20,
+        "p_fail": 0.75,
+        "return_fail": 0.01,
+    },
+    "base": {
+        "p_success": 0.35,
+        "return_success": 0.25,
+        "p_fail": 0.65,
+        "return_fail": 0.00,
+    },
+    "bull": {
+        "p_success": 0.45,
+        "return_success": 0.30,
+        "p_fail": 0.55,
+        "return_fail": -0.01,
+    },
+}
 TARGET_VOLATILITY_MIN = 0.04
 TARGET_VOLATILITY_MAX = 0.22
 TARGET_VOLATILITY_STEP = 0.02
