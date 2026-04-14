@@ -339,6 +339,11 @@ Widget _buildActivityCard(
     final amount = activity.amount ?? 0;
     value = '+₩${_formatCurrency(amount.round())}';
     valueColor = tc.accent;
+  } else if (activity.type == 'rebalance_cash') {
+    icon = Icons.sync_alt_rounded;
+    iconColor = WeRoboColors.primary;
+    final amount = activity.amount ?? 0;
+    value = '₩${_formatCurrency(amount.round())}';
   } else if (activity.type == 'portfolio_created') {
     icon = Icons.pie_chart_rounded;
     iconColor = WeRoboColors.primary;

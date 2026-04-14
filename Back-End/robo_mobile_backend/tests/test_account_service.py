@@ -17,6 +17,7 @@ class FakePortfolioAccountRepository:
         self.accounts_by_user_id: dict[int, dict[str, object]] = {}
         self.cash_flows_by_account_id: dict[int, list[dict[str, object]]] = {}
         self.snapshots_by_account_id: dict[int, list[dict[str, object]]] = {}
+        self.rebalance_cash_entries_by_account_id: dict[int, list[dict[str, object]]] = {}
         self.rebalance_insights_by_account_id: dict[int, list[dict[str, object]]] = {}
 
     def is_configured(self) -> bool:
@@ -49,6 +50,7 @@ class FakePortfolioAccountRepository:
         self.accounts_by_user_id[user_id] = account
         self.cash_flows_by_account_id[account["id"]] = []
         self.snapshots_by_account_id[account["id"]] = []
+        self.rebalance_cash_entries_by_account_id[account["id"]] = []
         self.rebalance_insights_by_account_id[account["id"]] = []
         self.next_account_id += 1
         return account
@@ -89,6 +91,41 @@ class FakePortfolioAccountRepository:
 
     def list_snapshots(self, account_id: int) -> list[dict[str, object]]:
         return list(self.snapshots_by_account_id.get(account_id, []))
+
+    def replace_rebalance_cash_entries(
+        self,
+        account_id: int,
+        entries: list[dict[str, object]],
+    ) -> None:
+        normalized_entries: list[dict[str, object]] = []
+        for index, entry in enumerate(entries, start=1):
+            normalized_entries.append(
+                {
+                    "id": index,
+                    "account_id": account_id,
+                    "rebalance_date": str(entry["rebalance_date"]),
+                    "trigger": str(entry["trigger"]),
+                    "cash_before": float(entry["cash_before"]),
+                    "cash_from_sales": float(entry["cash_from_sales"]),
+                    "cash_to_buys": float(entry["cash_to_buys"]),
+                    "cash_after": float(entry["cash_after"]),
+                    "net_cash_change": float(entry["net_cash_change"]),
+                    "trades": {
+                        str(key): float(value)
+                        for key, value in dict(entry["trades"]).items()
+                    },
+                    "created_at": f"{entry['rebalance_date']}T00:00:00Z",
+                    "updated_at": f"{entry['rebalance_date']}T00:00:00Z",
+                }
+            )
+        normalized_entries.sort(
+            key=lambda item: str(item["rebalance_date"]),
+            reverse=True,
+        )
+        self.rebalance_cash_entries_by_account_id[account_id] = normalized_entries
+
+    def list_rebalance_cash_entries(self, account_id: int) -> list[dict[str, object]]:
+        return list(self.rebalance_cash_entries_by_account_id.get(account_id, []))
 
     def upsert_rebalance_insight(
         self,
@@ -413,6 +450,10 @@ def test_account_snapshots_follow_two_stage_rebalance_policy() -> None:
         "2026-04-01",
         "2026-03-31",
     ]
+    assert [item["rebalance_date"] for item in repository.list_rebalance_cash_entries(1)] == [
+        "2026-04-01",
+        "2026-03-31",
+    ]
 
 
 def test_dashboard_allocations_exclude_reserve_cash_from_weights() -> None:
@@ -496,6 +537,23 @@ def test_dashboard_allocations_exclude_reserve_cash_from_weights() -> None:
     assert summary["stock_allocations"][0]["weight"] == pytest.approx(0.508637, abs=1e-6)
     assert summary["stock_allocations"][1]["weight"] == pytest.approx(0.287908, abs=1e-6)
     assert summary["stock_allocations"][2]["weight"] == pytest.approx(0.203455, abs=1e-6)
+
+    rebalance_entries = repository.list_rebalance_cash_entries(1)
+    assert len(rebalance_entries) == 1
+    rebalance_entry = rebalance_entries[0]
+    assert rebalance_entry["cash_after"] == pytest.approx(summary["cash_balance"], abs=2.0)
+    assert rebalance_entry["net_cash_change"] == pytest.approx(summary["cash_balance"], abs=2.0)
+    assert rebalance_entry["cash_from_sales"] > 0
+    assert rebalance_entry["cash_to_buys"] > 0
+
+    rebalance_activity = next(
+        activity
+        for activity in dashboard["recent_activity"]
+        if activity["type"] == "rebalance_cash"
+    )
+    assert rebalance_activity["amount"] == pytest.approx(summary["cash_balance"], abs=2.0)
+    assert rebalance_activity["title"] == "드리프트 리밸런싱"
+    assert "예비현금" in str(rebalance_activity["description"])
 
 
 def test_refresh_managed_universe_accounts_filters_target_accounts() -> None:
