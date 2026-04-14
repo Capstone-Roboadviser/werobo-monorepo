@@ -375,7 +375,7 @@ class _SummaryCard extends StatelessWidget {
     final excess7 = d.totalReturnPct - asset7;
     final sign7 = excess7 >= 0 ? '+' : '';
     final parts = <String>[
-      '7자산 균등배분 대비 $sign7${excess7.toStringAsFixed(1)}%',
+      '시장 대비 $sign7${excess7.toStringAsFixed(1)}%',
     ];
     if (d.benchmarkBondReturnPct != null) {
       final excessBond =
