@@ -27,7 +27,6 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
-  bool _showWelcome = true;
   bool _showAllocationAmounts = false;
 
   @override
@@ -111,23 +110,23 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             const SizedBox(height: 8),
 
             // Welcome banner (first visit only)
-            if (_showWelcome)
+            if (!state.welcomeBannerSeen)
               _stagger(
                   staggerIdx,
                   _WelcomeBanner(
                     type: type,
-                    onDismiss: () => setState(() => _showWelcome = false),
+                    onDismiss: () => state.markWelcomeBannerSeen(),
                   ))
             else
               const SizedBox.shrink(),
-            if (_showWelcome)
+            if (!state.welcomeBannerSeen)
               const SizedBox(height: 16)
             else
               const SizedBox.shrink(),
 
             // Hero: value + chart + time range
             _stagger(
-              _showWelcome ? ++staggerIdx : staggerIdx,
+              !state.welcomeBannerSeen ? ++staggerIdx : staggerIdx,
               _PortfolioHeroChart(type: type),
             ),
             const SizedBox(height: 28),
