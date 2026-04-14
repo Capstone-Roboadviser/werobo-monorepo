@@ -66,3 +66,20 @@ def get_digest(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except PortfolioAccountNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/digest/cache",
+    summary="다이제스트 캐시 삭제",
+    description="현재 사용자의 다이제스트 캐시를 삭제하여 다음 요청 시 새로 생성합니다.",
+    responses=DIGEST_ERROR_RESPONSES,
+)
+def bust_digest_cache(
+    authorization: str | None = Header(default=None),
+) -> dict:
+    user_id = _current_user_id(authorization)
+    account = account_service.repository.get_account_by_user_id(user_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="자산 계정을 찾지 못했습니다.")
+    digest_service.digest_repo.bust_cache(int(account["id"]))
+    return {"status": "ok"}
