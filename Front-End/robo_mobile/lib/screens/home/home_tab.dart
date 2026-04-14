@@ -1,4 +1,5 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
@@ -249,13 +250,14 @@ class _PortfolioHeroChart extends StatefulWidget {
 }
 
 class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체', '미래'];
   static const _rangeDays = [7, 90, 365, 1825, 99999, -1];
   static const _baseInvestment = 10000000.0;
   static const _defaultCashInAmount = 500000.0;
 
   late AnimationController _drawCtrl;
+  late AnimationController _glowCtrl;
   int _range = 4; // 전체
   int? _touchIndex;
 
@@ -300,6 +302,10 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
       duration: const Duration(milliseconds: 1000),
       vsync: this,
     )..forward();
+    _glowCtrl = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
   }
 
   @override
@@ -313,6 +319,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
   @override
   void dispose() {
+    _glowCtrl.dispose();
     _drawCtrl.dispose();
     super.dispose();
   }
@@ -414,7 +421,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     if (_touchIndex != null && _touchIndex! < valuePts.length) {
       final pt = valuePts[_touchIndex!];
       crosshairDate =
-          '${pt.date.year}-${pt.date.month.toString().padLeft(2, '0')}-${pt.date.day.toString().padLeft(2, '0')}';
+          '${pt.date.year}년 ${pt.date.month}월 ${pt.date.day}일';
       crosshairValue = pt.value;
       if (_touchIndex! < costPts.length) {
         crosshairCost = costPts[_touchIndex!].value;
@@ -460,7 +467,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
         // Performance badge
         if (crosshairDate != null)
-          // Crosshair mode: show date + cost basis
           _CrosshairBadge(
             date: crosshairDate,
             portfolioValue: crosshairValue!,
@@ -493,43 +499,71 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
             ],
           ),
 
+        // Net funding line
+        if (crosshairDate == null) ...[
+          const SizedBox(height: 4),
+          Text(
+            '— ₩${_formatCurrency((accountSummary?.investedAmount ?? _baseInvestment).toInt())} 총 입금',
+            style: TextStyle(
+              fontFamily: WeRoboFonts.english,
+              fontSize: 13,
+              fontWeight: FontWeight.w400,
+              color: tc.textTertiary,
+            ),
+          ),
+        ],
+
         const SizedBox(height: 20),
 
-        // Chart
+        // Chart (edge-to-edge)
         LayoutBuilder(builder: (context, constraints) {
-          return GestureDetector(
-            onPanUpdate: (d) {
-              const padL = 12.0;
-              const padR = 12.0;
-              final chartW = constraints.maxWidth - padL - padR;
-              final x = d.localPosition.dx - padL;
-              final idx = ((x / chartW) * (valuePts.length - 1))
-                  .round()
-                  .clamp(0, valuePts.length - 1);
-              setState(() => _touchIndex = idx);
-            },
-            onPanEnd: (_) => setState(() => _touchIndex = null),
-            onTapUp: (_) => setState(() => _touchIndex = null),
-            child: AnimatedBuilder(
-              animation: _drawCtrl,
-              builder: (context, _) {
-                return CustomPaint(
-                  size: Size(constraints.maxWidth, 240),
-                  painter: _PortfolioValuePainter(
-                    valuePts: valuePts,
-                    costPts: costPts,
-                    progress: _drawCtrl.value,
-                    touchIndex: _touchIndex,
-                    primaryColor: WeRoboColors.primary,
-                    costColor: tc.border,
-                    gridColor: tc.border,
-                    textColor: tc.textTertiary,
-                    tooltipBg: tc.surface,
-                    tooltipBorder: tc.border,
-                    textPrimaryColor: tc.textPrimary,
-                  ),
-                );
-              },
+          final fullWidth = constraints.maxWidth + 48;
+          return Transform.translate(
+            offset: const Offset(-24, 0),
+            child: SizedBox(
+              width: fullWidth,
+              child: GestureDetector(
+                onPanUpdate: (d) {
+                  final x = d.localPosition.dx;
+                  final idx = ((x / fullWidth) *
+                          (valuePts.length - 1))
+                      .round()
+                      .clamp(0, valuePts.length - 1);
+                  if (_touchIndex == null) {
+                    _glowCtrl.repeat(reverse: true);
+                  }
+                  setState(() => _touchIndex = idx);
+                },
+                onPanEnd: (_) {
+                  _glowCtrl.stop();
+                  _glowCtrl.value = 0;
+                  setState(() => _touchIndex = null);
+                },
+                onTapUp: (_) {
+                  _glowCtrl.stop();
+                  _glowCtrl.value = 0;
+                  setState(() => _touchIndex = null);
+                },
+                child: AnimatedBuilder(
+                  animation: Listenable.merge([_drawCtrl, _glowCtrl]),
+                  builder: (context, _) {
+                    return CustomPaint(
+                      size: Size(fullWidth, 320),
+                      painter: _PortfolioValuePainter(
+                        valuePts: valuePts,
+                        costPts: costPts,
+                        progress: _drawCtrl.value,
+                        touchIndex: _touchIndex,
+                        glowPhase: _glowCtrl.value,
+                        primaryColor: WeRoboColors.primary,
+                        glowColor: WeRoboColors.sky3,
+                        costColor: tc.border,
+                        gridColor: tc.border,
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
           );
         }),
@@ -616,54 +650,31 @@ class _PerformanceBadge extends StatelessWidget {
     final color = isPositive ? tc.accent : WeRoboColors.error;
     final sign = isPositive ? '+' : '';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isPositive
-                ? Icons.trending_up_rounded
-                : Icons.trending_down_rounded,
-            size: 18,
+    final arrow = isPositive ? '▲' : '▼';
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$arrow $sign₩${_formatCurrency(changeAmount.abs().toInt())} ($sign${changePct.toStringAsFixed(1)}%)',
+          style: TextStyle(
+            fontFamily: WeRoboFonts.english,
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
             color: color,
           ),
-          const SizedBox(width: 6),
-          Text(
-            '$sign${changePct.toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontFamily: WeRoboFonts.english,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: TextStyle(
+            fontFamily: WeRoboFonts.body,
+            fontSize: 12,
+            fontWeight: FontWeight.w400,
+            color: tc.textSecondary,
           ),
-          const SizedBox(width: 4),
-          Text(
-            '(₩${_formatCurrency(changeAmount.abs().toInt())})',
-            style: TextStyle(
-              fontFamily: WeRoboFonts.english,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: WeRoboFonts.body,
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              color: tc.textSecondary,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -682,57 +693,14 @@ class _CrosshairBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final gain = costBasis != null ? portfolioValue - costBasis! : null;
-    final isPositive = gain != null && gain >= 0;
-    final color = isPositive ? tc.accent : WeRoboColors.error;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: tc.card,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            date,
-            style: TextStyle(
-              fontFamily: WeRoboFonts.english,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: tc.textSecondary,
-            ),
-          ),
-          if (gain != null) ...[
-            const SizedBox(width: 8),
-            Container(
-              width: 1,
-              height: 14,
-              color: tc.border,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '원금 ₩${_formatCurrency(costBasis!.toInt())}',
-              style: TextStyle(
-                fontFamily: WeRoboFonts.english,
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                color: tc.textSecondary,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '${isPositive ? '+' : ''}₩${_formatCurrency(gain.abs().toInt())}',
-              style: TextStyle(
-                fontFamily: WeRoboFonts.english,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ],
+    return Text(
+      date,
+      style: TextStyle(
+        fontFamily: WeRoboFonts.body,
+        fontSize: 13,
+        fontWeight: FontWeight.w400,
+        color: tc.textTertiary,
       ),
     );
   }
@@ -745,26 +713,22 @@ class _PortfolioValuePainter extends CustomPainter {
   final List<ChartPoint> costPts;
   final double progress;
   final int? touchIndex;
+  final double glowPhase;
   final Color primaryColor;
+  final Color glowColor;
   final Color costColor;
   final Color gridColor;
-  final Color textColor;
-  final Color tooltipBg;
-  final Color tooltipBorder;
-  final Color textPrimaryColor;
 
   _PortfolioValuePainter({
     required this.valuePts,
     required this.costPts,
     required this.progress,
     this.touchIndex,
+    this.glowPhase = 0,
     required this.primaryColor,
+    required this.glowColor,
     required this.costColor,
     required this.gridColor,
-    required this.textColor,
-    required this.tooltipBg,
-    required this.tooltipBorder,
-    required this.textPrimaryColor,
   });
 
   @override
@@ -773,12 +737,9 @@ class _PortfolioValuePainter extends CustomPainter {
 
     final w = size.width;
     final h = size.height;
-    const padL = 12.0;
-    const padR = 12.0;
     const padT = 8.0;
-    const padB = 24.0;
-    final chartW = w - padL - padR;
-    final chartH = h - padT - padB;
+    final chartW = w;
+    final chartH = h - padT;
 
     // Y-range across both lines
     double minY = double.infinity;
@@ -791,14 +752,14 @@ class _PortfolioValuePainter extends CustomPainter {
       if (p.value < minY) minY = p.value;
       if (p.value > maxY) maxY = p.value;
     }
-    // Add 5% padding
     final range = (maxY - minY).clamp(1.0, double.infinity);
     minY -= range * 0.05;
     maxY += range * 0.05;
     final rangeY = maxY - minY;
 
-    double toX(int i, int total) => padL + chartW * i / (total - 1);
-    double toY(double val) => padT + chartH - ((val - minY) / rangeY) * chartH;
+    double toX(int i, int total) => chartW * i / (total - 1);
+    double toY(double val) =>
+        padT + chartH - ((val - minY) / rangeY) * chartH;
 
     // Grid lines (4 horizontal, very subtle)
     final gridPaint = Paint()
@@ -806,15 +767,20 @@ class _PortfolioValuePainter extends CustomPainter {
       ..strokeWidth = 0.5;
     for (int i = 0; i <= 4; i++) {
       final y = padT + chartH * i / 4;
-      canvas.drawLine(Offset(padL, y), Offset(w - padR, y), gridPaint);
+      canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
     }
 
     final drawCount =
         (valuePts.length * progress).ceil().clamp(2, valuePts.length);
 
+    // Effective draw limit: clip at touchIndex when dragging
+    final effectiveCount = touchIndex != null
+        ? (touchIndex! + 1).clamp(2, drawCount)
+        : drawCount;
+
     // Cost basis line (draw first, behind portfolio)
     if (costPts.length >= 2) {
-      final costCount = min(drawCount, costPts.length);
+      final costCount = min(effectiveCount, costPts.length);
       final costPath = Path();
       for (int i = 0; i < costCount; i++) {
         final x = toX(i, valuePts.length);
@@ -837,21 +803,47 @@ class _PortfolioValuePainter extends CustomPainter {
     }
 
     // Portfolio value line + gradient
-    final linePath = Path();
+    // Transition zone: last 20 points before touch fade to glow
+    const transitionLen = 20;
+    final transitionStart = touchIndex != null
+        ? max(0, touchIndex! - transitionLen)
+        : effectiveCount;
+
+    // Build main segment path (up to transition start)
+    final mainPath = Path();
     final areaPath = Path();
-    for (int i = 0; i < drawCount; i++) {
+    final mainEnd = min(transitionStart + 1, effectiveCount);
+    for (int i = 0; i < mainEnd; i++) {
       final x = toX(i, valuePts.length);
       final y = toY(valuePts[i].value);
       if (i == 0) {
-        linePath.moveTo(x, y);
+        mainPath.moveTo(x, y);
         areaPath.moveTo(x, padT + chartH);
         areaPath.lineTo(x, y);
       } else {
-        linePath.lineTo(x, y);
+        mainPath.lineTo(x, y);
         areaPath.lineTo(x, y);
       }
     }
-    final lastX = toX(drawCount - 1, valuePts.length);
+
+    // Build transition segment path (gradient color zone)
+    Path? transPath;
+    if (touchIndex != null && transitionStart < effectiveCount - 1) {
+      transPath = Path();
+      final startX = toX(transitionStart, valuePts.length);
+      final startY = toY(valuePts[transitionStart].value);
+      transPath.moveTo(startX, startY);
+      for (int i = transitionStart + 1; i < effectiveCount; i++) {
+        final x = toX(i, valuePts.length);
+        final y = toY(valuePts[i].value);
+        transPath.lineTo(x, y);
+        areaPath.lineTo(x, y);
+      }
+    }
+
+    // Close area path
+    final lastIdx = effectiveCount - 1;
+    final lastX = toX(lastIdx, valuePts.length);
     areaPath.lineTo(lastX, padT + chartH);
     areaPath.close();
 
@@ -866,12 +858,13 @@ class _PortfolioValuePainter extends CustomPainter {
     );
     canvas.drawPath(
       areaPath,
-      Paint()..shader = gradient.createShader(Rect.fromLTWH(0, 0, w, h)),
+      Paint()..shader = gradient.createShader(
+        Rect.fromLTWH(0, 0, w, h)),
     );
 
-    // Portfolio line stroke
+    // Main line stroke
     canvas.drawPath(
-      linePath,
+      mainPath,
       Paint()
         ..color = primaryColor
         ..style = PaintingStyle.stroke
@@ -880,31 +873,27 @@ class _PortfolioValuePainter extends CustomPainter {
         ..strokeJoin = StrokeJoin.round,
     );
 
-    // End dot
-    if (drawCount > 0 && touchIndex == null) {
-      final lastY = toY(valuePts[drawCount - 1].value);
-      canvas.drawCircle(Offset(lastX, lastY), 4, Paint()..color = primaryColor);
-      canvas.drawCircle(Offset(lastX, lastY), 2, Paint()..color = tooltipBg);
+    // Transition segment with gradient shader
+    if (transPath != null && touchIndex != null) {
+      final gradStart = toX(transitionStart, valuePts.length);
+      final gradEnd = toX(touchIndex!, valuePts.length);
+      final shader = ui.Gradient.linear(
+        Offset(gradStart, 0),
+        Offset(gradEnd, 0),
+        [primaryColor, glowColor],
+      );
+      canvas.drawPath(
+        transPath,
+        Paint()
+          ..shader = shader
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
     }
 
-    // X-axis date labels (5 evenly spaced)
-    final labelStyle =
-        TextStyle(fontSize: 9, color: textColor, fontFamily: 'IBMPlexSans');
-    final totalPts = valuePts.length;
-    for (int i = 0; i < 5; i++) {
-      final idx = (totalPts - 1) * i ~/ 4;
-      if (idx >= totalPts) continue;
-      final d = valuePts[idx].date;
-      final label = '${d.year}-${d.month.toString().padLeft(2, '0')}';
-      final tp = TextPainter(
-        text: TextSpan(text: label, style: labelStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final x = toX(idx, totalPts);
-      tp.paint(canvas, Offset(x - tp.width / 2, h - padB + 6));
-    }
-
-    // Crosshair
+    // Interactive crosshair with glow
     if (touchIndex != null && touchIndex! < drawCount) {
       final ti = touchIndex!;
       final tx = toX(ti, valuePts.length);
@@ -918,23 +907,39 @@ class _PortfolioValuePainter extends CustomPainter {
           ..strokeWidth = 0.5,
       );
 
-      // Dots
+      // Glow dot at intersection
       final vy = toY(valuePts[ti].value);
-      canvas.drawCircle(Offset(tx, vy), 5, Paint()..color = primaryColor);
-      canvas.drawCircle(Offset(tx, vy), 3, Paint()..color = tooltipBg);
-
-      if (ti < costPts.length) {
-        final cy = toY(costPts[ti].value);
-        canvas.drawCircle(Offset(tx, cy), 4,
-            Paint()..color = costColor.withValues(alpha: 0.8));
-        canvas.drawCircle(Offset(tx, cy), 2, Paint()..color = tooltipBg);
-      }
+      final glowRadius = 10 + 4 * glowPhase;
+      final glowAlpha = 0.25 + 0.15 * glowPhase;
+      // Outer glow
+      canvas.drawCircle(
+        Offset(tx, vy),
+        glowRadius,
+        Paint()
+          ..color = glowColor.withValues(alpha: glowAlpha)
+          ..maskFilter =
+              const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+      // Mid glow
+      canvas.drawCircle(
+        Offset(tx, vy),
+        6,
+        Paint()..color = glowColor.withValues(alpha: 0.6),
+      );
+      // Inner bright dot
+      canvas.drawCircle(
+        Offset(tx, vy),
+        3,
+        Paint()..color = Colors.white,
+      );
     }
   }
 
   @override
   bool shouldRepaint(covariant _PortfolioValuePainter old) =>
-      old.progress != progress || old.touchIndex != touchIndex;
+      old.progress != progress ||
+      old.touchIndex != touchIndex ||
+      old.glowPhase != glowPhase;
 }
 
 // ─── Shared helpers ───────────────────────────────────────────
