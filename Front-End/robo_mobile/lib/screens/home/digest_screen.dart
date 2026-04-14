@@ -40,15 +40,36 @@ class _DigestScreenState extends State<DigestScreen> {
       return;
     }
 
+    final alreadySeen = state.hasSeenCurrentDigest;
+
     try {
-      final result = await MobileBackendApi.instance
-          .fetchDigest(accessToken: token);
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      if (mounted) {
-        setState(() {
-          _digest = result;
-          _loading = false;
-        });
+      if (alreadySeen) {
+        // Skip loading animation for already-seen digests
+        final result = await MobileBackendApi.instance
+            .fetchDigest(accessToken: token);
+        if (mounted) {
+          setState(() {
+            _digest = result;
+            _loading = false;
+          });
+        }
+      } else {
+        // Show full loading animation for new digests
+        const minDuration = Duration(milliseconds: 5500);
+        final results = await Future.wait([
+          MobileBackendApi.instance
+              .fetchDigest(accessToken: token),
+          Future<void>.delayed(minDuration),
+        ]);
+        if (mounted) {
+          final result =
+              results[0] as MobileDigestResponse;
+          await state.markDigestSeen(result.digestDate);
+          setState(() {
+            _digest = result;
+            _loading = false;
+          });
+        }
       }
     } on MobileBackendException catch (e) {
       if (mounted) {
