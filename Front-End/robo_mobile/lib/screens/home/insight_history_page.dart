@@ -97,7 +97,7 @@ class _InsightHistoryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final explanation = insight.historySummary;
+    final explanation = insight.generatedExplanation;
     final truncatedText = explanation.length > 60
         ? '${explanation.substring(0, 60)}...'
         : explanation;
