@@ -10,7 +10,6 @@ import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
 import '../../models/rebalance_insight.dart';
-import '../../services/mobile_backend_api.dart';
 import 'activity_hub_page.dart';
 import 'digest_screen.dart';
 import 'insight_detail_page.dart';
@@ -254,7 +253,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체', '미래'];
   static const _rangeDays = [7, 90, 365, 1825, 99999, -1];
   static const _baseInvestment = 10000000.0;
-  static const _defaultCashInAmount = 500000.0;
 
   late AnimationController _drawCtrl;
   late AnimationController _glowCtrl;
@@ -345,35 +343,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     ];
   }
 
-  Future<void> _handleCashIn() async {
-    logAction('tap prototype cash in', {
-      'amount': _defaultCashInAmount.toInt(),
-    });
-    try {
-      await PortfolioStateProvider.of(context).cashInPrototypeAccount(
-        amount: _defaultCashInAmount,
-      );
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('입금이 반영되었습니다.')),
-      );
-      _drawCtrl.forward(from: 0);
-    } catch (error) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            error is MobileBackendException ? error.message : '입금을 반영하지 못했어요.',
-          ),
-        ),
-      );
-    }
-  }
-
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -398,7 +367,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final tc = WeRoboThemeColors.of(context);
     final portfolioState = PortfolioStateProvider.of(context);
     final accountSummary = portfolioState.accountSummary;
-    final hasPrototypeAccount = portfolioState.hasPrototypeAccount;
     final allValue = _allValue;
     final allCost = _allCostBasis;
     final valuePts = _filterByRange(allValue);
@@ -481,21 +449,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                 label: rangeLabel,
                 isPositive: isPositive,
               ),
-              if (hasPrototypeAccount) ...[
-                const SizedBox(width: 8),
-                OutlinedButton.icon(
-                  onPressed: _handleCashIn,
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 44),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 10,
-                    ),
-                  ),
-                  icon: const Icon(Icons.add_rounded, size: 16),
-                  label: const Text('입금하기'),
-                ),
-              ],
             ],
           ),
 
