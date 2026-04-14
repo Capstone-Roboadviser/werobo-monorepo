@@ -101,7 +101,7 @@ def top_drivers_detractors(
 # ---------------------------------------------------------------------------
 
 GEMINI_MODEL = "gemini-2.5-flash"
-LLM_TIMEOUT_SECONDS = 15
+LLM_TIMEOUT_SECONDS = 10
 
 SYSTEM_PROMPT = """\
 You are a Korean financial summary writer for a robo-advisor app called WeRobo.
@@ -217,10 +217,28 @@ def generate_narrative(
             request_options={"timeout": LLM_TIMEOUT_SECONDS},
         )
 
+        if not response.candidates:
+            logger.error(
+                "Gemini returned no candidates (safety block or empty response)"
+            )
+            return None
+
         text = response.text.strip()
+        logger.info("Gemini raw response: %s", text[:500])
         return json.loads(text)
+    except json.JSONDecodeError:
+        logger.error(
+            "Gemini returned non-JSON response", exc_info=True
+        )
+        return None
+    except ValueError:
+        logger.error(
+            "Gemini response.text access failed (no valid parts)",
+            exc_info=True,
+        )
+        return None
     except Exception:
-        logger.warning("Gemini narrative generation failed", exc_info=True)
+        logger.error("Gemini narrative generation failed", exc_info=True)
         return None
 
 
@@ -248,8 +266,13 @@ class DigestService:
         # Check cache (with read-time rebalance bust)
         cached = self.digest_repo.get_cached(account_id)
         if cached is not None:
-            logger.info("digest.cache.hit account_id=%s", account_id)
-            return cached
+            if cached.get("has_narrative"):
+                logger.info("digest.cache.hit account_id=%s", account_id)
+                return cached
+            logger.info(
+                "digest.cache.degraded account_id=%s, regenerating",
+                account_id,
+            )
 
         logger.info("digest.cache.miss account_id=%s", account_id)
 
