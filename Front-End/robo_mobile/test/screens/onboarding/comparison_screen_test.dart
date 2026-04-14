@@ -89,8 +89,7 @@ void main() {
   });
 
   group('marketRiskComparison', () {
-    MobileRecommendationResponse makeRecommendation(
-        List<double> volatilities) {
+    MobileRecommendationResponse makeRecommendation(List<double> volatilities) {
       return MobileRecommendationResponse(
         resolvedProfile: const MobileResolvedProfile(
           code: 'balanced',
@@ -101,6 +100,7 @@ void main() {
         ),
         recommendedPortfolioCode: 'balanced',
         dataSource: 'managed_universe',
+        asOfDate: DateTime(2026, 4, 15),
         portfolios: [
           for (int i = 0; i < volatilities.length; i++)
             MobilePortfolioRecommendation(
