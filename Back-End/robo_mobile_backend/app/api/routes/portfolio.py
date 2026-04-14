@@ -28,7 +28,11 @@ from app.api.schemas.response import (
     VolatilityPointResponse,
 )
 from app.core.config import DEMO_STOCK_UNIVERSE_PATH, TARGET_VOLATILITY_MAX, TARGET_VOLATILITY_MIN, TARGET_VOLATILITY_STEP
-from app.engine.rebalance import simulate_drift_rebalance
+from app.engine.rebalance import (
+    build_two_stage_rebalance_policy,
+    serialize_rebalance_policy,
+    simulate_two_stage_rebalance,
+)
 from app.data.stock_repository import StockDataRepository
 from app.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
 from app.domain.models import PortfolioSimulationResult, UserProfile
@@ -41,6 +45,7 @@ portfolio_service = PortfolioSimulationService()
 portfolio_analytics_service = PortfolioAnalyticsService(
     portfolio_service=portfolio_service,
 )
+TWO_STAGE_REBALANCE_POLICY = build_two_stage_rebalance_policy()
 
 
 @router.get("/assets", response_model=AssetUniverseResponse)
@@ -434,7 +439,11 @@ def rebalance_simulation(payload: RebalanceSimulationRequest) -> RebalanceSimula
     weight_map = {t: w / total_w for t, w in weight_map.items()}
 
     try:
-        result = simulate_drift_rebalance(pivoted, weight_map, payload.investment_amount)
+        result = simulate_two_stage_rebalance(
+            pivoted,
+            weight_map,
+            payload.investment_amount,
+        )
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"리밸런싱 시뮬레이션 중 오류가 발생했습니다: {exc}") from exc
 
@@ -475,6 +484,7 @@ def rebalance_simulation(payload: RebalanceSimulationRequest) -> RebalanceSimula
         investment_amount=result.investment_amount,
         target_weights=sector_target_weights,
         drift_threshold=result.drift_threshold,
+        rebalance_policy=serialize_rebalance_policy(TWO_STAGE_REBALANCE_POLICY),
         sector_names=sector_to_name,
         time_series=aggregated_time_series,
         rebalance_events=aggregated_events,
@@ -506,6 +516,7 @@ def comparison_backtest(payload: ComparisonBacktestRequest) -> ComparisonBacktes
         end_date=result.end_date,
         split_ratio=result.split_ratio,
         rebalance_dates=result.rebalance_dates,
+        rebalance_policy=serialize_rebalance_policy(TWO_STAGE_REBALANCE_POLICY),
         lines=[
             ComparisonLineResponse(
                 key=line.key,

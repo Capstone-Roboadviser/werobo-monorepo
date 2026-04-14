@@ -235,7 +235,7 @@ class ManagedUniverseService:
 
         for item in asset_roles or []:
             asset_code = item.asset_code.strip()
-            role_key = item.role_key.strip()
+            role_key = self.static_repository.normalize_asset_role_key(item.role_key)
             if asset_code in provided_role_map:
                 raise RuntimeError(f"자산군 '{asset_code}'의 role이 중복으로 전달되었습니다.")
             if asset_code not in asset_codes:

@@ -12,7 +12,10 @@ import pytest
 from app.engine.rebalance import (
     DRIFT_THRESHOLD_DEFAULT,
     check_and_rebalance,
+    build_two_stage_rebalance_policy,
+    serialize_rebalance_policy,
     simulate_drift_rebalance,
+    simulate_two_stage_rebalance,
 )
 
 
@@ -375,3 +378,40 @@ class TestIntegration:
         assert len(result.time_series) > 0
         assert isinstance(result.total_return_pct, float)
         assert isinstance(result.no_rebalance_return_pct, float)
+
+    def test_two_stage_policy_rebalances_at_quarter_end_before_drift_guard(self):
+        prices_df = _make_prices(
+            {
+                "A": [100.0, 106.0, 200.0],
+                "B": [100.0, 94.0, 50.0],
+            },
+            start="2024-03-28",
+        )
+
+        result = simulate_two_stage_rebalance(
+            prices_df,
+            {"A": 0.5, "B": 0.5},
+            10000.0,
+            max_points=None,
+        )
+
+        assert [event.date for event in result.rebalance_events] == [
+            "2024-03-29",
+            "2024-04-01",
+        ]
+        assert result.rebalance_events[0].trigger == "scheduled"
+        assert result.rebalance_events[1].trigger == "drift_guard"
+        assert result.final_value < result.no_rebalance_final_value
+
+    def test_serialize_two_stage_policy_exposes_contract_metadata(self):
+        payload = serialize_rebalance_policy(
+            build_two_stage_rebalance_policy(),
+        )
+
+        assert payload == {
+            "strategy": "scheduled_plus_drift_guard",
+            "scheduled_rebalance_frequency": "quarterly",
+            "force_rebalance_on_schedule": True,
+            "drift_check_frequency": "daily",
+            "drift_threshold": 0.10,
+        }

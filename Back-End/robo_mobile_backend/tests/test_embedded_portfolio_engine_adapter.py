@@ -7,6 +7,7 @@ import unittest
 from app.domain.models import PortfolioHistoryPoint, PortfolioHistorySeries
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
 from mobile_backend.integrations.embedded_portfolio_engine import EmbeddedPortfolioEngineAdapter
+from mobile_backend.services.profile_service import ProfileService
 
 
 class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
@@ -124,6 +125,8 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         adapter.portfolio_metrics_from_weights = fake_portfolio_metrics_from_weights
         adapter.risk_contributions = lambda weights, covariance: dict(weights)
         adapter.RISK_FREE_RATE = 0.02
+        adapter.FRONTIER_SNAPSHOT_SCHEMA_VERSION = 2
+        adapter.profile_service = ProfileService()
         adapter.portfolio_service = SimpleNamespace(
             mapping_service=SimpleNamespace(
                 build_portfolio_id=lambda profile, target_volatility: (
@@ -203,6 +206,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             [point["is_recommended"] for point in response["points"]],
             [False, True, False],
         )
+        self.assertEqual(response["resolved_profile"]["target_volatility"], 0.12)
 
     def test_build_frontier_selection_returns_selected_portfolio(self) -> None:
         adapter, _ = self._build_fake_adapter()
@@ -222,6 +226,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(response["portfolio"]["code"], "selected")
         self.assertEqual(response["portfolio"]["label"], "선택 포트폴리오")
         self.assertIsNone(response["as_of_date"])
+        self.assertEqual(response["resolved_profile"]["target_volatility"], 0.12)
 
     def test_build_frontier_selection_uses_exact_point_index_when_provided(self) -> None:
         adapter, _ = self._build_fake_adapter()
@@ -313,6 +318,58 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         self.assertEqual(response["selected_point_index"], 1)
         self.assertEqual(response["representative_code"], "balanced")
         self.assertEqual(response["portfolio"]["code"], "selected")
+
+    def test_build_frontier_preview_selects_representative_by_profile_target_volatility(self) -> None:
+        adapter, fake_context = self._build_fake_adapter()
+        fake_context.frontier_points = [
+            SimpleNamespace(volatility=0.08, expected_return=0.05, weights={"BND": 1.0}),
+            SimpleNamespace(volatility=0.10, expected_return=0.06, weights={"VTV": 0.7, "BND": 0.3}),
+            SimpleNamespace(volatility=0.11, expected_return=0.07, weights={"VTV": 0.5, "VUG": 0.3, "BND": 0.2}),
+            SimpleNamespace(volatility=0.12, expected_return=0.08, weights={"VTV": 0.35, "VUG": 0.30, "BND": 0.35}),
+            SimpleNamespace(volatility=0.16, expected_return=0.09, weights={"VUG": 0.8, "BND": 0.2}),
+        ]
+
+        response = adapter.build_frontier_preview(
+            resolved_profile=RiskProfile.BALANCED,
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+            propensity_score=45.0,
+            sample_points=5,
+        )
+
+        recommended_point = next(point for point in response["points"] if point["is_recommended"])
+        self.assertEqual(recommended_point["volatility"], 0.12)
+        self.assertEqual(response["resolved_profile"]["target_volatility"], 0.12)
+
+    def test_managed_universe_snapshot_payload_ignores_stale_schema(self) -> None:
+        adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
+        adapter.FRONTIER_SNAPSHOT_SCHEMA_VERSION = 2
+        adapter.managed_universe_service = SimpleNamespace(
+            is_configured=lambda: True,
+            get_active_version=lambda: SimpleNamespace(version_id=1, version_name="v1"),
+            get_instruments_for_version=lambda version_id: [SimpleNamespace(ticker="VTV")],
+            get_price_window=lambda version_id, instruments: SimpleNamespace(
+                aligned_start_date="2020-01-01",
+                aligned_end_date="2026-04-13",
+            ),
+            repository=SimpleNamespace(
+                get_frontier_snapshot=lambda **kwargs: SimpleNamespace(
+                    aligned_start_date="2020-01-01",
+                    aligned_end_date="2026-04-13",
+                    total_point_count=160,
+                    updated_at="2026-04-14T00:00:00Z",
+                    payload={"frontier_points": [], "representative_indices": {}},
+                )
+            ),
+        )
+
+        payload, lookup = adapter._get_managed_universe_snapshot_payload(
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        )
+
+        self.assertIsNone(payload)
+        self.assertEqual(lookup["reason"], "frontier_snapshot_schema_mismatch")
 
     def test_get_volatility_history_uses_analytics_service(self) -> None:
         adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
@@ -431,6 +488,14 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
 
         self.assertEqual(response["lines"][0]["points"][0]["date"], "2025-01-01")
         self.assertEqual(response["lines"][0]["points"][1]["return_pct"], 1.25)
+        self.assertEqual(
+            response["rebalance_policy"]["strategy"],
+            "scheduled_plus_drift_guard",
+        )
+        self.assertEqual(
+            response["rebalance_policy"]["scheduled_rebalance_frequency"],
+            "quarterly",
+        )
 
     def test_get_comparison_backtest_uses_materialized_snapshot_when_available(self) -> None:
         adapter = EmbeddedPortfolioEngineAdapter.__new__(EmbeddedPortfolioEngineAdapter)
@@ -470,6 +535,10 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
 
         self.assertEqual(response["lines"][0]["key"], "balanced")
         self.assertEqual(response["lines"][0]["points"][1]["return_pct"], 1.25)
+        self.assertEqual(
+            response["rebalance_policy"]["strategy"],
+            "scheduled_plus_drift_guard",
+        )
 
 
 if __name__ == "__main__":

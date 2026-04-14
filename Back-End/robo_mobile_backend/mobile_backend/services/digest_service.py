@@ -100,7 +100,7 @@ def top_drivers_detractors(
 # LLM synthesis (Gemini Flash)
 # ---------------------------------------------------------------------------
 
-GEMINI_MODEL = "gemini-2.5-flash-lite"
+GEMINI_MODEL = "gemini-2.5-flash"
 LLM_TIMEOUT_SECONDS = 5
 
 SYSTEM_PROMPT = """\

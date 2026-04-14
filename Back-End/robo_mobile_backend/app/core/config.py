@@ -14,6 +14,12 @@ DEMO_STOCK_DATA_DIR = DATA_DIR / "demo"
 DEMO_STOCK_UNIVERSE_PATH = DEMO_STOCK_DATA_DIR / "demo_stock_universe.csv"
 DEMO_STOCK_PRICES_PATH = DEMO_STOCK_DATA_DIR / "demo_stock_prices.csv"
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+ENABLE_LIVE_MARKET_DATA_FETCH = os.getenv("ENABLE_LIVE_MARKET_DATA_FETCH", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 APP_NAME = "자산배분 시뮬레이터 데모 API"
 APP_DESCRIPTION = (

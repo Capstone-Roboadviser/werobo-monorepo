@@ -8,6 +8,7 @@ import pandas as pd
 
 from app.core.config import DEMO_STOCK_PRICES_PATH
 from app.data.stock_repository import StockDataRepository
+from app.engine.rebalance import RebalanceEvent, simulate_two_stage_rebalance
 from mobile_backend.data.account_repository import PortfolioAccountRepository
 from mobile_backend.domain.enums import SimulationDataSource
 
@@ -146,6 +147,19 @@ class PortfolioAccountService:
     def refresh_managed_universe_accounts(self) -> PortfolioAccountSnapshotRefreshStatus:
         return self.refresh_accounts(data_source=SimulationDataSource.MANAGED_UNIVERSE)
 
+    def list_managed_universe_account_tickers(self) -> list[str]:
+        self._ensure_storage_ready()
+        tickers: set[str] = set()
+        accounts = self.repository.list_accounts(
+            data_source=SimulationDataSource.MANAGED_UNIVERSE.value,
+        )
+        for account in accounts:
+            for raw_ticker in dict(account["stock_weights"]).keys():
+                ticker = str(raw_ticker).strip().upper()
+                if ticker:
+                    tickers.add(ticker)
+        return sorted(tickers)
+
     def refresh_accounts(
         self,
         *,
@@ -274,58 +288,32 @@ class PortfolioAccountService:
             data_source=SimulationDataSource(str(account["data_source"])),
         )
         cash_flows = self.repository.list_cash_flows(int(account["id"]))
-        snapshots = self._build_snapshots(
+        snapshots, rebalance_events = self._build_snapshots(
             prices=prices,
             stock_weights=stock_weights,
             cash_flows=cash_flows,
             started_at=str(account["started_at"]),
         )
         self.repository.replace_snapshots(int(account["id"]), snapshots)
-        self._detect_and_save_insights(
+        self._replace_rebalance_insights(
             account=account,
-            prices=prices,
-            stock_weights=stock_weights,
-            cash_flows=cash_flows,
+            rebalance_events=rebalance_events,
         )
 
-    def _detect_and_save_insights(
+    def _replace_rebalance_insights(
         self,
         *,
         account: dict[str, object],
-        prices: pd.DataFrame,
-        stock_weights: dict[str, float],
-        cash_flows: list[dict[str, object]],
+        rebalance_events: list[RebalanceEvent],
     ) -> None:
-        """Detect drift-based rebalancing and create insight records."""
+        """Replace stored rebalance insights from a shared rebalance simulation."""
         from mobile_backend.services.insight_text_service import (
             generate_insight_explanation,
         )
 
-        pivoted = (
-            prices.pivot_table(
-                index="date", columns="ticker", values="adjusted_close", aggfunc="last",
-            )
-            .sort_index()
-            .ffill()
-        )
-        if pivoted.empty:
-            return
+        account_id = int(account["id"])
+        self.repository.delete_rebalance_insights(account_id)
 
-        start_ts = pd.Timestamp(str(account["started_at"])).normalize()
-        today_ts = pd.Timestamp(datetime.now(UTC).date())
-        full_index = pd.date_range(start=pivoted.index.min(), end=today_ts, freq="D")
-        calendar_prices = pivoted.reindex(full_index).ffill()
-        calendar_prices = calendar_prices[calendar_prices.index >= start_ts]
-        calendar_prices = calendar_prices.dropna(how="any")
-        if calendar_prices.empty:
-            return
-
-        total_weight = sum(stock_weights.values())
-        if total_weight <= 0:
-            return
-        target_weights = {t: w / total_weight for t, w in stock_weights.items() if w > 0}
-
-        # Map ticker → sector using stock_allocations
         stock_allocs = list(account.get("stock_allocations") or [])
         ticker_to_sector_code: dict[str, str] = {}
         ticker_to_sector_name: dict[str, str] = {}
@@ -334,63 +322,24 @@ class PortfolioAccountService:
             ticker_to_sector_code[ticker] = str(alloc.get("sector_code", ""))
             ticker_to_sector_name[ticker] = str(alloc.get("sector_name", ""))
 
-        # Build holdings over time and check for drift quarterly
-        holdings = {ticker: 0.0 for ticker in target_weights}
-        cash_flow_map: dict[str, float] = {}
-        for cf in cash_flows:
-            d = str(cf["effective_date"])
-            cash_flow_map[d] = cash_flow_map.get(d, 0.0) + float(cf["amount"])
-
-        drift_threshold = 0.10
-        account_id = int(account["id"])
-        last_rebalance_date: str | None = None
-
-        for snapshot_date, row in calendar_prices.iterrows():
-            date_key = snapshot_date.strftime("%Y-%m-%d")
-            flow_amount = cash_flow_map.get(date_key, 0.0)
-            if flow_amount > 0:
-                for ticker, weight in target_weights.items():
-                    price = float(row.get(ticker, 0.0))
-                    if price <= 0:
-                        continue
-                    holdings[ticker] += (flow_amount * weight) / price
-
-            # Check drift on the last day of each quarter
-            if snapshot_date.month % 3 != 0 or snapshot_date != calendar_prices.index[-1]:
-                # Only check at quarter end or on the latest day
-                if snapshot_date != calendar_prices.index[-1]:
-                    continue
-
-            total_value = sum(
-                holdings[t] * float(row.get(t, 0.0)) for t in holdings
-            )
-            if total_value <= 0:
-                continue
-
-            actual_weights = {
-                t: (holdings[t] * float(row.get(t, 0.0))) / total_value
-                for t in holdings
-            }
-
-            max_drift = max(
-                abs(actual_weights.get(t, 0) - target_weights.get(t, 0))
-                / max(target_weights.get(t, 0), 1e-9)
-                for t in target_weights
-            )
-
-            if max_drift < drift_threshold:
-                continue
-
-            # Aggregate to sector level
+        for event in rebalance_events:
             sector_pre: dict[str, float] = {}
             sector_post: dict[str, float] = {}
             sector_code_to_name: dict[str, str] = {}
-            for ticker in target_weights:
+            for ticker, weight in event.pre_weights.items():
+                if ticker == "CASH":
+                    continue
                 code = ticker_to_sector_code.get(ticker, ticker)
                 name = ticker_to_sector_name.get(ticker, ticker)
                 sector_code_to_name[code] = name
-                sector_pre[code] = sector_pre.get(code, 0.0) + actual_weights.get(ticker, 0.0)
-                sector_post[code] = sector_post.get(code, 0.0) + target_weights.get(ticker, 0.0)
+                sector_pre[code] = sector_pre.get(code, 0.0) + weight
+            for ticker, weight in event.post_weights.items():
+                if ticker == "CASH":
+                    continue
+                code = ticker_to_sector_code.get(ticker, ticker)
+                name = ticker_to_sector_name.get(ticker, ticker)
+                sector_code_to_name[code] = name
+                sector_post[code] = sector_post.get(code, 0.0) + weight
 
             explanation = generate_insight_explanation(
                 pre_weights=sector_pre,
@@ -400,16 +349,11 @@ class PortfolioAccountService:
 
             self.repository.upsert_rebalance_insight(
                 account_id=account_id,
-                rebalance_date=date_key,
+                rebalance_date=event.date,
                 pre_weights=sector_pre,
                 post_weights=sector_post,
                 explanation_text=explanation,
             )
-            last_rebalance_date = date_key
-
-            # Simulate rebalance: reset holdings to target weights
-            for ticker in holdings:
-                holdings[ticker] = (total_value * target_weights[ticker]) / float(row.get(ticker, 1.0))
 
     def _load_price_history(
         self,
@@ -452,7 +396,7 @@ class PortfolioAccountService:
         stock_weights: dict[str, float],
         cash_flows: list[dict[str, object]],
         started_at: str,
-    ) -> list[dict[str, float | str]]:
+    ) -> tuple[list[dict[str, float | str]], list[RebalanceEvent]]:
         pivoted = (
             prices.pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
             .sort_index()
@@ -488,29 +432,39 @@ class PortfolioAccountService:
             effective_date = str(cash_flow["effective_date"])
             cash_flow_map[effective_date] = cash_flow_map.get(effective_date, 0.0) + float(cash_flow["amount"])
 
-        holdings = {ticker: 0.0 for ticker in normalized_weights}
-        invested_amount = 0.0
+        first_snapshot_date = calendar_prices.index[0].strftime("%Y-%m-%d")
+        initial_investment = sum(
+            amount
+            for effective_date, amount in cash_flow_map.items()
+            if effective_date <= first_snapshot_date
+        )
+        if initial_investment <= 0:
+            raise PortfolioAccountValidationError("초기 입금이 없어 자산 스냅샷을 만들 수 없습니다.")
+        recurring_cash_flows = {
+            effective_date: amount
+            for effective_date, amount in cash_flow_map.items()
+            if effective_date > first_snapshot_date
+        }
+
+        simulation = simulate_two_stage_rebalance(
+            calendar_prices,
+            normalized_weights,
+            initial_investment,
+            cash_flows=recurring_cash_flows,
+            max_points=None,
+        )
+
+        invested_amount = initial_investment
         snapshots: list[dict[str, float | str]] = []
 
-        for snapshot_date, row in calendar_prices.iterrows():
-            date_key = snapshot_date.strftime("%Y-%m-%d")
-            flow_amount = cash_flow_map.get(date_key, 0.0)
-            if flow_amount > 0:
-                for ticker, weight in normalized_weights.items():
-                    price = float(row[ticker])
-                    if price <= 0:
-                        continue
-                    holdings[ticker] += (flow_amount * weight) / price
-                invested_amount += flow_amount
-
-            portfolio_value = 0.0
-            for ticker, shares in holdings.items():
-                portfolio_value += shares * float(row[ticker])
+        for point in simulation.time_series:
+            invested_amount += recurring_cash_flows.get(point.date, 0.0)
+            portfolio_value = point.total_value
             profit_loss = portfolio_value - invested_amount
             profit_loss_pct = 0.0 if invested_amount <= 0 else profit_loss / invested_amount
             snapshots.append(
                 {
-                    "snapshot_date": date_key,
+                    "snapshot_date": point.date,
                     "portfolio_value": round(portfolio_value, 2),
                     "invested_amount": round(invested_amount, 2),
                     "profit_loss": round(profit_loss, 2),
@@ -518,7 +472,7 @@ class PortfolioAccountService:
                 }
             )
 
-        return snapshots
+        return snapshots, simulation.rebalance_events
 
     def _normalize_stock_weights(
         self,

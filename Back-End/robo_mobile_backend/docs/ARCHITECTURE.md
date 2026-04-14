@@ -28,6 +28,16 @@
 - `core`
   - 설정, 앱 메타데이터
 
+## Managed Market Data Pipeline
+
+`admin refresh -> stored prices + stored dividend estimates -> snapshots -> mobile runtime reuse`
+
+- 가격과 배당수익률 추정치는 refresh 시점에 적재한다.
+- 기대수익률 계산은 저장된 dividend estimate를 우선 사용한다.
+- request-path live fetch는 기본 경로가 아니라 fallback/debug 경로다.
+
+이 구조는 role 의미를 유지하면서 모바일 API latency를 안정적으로 관리하기 위한 것이다.
+
 ## 마이그레이션 우선순위
 
 1. `app` 계산 코어를 `mobile_backend` 네임스페이스로 재배치

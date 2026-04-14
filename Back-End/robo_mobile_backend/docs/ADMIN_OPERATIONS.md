@@ -57,12 +57,18 @@
 
 - `single_representative`
   - 후보 종목 중 대표 1개를 선택
-- `equal_weight_basket`
-  - 후보 종목 전체를 동일비중 바스켓으로 사용
 - `equal_weight_dividend_basket`
-  - 후보 종목 전체를 동일비중 바스켓으로 사용
-  - 배당 지급 이력이 있는 종목은 최근 지급 주기를 추정해 연환산 배당수익률을 계산
-  - 계산된 배당수익률을 바스켓 기대수익률에 동일비중으로 가산
+  - 후보 종목 전체를 optimizer 후보로 사용
+  - 최종 종목 비중은 optimizer가 결정
+  - refresh가 저장한 ticker별 dividend yield estimate를 기대수익률 overlay로 가산
+- `fixed_five_percent_equal_weight`
+  - 후보 종목 전체를 사용하되 해당 자산군 총합을 항상 5%로 고정
+  - 자산군 내부 종목은 동일비중으로 분할
+
+호환 규칙:
+
+- 과거 버전이나 외부 요청이 `equal_weight_basket`을 보내더라도 서버는 내부적으로 `equal_weight_dividend_basket`으로 정규화합니다.
+- 관리자 UI와 현재 문서에서는 중복을 피하기 위해 `equal_weight_dividend_basket`만 노출합니다.
 
 현재 구현 기준으로 role은 버전별 snapshot으로 저장됩니다.
 
@@ -110,11 +116,11 @@
   },
   {
     "asset_code": "gold",
-    "role_key": "equal_weight_basket"
+    "role_key": "equal_weight_dividend_basket"
   },
   {
     "asset_code": "infra_bond",
-    "role_key": "equal_weight_dividend_basket"
+    "role_key": "fixed_five_percent_equal_weight"
   }
 ]
 ```
@@ -139,7 +145,8 @@
 
 - 종목이 없는 빈 유니버스는 저장할 수 없습니다.
 - role 미지정 자산군은 기본 카탈로그의 기본 role을 따릅니다.
-- `equal_weight_dividend_basket`은 배당 지급 이력과 최근 지급 주기를 추정할 수 있는 종목에서 가장 잘 동작합니다.
+- `equal_weight_dividend_basket`은 refresh가 저장한 dividend yield estimate를 사용하므로, 가격 refresh가 최근 성공한 상태에서 가장 잘 동작합니다.
+- request 시점 live fallback은 `ENABLE_LIVE_MARKET_DATA_FETCH=true`일 때만 허용됩니다.
 
 ## 2. 가격 데이터 갱신
 
@@ -161,9 +168,11 @@
 - refresh가 `success` 또는 `partial_success`로 끝나면 같은 요청 안에서 `managed_universe`용 frontier snapshot도 다시 생성합니다.
 - 같은 요청 안에서 `managed_universe`용 comparison backtest snapshot도 다시 생성합니다.
 - 같은 요청 안에서 `managed_universe`를 사용하는 사용자 포트폴리오 계정 snapshot도 다시 계산합니다.
+- 같은 요청 안에서 refresh 대상 ticker의 dividend yield estimate도 함께 갱신합니다.
 - frontier snapshot은 `short`, `medium`, `long` horizon별로 저장되며, 모바일 recommendation/preview/selection API가 우선 재사용합니다.
 - comparison backtest snapshot은 horizon 없이 버전별 1개로 저장되며, 모바일 `comparison-backtest` API가 우선 재사용합니다.
 - 현재 가격 수집 단위는 일봉입니다. 저장 컬럼은 `date`, `adjusted_close`입니다.
+- 배당수익률 추정치는 ticker 단위로 별도 저장하며, expectation overlay 계산이 이 값을 우선 재사용합니다.
 
 응답 추가 필드:
 
@@ -182,6 +191,24 @@
 - `account_snapshot_refresh.failure_count`
 - `account_snapshot_refresh.failed_user_ids`
 - `account_snapshot_refresh.message`
+
+수동 실행 예시:
+
+```bash
+curl -X POST "http://127.0.0.1:8000/admin/api/prices/refresh" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "version_id": 12,
+    "refresh_mode": "incremental",
+    "full_lookback_years": 5
+  }'
+```
+
+운영 해석:
+
+- `version_id`를 주면 그 버전을 기준으로 refresh합니다.
+- `version_id`를 생략하면 현재 active 버전을 기준으로 refresh합니다.
+- 일반 운영은 `incremental`, 이력 재적재나 복구 작업만 `full`을 권장합니다.
 
 ### `POST /admin/api/prices/refresh/active`
 
@@ -206,7 +233,31 @@
 - 일반 운영은 `incremental`
 - 장기 백필이나 문제 복구 시에만 `full`
 - 미국 시장 종가 반영 이후 하루 1회 호출
+- 호출 성공 시 active 유니버스 종목뿐 아니라 `managed_universe` 사용자 계정이 이미 보유 중인 티커도 함께 최신화됨
 - 호출 성공 시 `managed_universe` comparison backtest snapshot과 사용자 자산 snapshot도 함께 최신화됨
+
+cron/외부 job 직접 호출 예시:
+
+```bash
+curl -X POST "https://<your-backend>/admin/api/prices/refresh/active" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Secret: ${ADMIN_REFRESH_SECRET}" \
+  -d '{
+    "refresh_mode": "incremental",
+    "full_lookback_years": 5
+  }'
+```
+
+내장 스크립트 예시:
+
+```bash
+cd Back-End/robo_mobile_backend
+BACKEND_BASE_URL="https://robomobilebackend-production.up.railway.app" \
+ADMIN_REFRESH_SECRET="<same-secret>" \
+REFRESH_MODE="incremental" \
+FULL_LOOKBACK_YEARS="5" \
+python scripts/run_active_refresh.py
+```
 
 ### 포트폴리오 계정 snapshot 자동 갱신 규칙
 
@@ -218,6 +269,7 @@
 주의:
 
 - `stock_combination_demo` 계정은 관리자 가격 refresh 대상이 아니므로 이 자동 배치에 포함되지 않습니다.
+- `managed_universe` 계정은 현재 active 유니버스에 없는 예전 보유 티커라도 저장된 `stock_weights`에 포함돼 있으면 refresh 대상에 계속 포함됩니다.
 - 계정 snapshot 계산은 가격 refresh 이후 수행되므로, 같은 응답 안에서 성공/실패 상태를 함께 확인할 수 있습니다.
 
 ## 3. Readiness 확인

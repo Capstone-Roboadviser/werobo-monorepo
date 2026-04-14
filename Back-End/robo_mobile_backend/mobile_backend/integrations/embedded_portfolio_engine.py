@@ -4,9 +4,11 @@ from datetime import date
 
 import logging
 
+from app.engine.rebalance import build_two_stage_rebalance_policy, serialize_rebalance_policy
 from app.services.managed_universe_service import ManagedUniverseService
 from mobile_backend.core.config import PROFILE_LABELS
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
+from mobile_backend.services.profile_service import ProfileService
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +21,14 @@ class EmbeddedPortfolioEngineAdapter:
     mobile-focused response contracts.
     """
 
+    FRONTIER_SNAPSHOT_SCHEMA_VERSION = 2
+    COMPARISON_BACKTEST_POLICY = serialize_rebalance_policy(
+        build_two_stage_rebalance_policy()
+    )
+
     def __init__(self, managed_universe_service: ManagedUniverseService | None = None) -> None:
         self.managed_universe_service = managed_universe_service or ManagedUniverseService()
+        self.profile_service = ProfileService()
         self._load_calculation_modules()
 
     def _load_calculation_modules(self) -> None:
@@ -222,6 +230,19 @@ class EmbeddedPortfolioEngineAdapter:
             **portfolio_data,
         }
 
+    def _resolve_profile_target_volatility(
+        self,
+        *,
+        risk_profile: RiskProfile,
+        investment_horizon: InvestmentHorizon,
+    ) -> float:
+        return float(
+            self.profile_service.resolve_target_volatility(
+                risk_profile=risk_profile,
+                investment_horizon=investment_horizon,
+            )
+        )
+
     def _build_portfolio_snapshot_from_context(
         self,
         *,
@@ -231,7 +252,11 @@ class EmbeddedPortfolioEngineAdapter:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
     ) -> dict[str, object]:
-        point = self._select_profile_option_point(context, risk_profile)
+        point = self._select_profile_option_point(
+            context,
+            risk_profile,
+            investment_horizon=investment_horizon,
+        )
         return self._build_portfolio_snapshot_from_point(
             context=context,
             instrument_by_ticker=instrument_by_ticker,
@@ -247,34 +272,38 @@ class EmbeddedPortfolioEngineAdapter:
         self,
         context,
         risk_profile: RiskProfile,
+        *,
+        investment_horizon: InvestmentHorizon,
     ):
-        profile_keys = (
-            RiskProfile.CONSERVATIVE,
-            RiskProfile.BALANCED,
-            RiskProfile.GROWTH,
+        target_volatility = self._resolve_profile_target_volatility(
+            risk_profile=risk_profile,
+            investment_horizon=investment_horizon,
         )
-        option_points = self.build_frontier_options(context.frontier_points)
-        point_map = {
-            profile: point
-            for profile, (_, point) in zip(profile_keys, option_points)
-        }
-        point = point_map.get(risk_profile)
-        if point is None:
-            raise RuntimeError(f"{risk_profile.value} 대표 포트폴리오 포인트를 찾지 못했습니다.")
-        return point
+        selected_index = self.select_frontier_point_index(
+            context.frontier_points,
+            target_volatility,
+        )
+        return context.frontier_points[selected_index]
 
-    def _build_representative_index_map(self, context) -> dict[RiskProfile, int]:
-        profile_keys = (
+    def _build_representative_index_map(
+        self,
+        context,
+        *,
+        investment_horizon: InvestmentHorizon,
+    ) -> dict[RiskProfile, int]:
+        index_map: dict[RiskProfile, int] = {}
+        for profile in (
             RiskProfile.CONSERVATIVE,
             RiskProfile.BALANCED,
             RiskProfile.GROWTH,
-        )
-        option_points = self.build_frontier_options(context.frontier_points)
-        index_map: dict[RiskProfile, int] = {}
-        for profile, (_, point) in zip(profile_keys, option_points):
+        ):
+            target_volatility = self._resolve_profile_target_volatility(
+                risk_profile=profile,
+                investment_horizon=investment_horizon,
+            )
             index_map[profile] = self.select_frontier_point_index(
                 context.frontier_points,
-                float(point.volatility),
+                target_volatility,
             )
         return index_map
 
@@ -419,11 +448,16 @@ class EmbeddedPortfolioEngineAdapter:
         lookup["snapshot_aligned_end_date"] = snapshot.aligned_end_date
         lookup["snapshot_point_count"] = snapshot.total_point_count
         lookup["snapshot_updated_at"] = snapshot.updated_at
+        schema_version = int(snapshot.payload.get("schema_version", 0))
+        lookup["snapshot_schema_version"] = schema_version
         if snapshot.aligned_start_date != price_window.aligned_start_date:
             lookup["reason"] = "aligned_start_date_mismatch"
             return None, lookup
         if snapshot.aligned_end_date != price_window.aligned_end_date:
             lookup["reason"] = "aligned_end_date_mismatch"
+            return None, lookup
+        if schema_version != self.FRONTIER_SNAPSHOT_SCHEMA_VERSION:
+            lookup["reason"] = "frontier_snapshot_schema_mismatch"
             return None, lookup
         lookup["reason"] = "frontier_snapshot_reused"
         return snapshot.payload, lookup
@@ -559,13 +593,15 @@ class EmbeddedPortfolioEngineAdapter:
         propensity_score: float | None,
     ) -> dict[str, object]:
         representative_portfolios = dict(snapshot_payload["representative_portfolios"])
-        resolved_target = float(representative_portfolios[resolved_profile.value]["target_volatility"])
         return {
             "resolved_profile": self._build_resolved_profile_payload(
                 resolved_profile=resolved_profile,
                 propensity_score=propensity_score,
                 investment_horizon=investment_horizon,
-                target_volatility=resolved_target,
+                target_volatility=self._resolve_profile_target_volatility(
+                    risk_profile=resolved_profile,
+                    investment_horizon=investment_horizon,
+                ),
             ),
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
@@ -608,7 +644,10 @@ class EmbeddedPortfolioEngineAdapter:
                 resolved_profile=resolved_profile,
                 propensity_score=propensity_score,
                 investment_horizon=investment_horizon,
-                target_volatility=float(frontier_points[recommended_index]["volatility"]),
+                target_volatility=self._resolve_profile_target_volatility(
+                    risk_profile=resolved_profile,
+                    investment_horizon=investment_horizon,
+                ),
             ),
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
@@ -676,8 +715,9 @@ class EmbeddedPortfolioEngineAdapter:
                 resolved_profile=resolved_profile,
                 propensity_score=propensity_score,
                 investment_horizon=investment_horizon,
-                target_volatility=float(
-                    dict(snapshot_payload["representative_portfolios"])[resolved_profile.value]["target_volatility"]
+                target_volatility=self._resolve_profile_target_volatility(
+                    risk_profile=resolved_profile,
+                    investment_horizon=investment_horizon,
                 ),
             ),
             "data_source": data_source.value,
@@ -705,8 +745,12 @@ class EmbeddedPortfolioEngineAdapter:
             investment_horizon=investment_horizon,
             data_source=data_source,
         )
-        representative_indices = self._build_representative_index_map(context)
+        representative_indices = self._build_representative_index_map(
+            context,
+            investment_horizon=investment_horizon,
+        )
         return {
+            "schema_version": self.FRONTIER_SNAPSHOT_SCHEMA_VERSION,
             "is_stock_combination": context.selected_combination is not None,
             "total_point_count": len(context.frontier_points),
             "frontier_points": [
@@ -827,18 +871,15 @@ class EmbeddedPortfolioEngineAdapter:
             )
         ]
 
-        resolved_target = next(
-            portfolio["target_volatility"]
-            for portfolio in portfolios
-            if portfolio["code"] == resolved_profile.value
-        )
-
         return {
             "resolved_profile": self._build_resolved_profile_payload(
                 resolved_profile=resolved_profile,
                 propensity_score=propensity_score,
                 investment_horizon=investment_horizon,
-                target_volatility=resolved_target,
+                target_volatility=self._resolve_profile_target_volatility(
+                    risk_profile=resolved_profile,
+                    investment_horizon=investment_horizon,
+                ),
             ),
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
@@ -897,7 +938,10 @@ class EmbeddedPortfolioEngineAdapter:
             data_source=data_source,
             as_of_date=as_of_date,
         )
-        representative_indices = self._build_representative_index_map(context)
+        representative_indices = self._build_representative_index_map(
+            context,
+            investment_horizon=investment_horizon,
+        )
         recommended_index = representative_indices[resolved_profile]
         representative_index_lookup = {
             index: profile for profile, index in representative_indices.items()
@@ -913,7 +957,10 @@ class EmbeddedPortfolioEngineAdapter:
                 resolved_profile=resolved_profile,
                 propensity_score=propensity_score,
                 investment_horizon=investment_horizon,
-                target_volatility=context.frontier_points[recommended_index].volatility,
+                target_volatility=self._resolve_profile_target_volatility(
+                    risk_profile=resolved_profile,
+                    investment_horizon=investment_horizon,
+                ),
             ),
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
@@ -990,7 +1037,10 @@ class EmbeddedPortfolioEngineAdapter:
             target_volatility=target_volatility,
             frontier_points=context.frontier_points,
         )
-        representative_indices = self._build_representative_index_map(context)
+        representative_indices = self._build_representative_index_map(
+            context,
+            investment_horizon=investment_horizon,
+        )
         representative_profile = min(
             representative_indices,
             key=lambda profile: abs(
@@ -1013,7 +1063,10 @@ class EmbeddedPortfolioEngineAdapter:
                 resolved_profile=resolved_profile,
                 propensity_score=propensity_score,
                 investment_horizon=investment_horizon,
-                target_volatility=context.frontier_points[representative_indices[resolved_profile]].volatility,
+                target_volatility=self._resolve_profile_target_volatility(
+                    risk_profile=resolved_profile,
+                    investment_horizon=investment_horizon,
+                ),
             ),
             "data_source": data_source.value,
             "as_of_date": self._serialize_as_of_date(as_of_date),
@@ -1158,6 +1211,7 @@ class EmbeddedPortfolioEngineAdapter:
             "end_date": response.end_date,
             "split_ratio": response.split_ratio,
             "rebalance_dates": response.rebalance_dates,
+            "rebalance_policy": dict(self.COMPARISON_BACKTEST_POLICY),
             "lines": [
                 {
                     "key": line.key,
@@ -1178,6 +1232,12 @@ class EmbeddedPortfolioEngineAdapter:
         *,
         snapshot_payload: dict[str, object],
     ) -> dict[str, object]:
+        raw_policy = snapshot_payload.get("rebalance_policy")
+        rebalance_policy = (
+            dict(raw_policy)
+            if isinstance(raw_policy, dict)
+            else dict(self.COMPARISON_BACKTEST_POLICY)
+        )
         return {
             "train_start_date": str(snapshot_payload["train_start_date"]),
             "train_end_date": str(snapshot_payload["train_end_date"]),
@@ -1186,6 +1246,7 @@ class EmbeddedPortfolioEngineAdapter:
             "end_date": str(snapshot_payload["end_date"]),
             "split_ratio": float(snapshot_payload["split_ratio"]),
             "rebalance_dates": list(snapshot_payload.get("rebalance_dates", [])),
+            "rebalance_policy": rebalance_policy,
             "lines": [
                 {
                     "key": str(line["key"]),

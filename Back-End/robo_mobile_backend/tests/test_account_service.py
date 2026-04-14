@@ -16,6 +16,7 @@ class FakePortfolioAccountRepository:
         self.accounts_by_user_id: dict[int, dict[str, object]] = {}
         self.cash_flows_by_account_id: dict[int, list[dict[str, object]]] = {}
         self.snapshots_by_account_id: dict[int, list[dict[str, object]]] = {}
+        self.rebalance_insights_by_account_id: dict[int, list[dict[str, object]]] = {}
 
     def is_configured(self) -> bool:
         return self.ready
@@ -47,6 +48,7 @@ class FakePortfolioAccountRepository:
         self.accounts_by_user_id[user_id] = account
         self.cash_flows_by_account_id[account["id"]] = []
         self.snapshots_by_account_id[account["id"]] = []
+        self.rebalance_insights_by_account_id[account["id"]] = []
         self.next_account_id += 1
         return account
 
@@ -87,6 +89,37 @@ class FakePortfolioAccountRepository:
     def list_snapshots(self, account_id: int) -> list[dict[str, object]]:
         return list(self.snapshots_by_account_id.get(account_id, []))
 
+    def upsert_rebalance_insight(
+        self,
+        *,
+        account_id: int,
+        rebalance_date: str,
+        pre_weights: dict[str, float],
+        post_weights: dict[str, float],
+        explanation_text: str | None = None,
+    ) -> dict[str, object]:
+        existing = self.rebalance_insights_by_account_id.setdefault(account_id, [])
+        insight = {
+            "account_id": account_id,
+            "rebalance_date": rebalance_date,
+            "pre_weights": dict(pre_weights),
+            "post_weights": dict(post_weights),
+            "explanation_text": explanation_text,
+        }
+        for idx, current in enumerate(existing):
+            if current["rebalance_date"] == rebalance_date:
+                existing[idx] = insight
+                return insight
+        existing.append(insight)
+        existing.sort(key=lambda item: str(item["rebalance_date"]), reverse=True)
+        return insight
+
+    def list_rebalance_insights(self, account_id: int) -> list[dict[str, object]]:
+        return list(self.rebalance_insights_by_account_id.get(account_id, []))
+
+    def delete_rebalance_insights(self, account_id: int) -> None:
+        self.rebalance_insights_by_account_id[account_id] = []
+
 
 class StubPortfolioAccountService(PortfolioAccountService):
     def __init__(self, repository: FakePortfolioAccountRepository) -> None:
@@ -104,6 +137,7 @@ class StubPortfolioAccountService(PortfolioAccountService):
         for ticker, yesterday_price, today_price in (
             ("QQQ", 100.0, 102.0),
             ("TLT", 50.0, 51.0),
+            ("GLD", 200.0, 202.0),
         ):
             if ticker not in tickers:
                 continue
@@ -119,6 +153,43 @@ class StubPortfolioAccountService(PortfolioAccountService):
                     "date": pd.Timestamp(today),
                     "ticker": ticker,
                     "adjusted_close": today_price,
+                }
+            )
+        return pd.DataFrame(rows)
+
+
+class QuarterlyRebalancePortfolioAccountService(PortfolioAccountService):
+    def __init__(self, repository: FakePortfolioAccountRepository) -> None:
+        super().__init__(repository=repository, portfolio_service=object())
+
+    def _load_price_history(
+        self,
+        *,
+        tickers: list[str],
+        data_source: SimulationDataSource,
+    ) -> pd.DataFrame:
+        if set(tickers) != {"QQQ", "TLT"}:
+            raise AssertionError(f"Unexpected tickers: {tickers}")
+
+        rows = []
+        for snapshot_date, qqq_price, tlt_price in (
+            (date(2026, 3, 30), 100.0, 100.0),
+            (date(2026, 3, 31), 106.0, 94.0),
+            (date(2026, 4, 1), 200.0, 50.0),
+            (date.today(), 200.0, 50.0),
+        ):
+            rows.append(
+                {
+                    "date": pd.Timestamp(snapshot_date),
+                    "ticker": "QQQ",
+                    "adjusted_close": qqq_price,
+                }
+            )
+            rows.append(
+                {
+                    "date": pd.Timestamp(snapshot_date),
+                    "ticker": "TLT",
+                    "adjusted_close": tlt_price,
                 }
             )
         return pd.DataFrame(rows)
@@ -257,6 +328,50 @@ def test_cash_in_updates_invested_amount_and_activity() -> None:
     )
 
 
+def test_account_snapshots_follow_two_stage_rebalance_policy() -> None:
+    repository = FakePortfolioAccountRepository()
+    service = QuarterlyRebalancePortfolioAccountService(repository)
+
+    dashboard = service.create_or_replace_account(
+        user_id=9,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "QQQ",
+                "name": "Invesco QQQ Trust",
+                "sector_code": "us_growth",
+                "sector_name": "미국 성장주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "TLT",
+                "name": "iShares 20+ Year Treasury Bond ETF",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.5,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+        started_at="2026-03-30",
+    )
+
+    assert dashboard["summary"] is not None
+    assert dashboard["summary"]["current_value"] == 12_093_536.73
+    assert [item["rebalance_date"] for item in repository.list_rebalance_insights(1)] == [
+        "2026-04-01",
+        "2026-03-31",
+    ]
+
+
 def test_refresh_managed_universe_accounts_filters_target_accounts() -> None:
     repository = FakePortfolioAccountRepository()
     service = StubPortfolioAccountService(repository)
@@ -313,3 +428,93 @@ def test_refresh_managed_universe_accounts_filters_target_accounts() -> None:
     assert status.account_count == 1
     assert status.success_count == 1
     assert status.failure_count == 0
+
+
+def test_list_managed_universe_account_tickers_returns_unique_sorted_tickers() -> None:
+    repository = FakePortfolioAccountRepository()
+    service = StubPortfolioAccountService(repository)
+    service.create_or_replace_account(
+        user_id=21,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "qqq",
+                "name": "Invesco QQQ Trust",
+                "sector_code": "us_growth",
+                "sector_name": "미국 성장주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "tlt",
+                "name": "iShares 20+ Year Treasury Bond ETF",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.5,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+    )
+    service.create_or_replace_account(
+        user_id=22,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="growth",
+        portfolio_label="성장형",
+        portfolio_id="stocks-growth-medium-0.16",
+        target_volatility=0.16,
+        expected_return=0.1,
+        volatility=0.14,
+        sharpe_ratio=0.8,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "GLD",
+                "name": "SPDR Gold Shares",
+                "sector_code": "gold",
+                "sector_name": "금",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "QQQ",
+                "name": "Invesco QQQ Trust",
+                "sector_code": "us_growth",
+                "sector_name": "미국 성장주",
+                "weight": 0.5,
+            },
+        ],
+        initial_cash_amount=5_000_000,
+    )
+    service.create_or_replace_account(
+        user_id=23,
+        data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+        investment_horizon="medium",
+        portfolio_code="growth",
+        portfolio_label="성장형",
+        portfolio_id="stocks-growth-medium-0.18",
+        target_volatility=0.18,
+        expected_return=0.11,
+        volatility=0.16,
+        sharpe_ratio=0.84,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "QQQ",
+                "name": "Invesco QQQ Trust",
+                "sector_code": "us_growth",
+                "sector_name": "미국 성장주",
+                "weight": 1.0,
+            },
+        ],
+        initial_cash_amount=3_000_000,
+    )
+
+    assert service.list_managed_universe_account_tickers() == ["GLD", "QQQ", "TLT"]

@@ -53,6 +53,7 @@ robo_mobile_backend/
 - [모바일 API 명세](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/docs/MOBILE_API_SPEC.md)
 - [관리자 운영 문서](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/docs/ADMIN_OPERATIONS.md)
 - [아키텍처 개요](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/docs/ARCHITECTURE.md)
+- [기대수익률/배당 파이프라인](/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Back-End/robo_mobile_backend/docs/EXPECTED_RETURN_PIPELINE.md)
 
 ## 주요 엔드포인트
 
@@ -128,7 +129,8 @@ robo_mobile_backend/
 동작 규칙:
 
 - 초기 자산 계정 생성 시 기본 원금과 포트폴리오 종목 비중이 저장됩니다.
-- `cash-in`이 발생하면 누적 원금과 보유 수량 기준으로 일별 스냅샷이 다시 계산됩니다.
+- 자산 스냅샷은 공용 리밸런싱 엔진을 사용해 계산되며, 분기말 정기 리밸런싱과 일일 10% drift guard를 함께 반영합니다.
+- `cash-in`이 발생하면 누적 원금과 리밸런싱 정책을 함께 반영해 일별 스냅샷이 다시 계산됩니다.
 - 홈 화면 `현재 자산` 차트와 `최근 활동`은 이 스냅샷/이벤트를 우선 사용합니다.
 - 로그인하지 않은 사용자는 기존 목업 fallback을 사용합니다.
 
@@ -139,10 +141,11 @@ robo_mobile_backend/
 성공 또는 부분 성공으로 끝나면 같은 요청 안에서 아래 작업이 이어집니다.
 
 1. active 유니버스의 공통 가격 구간 계산
-2. `managed_universe` 기준 efficient frontier 재계산
-3. `short`, `medium`, `long` horizon별 materialized frontier snapshot 저장
-4. `managed_universe` comparison backtest snapshot 저장
-5. `managed_universe`를 사용하는 사용자 포트폴리오 계정의 일별 자산 snapshot 재계산
+2. refresh 대상 티커의 배당수익률 추정치 저장
+3. `managed_universe` 기준 efficient frontier 재계산
+4. `short`, `medium`, `long` horizon별 materialized frontier snapshot 저장
+5. `managed_universe` comparison backtest snapshot 저장
+6. `managed_universe`를 사용하는 사용자 포트폴리오 계정의 일별 자산 snapshot 재계산
 
 그 결과 모바일 API의 아래 엔드포인트는 `managed_universe` 요청 시 저장된 snapshot을 우선 읽고, 없을 때만 기존 계산 경로로 fallback 합니다.
 즉 응답 기준 시점은 마지막 성공한 admin refresh 시점과 일치할 수 있습니다.
@@ -152,15 +155,20 @@ robo_mobile_backend/
 - `POST /api/v1/portfolios/frontier-selection`
 - `POST /api/v1/portfolios/comparison-backtest`
 
+배당 반영 role은 request 시점에 외부 배당 데이터를 바로 조회하지 않습니다.
+admin refresh가 저장한 ticker별 dividend yield estimate를 우선 사용하고,
+저장값이 없을 때만 `ENABLE_LIVE_MARKET_DATA_FETCH=true` 환경에서 live fallback이 가능합니다.
+
 자동 주기 갱신이 필요하면 `POST /admin/api/prices/refresh/active`를 사용하면 됩니다.
 
-- 대상: 현재 active 유니버스만
+- 대상: 현재 active 유니버스 + `managed_universe` 사용자 계정이 이미 보유 중인 티커
 - 인증: `X-Admin-Secret` 헤더
 - 서버 설정: `ADMIN_REFRESH_SECRET` 환경변수
 - 권장 호출 주기: 하루 1번
-- 후속 작업: frontier snapshot 재생성 + comparison backtest snapshot 재생성 + `managed_universe` 사용자 자산 snapshot 재계산
+- 후속 작업: dividend yield estimate 갱신 + frontier snapshot 재생성 + comparison backtest snapshot 재생성 + `managed_universe` 사용자 자산 snapshot 재계산
 
-현재 가격 데이터는 `yfinance`의 일별 가격 데이터(`date`, `adjusted_close`)를 사용합니다.
+현재 market refresh는 `yfinance`의 일별 가격 데이터(`date`, `adjusted_close`)와
+배당 지급 이력을 함께 사용합니다.
 
 ### Railway cron 권장 설정
 
@@ -186,10 +194,11 @@ cron 서비스 변수:
 
 cron이 성공하면 아래가 한 번에 갱신됩니다.
 
-1. active 유니버스 가격 데이터
-2. `managed_universe` materialized frontier snapshot
-3. `managed_universe` comparison backtest snapshot
-4. `managed_universe` 사용자 포트폴리오 계정의 `portfolio_daily_snapshots`
+1. active 유니버스 가격 데이터 + `managed_universe` 사용자 보유 티커 가격 데이터
+2. refresh 대상 ticker의 dividend yield estimate
+3. `managed_universe` materialized frontier snapshot
+4. `managed_universe` comparison backtest snapshot
+5. `managed_universe` 사용자 포트폴리오 계정의 `portfolio_daily_snapshots`
 
 ## 실행 방법
 
