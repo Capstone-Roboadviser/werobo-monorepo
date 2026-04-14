@@ -487,8 +487,11 @@ class _ComparisonViewState extends State<_ComparisonView>
         (widget.useFallbackMock
             ? _allMockComparisonLines()
             : const <ChartLine>[]);
-    final typedLines = allLines.isEmpty ? allLines : _filterByType(allLines);
-    final lines = typedLines.isEmpty ? typedLines : _filterByRange(typedLines);
+    // Filter by range before deriving comparison overlays so the bond trend
+    // keeps the selected window's start/end points instead of collapsing.
+    final rangedLines = allLines.isEmpty ? allLines : _filterByRange(allLines);
+    final lines =
+        rangedLines.isEmpty ? rangedLines : _filterByType(rangedLines);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
