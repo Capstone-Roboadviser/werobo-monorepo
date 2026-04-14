@@ -348,16 +348,49 @@ class _ComparisonViewState extends State<_ComparisonView>
     return null;
   }
 
+  ChartLine? _buildPortfolioLine(List<ChartLine> rawLines) {
+    for (final key in [widget.type.riskCode, 'selected']) {
+      for (final line in rawLines) {
+        if (line.key == key) {
+          return _normalizePortfolioLine(line);
+        }
+      }
+    }
+
+    for (final line in rawLines) {
+      if (line.key == 'benchmark_avg' || line.key == 'treasury') {
+        continue;
+      }
+      return _normalizePortfolioLine(line);
+    }
+    return null;
+  }
+
+  ChartLine _normalizePortfolioLine(ChartLine line) {
+    if (line.key != 'selected') {
+      return line;
+    }
+
+    final normalizedLabel =
+        line.label.trim().isEmpty || line.label == 'selected'
+            ? '선택 포트폴리오'
+            : line.label;
+    return ChartLine(
+      key: line.key,
+      label: normalizedLabel,
+      color: WeRoboColors.primary,
+      dashed: false,
+      points: line.points,
+    );
+  }
+
   List<ChartLine> _filterByType(List<ChartLine> rawLines) {
-    final code = widget.type.riskCode;
     final result = <ChartLine>[];
 
     // Selected portfolio line
-    for (final line in rawLines) {
-      if (line.key == code) {
-        result.add(line);
-        break;
-      }
+    final portfolioLine = _buildPortfolioLine(rawLines);
+    if (portfolioLine != null) {
+      result.add(portfolioLine);
     }
 
     // 7-asset average benchmark (toggle-controlled)
@@ -424,7 +457,7 @@ class _ComparisonViewState extends State<_ComparisonView>
     return ChartLine(
       key: 'bond_trend',
       label: '채권 수익률',
-      color: const Color(0xFF999999).withValues(alpha: 0.4),
+      color: treasury.color,
       dashed: true,
       points: [first, last],
     );
