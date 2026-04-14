@@ -6,12 +6,14 @@ class GlowingBorder extends StatefulWidget {
   final Widget child;
   final Duration duration;
   final double borderRadius;
+  final bool shrinkWrap;
 
   const GlowingBorder({
     super.key,
     required this.child,
     this.duration = const Duration(milliseconds: 2200),
     this.borderRadius = WeRoboColors.radiusXL,
+    this.shrinkWrap = false,
   });
 
   @override
@@ -40,7 +42,7 @@ class _GlowingBorderState extends State<GlowingBorder>
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: double.infinity,
+      width: widget.shrinkWrap ? null : double.infinity,
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) => CustomPaint(

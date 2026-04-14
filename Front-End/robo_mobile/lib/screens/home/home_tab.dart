@@ -541,32 +541,52 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(_rangeLabels.length, (i) {
             final active = i == _range;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: GestureDetector(
-                onTap: () => _selectRange(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: active ? WeRoboColors.primary : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    border: active
-                        ? null
-                        : Border.all(color: tc.border, width: 0.5),
-                  ),
-                  child: Text(
-                    _rangeLabels[i],
-                    style: TextStyle(
-                      fontFamily: WeRoboFonts.body,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: active ? WeRoboColors.white : tc.textTertiary,
-                    ),
+            final isFuture = i == _rangeLabels.length - 1;
+
+            final chip = GestureDetector(
+              onTap: () => _selectRange(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: active ? WeRoboColors.primary : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: isFuture
+                      ? [
+                          BoxShadow(
+                            color:
+                                WeRoboColors.primary.withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Text(
+                  _rangeLabels[i],
+                  style: TextStyle(
+                    fontFamily: WeRoboFonts.body,
+                    fontSize: 12,
+                    fontWeight: isFuture ? FontWeight.w600 : FontWeight.w500,
+                    color: isFuture
+                        ? WeRoboColors.primary
+                        : active
+                            ? WeRoboColors.white
+                            : WeRoboColors.white,
                   ),
                 ),
               ),
+            );
+
+            final child = isFuture
+                ? GlowingBorder(
+                    borderRadius: 8, shrinkWrap: true, child: chip)
+                : chip;
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: child,
             );
           }),
         ),
