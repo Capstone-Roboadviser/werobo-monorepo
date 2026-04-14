@@ -73,7 +73,7 @@ class _DigestLoadingState extends State<DigestLoading>
             AnimatedBuilder(
               animation: _pulseController,
               builder: (context, child) {
-                final scale = 1.0 + _pulseController.value * 0.08;
+                final scale = 1.0 + _pulseController.value * 0.04;
                 return Transform.scale(scale: scale, child: child);
               },
               child: Container(

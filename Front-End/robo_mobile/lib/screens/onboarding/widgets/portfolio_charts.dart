@@ -64,7 +64,7 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
         const SizedBox(height: 12),
         Expanded(
           child: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 250),
+            duration: WeRoboMotion.medium,
             child: _topTab == 0
                 ? _VolReturnView(
                     key: const ValueKey('volret'),
@@ -100,7 +100,8 @@ class _ToggleTab extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: WeRoboMotion.short,
+          curve: WeRoboMotion.move,
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
             color: isActive ? WeRoboColors.primary : Colors.transparent,

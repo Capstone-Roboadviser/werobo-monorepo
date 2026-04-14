@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
+import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../app/theme_state.dart';
 import '../onboarding/splash_screen.dart';
@@ -126,7 +127,7 @@ class SettingsTab extends StatelessWidget {
   }
 }
 
-class _SettingsItem extends StatefulWidget {
+class _SettingsItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -138,50 +139,32 @@ class _SettingsItem extends StatefulWidget {
   });
 
   @override
-  State<_SettingsItem> createState() => _SettingsItemState();
-}
-
-class _SettingsItemState extends State<_SettingsItem> {
-  bool _pressed = false;
-
-  @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    return GestureDetector(
-      onTapDown: (_) => setState(() => _pressed = true),
-      onTapUp: (_) {
-        setState(() => _pressed = false);
-        widget.onTap();
-      },
-      onTapCancel: () => setState(() => _pressed = false),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedScale(
-        scale: _pressed ? 0.97 : 1.0,
-        duration: const Duration(milliseconds: 100),
-        curve: Curves.easeOut,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: tc.border.withValues(alpha: 0.4),
-                width: 0.5,
-              ),
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: tc.border.withValues(alpha: 0.4),
+              width: 0.5,
             ),
           ),
-          child: Row(
-            children: [
-              Icon(widget.icon, size: 22, color: tc.textSecondary),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(widget.label,
-                    style:
-                        WeRoboTypography.body.copyWith(color: tc.textPrimary)),
-              ),
-              Icon(Icons.chevron_right_rounded,
-                  size: 20, color: tc.textTertiary),
-            ],
-          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 22, color: tc.textSecondary),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(label,
+                  style:
+                      WeRoboTypography.body.copyWith(color: tc.textPrimary)),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                size: 20, color: tc.textTertiary),
+          ],
         ),
       ),
     );

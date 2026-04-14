@@ -64,15 +64,8 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
                     onTap: () {
                       Navigator.push(
                         context,
-                        PageRouteBuilder<void>(
-                          pageBuilder: (_, __, ___) =>
-                              const InsightHistoryPage(),
-                          transitionsBuilder: (_, anim, __, child) =>
-                              FadeTransition(
-                            opacity: anim,
-                            child: child,
-                          ),
-                        ),
+                        WeRoboMotion.fadeRoute<void>(
+                            const InsightHistoryPage()),
                       );
                     },
                     child: Container(

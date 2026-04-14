@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'theme.dart';
 
 /// Wraps a child with scale-on-press feedback (Emil Kowalski pattern).
 /// Use for any tappable element that needs physical feedback.
@@ -36,7 +37,7 @@ class _PressableState extends State<Pressable> {
       child: AnimatedScale(
         scale: _pressed ? widget.scale : 1.0,
         duration: widget.duration,
-        curve: Curves.easeOut,
+        curve: WeRoboMotion.enter,
         child: widget.child,
       ),
     );
