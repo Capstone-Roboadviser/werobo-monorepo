@@ -6,6 +6,7 @@ import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
 import 'widgets/digest_loading.dart';
 import 'widgets/driver_card.dart';
+import 'widgets/return_bar_chart.dart';
 
 class DigestScreen extends StatefulWidget {
   const DigestScreen({super.key});
@@ -164,6 +165,16 @@ class _DigestContent extends StatelessWidget {
         _SummaryCard(digest: digest),
         const SizedBox(height: WeRoboSpacing.xl),
 
+        // Asset return bar chart
+        if (digest.drivers.isNotEmpty ||
+            digest.detractors.isNotEmpty) ...[
+          ReturnBarChart(
+            drivers: digest.drivers,
+            detractors: digest.detractors,
+          ),
+          const SizedBox(height: WeRoboSpacing.xl),
+        ],
+
         // Drivers
         if (digest.drivers.isNotEmpty) ...[
           _SectionHeader(
@@ -221,7 +232,6 @@ class _DateBadge extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: tc.card,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
@@ -257,7 +267,6 @@ class _SummaryCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: tc.card,
         borderRadius: BorderRadius.circular(WeRoboColors.radiusXL),
       ),
       child: Column(
@@ -282,18 +291,10 @@ class _SummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          if (digest.drivers.isNotEmpty ||
-              digest.detractors.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            _ContributionBar(
-              drivers: digest.drivers,
-              detractors: digest.detractors,
-            ),
-          ],
           if (digest.hasNarrative && digest.narrativeKo != null) ...[
             const SizedBox(height: 12),
             Text(
-              digest.narrativeKo!,
+              _buildNarrativeWithBenchmark(digest),
               style: WeRoboTypography.bodySmall.copyWith(
                 color: tc.textPrimary,
                 height: 1.7,
@@ -306,7 +307,6 @@ class _SummaryCard extends StatelessWidget {
               padding: const EdgeInsets.symmetric(
                   horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: tc.background,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -323,6 +323,38 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 
+  String _buildNarrativeWithBenchmark(MobileDigestResponse d) {
+    final narrative = d.narrativeKo!;
+    if (d.benchmark7assetReturnPct == null) return narrative;
+
+    final asset7 = d.benchmark7assetReturnPct!;
+    final excess7 = d.totalReturnPct - asset7;
+    final sign7 = excess7 >= 0 ? '+' : '';
+    final parts = <String>[
+      '7자산 균등배분 대비 $sign7${excess7.toStringAsFixed(1)}%p',
+    ];
+    if (d.benchmarkBondReturnPct != null) {
+      final excessBond =
+          d.totalReturnPct - d.benchmarkBondReturnPct!;
+      final signBond = excessBond >= 0 ? '+' : '';
+      parts.add(
+        '채권 대비 $signBond${excessBond.toStringAsFixed(1)}%p',
+      );
+    }
+    final verb = excess7 >= 0 ? '초과 수익' : '하회';
+    final benchmarkSentence =
+        '${parts.join(", ")} $verb을 기록했습니다.';
+
+    // Insert as 2nd sentence
+    final dotIdx = narrative.indexOf('. ');
+    if (dotIdx >= 0) {
+      final first = narrative.substring(0, dotIdx + 1);
+      final rest = narrative.substring(dotIdx + 1).trimLeft();
+      return '$first $benchmarkSentence $rest';
+    }
+    return '$narrative $benchmarkSentence';
+  }
+
   String _formatWon(double won) {
     final abs = won.abs().round();
     final formatted = abs.toString().replaceAllMapped(
@@ -330,70 +362,6 @@ class _SummaryCard extends StatelessWidget {
       (m) => '${m[1]},',
     );
     return won < 0 ? '-₩$formatted' : '₩$formatted';
-  }
-}
-
-class _ContributionBar extends StatelessWidget {
-  final List<DigestDriver> drivers;
-  final List<DigestDriver> detractors;
-  const _ContributionBar({
-    required this.drivers,
-    required this.detractors,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    final posSum = drivers.fold<double>(
-        0, (s, d) => s + d.contributionWon.abs());
-    final negSum = detractors.fold<double>(
-        0, (s, d) => s + d.contributionWon.abs());
-    final total = posSum + negSum;
-    if (total == 0) return const SizedBox.shrink();
-    final posFrac = posSum / total;
-
-    return Column(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(3),
-          child: SizedBox(
-            height: 6,
-            child: Row(
-              children: [
-                Flexible(
-                  flex: (posFrac * 1000).round(),
-                  child: Container(color: tc.accent),
-                ),
-                if (posFrac < 1) const SizedBox(width: 2),
-                Flexible(
-                  flex: ((1 - posFrac) * 1000).round(),
-                  child:
-                      Container(color: WeRoboColors.error),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              '상승 ${drivers.length}종목',
-              style: WeRoboTypography.caption.copyWith(
-                color: tc.accent,
-              ),
-            ),
-            Text(
-              '하락 ${detractors.length}종목',
-              style: WeRoboTypography.caption.copyWith(
-                color: WeRoboColors.error,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
   }
 }
 

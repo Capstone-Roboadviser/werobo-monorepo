@@ -21,8 +21,8 @@ class DigestResponse(BaseModel):
     total_return_won: float = Field(..., description="주간 총 수익(원)", examples=[-32400])
     narrative_ko: str | None = Field(None, description="AI 생성 한국어 요약")
     has_narrative: bool = Field(..., description="AI 요약 포함 여부")
-    drivers: list[DigestDriverResponse] = Field(..., description="상승 기여 종목 (최대 3)")
-    detractors: list[DigestDriverResponse] = Field(..., description="하락 기여 종목 (최대 3)")
+    drivers: list[DigestDriverResponse] = Field(..., description="상승 기여 종목 (최대 2)")
+    detractors: list[DigestDriverResponse] = Field(..., description="하락 기여 종목 (최대 2)")
     sources_used: list[str] = Field(..., description="데이터 소스 목록")
     disclaimer: str = Field(
         default="이 내용은 투자 조언이 아닙니다. AI가 생성한 요약이며 투자 결정의 근거로 사용하지 마세요.",
@@ -33,4 +33,10 @@ class DigestResponse(BaseModel):
         ...,
         description="저하 수준: 0=전체, 1=뉴스 없음, 2=내러티브 없음, 3=오류",
         examples=[0],
+    )
+    benchmark_7asset_return_pct: float | None = Field(
+        None, description="7자산 균등배분 벤치마크 주간 수익률(%)"
+    )
+    benchmark_bond_return_pct: float | None = Field(
+        None, description="채권 벤치마크 주간 수익률(%)"
     )
