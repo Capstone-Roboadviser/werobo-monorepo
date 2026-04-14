@@ -23,7 +23,6 @@ class DriverCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: tc.card,
         borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
       ),
       child: Column(
@@ -37,7 +36,7 @@ class DriverCard extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: tc.card,
+                  color: tc.border.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -97,7 +96,7 @@ class DriverCard extends StatelessWidget {
               padding: const EdgeInsets.only(top: 8),
               decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: tc.card),
+                  top: BorderSide(color: tc.border.withValues(alpha: 0.3)),
                 ),
               ),
               child: Text(

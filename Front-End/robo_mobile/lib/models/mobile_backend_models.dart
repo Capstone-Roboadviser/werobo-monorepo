@@ -1484,6 +1484,8 @@ class MobileDigestResponse {
   final String disclaimer;
   final String generatedAt;
   final int degradationLevel;
+  final double? benchmark7assetReturnPct;
+  final double? benchmarkBondReturnPct;
 
   const MobileDigestResponse({
     required this.digestDate,
@@ -1499,6 +1501,8 @@ class MobileDigestResponse {
     required this.disclaimer,
     required this.generatedAt,
     required this.degradationLevel,
+    this.benchmark7assetReturnPct,
+    this.benchmarkBondReturnPct,
   });
 
   factory MobileDigestResponse.fromJson(Map<String, dynamic> json) {
@@ -1527,6 +1531,14 @@ class MobileDigestResponse {
       disclaimer: json['disclaimer']?.toString() ?? '',
       generatedAt: json['generated_at']?.toString() ?? '',
       degradationLevel: (json['degradation_level'] as num?)?.toInt() ?? 0,
+      benchmark7assetReturnPct:
+          json['benchmark_7asset_return_pct'] != null
+              ? _asDouble(json['benchmark_7asset_return_pct'])
+              : null,
+      benchmarkBondReturnPct:
+          json['benchmark_bond_return_pct'] != null
+              ? _asDouble(json['benchmark_bond_return_pct'])
+              : null,
     );
   }
 }

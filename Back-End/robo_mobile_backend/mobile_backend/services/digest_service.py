@@ -6,6 +6,7 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
+from app.core.config import RISK_FREE_RATE
 from app.data.managed_universe_repository import ManagedUniverseRepository
 from mobile_backend.data.account_repository import PortfolioAccountRepository
 from mobile_backend.data.digest_repository import DigestRepository
@@ -17,7 +18,7 @@ from mobile_backend.services.news_aggregator import (
 logger = logging.getLogger(__name__)
 
 DIGEST_PERIOD_DAYS = 7
-TOP_N = 3
+TOP_N = 2
 
 
 class DigestError(Exception):
@@ -94,6 +95,86 @@ def top_drivers_detractors(
     detractors = [a for a in attributions if a["contribution_won"] < 0]
     detractors.sort(key=lambda x: x["contribution_won"])
     return drivers, detractors[:n]
+
+
+# ---------------------------------------------------------------------------
+# Benchmark returns
+# ---------------------------------------------------------------------------
+
+def _compute_benchmark_returns(
+    universe_repo: ManagedUniverseRepository,
+    start_date: str,
+    end_date: str,
+) -> tuple[float | None, float | None]:
+    """Compute 7-asset equal-weight benchmark and bond returns for period."""
+    try:
+        days = (datetime.fromisoformat(end_date) - datetime.fromisoformat(start_date)).days
+        bond_return_pct = round(RISK_FREE_RATE * (days / 365.25) * 100, 4)
+
+        instruments = universe_repo.get_active_instruments()
+        if not instruments:
+            return None, bond_return_pct
+
+        sectors: dict[str, list[str]] = {}
+        all_tickers: list[str] = []
+        for inst in instruments:
+            code = getattr(inst, "sector_code", "")
+            ticker = getattr(inst, "ticker", "")
+            if code and ticker:
+                sectors.setdefault(code, []).append(ticker)
+                all_tickers.append(ticker)
+
+        if not sectors or not all_tickers:
+            return None, bond_return_pct
+
+        prices_df = universe_repo.load_prices_for_tickers(
+            tickers=all_tickers,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if prices_df is None or prices_df.empty:
+            return None, bond_return_pct
+
+        prices_by_ticker: dict[str, dict[str, float]] = {}
+        for _, row in prices_df.iterrows():
+            ticker = str(row.get("ticker", ""))
+            date_str = str(row.get("date", ""))
+            price = float(row.get("adjusted_close", 0))
+            if ticker not in prices_by_ticker:
+                prices_by_ticker[ticker] = {}
+            prices_by_ticker[ticker][date_str] = price
+
+        sector_returns: list[float] = []
+        for _sector_code, tickers in sectors.items():
+            ticker_returns: list[float] = []
+            for ticker in tickers:
+                prices = prices_by_ticker.get(ticker)
+                if not prices:
+                    continue
+                sorted_dates = sorted(prices.keys())
+                if len(sorted_dates) < 2:
+                    continue
+                p_start = prices[sorted_dates[0]]
+                p_end = prices[sorted_dates[-1]]
+                if p_start > 0:
+                    ticker_returns.append((p_end / p_start) - 1)
+
+            if ticker_returns:
+                sector_returns.append(
+                    sum(ticker_returns) / len(ticker_returns)
+                )
+
+        if not sector_returns:
+            return None, bond_return_pct
+
+        seven_asset_pct = round(
+            sum(sector_returns) / len(sector_returns) * 100, 2
+        )
+        return seven_asset_pct, bond_return_pct
+
+    except Exception:
+        logger.warning("Benchmark computation failed", exc_info=True)
+        return None, None
 
 
 # ---------------------------------------------------------------------------
@@ -333,6 +414,13 @@ class DigestService:
 
         drivers, detractors = top_drivers_detractors(attributions)
 
+        # Benchmark returns
+        benchmark_7asset, benchmark_bond = _compute_benchmark_returns(
+            universe_repo=self.universe_repo,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+        )
+
         # Fetch news (parallel, 3s timeout per source)
         driver_tickers = [d["ticker"] for d in drivers]
         detractor_tickers = [d["ticker"] for d in detractors]
@@ -382,6 +470,8 @@ class DigestService:
             "disclaimer": "이 내용은 투자 조언이 아닙니다. AI가 생성한 요약이며 투자 결정의 근거로 사용하지 마세요.",
             "generated_at": now_utc,
             "degradation_level": degradation_level,
+            "benchmark_7asset_return_pct": benchmark_7asset,
+            "benchmark_bond_return_pct": benchmark_bond,
         }
 
         # Cache the result
