@@ -217,6 +217,12 @@ class PortfolioAccountService:
         summary = None
         if snapshots:
             latest = snapshots[-1]
+            current_sector_allocations, current_stock_allocations = (
+                self._build_current_summary_allocations(
+                    account=account,
+                    latest_snapshot=latest,
+                )
+            )
             summary = {
                 "portfolio_code": account["portfolio_code"],
                 "portfolio_label": account["portfolio_label"],
@@ -232,9 +238,10 @@ class PortfolioAccountService:
                 "current_value": latest["portfolio_value"],
                 "invested_amount": latest["invested_amount"],
                 "profit_loss": latest["profit_loss"],
+                "cash_balance": float(latest.get("cash_balance", 0.0)),
                 "profit_loss_pct": latest["profit_loss_pct"],
-                "sector_allocations": account["sector_allocations"],
-                "stock_allocations": account["stock_allocations"],
+                "sector_allocations": current_sector_allocations,
+                "stock_allocations": current_stock_allocations,
             }
 
         history = [
@@ -277,6 +284,115 @@ class PortfolioAccountService:
             "history": history,
             "recent_activity": recent_activity[:10],
         }
+
+    def _build_current_summary_allocations(
+        self,
+        *,
+        account: dict[str, object],
+        latest_snapshot: dict[str, object],
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        target_sector_allocations = list(account.get("sector_allocations") or [])
+        target_stock_allocations = list(account.get("stock_allocations") or [])
+        asset_values = latest_snapshot.get("asset_values")
+        if not isinstance(asset_values, dict) or not asset_values:
+            return target_sector_allocations, target_stock_allocations
+
+        ticker_meta: dict[str, dict[str, object]] = {}
+        sector_meta: dict[str, dict[str, object]] = {}
+        sector_order: list[str] = []
+
+        for index, allocation in enumerate(target_sector_allocations):
+            asset_code = str(allocation.get("asset_code", "")).strip()
+            if not asset_code:
+                continue
+            sector_meta[asset_code] = {
+                "asset_name": str(allocation.get("asset_name", "")).strip() or asset_code,
+                "risk_contribution": float(allocation.get("risk_contribution", 0.0)),
+                "order": index,
+            }
+            sector_order.append(asset_code)
+
+        for allocation in target_stock_allocations:
+            ticker = str(allocation.get("ticker", "")).strip().upper()
+            if not ticker:
+                continue
+            sector_code = str(allocation.get("sector_code", "")).strip()
+            sector_name = str(allocation.get("sector_name", "")).strip()
+            ticker_meta[ticker] = {
+                "name": str(allocation.get("name", "")).strip() or ticker,
+                "sector_code": sector_code or ticker,
+                "sector_name": sector_name or sector_code or ticker,
+            }
+            if sector_code and sector_code not in sector_meta:
+                sector_meta[sector_code] = {
+                    "asset_name": sector_name or sector_code,
+                    "risk_contribution": 0.0,
+                    "order": len(sector_order),
+                }
+                sector_order.append(sector_code)
+
+        non_cash_values: dict[str, float] = {}
+        for raw_ticker, raw_value in asset_values.items():
+            ticker = str(raw_ticker).strip().upper()
+            if ticker == "CASH":
+                continue
+            value = float(raw_value)
+            if value <= 0:
+                continue
+            non_cash_values[ticker] = value
+
+        total_invested_value = sum(non_cash_values.values())
+        if total_invested_value <= 0:
+            return target_sector_allocations, target_stock_allocations
+
+        current_stock_allocations: list[dict[str, object]] = []
+        sector_values: dict[str, float] = {}
+        sector_names: dict[str, str] = {}
+        for ticker, value in non_cash_values.items():
+            meta = ticker_meta.get(ticker, {})
+            sector_code = str(meta.get("sector_code", "")).strip() or ticker
+            sector_name = str(meta.get("sector_name", "")).strip() or sector_code
+            sector_names[sector_code] = sector_name
+            sector_values[sector_code] = sector_values.get(sector_code, 0.0) + value
+            current_stock_allocations.append(
+                {
+                    "ticker": ticker,
+                    "name": str(meta.get("name", "")).strip() or ticker,
+                    "sector_code": sector_code,
+                    "sector_name": sector_name,
+                    "weight": round(value / total_invested_value, 6),
+                }
+            )
+
+        current_stock_allocations.sort(
+            key=lambda item: (-float(item["weight"]), str(item["ticker"]))
+        )
+
+        ordered_sector_codes = [
+            code for code in sector_order if sector_values.get(code, 0.0) > 0
+        ]
+        remaining_sector_codes = sorted(
+            [code for code in sector_values if code not in ordered_sector_codes],
+            key=lambda code: (-sector_values[code], code),
+        )
+
+        current_sector_allocations: list[dict[str, object]] = []
+        for sector_code in ordered_sector_codes + remaining_sector_codes:
+            value = sector_values.get(sector_code, 0.0)
+            if value <= 0:
+                continue
+            meta = sector_meta.get(sector_code, {})
+            current_sector_allocations.append(
+                {
+                    "asset_code": sector_code,
+                    "asset_name": str(meta.get("asset_name", "")).strip()
+                    or sector_names.get(sector_code, sector_code),
+                    "weight": round(value / total_invested_value, 6),
+                    "risk_contribution": float(meta.get("risk_contribution", 0.0)),
+                }
+            )
+
+        return current_sector_allocations, current_stock_allocations
 
     def _refresh_snapshots(self, account: dict[str, object]) -> None:
         stock_weights = {
@@ -459,19 +575,39 @@ class PortfolioAccountService:
         )
 
         invested_amount = initial_investment
-        snapshots: list[dict[str, float | str]] = []
+        snapshots: list[dict[str, object]] = []
+        rebalance_event_by_date = {
+            event.date: event for event in simulation.rebalance_events
+        }
 
         for point in simulation.time_series:
             invested_amount += recurring_cash_flows.get(point.date, 0.0)
             portfolio_value = point.total_value
             profit_loss = portfolio_value - invested_amount
             profit_loss_pct = 0.0 if invested_amount <= 0 else profit_loss / invested_amount
+            rebalance_event = rebalance_event_by_date.get(point.date)
+            if rebalance_event is None:
+                asset_values = {
+                    str(ticker).upper(): round(float(value), 2)
+                    for ticker, value in point.asset_values.items()
+                }
+            else:
+                asset_values = {
+                    str(ticker).upper(): round(
+                        float(weight) * float(rebalance_event.total_value),
+                        2,
+                    )
+                    for ticker, weight in rebalance_event.post_weights.items()
+                }
+            cash_balance = float(asset_values.get("CASH", 0.0))
             snapshots.append(
                 {
                     "snapshot_date": point.date,
                     "portfolio_value": round(portfolio_value, 2),
                     "invested_amount": round(invested_amount, 2),
                     "profit_loss": round(profit_loss, 2),
+                    "cash_balance": round(cash_balance, 2),
+                    "asset_values": asset_values,
                     "profit_loss_pct": round(profit_loss_pct, 6),
                 }
             )

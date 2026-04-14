@@ -70,11 +70,25 @@ class PortfolioAccountRepository:
                         portfolio_value DOUBLE PRECISION NOT NULL,
                         invested_amount DOUBLE PRECISION NOT NULL,
                         profit_loss DOUBLE PRECISION NOT NULL,
+                        cash_balance DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        asset_values JSONB NOT NULL DEFAULT '{}'::jsonb,
                         profit_loss_pct DOUBLE PRECISION NOT NULL,
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         UNIQUE(account_id, snapshot_date)
                     )
+                    """
+                )
+                cursor.execute(
+                    """
+                    ALTER TABLE portfolio_daily_snapshots
+                    ADD COLUMN IF NOT EXISTS cash_balance DOUBLE PRECISION NOT NULL DEFAULT 0
+                    """
+                )
+                cursor.execute(
+                    """
+                    ALTER TABLE portfolio_daily_snapshots
+                    ADD COLUMN IF NOT EXISTS asset_values JSONB NOT NULL DEFAULT '{}'::jsonb
                     """
                 )
                 cursor.execute(
@@ -319,7 +333,7 @@ class PortfolioAccountRepository:
                 rows = cursor.fetchall()
         return [self._cash_flow_from_row(row) for row in rows]
 
-    def replace_snapshots(self, account_id: int, snapshots: list[dict[str, float | str]]) -> None:
+    def replace_snapshots(self, account_id: int, snapshots: list[dict[str, object]]) -> None:
         self._ensure_ready()
         with self._connect() as connection:
             with connection.cursor() as cursor:
@@ -333,9 +347,11 @@ class PortfolioAccountRepository:
                             portfolio_value,
                             invested_amount,
                             profit_loss,
+                            cash_balance,
+                            asset_values,
                             profit_loss_pct
                         )
-                        VALUES (%s, %s::date, %s, %s, %s, %s)
+                        VALUES (%s, %s::date, %s, %s, %s, %s, %s::jsonb, %s)
                         """,
                         (
                             account_id,
@@ -343,6 +359,8 @@ class PortfolioAccountRepository:
                             snapshot["portfolio_value"],
                             snapshot["invested_amount"],
                             snapshot["profit_loss"],
+                            snapshot["cash_balance"],
+                            json.dumps(snapshot["asset_values"]),
                             snapshot["profit_loss_pct"],
                         ),
                     )
@@ -361,6 +379,8 @@ class PortfolioAccountRepository:
                         portfolio_value,
                         invested_amount,
                         profit_loss,
+                        cash_balance,
+                        asset_values,
                         profit_loss_pct,
                         TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,
                         TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
@@ -536,6 +556,9 @@ class PortfolioAccountRepository:
         }
 
     def _snapshot_from_row(self, row: dict[str, object]) -> dict[str, object]:
+        asset_values = row["asset_values"]
+        if isinstance(asset_values, str):
+            asset_values = json.loads(asset_values)
         return {
             "id": int(row["id"]),
             "account_id": int(row["account_id"]),
@@ -543,6 +566,11 @@ class PortfolioAccountRepository:
             "portfolio_value": float(row["portfolio_value"]),
             "invested_amount": float(row["invested_amount"]),
             "profit_loss": float(row["profit_loss"]),
+            "cash_balance": float(row["cash_balance"]),
+            "asset_values": {
+                str(key): float(value)
+                for key, value in dict(asset_values or {}).items()
+            },
             "profit_loss_pct": float(row["profit_loss_pct"]),
             "created_at": str(row["created_at"]),
             "updated_at": str(row["updated_at"]),

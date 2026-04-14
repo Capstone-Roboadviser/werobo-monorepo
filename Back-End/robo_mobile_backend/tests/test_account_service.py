@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pandas as pd
+import pytest
 
 from mobile_backend.domain.enums import SimulationDataSource
 from mobile_backend.services.account_service import PortfolioAccountService
@@ -195,6 +196,48 @@ class QuarterlyRebalancePortfolioAccountService(PortfolioAccountService):
         return pd.DataFrame(rows)
 
 
+class ReserveCashPortfolioAccountService(PortfolioAccountService):
+    def __init__(self, repository: FakePortfolioAccountRepository) -> None:
+        super().__init__(repository=repository, portfolio_service=object())
+
+    def _load_price_history(
+        self,
+        *,
+        tickers: list[str],
+        data_source: SimulationDataSource,
+    ) -> pd.DataFrame:
+        if set(tickers) != {"AAA", "BBB", "CCC"}:
+            raise AssertionError(f"Unexpected tickers: {tickers}")
+
+        today = datetime.now(UTC).date()
+        yesterday = today - timedelta(days=1)
+        rows = []
+        for snapshot_date, aaa_price, bbb_price, ccc_price in (
+            (yesterday, 100.0, 100.0, 100.0),
+            (today, 120.0, 100.0, 80.0),
+        ):
+            rows.extend(
+                [
+                    {
+                        "date": pd.Timestamp(snapshot_date),
+                        "ticker": "AAA",
+                        "adjusted_close": aaa_price,
+                    },
+                    {
+                        "date": pd.Timestamp(snapshot_date),
+                        "ticker": "BBB",
+                        "adjusted_close": bbb_price,
+                    },
+                    {
+                        "date": pd.Timestamp(snapshot_date),
+                        "ticker": "CCC",
+                        "adjusted_close": ccc_price,
+                    },
+                ]
+            )
+        return pd.DataFrame(rows)
+
+
 def test_create_account_builds_dashboard_and_snapshots() -> None:
     repository = FakePortfolioAccountRepository()
     service = StubPortfolioAccountService(repository)
@@ -370,6 +413,89 @@ def test_account_snapshots_follow_two_stage_rebalance_policy() -> None:
         "2026-04-01",
         "2026-03-31",
     ]
+
+
+def test_dashboard_allocations_exclude_reserve_cash_from_weights() -> None:
+    repository = FakePortfolioAccountRepository()
+    service = ReserveCashPortfolioAccountService(repository)
+    started_at = (datetime.now(UTC).date() - timedelta(days=1)).isoformat()
+
+    dashboard = service.create_or_replace_account(
+        user_id=13,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[
+            {
+                "asset_code": "us_value",
+                "asset_name": "미국 가치주",
+                "weight": 0.5,
+                "risk_contribution": 0.4,
+            },
+            {
+                "asset_code": "bond",
+                "asset_name": "채권",
+                "weight": 0.3,
+                "risk_contribution": 0.35,
+            },
+            {
+                "asset_code": "gold",
+                "asset_name": "금",
+                "weight": 0.2,
+                "risk_contribution": 0.25,
+            },
+        ],
+        stock_allocations=[
+            {
+                "ticker": "AAA",
+                "name": "Alpha Asset",
+                "sector_code": "us_value",
+                "sector_name": "미국 가치주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "BBB",
+                "name": "Beta Bond",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.3,
+            },
+            {
+                "ticker": "CCC",
+                "name": "Core Gold",
+                "sector_code": "gold",
+                "sector_name": "금",
+                "weight": 0.2,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+        started_at=started_at,
+    )
+
+    summary = dashboard["summary"]
+    assert summary is not None
+    assert summary["cash_balance"] == pytest.approx(180000.0, abs=2.0)
+    assert sum(item["weight"] for item in summary["stock_allocations"]) == pytest.approx(1.0, abs=1e-6)
+    assert sum(item["weight"] for item in summary["sector_allocations"]) == pytest.approx(1.0, abs=1e-6)
+    assert [item["asset_code"] for item in summary["sector_allocations"]] == [
+        "us_value",
+        "bond",
+        "gold",
+    ]
+    assert [item["ticker"] for item in summary["stock_allocations"]] == [
+        "AAA",
+        "BBB",
+        "CCC",
+    ]
+    assert summary["stock_allocations"][0]["weight"] == pytest.approx(0.508637, abs=1e-6)
+    assert summary["stock_allocations"][1]["weight"] == pytest.approx(0.287908, abs=1e-6)
+    assert summary["stock_allocations"][2]["weight"] == pytest.approx(0.203455, abs=1e-6)
 
 
 def test_refresh_managed_universe_accounts_filters_target_accounts() -> None:
