@@ -104,6 +104,7 @@ class StubPortfolioAccountService(PortfolioAccountService):
         for ticker, yesterday_price, today_price in (
             ("QQQ", 100.0, 102.0),
             ("TLT", 50.0, 51.0),
+            ("GLD", 200.0, 202.0),
         ):
             if ticker not in tickers:
                 continue
@@ -313,3 +314,93 @@ def test_refresh_managed_universe_accounts_filters_target_accounts() -> None:
     assert status.account_count == 1
     assert status.success_count == 1
     assert status.failure_count == 0
+
+
+def test_list_managed_universe_account_tickers_returns_unique_sorted_tickers() -> None:
+    repository = FakePortfolioAccountRepository()
+    service = StubPortfolioAccountService(repository)
+    service.create_or_replace_account(
+        user_id=21,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "qqq",
+                "name": "Invesco QQQ Trust",
+                "sector_code": "us_growth",
+                "sector_name": "미국 성장주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "tlt",
+                "name": "iShares 20+ Year Treasury Bond ETF",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.5,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+    )
+    service.create_or_replace_account(
+        user_id=22,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="growth",
+        portfolio_label="성장형",
+        portfolio_id="stocks-growth-medium-0.16",
+        target_volatility=0.16,
+        expected_return=0.1,
+        volatility=0.14,
+        sharpe_ratio=0.8,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "GLD",
+                "name": "SPDR Gold Shares",
+                "sector_code": "gold",
+                "sector_name": "금",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "QQQ",
+                "name": "Invesco QQQ Trust",
+                "sector_code": "us_growth",
+                "sector_name": "미국 성장주",
+                "weight": 0.5,
+            },
+        ],
+        initial_cash_amount=5_000_000,
+    )
+    service.create_or_replace_account(
+        user_id=23,
+        data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+        investment_horizon="medium",
+        portfolio_code="growth",
+        portfolio_label="성장형",
+        portfolio_id="stocks-growth-medium-0.18",
+        target_volatility=0.18,
+        expected_return=0.11,
+        volatility=0.16,
+        sharpe_ratio=0.84,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "QQQ",
+                "name": "Invesco QQQ Trust",
+                "sector_code": "us_growth",
+                "sector_name": "미국 성장주",
+                "weight": 1.0,
+            },
+        ],
+        initial_cash_amount=3_000_000,
+    )
+
+    assert service.list_managed_universe_account_tickers() == ["GLD", "QQQ", "TLT"]

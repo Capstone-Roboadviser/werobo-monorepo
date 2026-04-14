@@ -53,7 +53,6 @@ from mobile_backend.core.config import ADMIN_REFRESH_SECRET
 
 router = APIRouter(prefix="/admin/api", tags=["admin"])
 managed_universe_service = ManagedUniverseService()
-price_refresh_service = PriceRefreshService(managed_universe_service)
 portfolio_simulation_service = PortfolioSimulationService()
 ticker_discovery_service = TickerDiscoveryService()
 frontier_snapshot_service = FrontierSnapshotService(managed_universe_service=managed_universe_service)
@@ -61,6 +60,14 @@ comparison_backtest_snapshot_service = ComparisonBacktestSnapshotService(
     managed_universe_service=managed_universe_service
 )
 portfolio_account_service = PortfolioAccountService()
+price_refresh_service = PriceRefreshService(
+    managed_universe_service,
+    extra_ticker_provider=lambda version: (
+        portfolio_account_service.list_managed_universe_account_tickers()
+        if version.is_active
+        else []
+    ),
+)
 COMMON_ADMIN_422 = {
     422: {
         "model": ErrorResponse,
@@ -265,7 +272,10 @@ def activate_universe_version(version_id: int) -> ManagedUniverseVersionResponse
     "/prices/refresh",
     response_model=ManagedPriceRefreshResponse,
     summary="가격 데이터 갱신",
-    description="active 유니버스 또는 지정 버전에 대해 가격 데이터를 증분/전체 갱신합니다.",
+    description=(
+        "active 유니버스 또는 지정 버전에 대해 가격 데이터를 증분/전체 갱신합니다. "
+        "active 버전을 갱신할 때는 managed_universe 사용자 계정이 이미 보유 중인 티커도 함께 최신화합니다."
+    ),
     responses=COMMON_ADMIN_422,
 )
 def refresh_prices(payload: PriceRefreshRequest) -> ManagedPriceRefreshResponse:
@@ -306,6 +316,7 @@ def refresh_prices(payload: PriceRefreshRequest) -> ManagedPriceRefreshResponse:
     summary="active 유니버스 가격 갱신",
     description=(
         "cron/job에서 호출하기 위한 active 유니버스 전용 가격 갱신 엔드포인트입니다. "
+        "active 유니버스 종목과 managed_universe 사용자 계정이 보유 중인 티커를 함께 갱신합니다. "
         "ADMIN_REFRESH_SECRET 환경변수와 X-Admin-Secret 헤더가 일치해야 실행됩니다."
     ),
     responses={**COMMON_ADMIN_401, **COMMON_ADMIN_422},

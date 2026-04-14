@@ -154,7 +154,7 @@ robo_mobile_backend/
 
 자동 주기 갱신이 필요하면 `POST /admin/api/prices/refresh/active`를 사용하면 됩니다.
 
-- 대상: 현재 active 유니버스만
+- 대상: 현재 active 유니버스 + `managed_universe` 사용자 계정이 이미 보유 중인 티커
 - 인증: `X-Admin-Secret` 헤더
 - 서버 설정: `ADMIN_REFRESH_SECRET` 환경변수
 - 권장 호출 주기: 하루 1번
@@ -186,7 +186,7 @@ cron 서비스 변수:
 
 cron이 성공하면 아래가 한 번에 갱신됩니다.
 
-1. active 유니버스 가격 데이터
+1. active 유니버스 가격 데이터 + `managed_universe` 사용자 보유 티커 가격 데이터
 2. `managed_universe` materialized frontier snapshot
 3. `managed_universe` comparison backtest snapshot
 4. `managed_universe` 사용자 포트폴리오 계정의 `portfolio_daily_snapshots`

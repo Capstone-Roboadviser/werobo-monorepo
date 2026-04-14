@@ -206,6 +206,7 @@
 - 일반 운영은 `incremental`
 - 장기 백필이나 문제 복구 시에만 `full`
 - 미국 시장 종가 반영 이후 하루 1회 호출
+- 호출 성공 시 active 유니버스 종목뿐 아니라 `managed_universe` 사용자 계정이 이미 보유 중인 티커도 함께 최신화됨
 - 호출 성공 시 `managed_universe` comparison backtest snapshot과 사용자 자산 snapshot도 함께 최신화됨
 
 ### 포트폴리오 계정 snapshot 자동 갱신 규칙
@@ -218,6 +219,7 @@
 주의:
 
 - `stock_combination_demo` 계정은 관리자 가격 refresh 대상이 아니므로 이 자동 배치에 포함되지 않습니다.
+- `managed_universe` 계정은 현재 active 유니버스에 없는 예전 보유 티커라도 저장된 `stock_weights`에 포함돼 있으면 refresh 대상에 계속 포함됩니다.
 - 계정 snapshot 계산은 가격 refresh 이후 수행되므로, 같은 응답 안에서 성공/실패 상태를 함께 확인할 수 있습니다.
 
 ## 3. Readiness 확인

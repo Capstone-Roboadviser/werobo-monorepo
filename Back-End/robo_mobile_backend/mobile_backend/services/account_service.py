@@ -146,6 +146,19 @@ class PortfolioAccountService:
     def refresh_managed_universe_accounts(self) -> PortfolioAccountSnapshotRefreshStatus:
         return self.refresh_accounts(data_source=SimulationDataSource.MANAGED_UNIVERSE)
 
+    def list_managed_universe_account_tickers(self) -> list[str]:
+        self._ensure_storage_ready()
+        tickers: set[str] = set()
+        accounts = self.repository.list_accounts(
+            data_source=SimulationDataSource.MANAGED_UNIVERSE.value,
+        )
+        for account in accounts:
+            for raw_ticker in dict(account["stock_weights"]).keys():
+                ticker = str(raw_ticker).strip().upper()
+                if ticker:
+                    tickers.add(ticker)
+        return sorted(tickers)
+
     def refresh_accounts(
         self,
         *,
