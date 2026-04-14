@@ -216,6 +216,14 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               ),
             ),
             const SizedBox(height: 20),
+            Divider(
+              color: WeRoboThemeColors.of(context)
+                  .border
+                  .withValues(alpha: 0.15),
+              height: 1,
+              thickness: 0.5,
+            ),
+            const SizedBox(height: 20),
             _stagger(
               ++staggerIdx,
               _PortfolioAllocationPanel(
@@ -1332,77 +1340,68 @@ class _DepositsPanel extends StatelessWidget {
     final latestDate = _parseIsoDate(
       latestDeposit?.date ?? accountSummary?.startedAt,
     );
-    final upcomingAmount = latestAmount;
+    const upcomingAmount = 100000.0;
     final upcomingDate = latestDate == null ? null : _addOneMonth(latestDate);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: tc.card,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                '입금 현황',
-                style: WeRoboTypography.heading3.copyWith(
-                  color: tc.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '입금 현황',
+              style: WeRoboTypography.heading3.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '최근 입금과 예정된 입금 정보를 한눈에 확인해보세요.',
-            style: WeRoboTypography.bodySmall.copyWith(
-              color: tc.textSecondary,
             ),
-          ),
-          const SizedBox(height: 18),
-          _DepositInfoRow(
-            label: '최근 입금',
-            amountLabel: latestAmount == null
-                ? '아직 입금 내역이 없어요'
-                : '₩${_formatCurrency(latestAmount.round())}',
-            dateLabel: latestDate == null
-                ? '첫 입금을 기다리고 있어요'
-                : _formatKoreanMonthDay(latestDate),
-          ),
-          const SizedBox(height: 10),
-          _DepositInfoRow(
-            label: '예정 입금',
-            amountLabel: upcomingAmount == null
-                ? '예정된 입금이 없어요'
-                : '₩${_formatCurrency(upcomingAmount.round())}',
-            dateLabel: upcomingDate == null
-                ? '정기 입금 일정이 없어요'
-                : _formatKoreanMonthDay(upcomingDate),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: const [
-              Expanded(
-                child: _DepositActionButton(
-                  icon: Icons.add_rounded,
-                  label: '입금하기',
-                ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: tc.textTertiary,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _DepositInfoRow(
+          label: '최근 입금',
+          valueText: latestAmount == null
+              ? '아직 입금 내역이 없어요'
+              : '₩${_formatCurrency(latestAmount.round())}'
+                  ' · ${_formatKoreanMonthDay(latestDate!)}',
+        ),
+        Divider(
+          color: tc.border.withValues(alpha: 0.4),
+          height: 1,
+          thickness: 0.5,
+        ),
+        _DepositInfoRow(
+          label: '예정 입금',
+          valueText: upcomingDate == null
+              ? '예정된 입금이 없어요'
+              : '₩${_formatCurrency(upcomingAmount.round())}'
+                  ' · ${_formatKoreanMonthDay(upcomingDate)}',
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: const [
+            Expanded(
+              child: _DepositActionButton(
+                icon: Icons.add_rounded,
+                label: '입금하기',
               ),
-              SizedBox(width: 12),
-              Expanded(
-                child: _DepositActionButton(
-                  icon: Icons.event_repeat_rounded,
-                  label: '정기 입금',
-                ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: _DepositActionButton(
+                icon: Icons.event_repeat_rounded,
+                label: '정기 입금',
               ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1430,58 +1429,38 @@ class _DepositsPanel extends StatelessWidget {
 
 class _DepositInfoRow extends StatelessWidget {
   final String label;
-  final String amountLabel;
-  final String dateLabel;
+  final String valueText;
 
   const _DepositInfoRow({
     required this.label,
-    required this.amountLabel,
-    required this.dateLabel,
+    required this.valueText,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: tc.surface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              label,
-              style: WeRoboTypography.bodySmall.copyWith(
-                color: tc.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textSecondary,
+              fontWeight: FontWeight.w400,
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              amountLabel,
-              style: WeRoboTypography.bodySmall.copyWith(
-                color: tc.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontFamily: WeRoboFonts.english,
-              ),
+          const Spacer(),
+          Text(
+            valueText,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w500,
+              fontFamily: WeRoboFonts.english,
             ),
-            const SizedBox(height: 4),
-            Text(
-              dateLabel,
-              style: WeRoboTypography.caption.copyWith(
-                color: tc.textSecondary,
-              ),
-            ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1504,10 +1483,9 @@ class _DepositActionButton extends StatelessWidget {
         height: 52,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: tc.surface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: tc.border.withValues(alpha: 0.7),
+            color: tc.border.withValues(alpha: 0.3),
           ),
         ),
         child: Row(
@@ -1515,7 +1493,7 @@ class _DepositActionButton extends StatelessWidget {
           children: [
             Icon(
               icon,
-              size: 18,
+              size: 16,
               color: tc.textPrimary,
             ),
             const SizedBox(width: 8),
@@ -1555,69 +1533,110 @@ class _PortfolioAllocationPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: tc.card,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                '포트폴리오 구성',
-                style: WeRoboTypography.heading3.copyWith(
-                  color: tc.textPrimary,
-                  fontWeight: FontWeight.w600,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '포트폴리오 구성',
+              style: WeRoboTypography.heading3.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Spacer(),
+            _PortfolioValueToggle(
+              showAmounts: showAmounts,
+              onValueModeChanged: onValueModeChanged,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (details.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              hasResolvedPortfolio
+                  ? '자산군 비중 데이터가 아직 없습니다.'
+                  : '포트폴리오 데이터를 불러오는 중입니다.',
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textSecondary,
+              ),
+            ),
+          )
+        else
+          ...List.generate(details.length, (index) {
+            final detail = details[index];
+            return Column(
+              children: [
+                _PortfolioAllocationRow(
+                  detail: detail,
+                  baseValue: baseValue,
+                  showAmounts: showAmounts,
+                  onTap: () => _openAllocationDetailPage(context, detail),
                 ),
-              ),
-              const Spacer(),
-              _PortfolioValueToggle(
-                showAmounts: showAmounts,
-                onValueModeChanged: onValueModeChanged,
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '자산군별 비중과 세부 종목 구성을 함께 확인해보세요.',
-            style: WeRoboTypography.bodySmall.copyWith(
-              color: tc.textSecondary,
+                Divider(
+                  color: tc.border.withValues(alpha: 0.4),
+                  height: 1,
+                  thickness: 0.5,
+                ),
+              ],
+            );
+          }),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '예비 현금',
+                        style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '리밸런싱 시 자동 사용',
+                        style: WeRoboTypography.caption.copyWith(
+                          color: tc.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 20),
+                  child: Text(
+                    showAmounts
+                        ? _formatWonFromRatio(baseValue, 0.35)
+                        : '0.35%',
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      fontFamily: WeRoboFonts.english,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 18),
-          if (details.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                hasResolvedPortfolio
-                    ? '자산군 비중 데이터가 아직 없습니다.'
-                    : '포트폴리오 데이터를 불러오는 중입니다.',
-                style: WeRoboTypography.bodySmall.copyWith(
-                  color: tc.textSecondary,
-                ),
-              ),
-            )
-          else
-            ...List.generate(details.length, (index) {
-              final detail = details[index];
-              return Column(
-                children: [
-                  _PortfolioAllocationRow(
-                    detail: detail,
-                    baseValue: baseValue,
-                    showAmounts: showAmounts,
-                    onTap: () => _openAllocationDetailPage(context, detail),
-                  ),
-                  if (index != details.length - 1) const SizedBox(height: 8),
-                ],
-              );
-            }),
-        ],
-      ),
+        const SizedBox(height: 16),
+        Pressable(
+          onTap: () {},
+          child: Text(
+            '포트폴리오 조정',
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1651,67 +1670,75 @@ class _PortfolioValueToggle extends StatelessWidget {
     required this.onValueModeChanged,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: tc.surface,
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _PortfolioValueToggleChip(
-            label: '%',
-            isActive: !showAmounts,
-            onTap: () => onValueModeChanged(false),
-          ),
-          const SizedBox(width: 6),
-          _PortfolioValueToggleChip(
-            label: '₩',
-            isActive: showAmounts,
-            onTap: () => onValueModeChanged(true),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PortfolioValueToggleChip extends StatelessWidget {
-  final String label;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _PortfolioValueToggleChip({
-    required this.label,
-    required this.isActive,
-    required this.onTap,
-  });
+  static const double _chipSize = 36.0;
+  static const double _padding = 3.0;
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    const totalWidth = _chipSize * 2 + _padding * 2 + 4;
     return Pressable(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      onTap: () => onValueModeChanged(!showAmounts),
+      child: Container(
+        width: totalWidth,
+        height: _chipSize + _padding * 2,
+        padding: const EdgeInsets.all(_padding),
         decoration: BoxDecoration(
-          color: isActive
-              ? WeRoboColors.primary.withValues(alpha: 0.12)
-              : Colors.transparent,
+          color: tc.surface,
           borderRadius: BorderRadius.circular(999),
         ),
-        child: Text(
-          label,
-          style: WeRoboTypography.bodySmall.copyWith(
-            color: isActive ? WeRoboColors.primary : tc.textSecondary,
-            fontWeight: FontWeight.w700,
-            fontFamily: WeRoboFonts.english,
-          ),
+        child: Stack(
+          children: [
+            AnimatedAlign(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              alignment: showAmounts
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+              child: Container(
+                width: _chipSize,
+                height: _chipSize,
+                decoration: BoxDecoration(
+                  color: tc.card,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                SizedBox(
+                  width: _chipSize + 2,
+                  child: Center(
+                    child: Text(
+                      '%',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: !showAmounts
+                            ? tc.textPrimary
+                            : tc.textTertiary,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: WeRoboFonts.english,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: _chipSize + 2,
+                  child: Center(
+                    child: Text(
+                      '₩',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: showAmounts
+                            ? tc.textPrimary
+                            : tc.textTertiary,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: WeRoboFonts.english,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -1736,41 +1763,28 @@ class _PortfolioAllocationRow extends StatelessWidget {
     final tc = WeRoboThemeColors.of(context);
     return Pressable(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: tc.surface,
-          borderRadius: BorderRadius.circular(12),
-        ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
         child: Row(
           children: [
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                color: detail.category.color,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     detail.category.name,
-                    style: WeRoboTypography.heading3.copyWith(
+                    style: WeRoboTypography.bodySmall.copyWith(
                       color: tc.textPrimary,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 3),
                   Text(
                     _buildAllocationSubtitle(detail),
-                    style: WeRoboTypography.bodySmall.copyWith(
+                    style: WeRoboTypography.caption.copyWith(
                       color: tc.textSecondary,
                     ),
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -1781,17 +1795,17 @@ class _PortfolioAllocationRow extends StatelessWidget {
               showAmounts
                   ? _formatWonFromRatio(baseValue, detail.category.percentage)
                   : _formatPercentLabel(detail.category.percentage),
-              style: WeRoboTypography.heading3.copyWith(
+              style: WeRoboTypography.bodySmall.copyWith(
                 color: tc.textPrimary,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w500,
                 fontFamily: WeRoboFonts.english,
               ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 4),
             Icon(
               Icons.chevron_right_rounded,
               color: tc.textTertiary,
-              size: 24,
+              size: 16,
             ),
           ],
         ),
@@ -1806,9 +1820,9 @@ class _PortfolioAllocationRow extends StatelessWidget {
     final symbols =
         detail.tickers.take(3).map((ticker) => ticker.symbol).join(', ');
     if (detail.tickers.length <= 3) {
-      return '대표 종목 · $symbols';
+      return symbols;
     }
-    return '대표 종목 · $symbols 외 ${detail.tickers.length - 3}개';
+    return '$symbols 외 ${detail.tickers.length - 3}개';
   }
 }
 
