@@ -72,16 +72,7 @@ class ActivityHubPage extends StatelessWidget {
                   _DigestCard(
                     onTap: () => Navigator.push(
                       context,
-                      PageRouteBuilder<void>(
-                        pageBuilder: (_, __, ___) =>
-                            const DigestScreen(),
-                        transitionsBuilder:
-                            (_, anim, __, child) =>
-                                FadeTransition(
-                          opacity: anim,
-                          child: child,
-                        ),
-                      ),
+                      WeRoboMotion.fadeRoute<void>(const DigestScreen()),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -246,12 +237,8 @@ class _InsightCard extends StatelessWidget {
     return Pressable(
       onTap: () => Navigator.push(
         context,
-        PageRouteBuilder<void>(
-          pageBuilder: (_, __, ___) =>
-              InsightDetailPage(insight: insight),
-          transitionsBuilder: (_, anim, __, child) =>
-              FadeTransition(opacity: anim, child: child),
-        ),
+        WeRoboMotion.fadeRoute<void>(
+            InsightDetailPage(insight: insight)),
       ),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),

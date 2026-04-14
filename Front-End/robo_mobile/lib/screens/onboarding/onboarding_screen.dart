@@ -108,25 +108,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       });
     }
     Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            PortfolioLoadingScreen(
-          dotT: _selectedDotT,
-          selectedPointIndex: resolvedSelection?.isAuthoritative == true
-              ? resolvedSelection?.selectedPointIndex
-              : null,
-          targetVolatility: resolvedSelection?.targetVolatility,
-          previewDataSource: resolvedSelection?.isAuthoritative == true
-              ? resolvedSelection?.dataSource
-              : null,
-          asOfDate: resolvedSelection?.asOfDate ?? widget.asOfDate,
-          previewFuture: _frontierPreviewFuture,
-        ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
+      WeRoboMotion.fadeRoute(PortfolioLoadingScreen(
+        dotT: _selectedDotT,
+        selectedPointIndex: resolvedSelection?.isAuthoritative == true
+            ? resolvedSelection?.selectedPointIndex
+            : null,
+        targetVolatility: resolvedSelection?.targetVolatility,
+        previewDataSource: resolvedSelection?.isAuthoritative == true
+            ? resolvedSelection?.dataSource
+            : null,
+        asOfDate: resolvedSelection?.asOfDate ?? widget.asOfDate,
+        previewFuture: _frontierPreviewFuture,
+      )),
     );
   }
 

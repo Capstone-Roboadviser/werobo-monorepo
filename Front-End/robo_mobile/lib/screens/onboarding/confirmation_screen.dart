@@ -56,11 +56,11 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     _details = _portfolio.toCategoryDetails();
     _categories = _portfolio.toCategories();
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: WeRoboMotion.medium,
       vsync: this,
     );
     _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
+      CurvedAnimation(parent: _fadeController, curve: WeRoboMotion.enter),
     );
     _fadeController.forward();
     _loadChartData();
@@ -291,12 +291,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       return;
     }
     Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const WelcomeScreen(),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
+      WeRoboMotion.fadeRoute(const WelcomeScreen()),
     );
   }
 
@@ -357,7 +352,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     setState(() => _selectedSector = idx);
                   },
                   centerBuilder: (_) => AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
+                    duration: WeRoboMotion.medium,
                     child: _buildPieCenter(),
                   ),
                 ),

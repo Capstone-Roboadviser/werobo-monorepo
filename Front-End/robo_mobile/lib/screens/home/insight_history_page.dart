@@ -106,12 +106,8 @@ class _InsightHistoryCard extends StatelessWidget {
       onTap: () {
         Navigator.push(
           context,
-          PageRouteBuilder<void>(
-            pageBuilder: (_, __, ___) =>
-                InsightDetailPage(insight: insight),
-            transitionsBuilder: (_, anim, __, child) =>
-                FadeTransition(opacity: anim, child: child),
-          ),
+          WeRoboMotion.fadeRoute<void>(
+              InsightDetailPage(insight: insight)),
         );
       },
       child: Container(
