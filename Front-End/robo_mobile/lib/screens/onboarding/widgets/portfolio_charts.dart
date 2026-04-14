@@ -40,7 +40,7 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
       children: [
         // Top toggle
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Container(
             decoration: BoxDecoration(
               color: tc.card,
@@ -202,7 +202,7 @@ class _VolReturnViewState extends State<_VolReturnView>
     final points = _points;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
         children: [
           // Time range chips
@@ -247,8 +247,8 @@ class _VolReturnViewState extends State<_VolReturnView>
                       return GestureDetector(
                         onPanUpdate: (d) {
                           if (points.isEmpty) return;
-                          final x = d.localPosition.dx - 36;
-                          final chartW = constraints.maxWidth - 36 - 12;
+                          final x = d.localPosition.dx - 28;
+                          final chartW = constraints.maxWidth - 28 - 12;
                           final idx = ((x / chartW) * (points.length - 1))
                               .round()
                               .clamp(0, points.length - 1);
@@ -470,7 +470,7 @@ class _ComparisonViewState extends State<_ComparisonView>
     final lines = typedLines.isEmpty ? typedLines : _filterByRange(typedLines);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
         children: [
           // Benchmark toggles
@@ -543,8 +543,8 @@ class _ComparisonViewState extends State<_ComparisonView>
                       return GestureDetector(
                         onPanUpdate: (d) {
                           if (lines.isEmpty || lines[0].points.isEmpty) return;
-                          final x = d.localPosition.dx - 36;
-                          final chartW = constraints.maxWidth - 36 - 12;
+                          final x = d.localPosition.dx - 28;
+                          final chartW = constraints.maxWidth - 28 - 12;
                           final count = lines[0].points.length;
                           final idx = ((x / chartW) * (count - 1))
                               .round()
@@ -669,7 +669,7 @@ class _AreaChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (points.isEmpty) return;
-    const padL = 36.0;
+    const padL = 28.0;
     const padR = 12.0;
     const padB = 18.0;
     final w = size.width - padL - padR;
@@ -918,7 +918,7 @@ class _MultiLineChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (lines.isEmpty) return;
-    const padL = 36.0;
+    const padL = 28.0;
     const padR = 12.0;
     const padB = 18.0;
     final w = size.width - padL - padR;
