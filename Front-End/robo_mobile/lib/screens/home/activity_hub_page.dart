@@ -22,7 +22,7 @@ class ActivityHubPage extends StatelessWidget {
     final hasAccount = state.hasPrototypeAccount;
 
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

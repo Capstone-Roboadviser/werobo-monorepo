@@ -87,9 +87,9 @@ class _DigestScreenState extends State<DigestScreen> {
     logPageEnter('DigestScreen');
     final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       appBar: AppBar(
-        backgroundColor: tc.surface,
+        backgroundColor: tc.background,
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(

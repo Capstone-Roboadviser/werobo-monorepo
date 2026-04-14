@@ -189,6 +189,7 @@ void main() {
             currentValue: 10500000,
             investedAmount: 10000000,
             profitLoss: 500000,
+            cashBalance: 25000,
             profitLossPct: 0.05,
             sectorAllocations: [
               sector(code: 'us_value', name: '미국 가치주', weight: 0.6),

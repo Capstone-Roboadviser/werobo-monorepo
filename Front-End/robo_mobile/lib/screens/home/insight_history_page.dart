@@ -17,7 +17,7 @@ class InsightHistoryPage extends StatelessWidget {
     final insights = state.insights;
 
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

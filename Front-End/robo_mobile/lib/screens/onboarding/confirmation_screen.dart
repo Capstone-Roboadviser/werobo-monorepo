@@ -304,7 +304,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,

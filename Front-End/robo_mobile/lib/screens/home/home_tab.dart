@@ -27,7 +27,6 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
-  bool _showWelcome = true;
   bool _showAllocationAmounts = false;
 
   @override
@@ -111,23 +110,23 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             const SizedBox(height: 8),
 
             // Welcome banner (first visit only)
-            if (_showWelcome)
+            if (!state.welcomeBannerSeen)
               _stagger(
                   staggerIdx,
                   _WelcomeBanner(
                     type: type,
-                    onDismiss: () => setState(() => _showWelcome = false),
+                    onDismiss: () => state.markWelcomeBannerSeen(),
                   ))
             else
               const SizedBox.shrink(),
-            if (_showWelcome)
+            if (!state.welcomeBannerSeen)
               const SizedBox(height: 16)
             else
               const SizedBox.shrink(),
 
             // Hero: value + chart + time range
             _stagger(
-              _showWelcome ? ++staggerIdx : staggerIdx,
+              !state.welcomeBannerSeen ? ++staggerIdx : staggerIdx,
               _PortfolioHeroChart(type: type),
             ),
             const SizedBox(height: 28),
@@ -178,9 +177,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             ),
             const SizedBox(height: 20),
             Divider(
-              color: WeRoboThemeColors.of(context)
-                  .border
-                  .withValues(alpha: 0.15),
+              color:
+                  WeRoboThemeColors.of(context).border.withValues(alpha: 0.15),
               height: 1,
               thickness: 0.5,
             ),
@@ -189,9 +187,15 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               ++staggerIdx,
               _PortfolioAllocationPanel(
                 details: allocationDetails,
-                baseValue: (accountSummary?.currentValue ?? 0) > 0
-                    ? accountSummary?.currentValue
-                    : accountSummary?.investedAmount,
+                baseValue: _portfolioAllocationBaseValue(accountSummary),
+                reserveCashAmount: accountSummary?.cashBalance,
+                reserveCashPercent: accountSummary == null
+                    ? null
+                    : (accountSummary.currentValue > 0
+                        ? (accountSummary.cashBalance /
+                            accountSummary.currentValue *
+                            100)
+                        : 0.0),
                 showAmounts: _showAllocationAmounts,
                 hasResolvedPortfolio: hasResolvedPortfolio,
                 onValueModeChanged: (showAmounts) {
@@ -205,7 +209,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       ),
     );
   }
-
 }
 
 // ─── Hero chart: value + dual-line chart + time range ─────────
@@ -670,8 +673,7 @@ class _PortfolioValuePainter extends CustomPainter {
     }
 
     // Fractional index for smooth interpolation between data points
-    final fIdx =
-        (valuePts.length - 1) * progress.clamp(0.0, 1.0);
+    final fIdx = (valuePts.length - 1) * progress.clamp(0.0, 1.0);
     final complete = fIdx.floor();
     final frac = fIdx - complete;
     final drawCount = (complete + 1).clamp(2, valuePts.length);
@@ -997,6 +999,29 @@ String _formatWonFromRatio(double? baseValue, double percentage) {
   }
   final amount = (baseValue * percentage / 100).round();
   return '₩${_formatCurrency(amount)}';
+}
+
+String _formatWonAmount(double? amount) {
+  if (amount == null) {
+    return '-';
+  }
+  return '₩${_formatCurrency(amount.round())}';
+}
+
+double? _portfolioAllocationBaseValue(MobileAccountSummary? summary) {
+  if (summary == null) {
+    return null;
+  }
+  final currentInvestedValue = summary.currentValue - summary.cashBalance;
+  if (currentInvestedValue > 0) {
+    return currentInvestedValue;
+  }
+  final investedPrincipalExcludingCash =
+      summary.investedAmount - summary.cashBalance;
+  if (investedPrincipalExcludingCash > 0) {
+    return investedPrincipalExcludingCash;
+  }
+  return null;
 }
 
 DateTime? _parseIsoDate(String? value) {
@@ -1397,6 +1422,8 @@ class _DepositActionButton extends StatelessWidget {
 class _PortfolioAllocationPanel extends StatelessWidget {
   final List<PortfolioCategoryDetail> details;
   final double? baseValue;
+  final double? reserveCashAmount;
+  final double? reserveCashPercent;
   final bool showAmounts;
   final bool hasResolvedPortfolio;
   final ValueChanged<bool> onValueModeChanged;
@@ -1404,6 +1431,8 @@ class _PortfolioAllocationPanel extends StatelessWidget {
   const _PortfolioAllocationPanel({
     required this.details,
     required this.baseValue,
+    required this.reserveCashAmount,
+    required this.reserveCashPercent,
     required this.showAmounts,
     required this.hasResolvedPortfolio,
     required this.onValueModeChanged,
@@ -1463,47 +1492,49 @@ class _PortfolioAllocationPanel extends StatelessWidget {
               ],
             );
           }),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '예비 현금',
-                        style: WeRoboTypography.bodySmall.copyWith(
-                          color: tc.textPrimary,
-                          fontWeight: FontWeight.w600,
-                        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '예비 현금',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: tc.textPrimary,
+                        fontWeight: FontWeight.w600,
                       ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '리밸런싱 시 자동 사용',
-                        style: WeRoboTypography.caption.copyWith(
-                          color: tc.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 20),
-                  child: Text(
-                    showAmounts
-                        ? _formatWonFromRatio(baseValue, 0.35)
-                        : '0.35%',
-                    style: WeRoboTypography.bodySmall.copyWith(
-                      color: tc.textPrimary,
-                      fontWeight: FontWeight.w500,
-                      fontFamily: WeRoboFonts.english,
                     ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '리밸런싱 시 자동 사용',
+                      style: WeRoboTypography.caption.copyWith(
+                        color: tc.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(right: 20),
+                child: Text(
+                  showAmounts
+                      ? _formatWonAmount(reserveCashAmount)
+                      : reserveCashPercent == null
+                          ? '-'
+                          : _formatPercentLabel(reserveCashPercent!),
+                  style: WeRoboTypography.bodySmall.copyWith(
+                    color: tc.textPrimary,
+                    fontWeight: FontWeight.w500,
+                    fontFamily: WeRoboFonts.english,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
+        ),
         const SizedBox(height: 16),
         Pressable(
           onTap: () {},
@@ -1571,9 +1602,8 @@ class _PortfolioValueToggle extends StatelessWidget {
             AnimatedAlign(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              alignment: showAmounts
-                  ? Alignment.centerRight
-                  : Alignment.centerLeft,
+              alignment:
+                  showAmounts ? Alignment.centerRight : Alignment.centerLeft,
               child: Container(
                 width: _chipSize,
                 height: _chipSize,
@@ -1591,9 +1621,7 @@ class _PortfolioValueToggle extends StatelessWidget {
                     child: Text(
                       '%',
                       style: WeRoboTypography.bodySmall.copyWith(
-                        color: !showAmounts
-                            ? tc.textPrimary
-                            : tc.textTertiary,
+                        color: !showAmounts ? tc.textPrimary : tc.textTertiary,
                         fontWeight: FontWeight.w700,
                         fontFamily: WeRoboFonts.english,
                       ),
@@ -1606,9 +1634,7 @@ class _PortfolioValueToggle extends StatelessWidget {
                     child: Text(
                       '₩',
                       style: WeRoboTypography.bodySmall.copyWith(
-                        color: showAmounts
-                            ? tc.textPrimary
-                            : tc.textTertiary,
+                        color: showAmounts ? tc.textPrimary : tc.textTertiary,
                         fontWeight: FontWeight.w700,
                         fontFamily: WeRoboFonts.english,
                       ),

@@ -53,6 +53,7 @@ class PortfolioAccountSummaryResponse(BaseModel):
     current_value: float = Field(..., description="현재 총 자산", examples=[10325000])
     invested_amount: float = Field(..., description="누적 입금 원금", examples=[10000000])
     profit_loss: float = Field(..., description="평가 손익", examples=[325000])
+    cash_balance: float = Field(..., description="현재 리밸런싱 대기 현금", examples=[12500])
     profit_loss_pct: float = Field(..., description="평가 손익률", examples=[0.0325])
     sector_allocations: list["SectorAllocationResponse"] = Field(
         default_factory=list,
