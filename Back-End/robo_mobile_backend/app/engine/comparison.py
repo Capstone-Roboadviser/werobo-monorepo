@@ -41,6 +41,11 @@ _PROFILE_LABELS = {
     "growth": "성장형",
 }
 
+# Comparison backtests only need relative return paths, but the rebalance engine
+# rounds time-series total_value to cents. Using a 1.0 base investment quantizes
+# the comparison lines into 1% jumps, so keep the simulation notional large.
+_COMPARISON_SIMULATION_BASE_INVESTMENT = 1_000_000.0
+
 
 def build_comparison(
     prices: pd.DataFrame,
@@ -79,7 +84,7 @@ def build_comparison(
         simulation = simulate_two_stage_rebalance(
             prices[available].copy(),
             w,
-            1.0,
+            _COMPARISON_SIMULATION_BASE_INVESTMENT,
             drift_threshold=DRIFT_THRESHOLD_DEFAULT,
             max_points=None,
         )
