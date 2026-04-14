@@ -84,19 +84,20 @@ class _DigestScreenState extends State<DigestScreen> {
   @override
   Widget build(BuildContext context) {
     logPageEnter('DigestScreen');
+    final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: WeRoboColors.surface,
+      backgroundColor: tc.surface,
       appBar: AppBar(
-        backgroundColor: WeRoboColors.surface,
+        backgroundColor: tc.surface,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: WeRoboColors.textSecondary),
+          icon: Icon(Icons.arrow_back, color: tc.textSecondary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           '주간 다이제스트',
           style: WeRoboTypography.heading3.copyWith(
-            color: WeRoboColors.textPrimary,
+            color: tc.textPrimary,
           ),
         ),
         centerTitle: false,
@@ -118,23 +119,24 @@ class _ErrorState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Center(
       child: Padding(
         padding: WeRoboSpacing.screenH,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
+            Icon(
               Icons.error_outline,
               size: 48,
-              color: WeRoboColors.textTertiary,
+              color: tc.textTertiary,
             ),
             const SizedBox(height: WeRoboSpacing.lg),
             Text(
               message,
               textAlign: TextAlign.center,
               style: WeRoboTypography.body.copyWith(
-                color: WeRoboColors.textSecondary,
+                color: tc.textSecondary,
               ),
             ),
           ],
@@ -150,6 +152,7 @@ class _DigestContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
       children: [
@@ -165,7 +168,7 @@ class _DigestContent extends StatelessWidget {
         if (digest.drivers.isNotEmpty) ...[
           _SectionHeader(
             icon: Icons.arrow_drop_up,
-            iconColor: WeRoboColors.accent,
+            iconColor: tc.accent,
             title: '상승 기여 종목',
           ),
           const SizedBox(height: WeRoboSpacing.md),
@@ -179,7 +182,7 @@ class _DigestContent extends StatelessWidget {
         if (digest.detractors.isNotEmpty) ...[
           _SectionHeader(
             icon: Icons.arrow_drop_down,
-            iconColor: WeRoboColors.textSecondary,
+            iconColor: WeRoboColors.error,
             title: '하락 기여 종목',
           ),
           const SizedBox(height: WeRoboSpacing.md),
@@ -195,7 +198,7 @@ class _DigestContent extends StatelessWidget {
           child: Text(
             digest.disclaimer,
             style: WeRoboTypography.caption.copyWith(
-              color: WeRoboColors.textTertiary,
+              color: tc.textTertiary,
               height: 1.4,
             ),
           ),
@@ -212,18 +215,19 @@ class _DateBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: WeRoboColors.card,
+          color: tc.card,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Text(
           '${_formatDate(start)} - ${_formatDate(end)}',
           style: WeRoboTypography.caption.copyWith(
-            color: WeRoboColors.textSecondary,
+            color: tc.textSecondary,
           ),
         ),
       ),
@@ -243,16 +247,17 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final isNegative = digest.totalReturnWon < 0;
-    final returnColor = WeRoboColors.textSecondary;
+    final returnColor =
+        isNegative ? WeRoboColors.error : tc.accent;
     final sign = isNegative ? '' : '+';
     final wonStr = _formatWon(digest.totalReturnWon);
 
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: WeRoboColors.surface,
-        border: Border.all(color: WeRoboColors.card, width: 1.5),
+        color: tc.card,
         borderRadius: BorderRadius.circular(WeRoboColors.radiusXL),
       ),
       child: Column(
@@ -277,12 +282,20 @@ class _SummaryCard extends StatelessWidget {
               ),
             ],
           ),
+          if (digest.drivers.isNotEmpty ||
+              digest.detractors.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _ContributionBar(
+              drivers: digest.drivers,
+              detractors: digest.detractors,
+            ),
+          ],
           if (digest.hasNarrative && digest.narrativeKo != null) ...[
             const SizedBox(height: 12),
             Text(
               digest.narrativeKo!,
               style: WeRoboTypography.bodySmall.copyWith(
-                color: WeRoboColors.textPrimary,
+                color: tc.textPrimary,
                 height: 1.7,
               ),
             ),
@@ -290,15 +303,16 @@ class _SummaryCard extends StatelessWidget {
           if (digest.sourcesUsed.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: WeRoboColors.background,
+                color: tc.background,
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
                 '${digest.sourcesUsed.join(", ")} 기반 분석',
                 style: WeRoboTypography.caption.copyWith(
-                  color: WeRoboColors.textTertiary,
+                  color: tc.textTertiary,
                   fontSize: 11,
                 ),
               ),
@@ -319,6 +333,70 @@ class _SummaryCard extends StatelessWidget {
   }
 }
 
+class _ContributionBar extends StatelessWidget {
+  final List<DigestDriver> drivers;
+  final List<DigestDriver> detractors;
+  const _ContributionBar({
+    required this.drivers,
+    required this.detractors,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final posSum = drivers.fold<double>(
+        0, (s, d) => s + d.contributionWon.abs());
+    final negSum = detractors.fold<double>(
+        0, (s, d) => s + d.contributionWon.abs());
+    final total = posSum + negSum;
+    if (total == 0) return const SizedBox.shrink();
+    final posFrac = posSum / total;
+
+    return Column(
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(3),
+          child: SizedBox(
+            height: 6,
+            child: Row(
+              children: [
+                Flexible(
+                  flex: (posFrac * 1000).round(),
+                  child: Container(color: tc.accent),
+                ),
+                if (posFrac < 1) const SizedBox(width: 2),
+                Flexible(
+                  flex: ((1 - posFrac) * 1000).round(),
+                  child:
+                      Container(color: WeRoboColors.error),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '상승 ${drivers.length}종목',
+              style: WeRoboTypography.caption.copyWith(
+                color: tc.accent,
+              ),
+            ),
+            Text(
+              '하락 ${detractors.length}종목',
+              style: WeRoboTypography.caption.copyWith(
+                color: WeRoboColors.error,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _SectionHeader extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -332,6 +410,7 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Row(
       children: [
         Icon(icon, color: iconColor, size: 20),
@@ -340,7 +419,7 @@ class _SectionHeader extends StatelessWidget {
           title,
           style: WeRoboTypography.heading3.copyWith(
             fontSize: 16,
-            color: WeRoboColors.textPrimary,
+            color: tc.textPrimary,
           ),
         ),
       ],

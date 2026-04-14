@@ -61,6 +61,9 @@ class _DigestLoadingState extends State<DigestLoading>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final isDark =
+        Theme.of(context).brightness == Brightness.dark;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -76,15 +79,22 @@ class _DigestLoadingState extends State<DigestLoading>
               child: Container(
                 width: 64,
                 height: 64,
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: LinearGradient(
-                    colors: [WeRoboColors.sky1, WeRoboColors.sky2],
+                    colors: isDark
+                        ? [
+                            WeRoboColors.primary
+                                .withValues(alpha: 0.15),
+                            WeRoboColors.primary
+                                .withValues(alpha: 0.25),
+                          ]
+                        : [WeRoboColors.sky1, WeRoboColors.sky2],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.auto_awesome,
                   color: WeRoboColors.primary,
                   size: 28,
@@ -95,7 +105,7 @@ class _DigestLoadingState extends State<DigestLoading>
             Text(
               '다이제스트 생성 중',
               style: WeRoboTypography.heading3.copyWith(
-                color: WeRoboColors.textPrimary,
+                color: tc.textPrimary,
               ),
             ),
             const SizedBox(height: WeRoboSpacing.sm),
@@ -103,7 +113,7 @@ class _DigestLoadingState extends State<DigestLoading>
               'AI가 포트폴리오를 분석하고\n주간 리포트를 작성하고 있습니다',
               textAlign: TextAlign.center,
               style: WeRoboTypography.bodySmall.copyWith(
-                color: WeRoboColors.textTertiary,
+                color: tc.textTertiary,
               ),
             ),
             const SizedBox(height: WeRoboSpacing.xxxxl),
@@ -120,10 +130,10 @@ class _DigestLoadingState extends State<DigestLoading>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: isDone
-                            ? WeRoboColors.accent
+                            ? tc.accent
                             : isActive
                                 ? WeRoboColors.primary
-                                : WeRoboColors.lightGray,
+                                : tc.border,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -131,10 +141,10 @@ class _DigestLoadingState extends State<DigestLoading>
                       isDone ? '${_steps[i]} 완료' : _steps[i],
                       style: WeRoboTypography.bodySmall.copyWith(
                         color: isDone
-                            ? WeRoboColors.accent
+                            ? tc.accent
                             : isActive
                                 ? WeRoboColors.primary
-                                : WeRoboColors.textTertiary,
+                                : tc.textTertiary,
                       ),
                     ),
                   ],
