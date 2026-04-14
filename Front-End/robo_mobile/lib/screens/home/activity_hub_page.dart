@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
+import '../../models/mobile_backend_models.dart';
 import '../../models/rebalance_insight.dart';
 import 'digest_screen.dart';
 import 'insight_detail_page.dart';
@@ -17,6 +18,8 @@ class ActivityHubPage extends StatelessWidget {
     final tc = WeRoboThemeColors.of(context);
     final state = PortfolioStateProvider.of(context);
     final insights = state.insights;
+    final activities = state.accountActivities;
+    final hasAccount = state.hasPrototypeAccount;
 
     return Scaffold(
       backgroundColor: tc.surface,
@@ -108,6 +111,46 @@ class ActivityHubPage extends StatelessWidget {
                     ...insights.map(
                       (i) => _InsightCard(insight: i),
                     ),
+
+                  const SizedBox(height: 24),
+
+                  // Activities section
+                  Text(
+                    '최근 활동',
+                    style: WeRoboTypography.heading3
+                        .themed(context),
+                  ),
+                  const SizedBox(height: 12),
+
+                  if (hasAccount && activities.isNotEmpty)
+                    ...activities.map(
+                      (a) => _buildActivityCard(
+                          context, a),
+                    )
+                  else ...[
+                    _ActivityCard(
+                      icon: Icons.sync_alt_rounded,
+                      iconColor: WeRoboColors.primary,
+                      title: '리밸런싱 완료',
+                      date: '2026-04-01',
+                      value: '₩15,826,400',
+                    ),
+                    _ActivityCard(
+                      icon: Icons.arrow_downward_rounded,
+                      iconColor: tc.accent,
+                      title: '입금',
+                      date: '2026-03-15',
+                      value: '+₩500,000',
+                      valueColor: tc.accent,
+                    ),
+                    _ActivityCard(
+                      icon: Icons.sync_alt_rounded,
+                      iconColor: WeRoboColors.primary,
+                      title: '리밸런싱 완료',
+                      date: '2026-01-02',
+                      value: '₩15,120,000',
+                    ),
+                  ],
 
                   const SizedBox(height: 40),
                 ],
@@ -269,6 +312,130 @@ class _InsightCard extends StatelessWidget {
               Icons.chevron_right_rounded,
               size: 20,
               color: tc.textTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Activity helpers ─────────────────────────────────────────
+
+Widget _buildActivityCard(
+  BuildContext context,
+  MobileAccountActivity activity,
+) {
+  final tc = WeRoboThemeColors.of(context);
+  IconData icon = Icons.account_balance_wallet_rounded;
+  Color iconColor = WeRoboColors.primary;
+  String value = activity.description ?? '';
+  Color? valueColor;
+
+  if (activity.type == 'cash_in' ||
+      activity.type == 'initial_deposit') {
+    icon = Icons.arrow_downward_rounded;
+    iconColor = tc.accent;
+    final amount = activity.amount ?? 0;
+    value = '+₩${_formatCurrency(amount.round())}';
+    valueColor = tc.accent;
+  } else if (activity.type == 'portfolio_created') {
+    icon = Icons.pie_chart_rounded;
+    iconColor = WeRoboColors.primary;
+    value = '추적 시작';
+  }
+
+  return _ActivityCard(
+    icon: icon,
+    iconColor: iconColor,
+    title: activity.title,
+    date: activity.date,
+    value: value,
+    valueColor: valueColor,
+  );
+}
+
+String _formatCurrency(int amount) {
+  final str = amount.abs().toString();
+  final buf = StringBuffer();
+  for (int i = 0; i < str.length; i++) {
+    if (i > 0 && (str.length - i) % 3 == 0) buf.write(',');
+    buf.write(str[i]);
+  }
+  return buf.toString();
+}
+
+class _ActivityCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String date;
+  final String value;
+  final Color? valueColor;
+
+  const _ActivityCard({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.date,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: tc.card,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 20, color: iconColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style:
+                        WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    date,
+                    style: WeRoboTypography.caption
+                        .copyWith(
+                            fontFamily:
+                                WeRoboFonts.english)
+                        .themed(context),
+                  ),
+                ],
+              ),
+            ),
+            Text(
+              value,
+              style: WeRoboTypography.bodySmall.copyWith(
+                fontWeight: FontWeight.w600,
+                color: valueColor ?? tc.textPrimary,
+                fontFamily: WeRoboFonts.english,
+              ),
             ),
           ],
         ),
