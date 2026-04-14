@@ -289,8 +289,8 @@ class FanChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant FanChartPainter old) =>
-      old.data != data ||
-      old.progress != progress ||
-      old.touchIndex != touchIndex;
+  bool shouldRepaint(covariant FanChartPainter oldDelegate) =>
+      oldDelegate.data != data ||
+      oldDelegate.progress != progress ||
+      oldDelegate.touchIndex != touchIndex;
 }
