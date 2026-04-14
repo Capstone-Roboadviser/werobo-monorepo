@@ -277,7 +277,7 @@ class _PortfolioStatsCard extends StatelessWidget {
       child: Row(
         children: [
           _StatItem(
-            label: '예상 수익률',
+            label: '예상 연 수익률',
             value: p.expectedReturnLabel,
             valueColor: WeRoboColors.primary,
           ),
