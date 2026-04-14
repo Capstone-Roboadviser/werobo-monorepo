@@ -14,16 +14,16 @@ class DriverCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final returnColor =
-        isPositive ? WeRoboColors.accent : WeRoboColors.textSecondary;
+        isPositive ? tc.accent : WeRoboColors.error;
     final sign = isPositive ? '+' : '';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: WeRoboColors.surface,
-        border: Border.all(color: WeRoboColors.card, width: 1.5),
+        color: tc.card,
         borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
       ),
       child: Column(
@@ -37,7 +37,7 @@ class DriverCard extends StatelessWidget {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: WeRoboColors.card,
+                  color: tc.card,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
@@ -45,7 +45,7 @@ class DriverCard extends StatelessWidget {
                   style: WeRoboTypography.caption.copyWith(
                     fontWeight: FontWeight.w600,
                     fontFamily: 'IBMPlexSans',
-                    color: WeRoboColors.textPrimary,
+                    color: tc.textPrimary,
                   ),
                 ),
               ),
@@ -57,13 +57,13 @@ class DriverCard extends StatelessWidget {
                     Text(
                       driver.nameKo,
                       style: WeRoboTypography.bodySmall.copyWith(
-                        color: WeRoboColors.textPrimary,
+                        color: tc.textPrimary,
                       ),
                     ),
                     Text(
                       '비중 ${driver.weightPct.toStringAsFixed(1)}%',
                       style: WeRoboTypography.caption.copyWith(
-                        color: WeRoboColors.textTertiary,
+                        color: tc.textTertiary,
                       ),
                     ),
                   ],
@@ -95,15 +95,15 @@ class DriverCard extends StatelessWidget {
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.only(top: 8),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 border: Border(
-                  top: BorderSide(color: WeRoboColors.card),
+                  top: BorderSide(color: tc.card),
                 ),
               ),
               child: Text(
                 driver.explanationKo!,
                 style: WeRoboTypography.caption.copyWith(
-                  color: WeRoboColors.textSecondary,
+                  color: tc.textSecondary,
                   height: 1.5,
                 ),
               ),
