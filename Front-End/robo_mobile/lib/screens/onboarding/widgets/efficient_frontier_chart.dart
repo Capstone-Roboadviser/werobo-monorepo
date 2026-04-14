@@ -286,10 +286,8 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
 
   int _nearestPreviewPosition(Offset localPos, double w, double h) {
     final previewPoints = widget.previewPoints!;
-    final minVolatility =
-        previewPoints.map((p) => p.volatility).reduce(min);
-    final maxVolatility =
-        previewPoints.map((p) => p.volatility).reduce(max);
+    final minVolatility = previewPoints.map((p) => p.volatility).reduce(min);
+    final maxVolatility = previewPoints.map((p) => p.volatility).reduce(max);
     final minExpectedReturn =
         previewPoints.map((p) => p.expectedReturn).reduce(min);
     final maxExpectedReturn =
@@ -363,8 +361,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                   if (_hasPreviewPoints) {
                     final pp = widget.previewPoints!;
                     dotPos = _previewPointToOffset(
-                      pp[widget.selectedPreviewPosition ??
-                          pp.length ~/ 2],
+                      pp[widget.selectedPreviewPosition ?? pp.length ~/ 2],
                       w,
                       h,
                       pp.map((p) => p.volatility).reduce(min),
@@ -375,8 +372,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                   } else {
                     dotPos = _tToPoint(_dotT, w, h);
                   }
-                  if ((details.localPosition - dotPos).distance <
-                      60) {
+                  if ((details.localPosition - dotPos).distance < 60) {
                     setState(() => _isDragging = true);
                     widget.onDragStateChanged?.call(true);
                   }
@@ -386,20 +382,15 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                 if (_isDragging) {
                   if (_hasPreviewPoints) {
                     final previewPosition =
-                        _nearestPreviewPosition(
-                          details.localPosition, w, h);
-                    final nextDotT =
-                        widget.previewPoints!.length <= 1
+                        _nearestPreviewPosition(details.localPosition, w, h);
+                    final nextDotT = widget.previewPoints!.length <= 1
                         ? 0.45
-                        : previewPosition /
-                            (widget.previewPoints!.length - 1);
+                        : previewPosition / (widget.previewPoints!.length - 1);
                     setState(() => _dotT = nextDotT);
-                    widget.onPreviewPointChanged
-                        ?.call(previewPosition);
+                    widget.onPreviewPointChanged?.call(previewPosition);
                   } else {
                     setState(() {
-                      _dotT = _screenToT(
-                          details.localPosition, w, h);
+                      _dotT = _screenToT(details.localPosition, w, h);
                     });
                     widget.onPositionChanged?.call(_dotT);
                   }
@@ -415,8 +406,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                 width: double.infinity,
                 height: h,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: CustomPaint(
                     painter: _FrontierPainter(
                       curveProgress: _curveAnimation.value,
@@ -425,8 +415,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                       isDragging: _isDragging,
                       pulseValue: _pulseAnimation.value,
                       previewPoints: widget.previewPoints,
-                      selectedPreviewPosition:
-                          widget.selectedPreviewPosition,
+                      selectedPreviewPosition: widget.selectedPreviewPosition,
                       gridColor: tc.border,
                       textTertiaryColor: tc.textTertiary,
                     ),
@@ -541,45 +530,37 @@ class _FrontierPainter extends CustomPainter {
         final x = w * 0.2 + rng.nextDouble() * w * 0.6;
         final y = h * 0.2 + rng.nextDouble() * h * 0.6;
         scatterPaint.color =
-            textTertiaryColor.withValues(
-                alpha: 0.3 * dotProgress);
-        canvas.drawCircle(
-            Offset(x, y), 3 * dotProgress, scatterPaint);
+            textTertiaryColor.withValues(alpha: 0.3 * dotProgress);
+        canvas.drawCircle(Offset(x, y), 3 * dotProgress, scatterPaint);
       }
 
       // Draggable dot on the curve
       final dotPos = _tToPoint(dotT, w, h);
       final dotRadius = isDragging ? 12.0 : 8.0;
       final pulseGlow = sin(pulseValue * 2 * pi) * 3.0;
-      final glowRadius =
-          (isDragging ? 28.0 : 18.0) + pulseGlow;
+      final glowRadius = (isDragging ? 28.0 : 18.0) + pulseGlow;
       final glowAlpha =
-          ((isDragging ? 0.3 : 0.2) +
-              sin(pulseValue * 2 * pi) * 0.05) *
-          dotProgress;
+          ((isDragging ? 0.3 : 0.2) + sin(pulseValue * 2 * pi) * 0.05) *
+              dotProgress;
 
       // Glow
       final glowPaint = Paint()
-        ..color = WeRoboColors.primary
-            .withValues(alpha: glowAlpha)
+        ..color = WeRoboColors.primary.withValues(alpha: glowAlpha)
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(
-          dotPos, glowRadius * dotProgress, glowPaint);
+      canvas.drawCircle(dotPos, glowRadius * dotProgress, glowPaint);
 
       // Dot fill
       final dotPaint = Paint()
         ..color = WeRoboColors.primary
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(
-          dotPos, dotRadius * dotProgress, dotPaint);
+      canvas.drawCircle(dotPos, dotRadius * dotProgress, dotPaint);
 
       // White ring
       final ringPaint = Paint()
         ..color = WeRoboColors.white
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.5;
-      canvas.drawCircle(
-          dotPos, dotRadius * dotProgress, ringPaint);
+      canvas.drawCircle(dotPos, dotRadius * dotProgress, ringPaint);
     }
   }
 
@@ -589,10 +570,8 @@ class _FrontierPainter extends CustomPainter {
     final points = previewPoints!;
 
     // Use frontier-only range so the curve fills the canvas.
-    final minVolatility =
-        points.map((point) => point.volatility).reduce(min);
-    final maxVolatility =
-        points.map((point) => point.volatility).reduce(max);
+    final minVolatility = points.map((point) => point.volatility).reduce(min);
+    final maxVolatility = points.map((point) => point.volatility).reduce(max);
     final minExpectedReturn =
         points.map((point) => point.expectedReturn).reduce(min);
     final maxExpectedReturn =
@@ -613,8 +592,7 @@ class _FrontierPainter extends CustomPainter {
       1,
       (pointOffsets.length * curveProgress).ceil(),
     );
-    final visiblePoints =
-        pointOffsets.take(visibleCount).toList();
+    final visiblePoints = pointOffsets.take(visibleCount).toList();
 
     if (visiblePoints.length >= 2) {
       final activeZone = _activeZone(dotT);
@@ -658,32 +636,26 @@ class _FrontierPainter extends CustomPainter {
     final selectedPoint = pointOffsets[selectedPosition];
     final dotRadius = isDragging ? 12.0 : 8.0;
     final pulseGlow = sin(pulseValue * 2 * pi) * 3.0;
-    final glowRadius =
-        (isDragging ? 28.0 : 18.0) + pulseGlow;
+    final glowRadius = (isDragging ? 28.0 : 18.0) + pulseGlow;
     final glowAlpha =
-        ((isDragging ? 0.3 : 0.2) +
-            sin(pulseValue * 2 * pi) * 0.05) *
-        dotProgress;
+        ((isDragging ? 0.3 : 0.2) + sin(pulseValue * 2 * pi) * 0.05) *
+            dotProgress;
 
     final glowPaint = Paint()
-      ..color = WeRoboColors.primary
-          .withValues(alpha: glowAlpha)
+      ..color = WeRoboColors.primary.withValues(alpha: glowAlpha)
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(
-        selectedPoint, glowRadius * dotProgress, glowPaint);
+    canvas.drawCircle(selectedPoint, glowRadius * dotProgress, glowPaint);
 
     final dotPaint = Paint()
       ..color = WeRoboColors.primary
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(
-        selectedPoint, dotRadius * dotProgress, dotPaint);
+    canvas.drawCircle(selectedPoint, dotRadius * dotProgress, dotPaint);
 
     final ringPaint = Paint()
       ..color = WeRoboColors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5;
-    canvas.drawCircle(
-        selectedPoint, dotRadius * dotProgress, ringPaint);
+    canvas.drawCircle(selectedPoint, dotRadius * dotProgress, ringPaint);
 
     final labelPoint = points[selectedPosition];
     if (labelPoint.representativeLabel != null) {
@@ -725,21 +697,17 @@ class _FrontierPainter extends CustomPainter {
 
         final pos = Offset(w * slot.dx, h * slot.dy);
         // Scale: 3px at 10% → 8px at 30%+, with pulse.
-        final baseRadius =
-            3 + (weight - 0.10).clamp(0.0, 0.20) * 25;
+        final baseRadius = 3 + (weight - 0.10).clamp(0.0, 0.20) * 25;
         final radius =
-            (baseRadius + sin(pulseValue * 2 * pi) * 0.5) *
-            dotProgress;
+            (baseRadius + sin(pulseValue * 2 * pi) * 0.5) * dotProgress;
         final assetPaint = Paint()
           ..style = PaintingStyle.fill
-          ..color = asset.color.withValues(
-              alpha: 0.85 * dotProgress);
+          ..color = asset.color.withValues(alpha: 0.85 * dotProgress);
         canvas.drawCircle(pos, radius, assetPaint);
         // Border ring
         final assetRingPaint = Paint()
           ..style = PaintingStyle.stroke
-          ..color = asset.color.withValues(
-              alpha: 1.0 * dotProgress)
+          ..color = asset.color.withValues(alpha: 1.0 * dotProgress)
           ..strokeWidth = 1.5;
         canvas.drawCircle(pos, radius, assetRingPaint);
 
@@ -749,22 +717,19 @@ class _FrontierPainter extends CustomPainter {
           asset.name,
           Offset(pos.dx + radius + 4, pos.dy - 6),
           labelStyle.copyWith(
-            color: asset.color
-                .withValues(alpha: dotProgress),
+            color: asset.color.withValues(alpha: dotProgress),
             fontWeight: FontWeight.w600,
             fontSize: 9,
           ),
         );
         // Weight percentage
-        final pctText =
-            '${(weight * 100).toStringAsFixed(0)}%';
+        final pctText = '${(weight * 100).toStringAsFixed(0)}%';
         _drawText(
           canvas,
           pctText,
           Offset(pos.dx + radius + 4, pos.dy + 5),
           labelStyle.copyWith(
-            color: asset.color.withValues(
-                alpha: 0.75 * dotProgress),
+            color: asset.color.withValues(alpha: 0.75 * dotProgress),
             fontWeight: FontWeight.w400,
             fontSize: 9,
           ),
@@ -791,25 +756,19 @@ class _FrontierPainter extends CustomPainter {
       // continuity at boundaries).
       final segPts = <Offset>[];
       for (int i = 0; i < n; i++) {
-        final t = totalCount <= 0
-            ? 0.5
-            : i / totalCount.toDouble();
+        final t = totalCount <= 0 ? 0.5 : i / totalCount.toDouble();
         if (t >= zoneStart - 0.02 && t <= zoneEnd + 0.02) {
           segPts.add(pts[i]);
         }
       }
       if (segPts.length < 2) continue;
 
-      final segPath = Path()
-        ..moveTo(segPts.first.dx, segPts.first.dy);
-      for (int i = 1; i < segPts.length; i++) {
-        segPath.lineTo(segPts[i].dx, segPts[i].dy);
-      }
+      // Smooth the rendered curve while preserving the underlying preview
+      // points for hit-testing and selection.
+      final segPath = _buildSmoothPath(segPts);
 
       final isActive = zone == activeZone;
-      final segColor = isActive
-          ? _zoneColors[zone]
-          : WeRoboColors.primary;
+      final segColor = isActive ? _zoneColors[zone] : WeRoboColors.primary;
 
       if (isActive) {
         // Faint glow under active zone
@@ -832,9 +791,7 @@ class _FrontierPainter extends CustomPainter {
         // Blend start boundary
         if (zone > 0) {
           final gradStart = segPts.first;
-          final gradEnd = segPts.length > 2
-              ? segPts[1]
-              : segPts.last;
+          final gradEnd = segPts.length > 2 ? segPts[1] : segPts.last;
           segPaint.shader = _blendShader(
             WeRoboColors.primary,
             segColor,
@@ -859,6 +816,55 @@ class _FrontierPainter extends CustomPainter {
 
       canvas.drawPath(segPath, segPaint);
     }
+  }
+
+  Path _buildSmoothPath(List<Offset> points) {
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    if (points.length == 2) {
+      path.lineTo(points.last.dx, points.last.dy);
+      return path;
+    }
+
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = i > 0 ? points[i - 1] : points[i];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i + 2 < points.length ? points[i + 2] : p2;
+
+      final rawControl1 = Offset(
+        p1.dx + (p2.dx - p0.dx) / 6,
+        p1.dy + (p2.dy - p0.dy) / 6,
+      );
+      final rawControl2 = Offset(
+        p2.dx - (p3.dx - p1.dx) / 6,
+        p2.dy - (p3.dy - p1.dy) / 6,
+      );
+
+      final control1 = _clampOffsetToSegment(rawControl1, p1, p2);
+      final control2 = _clampOffsetToSegment(rawControl2, p1, p2);
+
+      path.cubicTo(
+        control1.dx,
+        control1.dy,
+        control2.dx,
+        control2.dy,
+        p2.dx,
+        p2.dy,
+      );
+    }
+
+    return path;
+  }
+
+  Offset _clampOffsetToSegment(Offset value, Offset start, Offset end) {
+    final minX = min(start.dx, end.dx);
+    final maxX = max(start.dx, end.dx);
+    final minY = min(start.dy, end.dy);
+    final maxY = max(start.dy, end.dy);
+    return Offset(
+      value.dx.clamp(minX, maxX).toDouble(),
+      value.dy.clamp(minY, maxY).toDouble(),
+    );
   }
 
   /// Create a gradient shader that blends from blue
@@ -899,8 +905,7 @@ class _FrontierPainter extends CustomPainter {
     return LinearGradient(
       colors: [from, to, to, from],
       stops: const [0.0, 0.15, 0.85, 1.0],
-    ).createShader(
-        Rect.fromPoints(pathStart, pathEnd));
+    ).createShader(Rect.fromPoints(pathStart, pathEnd));
   }
 
   Offset _previewPointToOffset(
@@ -917,29 +922,22 @@ class _FrontierPainter extends CustomPainter {
     const topPaddingRatio = 0.12;
     const bottomPaddingRatio = 0.86;
 
-    final normalizedVolatility =
-        maxVolatility == minVolatility
+    final normalizedVolatility = maxVolatility == minVolatility
         ? 0.5
-        : (point.volatility - minVolatility) /
-            (maxVolatility - minVolatility);
-    final normalizedExpectedReturn =
-        maxExpectedReturn == minExpectedReturn
+        : (point.volatility - minVolatility) / (maxVolatility - minVolatility);
+    final normalizedExpectedReturn = maxExpectedReturn == minExpectedReturn
         ? 0.5
         : (point.expectedReturn - minExpectedReturn) /
             (maxExpectedReturn - minExpectedReturn);
 
     final x = w * leftPaddingRatio +
-        (w * (rightPaddingRatio - leftPaddingRatio)) *
-            normalizedVolatility;
+        (w * (rightPaddingRatio - leftPaddingRatio)) * normalizedVolatility;
     final y = h * bottomPaddingRatio -
-        (h * (bottomPaddingRatio - topPaddingRatio)) *
-            normalizedExpectedReturn;
+        (h * (bottomPaddingRatio - topPaddingRatio)) * normalizedExpectedReturn;
     return Offset(x, y);
   }
 
-  void _drawText(
-      Canvas canvas, String text, Offset offset,
-      TextStyle style) {
+  void _drawText(Canvas canvas, String text, Offset offset, TextStyle style) {
     final tp = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
@@ -955,8 +953,7 @@ class _FrontierPainter extends CustomPainter {
         old.dotT != dotT ||
         old.isDragging != isDragging ||
         old.pulseValue != pulseValue ||
-        old.selectedPreviewPosition !=
-            selectedPreviewPosition ||
+        old.selectedPreviewPosition != selectedPreviewPosition ||
         old.previewPoints != previewPoints;
   }
 }
