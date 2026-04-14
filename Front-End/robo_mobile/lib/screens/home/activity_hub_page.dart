@@ -71,18 +71,7 @@ class ActivityHubPage extends StatelessWidget {
                   _DigestCard(
                     onTap: () => Navigator.push(
                       context,
-<<<<<<< HEAD
                       WeRoboMotion.fadeRoute<void>(const DigestScreen()),
-=======
-                      PageRouteBuilder<void>(
-                        pageBuilder: (_, __, ___) => const DigestScreen(),
-                        transitionsBuilder: (_, anim, __, child) =>
-                            FadeTransition(
-                          opacity: anim,
-                          child: child,
-                        ),
-                      ),
->>>>>>> 3b7c902 (fix: sync rebalance cash history)
                     ),
                   ),
                   const SizedBox(height: 24),
