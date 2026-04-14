@@ -91,6 +91,7 @@
 | `POST` | `/admin/api/universe/versions/{version_id}/activate` | active 전환 |
 | `POST` | `/admin/api/prices/refresh` | 가격 갱신 |
 | `POST` | `/admin/api/prices/refresh/active` | active 유니버스 주기 갱신 |
+| `POST` | `/admin/api/accounts/snapshots/backfill` | legacy 계정 snapshot one-off backfill |
 | `GET` | `/admin/api/universe/readiness` | 시뮬레이션 준비 상태 |
 | `GET` | `/admin/api/tickers/search` | 종목명/키워드 검색 |
 | `GET` | `/admin/api/tickers/lookup` | 티커 자동채움 |
@@ -272,6 +273,68 @@ python scripts/run_active_refresh.py
 - `stock_combination_demo` 계정은 관리자 가격 refresh 대상이 아니므로 이 자동 배치에 포함되지 않습니다.
 - `managed_universe` 계정은 현재 active 유니버스에 없는 예전 보유 티커라도 저장된 `stock_weights`에 포함돼 있으면 refresh 대상에 계속 포함됩니다.
 - 계정 snapshot 계산은 가격 refresh 이후 수행되므로, 같은 응답 안에서 성공/실패 상태를 함께 확인할 수 있습니다.
+
+### `POST /admin/api/accounts/snapshots/backfill`
+
+용도:
+
+- 기존 `portfolio_daily_snapshots.cash_balance`가 0으로 남아 있는 legacy 계정을 현재 계산 로직으로 다시 생성할 때 사용합니다.
+- 기본은 `dry_run=true` 이며, 운영 전에 어떤 계정이 선택되는지 먼저 확인하는 one-off 복구용 엔드포인트입니다.
+
+보안:
+
+- 서버 환경변수 `ADMIN_REFRESH_SECRET`가 설정되어 있어야 합니다.
+- 요청 헤더 `X-Admin-Secret`이 그 값과 일치해야 합니다.
+
+입력:
+
+- `dry_run`
+  - `true`: 대상 계정만 조회
+  - `false`: 실제로 snapshot/ledger/insight를 다시 계산
+- `data_source`
+  - 기본값 `managed_universe`
+  - `null`이면 모든 데이터 소스 포함
+- `account_ids`
+- `user_ids`
+- `started_from`
+- `started_to`
+- `limit`
+  - 기본값 `50`
+  - `allow_all_matching=true`면 제한 없이 전체 실행 가능
+- `allow_all_matching`
+  - 기본값 `false`
+
+운영 권장:
+
+- 1차는 반드시 `dry_run=true`
+- 2차는 `account_ids` 또는 `user_ids`로 좁혀서 소량 실행
+- 전체 복구가 필요할 때만 `allow_all_matching=true` 사용
+
+호출 예시:
+
+```bash
+curl -X POST "https://<your-backend>/admin/api/accounts/snapshots/backfill" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Secret: ${ADMIN_REFRESH_SECRET}" \
+  -d '{
+    "dry_run": true,
+    "data_source": "managed_universe",
+    "user_ids": [123],
+    "limit": 10
+  }'
+```
+
+내장 스크립트 예시:
+
+```bash
+cd Back-End/robo_mobile_backend
+BACKEND_BASE_URL="https://robomobilebackend-production.up.railway.app" \
+ADMIN_REFRESH_SECRET="<same-secret>" \
+DRY_RUN="true" \
+USER_IDS="123" \
+LIMIT="10" \
+python scripts/run_account_snapshot_backfill.py
+```
 
 ## 3. Readiness 확인
 

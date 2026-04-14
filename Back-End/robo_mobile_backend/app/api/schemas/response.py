@@ -264,6 +264,38 @@ class ManagedPortfolioAccountSnapshotStatusResponse(BaseModel):
     message: str | None = Field(default=None, description="포트폴리오 계정 snapshot 갱신 메시지")
 
 
+class ManagedPortfolioAccountSnapshotBackfillResponse(BaseModel):
+    status: str = Field(..., description="snapshot backfill 상태", examples=["dry_run"])
+    dry_run: bool = Field(..., description="dry-run 실행 여부", examples=[True])
+    data_source: str | None = Field(
+        default=None,
+        description="대상 계정 데이터 소스. null이면 전체",
+        examples=["managed_universe"],
+    )
+    account_count: int = Field(..., description="선택된 계정 수", examples=[12])
+    success_count: int = Field(..., description="실제 backfill 성공 계정 수", examples=[12])
+    failure_count: int = Field(..., description="실패 계정 수", examples=[0])
+    selected_account_ids: list[int] = Field(
+        default_factory=list,
+        description="이번 요청에서 선택된 account_id 목록",
+        examples=[[1, 2, 3]],
+    )
+    updated_account_ids: list[int] = Field(
+        default_factory=list,
+        description="실제 backfill에 성공한 account_id 목록",
+        examples=[[1, 2, 3]],
+    )
+    failed_account_ids: list[int] = Field(
+        default_factory=list,
+        description="backfill에 실패한 account_id 목록",
+    )
+    failed_user_ids: list[int] = Field(
+        default_factory=list,
+        description="backfill에 실패한 user_id 목록",
+    )
+    message: str | None = Field(default=None, description="backfill 결과 메시지")
+
+
 class ManagedUniverseStatusResponse(BaseModel):
     database_configured: bool = Field(..., description="DATABASE_URL 설정 여부", examples=[True])
     active_version: ManagedUniverseVersionResponse | None = Field(default=None, description="현재 active 유니버스 버전")

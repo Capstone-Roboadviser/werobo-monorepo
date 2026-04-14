@@ -38,6 +38,21 @@ class PortfolioAccountSnapshotRefreshStatus:
     message: str | None = None
 
 
+@dataclass(frozen=True)
+class PortfolioAccountSnapshotBackfillStatus:
+    status: str
+    dry_run: bool
+    data_source: str | None
+    account_count: int
+    success_count: int
+    failure_count: int
+    selected_account_ids: list[int] = field(default_factory=list)
+    updated_account_ids: list[int] = field(default_factory=list)
+    failed_account_ids: list[int] = field(default_factory=list)
+    failed_user_ids: list[int] = field(default_factory=list)
+    message: str | None = None
+
+
 class PortfolioAccountService:
     def __init__(
         self,
@@ -210,6 +225,105 @@ class PortfolioAccountService:
             message=message,
         )
 
+    def backfill_account_snapshots(
+        self,
+        *,
+        data_source: SimulationDataSource | None = SimulationDataSource.MANAGED_UNIVERSE,
+        account_ids: list[int] | None = None,
+        user_ids: list[int] | None = None,
+        started_from: str | None = None,
+        started_to: str | None = None,
+        limit: int | None = 50,
+        dry_run: bool = True,
+    ) -> PortfolioAccountSnapshotBackfillStatus:
+        self._ensure_storage_ready()
+        accounts = self.repository.list_accounts(
+            data_source=None if data_source is None else data_source.value,
+        )
+        selected_accounts = self._select_accounts_for_snapshot_backfill(
+            accounts=accounts,
+            account_ids=account_ids,
+            user_ids=user_ids,
+            started_from=started_from,
+            started_to=started_to,
+            limit=limit,
+        )
+        selected_account_ids = [int(account["id"]) for account in selected_accounts]
+
+        if not selected_accounts:
+            status = "dry_run" if dry_run else "success"
+            return PortfolioAccountSnapshotBackfillStatus(
+                status=status,
+                dry_run=dry_run,
+                data_source=None if data_source is None else data_source.value,
+                account_count=0,
+                success_count=0,
+                failure_count=0,
+                selected_account_ids=[],
+                updated_account_ids=[],
+                failed_account_ids=[],
+                failed_user_ids=[],
+                message="조건에 맞는 포트폴리오 계정이 없습니다.",
+            )
+
+        if dry_run:
+            return PortfolioAccountSnapshotBackfillStatus(
+                status="dry_run",
+                dry_run=True,
+                data_source=None if data_source is None else data_source.value,
+                account_count=len(selected_accounts),
+                success_count=0,
+                failure_count=0,
+                selected_account_ids=selected_account_ids,
+                updated_account_ids=[],
+                failed_account_ids=[],
+                failed_user_ids=[],
+                message=f"dry-run: {len(selected_accounts)}개 포트폴리오 계정이 backfill 대상입니다.",
+            )
+
+        success_count = 0
+        failed_user_ids: list[int] = []
+        failed_account_ids: list[int] = []
+        updated_account_ids: list[int] = []
+
+        for account in selected_accounts:
+            account_id = int(account["id"])
+            try:
+                self._refresh_snapshots(account)
+                success_count += 1
+                updated_account_ids.append(account_id)
+            except Exception:
+                failed_account_ids.append(account_id)
+                failed_user_ids.append(int(account["user_id"]))
+
+        failure_count = len(failed_account_ids)
+        if failure_count == 0:
+            status = "success"
+            message = f"{success_count}개 포트폴리오 계정 snapshot backfill 완료"
+        elif success_count > 0:
+            status = "partial_success"
+            message = (
+                f"{success_count}개 포트폴리오 계정 snapshot backfill 성공, "
+                f"{failure_count}개 실패"
+            )
+        else:
+            status = "failed"
+            message = "포트폴리오 계정 snapshot backfill에 모두 실패했습니다."
+
+        return PortfolioAccountSnapshotBackfillStatus(
+            status=status,
+            dry_run=False,
+            data_source=None if data_source is None else data_source.value,
+            account_count=len(selected_accounts),
+            success_count=success_count,
+            failure_count=failure_count,
+            selected_account_ids=selected_account_ids,
+            updated_account_ids=updated_account_ids,
+            failed_account_ids=failed_account_ids,
+            failed_user_ids=failed_user_ids,
+            message=message,
+        )
+
     def _build_dashboard(self, account: dict[str, object]) -> dict[str, object]:
         snapshots = self.repository.list_snapshots(int(account["id"]))
         cash_flows = self.repository.list_cash_flows(int(account["id"]))
@@ -378,6 +492,50 @@ class PortfolioAccountService:
             )
 
         return current_sector_allocations, current_stock_allocations
+
+    def _select_accounts_for_snapshot_backfill(
+        self,
+        *,
+        accounts: list[dict[str, object]],
+        account_ids: list[int] | None = None,
+        user_ids: list[int] | None = None,
+        started_from: str | None = None,
+        started_to: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, object]]:
+        selected = list(accounts)
+        if account_ids:
+            account_id_set = {int(account_id) for account_id in account_ids}
+            selected = [
+                account for account in selected
+                if int(account["id"]) in account_id_set
+            ]
+        if user_ids:
+            user_id_set = {int(user_id) for user_id in user_ids}
+            selected = [
+                account for account in selected
+                if int(account["user_id"]) in user_id_set
+            ]
+        if started_from is not None:
+            selected = [
+                account for account in selected
+                if str(account["started_at"]) >= started_from
+            ]
+        if started_to is not None:
+            selected = [
+                account for account in selected
+                if str(account["started_at"]) <= started_to
+            ]
+
+        selected.sort(
+            key=lambda account: (
+                str(account["started_at"]),
+                int(account["id"]),
+            )
+        )
+        if limit is not None:
+            selected = selected[:limit]
+        return selected
 
     def _refresh_snapshots(self, account: dict[str, object]) -> None:
         stock_weights = {

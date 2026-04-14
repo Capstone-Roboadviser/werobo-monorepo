@@ -3,6 +3,7 @@ import secrets
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.api.schemas.request import (
+    AccountSnapshotBackfillRequest,
     ActivePriceRefreshRequest,
     ManagedUniverseVersionCreateRequest,
     ManagedUniverseVersionUpdateRequest,
@@ -15,6 +16,7 @@ from app.api.schemas.response import (
     ErrorResponse,
     ManagedComparisonBacktestSnapshotStatusResponse,
     ManagedFrontierSnapshotStatusResponse,
+    ManagedPortfolioAccountSnapshotBackfillResponse,
     ManagedPortfolioAccountSnapshotStatusResponse,
     ManagedPriceRefreshJobResponse,
     ManagedPriceRefreshResponse,
@@ -351,6 +353,48 @@ def refresh_active_prices(
         )
         account_snapshot_status = portfolio_account_service.refresh_managed_universe_accounts()
     return _price_refresh_response(result, account_snapshot_status=account_snapshot_status)
+
+
+@router.post(
+    "/accounts/snapshots/backfill",
+    response_model=ManagedPortfolioAccountSnapshotBackfillResponse,
+    summary="포트폴리오 계정 snapshot backfill",
+    description=(
+        "legacy 계정의 portfolio_daily_snapshots를 현재 계산 로직으로 다시 생성하는 one-off 운영 엔드포인트입니다. "
+        "기본은 dry-run이며, ADMIN_REFRESH_SECRET 환경변수와 X-Admin-Secret 헤더가 일치해야 실행됩니다."
+    ),
+    responses={**COMMON_ADMIN_401, **COMMON_ADMIN_422},
+)
+def backfill_account_snapshots(
+    payload: AccountSnapshotBackfillRequest,
+    x_admin_secret: str | None = Header(default=None, alias="X-Admin-Secret"),
+) -> ManagedPortfolioAccountSnapshotBackfillResponse:
+    _verify_admin_refresh_secret(x_admin_secret)
+    try:
+        result = portfolio_account_service.backfill_account_snapshots(
+            data_source=payload.data_source,
+            account_ids=payload.account_ids,
+            user_ids=payload.user_ids,
+            started_from=payload.started_from,
+            started_to=payload.started_to,
+            limit=payload.limit if not payload.allow_all_matching else None,
+            dry_run=payload.dry_run,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ManagedPortfolioAccountSnapshotBackfillResponse(
+        status=result.status,
+        dry_run=result.dry_run,
+        data_source=result.data_source,
+        account_count=result.account_count,
+        success_count=result.success_count,
+        failure_count=result.failure_count,
+        selected_account_ids=result.selected_account_ids,
+        updated_account_ids=result.updated_account_ids,
+        failed_account_ids=result.failed_account_ids,
+        failed_user_ids=result.failed_user_ids,
+        message=result.message,
+    )
 
 
 @router.get(

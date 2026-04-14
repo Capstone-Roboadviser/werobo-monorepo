@@ -5,9 +5,14 @@ from datetime import UTC, date, datetime, timedelta
 import pandas as pd
 import pytest
 
+from app.api.schemas.request import AccountSnapshotBackfillRequest
+from mobile_backend.api.routes import admin as admin_route
 from mobile_backend.api.routes import insights as insights_route
 from mobile_backend.domain.enums import SimulationDataSource
-from mobile_backend.services.account_service import PortfolioAccountService
+from mobile_backend.services.account_service import (
+    PortfolioAccountService,
+    PortfolioAccountSnapshotBackfillStatus,
+)
 
 
 class FakePortfolioAccountRepository:
@@ -283,6 +288,16 @@ class ReserveCashPortfolioAccountService(PortfolioAccountService):
                 ]
             )
         return pd.DataFrame(rows)
+
+
+class TrackingReserveCashPortfolioAccountService(ReserveCashPortfolioAccountService):
+    def __init__(self, repository: FakePortfolioAccountRepository) -> None:
+        super().__init__(repository)
+        self.refreshed_account_ids: list[int] = []
+
+    def _refresh_snapshots(self, account: dict[str, object]) -> None:
+        self.refreshed_account_ids.append(int(account["id"]))
+        super()._refresh_snapshots(account)
 
 
 class StubInsightsAuthService:
@@ -720,6 +735,262 @@ def test_insights_route_falls_back_to_cash_ledger_when_legacy_insight_missing(
         float(dashboard["summary"]["cash_balance"]),
         abs=2.0,
     )
+
+
+def test_backfill_account_snapshots_dry_run_filters_without_writing() -> None:
+    repository = FakePortfolioAccountRepository()
+    service = TrackingReserveCashPortfolioAccountService(repository)
+
+    service.create_or_replace_account(
+        user_id=31,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "AAA",
+                "name": "Alpha Asset",
+                "sector_code": "us_value",
+                "sector_name": "미국 가치주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "BBB",
+                "name": "Beta Bond",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.3,
+            },
+            {
+                "ticker": "CCC",
+                "name": "Core Gold",
+                "sector_code": "gold",
+                "sector_name": "금",
+                "weight": 0.2,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+        started_at="2026-03-01",
+    )
+    second_account = service.create_or_replace_account(
+        user_id=32,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "AAA",
+                "name": "Alpha Asset",
+                "sector_code": "us_value",
+                "sector_name": "미국 가치주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "BBB",
+                "name": "Beta Bond",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.3,
+            },
+            {
+                "ticker": "CCC",
+                "name": "Core Gold",
+                "sector_code": "gold",
+                "sector_name": "금",
+                "weight": 0.2,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+        started_at="2026-03-10",
+    )
+
+    service.refreshed_account_ids.clear()
+    second_account_id = int(repository.get_account_by_user_id(32)["id"])
+
+    result = service.backfill_account_snapshots(
+        user_ids=[32],
+        started_from="2026-03-05",
+        limit=10,
+        dry_run=True,
+    )
+
+    assert result.status == "dry_run"
+    assert result.account_count == 1
+    assert result.selected_account_ids == [second_account_id]
+    assert result.updated_account_ids == []
+    assert result.success_count == 0
+    assert service.refreshed_account_ids == []
+    assert second_account["summary"] is not None
+
+
+def test_backfill_account_snapshots_updates_only_selected_accounts() -> None:
+    repository = FakePortfolioAccountRepository()
+    service = TrackingReserveCashPortfolioAccountService(repository)
+
+    service.create_or_replace_account(
+        user_id=41,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "AAA",
+                "name": "Alpha Asset",
+                "sector_code": "us_value",
+                "sector_name": "미국 가치주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "BBB",
+                "name": "Beta Bond",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.3,
+            },
+            {
+                "ticker": "CCC",
+                "name": "Core Gold",
+                "sector_code": "gold",
+                "sector_name": "금",
+                "weight": 0.2,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+        started_at="2026-03-01",
+    )
+    service.create_or_replace_account(
+        user_id=42,
+        data_source=SimulationDataSource.MANAGED_UNIVERSE,
+        investment_horizon="medium",
+        portfolio_code="balanced",
+        portfolio_label="균형형",
+        portfolio_id="stocks-balanced-medium-0.12",
+        target_volatility=0.12,
+        expected_return=0.08,
+        volatility=0.11,
+        sharpe_ratio=0.72,
+        sector_allocations=[],
+        stock_allocations=[
+            {
+                "ticker": "AAA",
+                "name": "Alpha Asset",
+                "sector_code": "us_value",
+                "sector_name": "미국 가치주",
+                "weight": 0.5,
+            },
+            {
+                "ticker": "BBB",
+                "name": "Beta Bond",
+                "sector_code": "bond",
+                "sector_name": "채권",
+                "weight": 0.3,
+            },
+            {
+                "ticker": "CCC",
+                "name": "Core Gold",
+                "sector_code": "gold",
+                "sector_name": "금",
+                "weight": 0.2,
+            },
+        ],
+        initial_cash_amount=10_000_000,
+        started_at="2026-03-05",
+    )
+
+    first_account_id = int(repository.get_account_by_user_id(41)["id"])
+    second_account_id = int(repository.get_account_by_user_id(42)["id"])
+    for snapshot in repository.snapshots_by_account_id[first_account_id]:
+        snapshot["cash_balance"] = 0.0
+    for snapshot in repository.snapshots_by_account_id[second_account_id]:
+        snapshot["cash_balance"] = 0.0
+
+    service.refreshed_account_ids.clear()
+
+    result = service.backfill_account_snapshots(
+        account_ids=[first_account_id],
+        limit=None,
+        dry_run=False,
+    )
+
+    assert result.status == "success"
+    assert result.account_count == 1
+    assert result.success_count == 1
+    assert result.updated_account_ids == [first_account_id]
+    assert result.failed_account_ids == []
+    assert service.refreshed_account_ids == [first_account_id]
+    assert repository.list_snapshots(first_account_id)[-1]["cash_balance"] > 0
+    assert repository.list_snapshots(second_account_id)[-1]["cash_balance"] == 0
+
+
+def test_admin_route_backfill_account_snapshots_uses_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class StubBackfillService:
+        def backfill_account_snapshots(self, **kwargs) -> PortfolioAccountSnapshotBackfillStatus:
+            captured.update(kwargs)
+            return PortfolioAccountSnapshotBackfillStatus(
+                status="dry_run",
+                dry_run=True,
+                data_source="managed_universe",
+                account_count=1,
+                success_count=0,
+                failure_count=0,
+                selected_account_ids=[7],
+                updated_account_ids=[],
+                failed_account_ids=[],
+                failed_user_ids=[],
+                message="dry-run: 1개 포트폴리오 계정이 backfill 대상입니다.",
+            )
+
+    monkeypatch.setattr(admin_route, "portfolio_account_service", StubBackfillService())
+    monkeypatch.setattr(admin_route, "ADMIN_REFRESH_SECRET", "secret")
+
+    payload = AccountSnapshotBackfillRequest(
+        dry_run=True,
+        user_ids=[7],
+        limit=5,
+    )
+
+    response = admin_route.backfill_account_snapshots(
+        payload,
+        x_admin_secret="secret",
+    )
+
+    assert captured == {
+        "data_source": SimulationDataSource.MANAGED_UNIVERSE,
+        "account_ids": [],
+        "user_ids": [7],
+        "started_from": None,
+        "started_to": None,
+        "limit": 5,
+        "dry_run": True,
+    }
+    assert response.status == "dry_run"
+    assert response.selected_account_ids == [7]
+    assert response.dry_run is True
 
 
 def test_refresh_managed_universe_accounts_filters_target_accounts() -> None:
