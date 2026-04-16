@@ -190,11 +190,15 @@ class ManagedUniverseRepository:
                     CREATE TABLE IF NOT EXISTS admin_comparison_snapshots (
                         id BIGSERIAL PRIMARY KEY,
                         name TEXT NOT NULL,
+                        folder TEXT,
                         payload JSONB NOT NULL,
                         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                     )
                     """
+                )
+                cursor.execute(
+                    "ALTER TABLE admin_comparison_snapshots ADD COLUMN IF NOT EXISTS folder TEXT"
                 )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_items_version_sector ON universe_items(version_id, sector_code)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_asset_roles_version ON universe_asset_roles(version_id)")
@@ -1371,6 +1375,7 @@ class ManagedUniverseRepository:
                     SELECT
                         id,
                         name,
+                        folder,
                         payload,
                         TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
                         TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
@@ -1390,6 +1395,7 @@ class ManagedUniverseRepository:
                     SELECT
                         id,
                         name,
+                        folder,
                         payload,
                         TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
                         TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
@@ -1406,23 +1412,26 @@ class ManagedUniverseRepository:
         *,
         name: str,
         payload: dict[str, object],
+        folder: str | None = None,
     ) -> dict[str, object]:
         self._ensure_ready()
         payload_json = json.dumps(payload, ensure_ascii=False)
+        normalized_folder = folder.strip() if folder and folder.strip() else None
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    INSERT INTO admin_comparison_snapshots (name, payload)
-                    VALUES (%s, %s::jsonb)
+                    INSERT INTO admin_comparison_snapshots (name, folder, payload)
+                    VALUES (%s, %s, %s::jsonb)
                     RETURNING
                         id,
                         name,
+                        folder,
                         payload,
                         TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
                         TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
                     """,
-                    (name, payload_json),
+                    (name, normalized_folder, payload_json),
                 )
                 row = cursor.fetchone()
             connection.commit()
@@ -1436,6 +1445,7 @@ class ManagedUniverseRepository:
         snapshot_id: int,
         name: str | None = None,
         payload: dict[str, object] | None = None,
+        folder: str | None | object = ...,
     ) -> dict[str, object] | None:
         self._ensure_ready()
         sets: list[str] = []
@@ -1446,6 +1456,14 @@ class ManagedUniverseRepository:
         if payload is not None:
             sets.append("payload = %s::jsonb")
             values.append(json.dumps(payload, ensure_ascii=False))
+        if folder is not ...:
+            sets.append("folder = %s")
+            normalized_folder = (
+                folder.strip()
+                if isinstance(folder, str) and folder.strip()
+                else None
+            )
+            values.append(normalized_folder)
         if not sets:
             return self.get_admin_comparison_snapshot(snapshot_id)
         sets.append("updated_at = NOW()")
@@ -1460,6 +1478,7 @@ class ManagedUniverseRepository:
                     RETURNING
                         id,
                         name,
+                        folder,
                         payload,
                         TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
                         TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
@@ -1490,9 +1509,11 @@ class ManagedUniverseRepository:
                 payload = json.loads(payload)
             except (TypeError, ValueError):
                 payload = {}
+        folder_value = row.get("folder")
         return {
             "id": int(row["id"]),
             "name": str(row["name"]),
+            "folder": str(folder_value) if folder_value else None,
             "payload": payload if isinstance(payload, dict) else {},
             "created_at": str(row["created_at"]) if row.get("created_at") is not None else None,
             "updated_at": str(row["updated_at"]) if row.get("updated_at") is not None else None,
