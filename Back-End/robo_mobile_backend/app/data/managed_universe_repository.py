@@ -185,6 +185,17 @@ class ManagedUniverseRepository:
                     )
                     """
                 )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS admin_comparison_snapshots (
+                        id BIGSERIAL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        payload JSONB NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_items_version_sector ON universe_items(version_id, sector_code)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_asset_roles_version ON universe_asset_roles(version_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_history_ticker_date ON price_history(ticker, date)")
@@ -1348,3 +1359,141 @@ class ManagedUniverseRepository:
                 for item in asset_role_assignments
             ],
         )
+
+    # ── Admin comparison snapshots ──
+
+    def list_admin_comparison_snapshots(self) -> list[dict[str, object]]:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        name,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    FROM admin_comparison_snapshots
+                    ORDER BY updated_at DESC
+                    """
+                )
+                rows = cursor.fetchall()
+        return [self._admin_comparison_snapshot_from_row(row) for row in rows]
+
+    def get_admin_comparison_snapshot(self, snapshot_id: int) -> dict[str, object] | None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        name,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    FROM admin_comparison_snapshots
+                    WHERE id = %s
+                    """,
+                    (snapshot_id,),
+                )
+                row = cursor.fetchone()
+        return None if row is None else self._admin_comparison_snapshot_from_row(row)
+
+    def create_admin_comparison_snapshot(
+        self,
+        *,
+        name: str,
+        payload: dict[str, object],
+    ) -> dict[str, object]:
+        self._ensure_ready()
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO admin_comparison_snapshots (name, payload)
+                    VALUES (%s, %s::jsonb)
+                    RETURNING
+                        id,
+                        name,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    """,
+                    (name, payload_json),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            raise RuntimeError("admin comparison snapshot 저장 결과를 다시 읽지 못했습니다.")
+        return self._admin_comparison_snapshot_from_row(row)
+
+    def update_admin_comparison_snapshot(
+        self,
+        *,
+        snapshot_id: int,
+        name: str | None = None,
+        payload: dict[str, object] | None = None,
+    ) -> dict[str, object] | None:
+        self._ensure_ready()
+        sets: list[str] = []
+        values: list[object] = []
+        if name is not None:
+            sets.append("name = %s")
+            values.append(name)
+        if payload is not None:
+            sets.append("payload = %s::jsonb")
+            values.append(json.dumps(payload, ensure_ascii=False))
+        if not sets:
+            return self.get_admin_comparison_snapshot(snapshot_id)
+        sets.append("updated_at = NOW()")
+        values.append(snapshot_id)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE admin_comparison_snapshots
+                    SET {', '.join(sets)}
+                    WHERE id = %s
+                    RETURNING
+                        id,
+                        name,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    """,
+                    values,
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        return None if row is None else self._admin_comparison_snapshot_from_row(row)
+
+    def delete_admin_comparison_snapshot(self, snapshot_id: int) -> bool:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM admin_comparison_snapshots WHERE id = %s",
+                    (snapshot_id,),
+                )
+                deleted = cursor.rowcount or 0
+            connection.commit()
+        return deleted > 0
+
+    @staticmethod
+    def _admin_comparison_snapshot_from_row(row: dict[str, object]) -> dict[str, object]:
+        payload = row["payload"]
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                payload = {}
+        return {
+            "id": int(row["id"]),
+            "name": str(row["name"]),
+            "payload": payload if isinstance(payload, dict) else {},
+            "created_at": str(row["created_at"]) if row.get("created_at") is not None else None,
+            "updated_at": str(row["updated_at"]) if row.get("updated_at") is not None else None,
+        }

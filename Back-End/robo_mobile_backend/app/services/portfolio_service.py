@@ -434,6 +434,7 @@ class PortfolioSimulationService:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
         as_of_date: date | None = None,
+        version_id: int | None = None,
     ) -> EngineContext:
         return self._prepare_context(
             UserProfile(
@@ -441,7 +442,8 @@ class PortfolioSimulationService:
                 investment_horizon=investment_horizon,
                 data_source=data_source,
                 as_of_date=as_of_date,
-            )
+            ),
+            version_id=version_id,
         )
 
     def get_all_profile_weights_for_price_window(
@@ -581,9 +583,17 @@ class PortfolioSimulationService:
             selected_combination=context.selected_combination,
         )
 
-    def _prepare_context(self, user_profile: UserProfile) -> EngineContext:
+    def _prepare_context(
+        self,
+        user_profile: UserProfile,
+        *,
+        version_id: int | None = None,
+    ) -> EngineContext:
         if user_profile.data_source == SimulationDataSource.MANAGED_UNIVERSE:
-            return self._prepare_managed_universe_context(as_of_date=user_profile.as_of_date)
+            return self._prepare_managed_universe_context(
+                as_of_date=user_profile.as_of_date,
+                version_id=version_id,
+            )
         if user_profile.data_source == SimulationDataSource.STOCK_COMBINATION_DEMO:
             return self._prepare_demo_stock_universe_context(as_of_date=user_profile.as_of_date)
         return self._prepare_assumption_context(as_of_date=user_profile.as_of_date)
@@ -639,33 +649,43 @@ class PortfolioSimulationService:
             data_source_label="자산군 가정값",
         )
 
-    def _prepare_managed_universe_context(self, *, as_of_date: date | None = None) -> EngineContext:
-        active_version = self.managed_universe_service.get_active_version()
-        if active_version is None:
-            raise RuntimeError(
-                "활성 관리자 유니버스가 없습니다. /admin 에서 유니버스 버전을 active로 전환한 뒤 다시 시도해주세요."
-            )
+    def _prepare_managed_universe_context(
+        self,
+        *,
+        as_of_date: date | None = None,
+        version_id: int | None = None,
+    ) -> EngineContext:
+        if version_id is None:
+            version = self.managed_universe_service.get_active_version()
+            if version is None:
+                raise RuntimeError(
+                    "활성 관리자 유니버스가 없습니다. /admin 에서 유니버스 버전을 active로 전환한 뒤 다시 시도해주세요."
+                )
+        else:
+            version = self.managed_universe_service.get_version(version_id)
+            if version is None:
+                raise RuntimeError(f"유니버스 버전 {version_id}를 찾을 수 없습니다.")
 
-        assets = self.list_assets(version_id=active_version.version_id)
-        instruments = self.managed_universe_service.get_active_instruments()
+        assets = self.list_assets(version_id=version.version_id)
+        instruments = self.managed_universe_service.get_instruments_for_version(version.version_id)
         if not instruments:
-            raise RuntimeError("활성 관리자 유니버스에 등록된 종목이 없습니다. /admin 에서 종목을 추가한 뒤 다시 시도해주세요.")
+            raise RuntimeError("관리자 유니버스 버전에 등록된 종목이 없습니다. /admin 에서 종목을 추가한 뒤 다시 시도해주세요.")
 
         prices = self.managed_universe_service.load_prices_for_instruments(
             instruments,
-            version_id=active_version.version_id,
+            version_id=version.version_id,
             end_date=None if as_of_date is None else as_of_date.isoformat(),
         )
         if prices.empty:
             raise RuntimeError(
-                "활성 관리자 유니버스의 가격 데이터가 없습니다. /admin 에서 가격 갱신을 먼저 실행해주세요."
+                "관리자 유니버스 버전의 가격 데이터가 없습니다. /admin 에서 가격 갱신을 먼저 실행해주세요."
             )
 
         representative_context = self._select_sector_representatives(
             assets=assets,
             instruments=instruments,
             prices=prices,
-            combination_prefix=active_version.version_name,
+            combination_prefix=version.version_name,
             use_asset_min_weights=True,
         )
         return EngineContext(
@@ -677,7 +697,7 @@ class PortfolioSimulationService:
             random_portfolios=representative_context.random_portfolios,
             used_fallback=False,
             data_source=SimulationDataSource.MANAGED_UNIVERSE,
-            data_source_label=f"관리자 대표 종목 유니버스 ({active_version.version_name})",
+            data_source_label=f"관리자 대표 종목 유니버스 ({version.version_name})",
             selected_combination=representative_context.selection_view,
         )
 

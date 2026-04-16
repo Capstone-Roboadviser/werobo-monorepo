@@ -280,8 +280,8 @@ def test_build_comparison_backtest_uses_current_fixed_stock_weights() -> None:
         _asset("us_value", "미국 가치주"),
         _asset("gold", "금"),
     ]
-    service._load_comparison_assets = lambda data_source: assets
-    service._load_comparison_universe = lambda data_source: (instruments, prices, "demo")
+    service._load_comparison_assets = lambda data_source, **_: assets
+    service._load_comparison_universe = lambda data_source, **_: (instruments, prices, "demo")
     service._fetch_benchmark_prices = lambda start_date: {}
 
     result = service.build_comparison_backtest(

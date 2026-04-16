@@ -364,6 +364,7 @@ def render_admin_page() -> HTMLResponse:
         <p>종목 등록, 유니버스 버전 관리, 가격 갱신만 빠르게 할 수 있는 가벼운 관리자 화면입니다.</p>
       </div>
       <div class="actions">
+        <a href="/admin/comparison"><button class="ghost" type="button">유니버스 비교 보드 →</button></a>
         <button class="secondary" id="reload-all">새로고침</button>
       </div>
     </div>
