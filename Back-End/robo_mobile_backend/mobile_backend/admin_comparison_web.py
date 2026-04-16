@@ -1126,8 +1126,8 @@ def render_admin_comparison_page() -> HTMLResponse:
     };
     let saveModalState = { mode: 'create' };
 
-    const NEW_GROWTH_CODE = 'new_growth';
     const TREASURY_KEY = 'treasury';
+    const MARKET_KEY = 'market';
 
     function nextGraphSetId() {
       graphSetSeq += 1;
@@ -1983,10 +1983,8 @@ def render_admin_comparison_page() -> HTMLResponse:
       const PORTFOLIO_KEYS = new Set(['selected', 'balanced', 'conservative', 'growth']);
       const lines = data.lines.filter(line => {
         if (line.key === TREASURY_KEY) return true;
-        if (line.key.startsWith('asset_')) {
-          const assetCode = line.key.replace(/^asset_/, '');
-          return assetCode !== NEW_GROWTH_CODE;
-        }
+        if (line.key === MARKET_KEY) return true;
+        if (line.key.startsWith('asset_')) return true;
         return PORTFOLIO_KEYS.has(line.key);
       }).map(line => {
         if (PORTFOLIO_KEYS.has(line.key)) {
