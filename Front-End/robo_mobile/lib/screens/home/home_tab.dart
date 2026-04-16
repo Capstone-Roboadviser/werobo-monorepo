@@ -181,14 +181,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               _PortfolioAllocationPanel(
                 details: allocationDetails,
                 baseValue: _portfolioAllocationBaseValue(accountSummary),
-                reserveCashAmount: accountSummary?.cashBalance,
-                reserveCashPercent: accountSummary == null
-                    ? null
-                    : (accountSummary.currentValue > 0
-                        ? (accountSummary.cashBalance /
-                            accountSummary.currentValue *
-                            100)
-                        : 0.0),
                 showAmounts: _showAllocationAmounts,
                 hasResolvedPortfolio: hasResolvedPortfolio,
                 onValueModeChanged: (showAmounts) {
@@ -196,6 +188,14 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 },
               ),
             ),
+            if (accountSummary != null) const SizedBox(height: 20),
+            if (accountSummary != null)
+              _stagger(
+                ++staggerIdx,
+                _ReserveCashPanel(
+                  reserveCashAmount: accountSummary.cashBalance,
+                ),
+              ),
             const SizedBox(height: 32),
           ],
         ),
@@ -1411,8 +1411,6 @@ class _DepositActionButton extends StatelessWidget {
 class _PortfolioAllocationPanel extends StatelessWidget {
   final List<PortfolioCategoryDetail> details;
   final double? baseValue;
-  final double? reserveCashAmount;
-  final double? reserveCashPercent;
   final bool showAmounts;
   final bool hasResolvedPortfolio;
   final ValueChanged<bool> onValueModeChanged;
@@ -1420,8 +1418,6 @@ class _PortfolioAllocationPanel extends StatelessWidget {
   const _PortfolioAllocationPanel({
     required this.details,
     required this.baseValue,
-    required this.reserveCashAmount,
-    required this.reserveCashPercent,
     required this.showAmounts,
     required this.hasResolvedPortfolio,
     required this.onValueModeChanged,
@@ -1481,49 +1477,6 @@ class _PortfolioAllocationPanel extends StatelessWidget {
               ],
             );
           }),
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '예비 현금',
-                      style: WeRoboTypography.bodySmall.copyWith(
-                        color: tc.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '리밸런싱 시 자동 사용',
-                      style: WeRoboTypography.caption.copyWith(
-                        color: tc.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: 20),
-                child: Text(
-                  showAmounts
-                      ? _formatWonAmount(reserveCashAmount)
-                      : reserveCashPercent == null
-                          ? '-'
-                          : _formatPercentLabel(reserveCashPercent!),
-                  style: WeRoboTypography.bodySmall.copyWith(
-                    color: tc.textPrimary,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: WeRoboFonts.english,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
         const SizedBox(height: 16),
         Pressable(
           onTap: () {},
@@ -1550,6 +1503,65 @@ class _PortfolioAllocationPanel extends StatelessWidget {
         baseValue: baseValue,
         initialShowAmounts: showAmounts,
       )),
+    );
+  }
+}
+
+class _ReserveCashPanel extends StatelessWidget {
+  final double reserveCashAmount;
+
+  const _ReserveCashPanel({
+    required this.reserveCashAmount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '예비 현금',
+          style: WeRoboTypography.heading3.copyWith(
+            color: tc.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '포트폴리오 구성 비중에는 포함되지 않아요.',
+          style: WeRoboTypography.bodySmall.copyWith(
+            color: tc.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '리밸런싱 시 별도로 보관됐다가 자동 사용돼요.',
+          style: WeRoboTypography.caption.copyWith(
+            color: tc.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Text(
+              '현재 보유',
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textSecondary,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              _formatWonAmount(reserveCashAmount),
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontFamily: WeRoboFonts.english,
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
