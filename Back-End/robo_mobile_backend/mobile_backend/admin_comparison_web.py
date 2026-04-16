@@ -587,7 +587,8 @@ def render_admin_comparison_page() -> HTMLResponse:
           state.pointIndex = balanced ? balanced.index : points[Math.floor(points.length / 2)].index;
         }
         renderFrontier(state);
-        await refreshSelection(state);
+        applySelectionFromFrontier(state);
+        await refreshBacktest(state);
       } catch (e) {
         state.frontier = null;
         showError(state, `Frontier 계산 실패: ${e.message}`);
@@ -596,23 +597,21 @@ def render_admin_comparison_page() -> HTMLResponse:
       }
     }
 
-    async function refreshSelection(state) {
-      if (!state.frontier || state.pointIndex === null) return;
-      try {
-        const data = await api('/admin/api/comparison/selection', {
-          method: 'POST',
-          body: JSON.stringify({
-            version_id: state.versionId,
-            as_of_date: state.asOfDate,
-            point_index: state.pointIndex,
-          }),
-        });
-        state.selection = data;
-        renderSelectionSummary(state);
-        await refreshBacktest(state);
-      } catch (e) {
-        showError(state, `Selection 계산 실패: ${e.message}`);
-      }
+    // Read selected point's weights/sector breakdown from cached frontier data —
+    // avoids a second heavyweight backend call on every drag.
+    function applySelectionFromFrontier(state) {
+      if (!state.frontier) return;
+      const point = state.frontier.points.find(p => p.index === state.pointIndex);
+      if (!point) return;
+      state.selection = {
+        version_id: state.versionId,
+        point_index: point.index,
+        volatility: point.volatility,
+        expected_return: point.expected_return,
+        stock_weights: point.stock_weights || {},
+        sector_breakdown: point.sector_breakdown || [],
+      };
+      renderSelectionSummary(state);
     }
 
     async function refreshBacktest(state) {
@@ -801,9 +800,10 @@ def render_admin_comparison_page() -> HTMLResponse:
         if (nearest.index !== state.pointIndex) {
           state.pointIndex = nearest.index;
           renderFrontier(state); // re-render dot
-          // debounce selection refresh
+          applySelectionFromFrontier(state); // instant summary update from cached data
+          // Debounce backtest call — only one heavyweight request after drag settles.
           clearTimeout(state._dragTimer);
-          state._dragTimer = setTimeout(() => refreshSelection(state), 200);
+          state._dragTimer = setTimeout(() => refreshBacktest(state), 350);
         }
       };
       const onUp = () => {

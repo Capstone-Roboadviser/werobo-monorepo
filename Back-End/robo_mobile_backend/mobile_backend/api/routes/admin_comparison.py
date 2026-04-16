@@ -160,10 +160,31 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
             preview_indices.append(idx)
     preview_indices = sorted(set(preview_indices))
 
+    instrument_lookup = {
+        instrument.ticker.upper(): instrument for instrument in context.instruments
+    }
+
     points = []
     for idx in preview_indices:
         fp = context.frontier_points[idx]
         rep_code = representative_lookup.get(idx)
+        weights = {
+            str(ticker).upper(): round(float(weight), 6)
+            for ticker, weight in fp.weights.items()
+            if float(weight) > 0
+        }
+        sector_totals: dict[str, float] = {}
+        for ticker, weight in weights.items():
+            instrument = instrument_lookup.get(ticker)
+            if instrument is None:
+                continue
+            sector_totals[instrument.sector_code] = (
+                sector_totals.get(instrument.sector_code, 0.0) + weight
+            )
+        sector_breakdown = [
+            {"asset_code": code, "weight": round(w, 4)}
+            for code, w in sorted(sector_totals.items(), key=lambda x: -x[1])
+        ]
         points.append(
             {
                 "index": idx,
@@ -173,6 +194,8 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
                 "representative_label": (
                     representative_labels.get(rep_code) if rep_code else None
                 ),
+                "stock_weights": weights,
+                "sector_breakdown": sector_breakdown,
             }
         )
 
