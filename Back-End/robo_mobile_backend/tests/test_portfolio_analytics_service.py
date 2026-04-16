@@ -79,6 +79,7 @@ def test_build_equal_weight_asset_benchmark_line_averages_asset_classes() -> Non
 
     assert line is not None
     assert line.key == "benchmark_avg"
+    assert line.label == "2자산 단순평균"
     assert line.points[0] == ("2026-03-01", 0.0)
     assert line.points[1] == ("2026-03-02", 7.5)
     assert line.points[2] == ("2026-03-03", 15.0)
@@ -115,7 +116,7 @@ def test_build_equal_weight_asset_benchmark_line_requires_all_asset_classes() ->
     assert line is None
 
 
-def test_build_equal_weight_asset_benchmark_line_caps_fixed_five_percent_role_upside() -> None:
+def test_build_equal_weight_asset_benchmark_line_excludes_fixed_five_percent_role() -> None:
     service = PortfolioAnalyticsService()
     date_index = pd.to_datetime(["2026-03-01", "2026-03-02", "2026-03-03"])
     prices = pd.DataFrame(
@@ -168,42 +169,26 @@ def test_build_equal_weight_asset_benchmark_line_caps_fixed_five_percent_role_up
         date_index=date_index,
     )
 
-    conservative_path = service._build_conservative_cap_path(date_index=date_index)
-    expected_points = [
-        (
-            date.strftime("%Y-%m-%d"),
-            round((((float(capped_value) + 1.0) / 2.0) - 1.0) * 100, 4),
-        )
-        for date, capped_value in conservative_path.items()
+    assert line is not None
+    assert line.label == "1자산 단순평균"
+    assert line.points == [
+        ("2026-03-01", 0.0),
+        ("2026-03-02", 0.0),
+        ("2026-03-03", 0.0),
     ]
 
-    assert line is not None
-    assert line.points == expected_points
 
-
-def test_build_equal_weight_asset_benchmark_line_keeps_fixed_five_percent_role_drawdown() -> None:
+def test_build_equal_weight_asset_benchmark_line_ignores_missing_fixed_five_percent_asset_data() -> None:
     service = PortfolioAnalyticsService()
     date_index = pd.to_datetime(["2026-03-01", "2026-03-02", "2026-03-03"])
     prices = pd.DataFrame(
         [
-            {"date": "2026-03-01", "ticker": "AAA", "adjusted_close": 100.0},
-            {"date": "2026-03-02", "ticker": "AAA", "adjusted_close": 90.0},
-            {"date": "2026-03-03", "ticker": "AAA", "adjusted_close": 80.0},
             {"date": "2026-03-01", "ticker": "BBB", "adjusted_close": 100.0},
-            {"date": "2026-03-02", "ticker": "BBB", "adjusted_close": 100.0},
-            {"date": "2026-03-03", "ticker": "BBB", "adjusted_close": 100.0},
+            {"date": "2026-03-02", "ticker": "BBB", "adjusted_close": 110.0},
+            {"date": "2026-03-03", "ticker": "BBB", "adjusted_close": 120.0},
         ]
     )
     instruments = [
-        StockInstrument(
-            ticker="AAA",
-            name="Thematic",
-            sector_code="new_growth",
-            sector_name="신성장주",
-            market="USA",
-            currency="USD",
-            base_weight=1.0,
-        ),
         StockInstrument(
             ticker="BBB",
             name="Gold",
@@ -235,10 +220,11 @@ def test_build_equal_weight_asset_benchmark_line_keeps_fixed_five_percent_role_d
     )
 
     assert line is not None
+    assert line.label == "1자산 단순평균"
     assert line.points == [
         ("2026-03-01", 0.0),
-        ("2026-03-02", -5.0),
-        ("2026-03-03", -10.0),
+        ("2026-03-02", 10.0),
+        ("2026-03-03", 20.0),
     ]
 
 
