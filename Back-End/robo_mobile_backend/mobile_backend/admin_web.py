@@ -3,400 +3,781 @@ from fastapi.responses import HTMLResponse
 
 def render_admin_page() -> HTMLResponse:
     html = """<!DOCTYPE html>
-<html lang="ko">
+<html lang="ko" data-theme="light">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Robo Mobile Admin</title>
+  <title>Universe / WeRobo Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sono:wght@300;400;500;600;700&family=Azeret+Mono:wght@400;500;600&display=swap" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
   <style>
     :root {
-      --bg: #f5f7fb;
-      --card: #ffffff;
-      --text: #122033;
-      --muted: #5b6b7f;
-      --line: #d8e0ea;
-      --primary: #133c7a;
-      --primary-soft: #e8f0ff;
-      --danger: #b42318;
-      --danger-soft: #fef3f2;
-      --ok: #027a48;
-      --ok-soft: #ecfdf3;
-      --warn: #b54708;
-      --warn-soft: #fffaeb;
-      --radius: 16px;
+      --font-ui: 'Sono', 'Pretendard', ui-sans-serif, system-ui, -apple-system, sans-serif;
+      --font-mono: 'Azeret Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+      --text-2xs: 10.5px;
+      --text-xs: 11.5px;
+      --text-sm: 12.5px;
+      --text-base: 13.5px;
+      --text-md: 14.5px;
+      --text-lg: 16px;
+      --text-xl: 19px;
+      --text-2xl: 24px;
+
+      --sp-1: 4px;
+      --sp-2: 8px;
+      --sp-3: 12px;
+      --sp-4: 16px;
+      --sp-5: 24px;
+      --sp-6: 32px;
+      --sp-7: 48px;
+
+      --r-1: 3px;
+      --r-2: 5px;
+      --r-3: 7px;
+      --r-4: 10px;
+
+      /* Light theme — cool paper, TradingView cobalt accent */
+      --bg: oklch(98% 0.004 255);
+      --surface: oklch(100% 0 0);
+      --surface-2: oklch(98.5% 0.005 255);
+      --surface-3: oklch(96% 0.008 255);
+      --fg: oklch(22% 0.018 255);
+      --fg-2: oklch(42% 0.018 255);
+      --fg-3: oklch(58% 0.016 255);
+      --fg-4: oklch(72% 0.012 255);
+      --line: oklch(91% 0.010 255);
+      --line-2: oklch(82% 0.014 255);
+      --line-3: oklch(68% 0.018 255);
+
+      --accent: oklch(56% 0.22 260);
+      --accent-hover: oklch(50% 0.24 260);
+      --accent-fg: oklch(99% 0.003 260);
+      --accent-soft: oklch(94% 0.045 260);
+
+      --pos: oklch(50% 0.15 155);
+      --pos-soft: oklch(94% 0.050 155);
+      --neg: oklch(52% 0.19 28);
+      --neg-soft: oklch(96% 0.028 28);
+      --warn: oklch(62% 0.14 82);
+      --warn-soft: oklch(95% 0.045 82);
+
+      --shadow-sm: 0 1px 0 oklch(40% 0.020 255 / 0.05);
+      --shadow-md: 0 1px 2px oklch(40% 0.020 255 / 0.08), 0 4px 12px oklch(40% 0.020 255 / 0.05);
+
+      color-scheme: light;
+    }
+
+    [data-theme="dark"] {
+      --bg: oklch(15% 0.015 255);
+      --surface: oklch(19% 0.017 255);
+      --surface-2: oklch(22.5% 0.018 255);
+      --surface-3: oklch(27% 0.018 255);
+      --fg: oklch(94% 0.008 255);
+      --fg-2: oklch(74% 0.014 255);
+      --fg-3: oklch(58% 0.017 255);
+      --fg-4: oklch(42% 0.017 255);
+      --line: oklch(28% 0.018 255);
+      --line-2: oklch(36% 0.021 255);
+      --line-3: oklch(48% 0.023 255);
+
+      --accent: oklch(70% 0.18 260);
+      --accent-hover: oklch(76% 0.16 260);
+      --accent-fg: oklch(15% 0.015 255);
+      --accent-soft: oklch(32% 0.090 260);
+
+      --pos: oklch(72% 0.17 155);
+      --pos-soft: oklch(30% 0.055 155);
+      --neg: oklch(72% 0.19 28);
+      --neg-soft: oklch(32% 0.055 28);
+      --warn: oklch(80% 0.14 82);
+      --warn-soft: oklch(32% 0.055 82);
+
+      --shadow-sm: 0 1px 0 oklch(4% 0 0 / 0.35);
+      --shadow-md: 0 1px 2px oklch(4% 0 0 / 0.45), 0 4px 14px oklch(4% 0 0 / 0.35);
+
+      color-scheme: dark;
     }
 
     * { box-sizing: border-box; }
+    html { height: 100%; }
     body {
       margin: 0;
+      min-height: 100%;
       background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--fg);
+      font-family: var(--font-ui);
+      font-size: var(--text-base);
+      font-variant-numeric: tabular-nums;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      line-height: 1.45;
     }
-    .container {
-      max-width: 1280px;
+    ::selection { background: var(--accent); color: var(--accent-fg); }
+
+    /* ─ Top utility rail ─ */
+    .rail {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--sp-4);
+      padding: 10px var(--sp-5);
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      font-size: var(--text-xs);
+      color: var(--fg-3);
+      letter-spacing: 0.01em;
+    }
+    .rail-brand {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-2);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--fg);
+      font-weight: 500;
+      letter-spacing: 0.02em;
+    }
+    .rail-brand .mark {
+      display: inline-block;
+      width: 7px; height: 7px;
+      border-radius: 1px;
+      background: var(--accent);
+    }
+    .rail-brand .slash { color: var(--fg-4); margin: 0 2px; }
+    .rail-brand .section { color: var(--fg-2); }
+    .rail-nav {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--sp-4);
+    }
+    .rail-nav a {
+      color: var(--fg-2);
+      text-decoration: none;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      padding: 3px 6px;
+      border-radius: var(--r-1);
+      transition: background 120ms;
+    }
+    .rail-nav a[aria-current="page"] {
+      color: var(--fg);
+      background: var(--surface-3);
+    }
+    .rail-nav a:hover { background: var(--surface-3); color: var(--fg); }
+    .theme-toggle {
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: var(--r-2);
+      padding: 2px;
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      letter-spacing: 0.08em;
+    }
+    .theme-toggle button {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--fg-3);
+      padding: 3px 10px;
+      border-radius: var(--r-1);
+      cursor: pointer;
+      font: inherit;
+      text-transform: uppercase;
+    }
+    .theme-toggle button[aria-pressed="true"] {
+      background: var(--surface);
+      color: var(--fg);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* ─ Page shell ─ */
+    .shell {
+      max-width: 1320px;
       margin: 0 auto;
-      padding: 24px;
+      padding: var(--sp-5) var(--sp-5) var(--sp-7);
     }
-    .header {
+    .page-head {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      gap: 16px;
-      margin-bottom: 20px;
+      align-items: flex-end;
+      gap: var(--sp-4);
+      flex-wrap: wrap;
+      padding: var(--sp-5) 0 var(--sp-4);
+      border-bottom: 1px solid var(--line);
+      margin-bottom: var(--sp-5);
     }
-    .title h1 {
+    .page-head h1 {
       margin: 0;
-      font-size: 28px;
+      font-size: var(--text-2xl);
+      font-weight: 600;
+      letter-spacing: -0.015em;
     }
-    .title p {
-      margin: 6px 0 0;
-      color: var(--muted);
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 20px;
-    }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 20px;
-      box-shadow: 0 6px 20px rgba(17, 24, 39, 0.04);
-    }
-    .card h2 {
-      margin: 0 0 12px;
-      font-size: 18px;
-    }
-    .card p.helper {
-      margin: -4px 0 16px;
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.5;
-    }
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-    .stat {
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 14px;
-      background: #fbfcfe;
-    }
-    .stat .label {
-      font-size: 12px;
-      color: var(--muted);
+    .page-head .eyebrow {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      letter-spacing: 0.12em;
+      color: var(--fg-3);
+      text-transform: uppercase;
       margin-bottom: 6px;
     }
-    .stat .value {
-      font-size: 18px;
-      font-weight: 700;
+    .page-head .subtitle {
+      margin: 4px 0 0;
+      max-width: 62ch;
+      color: var(--fg-3);
+      font-size: var(--text-sm);
     }
+    .page-head .actions {
+      display: flex;
+      gap: var(--sp-2);
+      flex-wrap: wrap;
+    }
+
+    /* ─ Status strip ─ */
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--r-3);
+      background: var(--surface);
+      overflow: hidden;
+      margin-bottom: var(--sp-5);
+    }
+    .strip-cell {
+      padding: 14px 18px;
+      border-right: 1px solid var(--line);
+      min-width: 0;
+    }
+    .strip-cell:last-child { border-right: 0; }
+    .strip-label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      color: var(--fg-3);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .strip-value {
+      font-size: var(--text-lg);
+      font-weight: 600;
+      color: var(--fg);
+      letter-spacing: -0.01em;
+      font-feature-settings: 'tnum';
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .strip-value.mono {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      font-size: var(--text-md);
+    }
+    .strip-sub {
+      font-size: var(--text-xs);
+      color: var(--fg-3);
+      font-family: var(--font-mono);
+      margin-top: 2px;
+    }
+
+    /* ─ Section + card ─ */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: var(--sp-4);
+      margin-bottom: var(--sp-5);
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-3);
+      padding: var(--sp-5);
+    }
+    .card + .card { margin-top: var(--sp-4); }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-4);
+    }
+    .card-head h2 {
+      margin: 0;
+      font-size: var(--text-lg);
+      font-weight: 600;
+      letter-spacing: -0.005em;
+    }
+    .card-head .eyebrow {
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      color: var(--fg-3);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+    .card-head .tag {
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      color: var(--fg-3);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      padding: 2px 7px;
+      background: var(--surface-3);
+      border-radius: var(--r-1);
+    }
+    .helper {
+      color: var(--fg-3);
+      font-size: var(--text-sm);
+      line-height: 1.5;
+      margin: -8px 0 var(--sp-4);
+      max-width: 68ch;
+    }
+
+    /* ─ Form ─ */
     .row {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
-      margin-bottom: 12px;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-3);
     }
     .field {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
+      min-width: 0;
     }
     .field.full { grid-column: 1 / -1; }
     label {
-      font-size: 13px;
-      color: var(--muted);
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      color: var(--fg-3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-weight: 500;
     }
     input, textarea, select {
       width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 10px 12px;
+      border: 1px solid var(--line-2);
+      border-radius: var(--r-2);
+      padding: 8px 10px;
       font: inherit;
-      background: white;
+      font-size: var(--text-sm);
+      background: var(--surface);
+      color: var(--fg);
+      transition: border-color 120ms, box-shadow 120ms;
+    }
+    input::placeholder, textarea::placeholder {
+      color: var(--fg-4);
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: 0;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
     }
     textarea {
-      min-height: 90px;
+      min-height: 80px;
       resize: vertical;
     }
+    input[type="checkbox"] {
+      width: auto;
+      accent-color: var(--accent);
+      margin-right: 6px;
+    }
+
+    /* ─ Actions / buttons ─ */
     .actions {
       display: flex;
-      gap: 10px;
+      gap: var(--sp-2);
       flex-wrap: wrap;
-      margin-top: 14px;
+      margin-top: var(--sp-4);
     }
     button {
-      border: 1px solid var(--primary);
-      background: var(--primary);
-      color: white;
-      border-radius: 12px;
-      padding: 10px 14px;
+      appearance: none;
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: var(--accent-fg);
+      border-radius: var(--r-2);
+      padding: 8px 14px;
       font: inherit;
-      font-weight: 600;
+      font-size: var(--text-sm);
+      font-weight: 500;
+      letter-spacing: 0.01em;
       cursor: pointer;
+      transition: background 120ms, border-color 120ms, color 120ms;
+    }
+    button:hover:not(:disabled) {
+      background: var(--accent-hover);
+      border-color: var(--accent-hover);
     }
     button:disabled {
-      opacity: 0.6;
-      cursor: wait;
+      opacity: 0.55;
+      cursor: not-allowed;
     }
     button.secondary {
-      background: white;
-      color: var(--primary);
+      background: var(--surface);
+      color: var(--fg);
+      border-color: var(--line-2);
     }
-    button.danger {
-      background: white;
-      border-color: #d92d20;
-      color: #d92d20;
+    button.secondary:hover:not(:disabled) {
+      background: var(--surface-3);
+      border-color: var(--line-3);
     }
     button.ghost {
       background: transparent;
-      border-color: var(--line);
-      color: var(--text);
+      color: var(--fg-2);
+      border-color: transparent;
     }
+    button.ghost:hover:not(:disabled) {
+      color: var(--fg);
+      background: var(--surface-3);
+    }
+    button.danger {
+      background: var(--surface);
+      color: var(--neg);
+      border-color: var(--line-2);
+    }
+    button.danger:hover:not(:disabled) {
+      color: var(--neg);
+      border-color: var(--neg);
+      background: var(--neg-soft);
+    }
+    button.mini {
+      padding: 5px 9px;
+      font-size: var(--text-2xs);
+      border-radius: var(--r-1);
+      letter-spacing: 0.04em;
+    }
+
+    a { color: var(--accent); }
+    a.nav-link {
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--fg-2);
+      text-decoration: none;
+      padding: 6px 10px;
+      border-radius: var(--r-2);
+      border: 1px solid var(--line-2);
+      background: var(--surface);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    a.nav-link:hover { color: var(--fg); border-color: var(--line-3); background: var(--surface-3); }
+
+    /* ─ Tables ─ */
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 14px;
+      font-size: var(--text-sm);
     }
     th, td {
       border-bottom: 1px solid var(--line);
-      padding: 10px 8px;
+      padding: 9px 10px;
       text-align: left;
       vertical-align: top;
     }
+    tbody tr:last-child td { border-bottom: 0; }
     th {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 600;
+      color: var(--fg-3);
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding-top: 8px;
+      padding-bottom: 8px;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--line-2);
+      position: sticky;
+      top: 0;
     }
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 12px;
-      font-weight: 700;
-    }
-    .pill.ok {
-      color: var(--ok);
-      background: var(--ok-soft);
-    }
-    .pill.warn {
-      color: var(--warn);
-      background: var(--warn-soft);
-    }
-    .pill.danger {
-      color: var(--danger);
-      background: var(--danger-soft);
-    }
-    .version-item {
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 14px;
-      margin-bottom: 10px;
-    }
-    .version-head {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-    .version-head strong {
-      font-size: 16px;
-    }
-    .version-meta {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.5;
-    }
+    td code, .mono { font-family: var(--font-mono); }
+    .instrument-table { margin-top: var(--sp-3); }
+    .instrument-table td { padding: 8px 8px; }
     .instrument-table input {
       min-width: 100px;
-      padding: 8px 10px;
-      border-radius: 10px;
+      padding: 6px 8px;
+      font-size: var(--text-sm);
+      border-radius: var(--r-2);
+    }
+    .instrument-table select {
+      padding: 6px 8px;
+      font-size: var(--text-sm);
     }
     .cell-stack {
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      min-width: 170px;
+      gap: 6px;
+      min-width: 160px;
     }
     .cell-actions {
       display: flex;
-      gap: 6px;
+      gap: 4px;
       flex-wrap: wrap;
     }
-    .mini {
-      padding: 6px 10px;
-      border-radius: 10px;
-      font-size: 12px;
-      line-height: 1;
+
+    /* ─ Chips / pills ─ */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: var(--r-1);
+      padding: 2px 8px;
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
+    .pill::before {
+      content: '';
+      display: inline-block;
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    .pill.ok    { color: var(--pos); background: var(--pos-soft); }
+    .pill.warn  { color: var(--warn); background: var(--warn-soft); }
+    .pill.danger{ color: var(--neg); background: var(--neg-soft); }
+
+    /* ─ Search results ─ */
     .search-results {
       border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #fbfcfe;
+      border-radius: var(--r-2);
+      background: var(--surface-2);
       overflow: hidden;
     }
-    .search-results[hidden] {
-      display: none;
-    }
+    .search-results[hidden] { display: none; }
     .search-result-item {
       display: flex;
       justify-content: space-between;
-      gap: 10px;
+      gap: var(--sp-2);
       padding: 10px;
       border-bottom: 1px solid var(--line);
     }
-    .search-result-item:last-child {
-      border-bottom: 0;
-    }
-    .search-result-main {
-      min-width: 0;
-    }
+    .search-result-item:last-child { border-bottom: 0; }
+    .search-result-main { min-width: 0; }
     .search-result-symbol {
-      font-size: 12px;
-      font-weight: 800;
-      color: var(--primary);
-      margin-bottom: 3px;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 2px;
+      letter-spacing: 0.03em;
     }
     .search-result-name {
-      font-size: 13px;
-      font-weight: 600;
-      margin-bottom: 3px;
+      font-size: var(--text-sm);
+      font-weight: 500;
+      margin-bottom: 2px;
     }
     .search-result-meta {
-      font-size: 12px;
-      color: var(--muted);
-      line-height: 1.4;
+      font-size: var(--text-xs);
+      color: var(--fg-3);
+      font-family: var(--font-mono);
       word-break: break-word;
     }
+
+    /* ─ Notices / messages ─ */
     .notice, .error {
-      border-radius: 12px;
-      padding: 12px 14px;
-      font-size: 14px;
-      line-height: 1.5;
-      margin-top: 12px;
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      border-radius: var(--r-2);
+      padding: 10px 14px;
+      font-size: var(--text-sm);
+      line-height: 1.55;
+      margin-top: var(--sp-3);
       white-space: pre-wrap;
-    }
-    .notice {
-      background: var(--primary-soft);
-      color: var(--primary);
+      color: var(--fg-2);
+      font-family: var(--font-mono);
     }
     .error {
-      background: var(--danger-soft);
-      color: var(--danger);
+      color: var(--neg);
+      background: var(--neg-soft);
+      border-color: color-mix(in oklab, var(--neg) 30%, var(--line));
     }
     .readiness-list {
-      margin: 0;
+      margin: 6px 0 0;
       padding-left: 18px;
-      color: var(--muted);
+      color: var(--fg-2);
+      font-family: var(--font-ui);
+      font-size: var(--text-sm);
     }
+
+    /* ─ Role / asset panel ─ */
     .role-panel {
-      margin: 18px 0;
+      margin: var(--sp-4) 0;
       border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 16px;
-      background: #fbfcfe;
+      border-radius: var(--r-3);
+      padding: var(--sp-4);
+      background: var(--surface-2);
     }
     .role-panel-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 12px;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-3);
     }
     .role-panel-header strong {
       display: block;
-      font-size: 15px;
+      font-size: var(--text-md);
+      font-weight: 600;
     }
     .role-panel-header span {
       display: block;
-      color: var(--muted);
-      font-size: 13px;
-      margin-top: 4px;
+      color: var(--fg-3);
+      font-size: var(--text-xs);
+      margin-top: 2px;
     }
     .asset-role-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: var(--sp-3);
     }
     .asset-role-card {
       border: 1px solid var(--line);
-      border-radius: 14px;
+      border-radius: var(--r-2);
       padding: 12px;
-      background: white;
+      background: var(--surface);
     }
     .asset-role-name {
-      font-size: 14px;
-      font-weight: 700;
-      margin-bottom: 3px;
+      font-size: var(--text-sm);
+      font-weight: 600;
+      margin-bottom: 2px;
     }
     .asset-role-meta {
-      font-size: 12px;
-      color: var(--muted);
-      margin-bottom: 10px;
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      color: var(--fg-3);
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
     }
+    .asset-role-card select { margin-top: 2px; }
     .asset-role-help {
       margin-top: 8px;
-      color: var(--muted);
-      font-size: 12px;
+      color: var(--fg-3);
+      font-size: var(--text-xs);
       line-height: 1.5;
       white-space: pre-line;
     }
+
+    /* ─ Version list ─ */
+    #version-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+    }
+    #version-list.notice { display: block; }
+    .version-item {
+      border-top: 1px solid var(--line);
+      padding: 14px 0;
+    }
+    .version-item:first-child { border-top: 0; }
+    .version-head {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: var(--sp-3);
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .version-head strong {
+      font-size: var(--text-md);
+      font-weight: 600;
+      letter-spacing: -0.005em;
+    }
+    .version-meta {
+      color: var(--fg-3);
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      line-height: 1.55;
+      margin-top: 3px;
+    }
+    .version-item .actions {
+      margin-top: 6px;
+    }
+
+    /* ─ Detail container ─ */
+    #version-detail .notice {
+      margin-top: 0;
+      margin-bottom: var(--sp-3);
+    }
+
     @media (max-width: 980px) {
-      .grid { grid-template-columns: 1fr; }
-      .row, .stats { grid-template-columns: 1fr; }
-      .asset-role-grid { grid-template-columns: 1fr; }
-      .container { padding: 16px; }
+      .grid-2 { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; }
+      .shell { padding: var(--sp-4); }
+      .rail { padding: 10px var(--sp-4); flex-wrap: wrap; }
+      .strip-cell { border-right: 0; border-bottom: 1px solid var(--line); }
+      .strip-cell:last-child { border-bottom: 0; }
+      .version-head { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="title">
-        <h1>모바일 백엔드 유니버스 관리</h1>
-        <p>종목 등록, 유니버스 버전 관리, 가격 갱신만 빠르게 할 수 있는 가벼운 관리자 화면입니다.</p>
+  <div class="rail">
+    <span class="rail-brand">
+      <span class="mark"></span>
+      <span>WEROBO</span>
+      <span class="slash">/</span>
+      <span class="section">UNIVERSE</span>
+    </span>
+    <nav class="rail-nav">
+      <a href="/admin" aria-current="page">관리</a>
+      <a href="/admin/comparison">비교 보드</a>
+    </nav>
+    <div class="theme-toggle" role="group" aria-label="테마 전환">
+      <button type="button" data-theme-set="light" aria-pressed="true">DAY</button>
+      <button type="button" data-theme-set="dark" aria-pressed="false">NIGHT</button>
+    </div>
+  </div>
+
+  <div class="shell">
+    <header class="page-head">
+      <div>
+        <span class="eyebrow">Admin · Universe</span>
+        <h1>유니버스 관리</h1>
+        <p class="subtitle">종목 등록, 버전 발행, 가격 갱신을 한 화면에서 처리합니다. 모바일 백엔드가 소비하는 active 유니버스를 여기서 결정합니다.</p>
       </div>
       <div class="actions">
-        <a href="/admin/comparison"><button class="ghost" type="button">유니버스 비교 보드 →</button></a>
+        <a class="nav-link" href="/admin/comparison">비교 보드 →</a>
         <button class="secondary" id="reload-all">새로고침</button>
       </div>
-    </div>
+    </header>
 
-    <div class="grid">
+    <section class="status-strip" aria-label="Active universe status">
+      <div class="strip-cell">
+        <span class="strip-label">DB</span>
+        <div class="strip-value" id="db-status">—</div>
+      </div>
+      <div class="strip-cell">
+        <span class="strip-label">Active Version</span>
+        <div class="strip-value" id="active-version-name">—</div>
+      </div>
+      <div class="strip-cell">
+        <span class="strip-label">Price Rows</span>
+        <div class="strip-value mono" id="price-row-count">—</div>
+      </div>
+      <div class="strip-cell">
+        <span class="strip-label">Aligned Start</span>
+        <div class="strip-value mono" id="aligned-start-date">—</div>
+      </div>
+    </section>
+    <div id="status-detail" class="notice">상태를 불러오는 중입니다.</div>
+
+    <div class="grid-2">
       <section class="card">
-        <h2>현재 상태</h2>
-        <p class="helper">active 유니버스와 가격 데이터 상태를 한 번에 확인합니다.</p>
-        <div class="stats">
-          <div class="stat">
-            <div class="label">DB 연결</div>
-            <div class="value" id="db-status">-</div>
-          </div>
-          <div class="stat">
-            <div class="label">Active 버전</div>
-            <div class="value" id="active-version-name">-</div>
-          </div>
-          <div class="stat">
-            <div class="label">가격 행 수</div>
-            <div class="value" id="price-row-count">-</div>
-          </div>
-          <div class="stat">
-            <div class="label">공통 시작일</div>
-            <div class="value" id="aligned-start-date">-</div>
+        <div class="card-head">
+          <div>
+            <span class="eyebrow">Section 01 · Prices</span>
+            <h2>가격 갱신</h2>
           </div>
         </div>
-        <div id="status-detail" class="notice">상태를 불러오는 중입니다.</div>
-      </section>
-
-      <section class="card">
-        <h2>가격 갱신</h2>
-        <p class="helper">active 유니버스 기준으로 가격을 증분 또는 전체 백필합니다.</p>
+        <p class="helper">active 유니버스 기준으로 가격을 증분 또는 전체 백필합니다. 성공 시 frontier / comparison snapshot과 사용자 자산 snapshot이 자동으로 재생성됩니다.</p>
         <div class="row">
           <div class="field">
             <label for="refresh-mode">갱신 모드</label>
@@ -417,16 +798,32 @@ def render_admin_page() -> HTMLResponse:
         <div id="refresh-result" class="notice" style="display:none"></div>
         <div id="readiness-panel" class="notice" style="display:none"></div>
       </section>
+
+      <section class="card">
+        <div class="card-head">
+          <div>
+            <span class="eyebrow">Section 02 · State</span>
+            <h2>상태 로그</h2>
+          </div>
+        </div>
+        <p class="helper">마지막 refresh 결과, frontier snapshot, comparison snapshot의 상태 요약입니다.</p>
+        <div id="status-log" class="notice">—</div>
+      </section>
     </div>
 
-    <section class="card" style="margin-top: 20px;">
-      <h2 id="version-form-title">새 유니버스 버전 생성</h2>
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">Section 03 · Authoring</span>
+          <h2 id="version-form-title">새 유니버스 버전 생성</h2>
+        </div>
+      </div>
       <p class="helper" id="version-form-helper">종목명 검색 또는 티커 자동채움으로 종목을 등록하고 새 버전을 만들 수 있습니다.</p>
       <div id="form-mode-banner" class="notice" style="display:none"></div>
       <div class="row">
         <div class="field">
           <label for="version-name">버전명</label>
-          <input id="version-name" type="text" placeholder="예: 2026-04 mobile universe" />
+          <input id="version-name" type="text" placeholder="2026-04 mobile universe" />
         </div>
         <div class="field">
           <label for="version-notes">메모</label>
@@ -434,50 +831,65 @@ def render_admin_page() -> HTMLResponse:
         </div>
       </div>
       <div class="field full">
-        <label><input id="version-activate" type="checkbox" checked /> 저장 후 active로 전환</label>
+        <label style="display:inline-flex; align-items:center; gap:8px; text-transform:none; letter-spacing:0; font-family:var(--font-ui); font-size:var(--text-sm); color:var(--fg-2);">
+          <input id="version-activate" type="checkbox" checked /> 저장 후 active로 전환
+        </label>
       </div>
       <div class="role-panel">
         <div class="role-panel-header">
           <div>
             <strong>자산군별 role 설정</strong>
-            <span>이 버전에서 자산군별 후보 선택 방식, 바스켓 내부 가중 방식, 기대수익률 모드를 함께 정합니다.</span>
+            <span>자산군별 후보 선택 방식, 바스켓 내부 가중 방식, 기대수익률 모드를 함께 정합니다.</span>
           </div>
-          <button class="secondary" id="reset-asset-roles" type="button">기본값 복원</button>
+          <button class="secondary mini" id="reset-asset-roles" type="button">기본값 복원</button>
         </div>
         <div id="asset-role-config" class="notice">자산군 role 설정을 불러오는 중입니다.</div>
       </div>
-      <table class="instrument-table" id="instrument-table">
-        <thead>
-          <tr>
-            <th>티커 / 자동채움</th>
-            <th>종목명 검색</th>
-            <th>자산군 코드</th>
-            <th>자산군 이름</th>
-            <th>시장</th>
-            <th>통화</th>
-            <th>기본가중치</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="instrument-body"></tbody>
-      </table>
+      <div style="overflow-x: auto;">
+        <table class="instrument-table" id="instrument-table">
+          <thead>
+            <tr>
+              <th>티커 / 자동채움</th>
+              <th>종목명 검색</th>
+              <th>자산군 코드</th>
+              <th>자산군 이름</th>
+              <th>시장</th>
+              <th>통화</th>
+              <th>기본가중치</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="instrument-body"></tbody>
+        </table>
+      </div>
       <div class="actions">
-        <button class="secondary" id="add-row">행 추가</button>
-        <button id="submit-version">버전 생성</button>
+        <button class="secondary mini" id="add-row">+ 행 추가</button>
+        <div style="flex:1"></div>
         <button class="ghost" id="cancel-edit" type="button" style="display:none">수정 취소</button>
+        <button id="submit-version">버전 생성</button>
       </div>
       <div id="create-result" class="notice" style="display:none"></div>
       <div id="create-error" class="error" style="display:none"></div>
     </section>
 
-    <section class="card" style="margin-top: 20px;">
-      <h2>유니버스 버전 목록</h2>
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">Section 04 · Registry</span>
+          <h2>유니버스 버전 목록</h2>
+        </div>
+      </div>
       <p class="helper">active 전환, 상세 조회, 삭제를 이곳에서 처리합니다.</p>
       <div id="version-list" class="notice">버전 목록을 불러오는 중입니다.</div>
     </section>
 
-    <section class="card" style="margin-top: 20px;">
-      <h2>버전 상세</h2>
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">Section 05 · Detail</span>
+          <h2>버전 상세</h2>
+        </div>
+      </div>
       <p class="helper">선택한 유니버스 버전의 종목 구성을 확인합니다.</p>
       <div id="version-detail" class="notice">상세를 보려면 버전 목록에서 "상세"를 눌러주세요.</div>
     </section>
@@ -507,11 +919,32 @@ def render_admin_page() -> HTMLResponse:
       <td><input data-field="market" placeholder="NASDAQ" /></td>
       <td><input data-field="currency" placeholder="USD" value="USD" /></td>
       <td><input data-field="base_weight" placeholder="선택" /></td>
-      <td><button class="ghost row-remove" type="button">삭제</button></td>
+      <td><button class="ghost mini row-remove" type="button">삭제</button></td>
     </tr>
   </template>
 
   <script>
+    // Theme toggle
+    (function(){
+      const root = document.documentElement;
+      const stored = localStorage.getItem('werobo-theme');
+      const initial = stored === 'dark' || stored === 'light'
+        ? stored
+        : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      root.setAttribute('data-theme', initial);
+      document.querySelectorAll('[data-theme-set]').forEach(btn => {
+        const target = btn.getAttribute('data-theme-set');
+        btn.setAttribute('aria-pressed', String(target === initial));
+        btn.addEventListener('click', () => {
+          root.setAttribute('data-theme', target);
+          localStorage.setItem('werobo-theme', target);
+          document.querySelectorAll('[data-theme-set]').forEach(b => {
+            b.setAttribute('aria-pressed', String(b.getAttribute('data-theme-set') === target));
+          });
+        });
+      });
+    })();
+
     const $ = (selector) => document.querySelector(selector);
     const $$ = (selector) => Array.from(document.querySelectorAll(selector));
     let assetCatalog = [];
@@ -966,14 +1399,27 @@ def render_admin_page() -> HTMLResponse:
     function renderStatus(status) {
       $('#db-status').textContent = status.database_configured ? '연결됨' : '미설정';
       $('#active-version-name').textContent = status.active_version ? status.active_version.version_name : '없음';
-      $('#price-row-count').textContent = status.price_stats ? String(status.price_stats.total_rows) : '-';
-      $('#aligned-start-date').textContent = status.price_window?.aligned_start_date || '-';
+      $('#price-row-count').textContent = status.price_stats ? Number(status.price_stats.total_rows).toLocaleString() : '—';
+      $('#aligned-start-date').textContent = status.price_window?.aligned_start_date || '—';
+
+      const window = status.price_window
+        ? `${status.price_window.aligned_start_date || '—'} → ${status.price_window.aligned_end_date || '—'}`
+        : '없음';
+      const latest = status.latest_refresh_job
+        ? `${status.latest_refresh_job.status} · ${status.latest_refresh_job.message || '메시지 없음'}`
+        : '없음';
+
       const detail = [
-        'active: ' + (status.active_version ? status.active_version.version_name : '없음'),
-        'latest job: ' + (status.latest_refresh_job ? `${status.latest_refresh_job.status} (${status.latest_refresh_job.message || '메시지 없음'})` : '없음'),
-        'window: ' + (status.price_window ? `${status.price_window.aligned_start_date || '-'} ~ ${status.price_window.aligned_end_date || '-'}` : '없음'),
+        `active : ${status.active_version ? status.active_version.version_name : '없음'}`,
+        `window : ${window}`,
       ].join('\\n');
       showMessage('#status-detail', detail, false);
+
+      const log = [
+        `latest  : ${latest}`,
+        `db      : ${status.database_configured ? 'connected' : 'not configured'}`,
+      ].join('\\n');
+      showMessage('#status-log', log, false);
     }
 
     function renderVersionList(versions) {
@@ -992,17 +1438,17 @@ def render_admin_page() -> HTMLResponse:
           <div class="version-head">
             <div>
               <strong>${version.version_name}</strong>
-              <div class="version-meta">ID ${version.version_id} · 종목 ${version.instrument_count}개 · 생성 ${version.created_at}</div>
-              <div class="version-meta">${version.notes || '메모 없음'}</div>
+              <div class="version-meta">ID ${version.version_id}  ·  종목 ${version.instrument_count}개  ·  생성 ${version.created_at}</div>
+              <div class="version-meta">${version.notes || '— 메모 없음'}</div>
             </div>
-            <div>${version.is_active ? '<span class="pill ok">ACTIVE</span>' : '<span class="pill warn">INACTIVE</span>'}</div>
+            <div>${version.is_active ? '<span class="pill ok">Active</span>' : '<span class="pill warn">Inactive</span>'}</div>
           </div>
           <div class="actions">
-            <button class="secondary detail-btn">상세</button>
-            <button class="ghost edit-btn">수정</button>
-            <button class="secondary activate-btn">활성화</button>
-            <button class="secondary version-refresh-btn">리프레시</button>
-            <button class="danger delete-btn">삭제</button>
+            <button class="secondary mini detail-btn">상세</button>
+            <button class="secondary mini edit-btn">수정</button>
+            <button class="secondary mini activate-btn">활성화</button>
+            <button class="secondary mini version-refresh-btn">리프레시</button>
+            <button class="danger mini delete-btn">삭제</button>
           </div>
         `;
         wrap.querySelector('.detail-btn').addEventListener('click', () => loadVersionDetail(version.version_id));
@@ -1019,32 +1465,32 @@ def render_admin_page() -> HTMLResponse:
       const roleRows = (detail.asset_roles || []).map((item) => `
         <tr>
           <td>${item.asset_name}</td>
-          <td>${item.asset_code}</td>
+          <td><span class="mono">${item.asset_code}</span></td>
           <td>${item.role_name}</td>
-          <td>${item.role_key}</td>
-          <td>${item.selection_mode}</td>
-          <td>${item.weighting_mode}</td>
-          <td>${item.return_mode}</td>
+          <td><span class="mono">${item.role_key}</span></td>
+          <td><span class="mono">${item.selection_mode}</span></td>
+          <td><span class="mono">${item.weighting_mode}</span></td>
+          <td><span class="mono">${item.return_mode}</span></td>
         </tr>
       `).join('');
       const rows = detail.instruments.map((item) => `
         <tr>
-          <td>${item.ticker}</td>
+          <td><span class="mono" style="color:var(--accent); font-weight:600;">${item.ticker}</span></td>
           <td>${item.name}</td>
-          <td>${item.sector_code}</td>
+          <td><span class="mono">${item.sector_code}</span></td>
           <td>${item.sector_name}</td>
           <td>${item.market}</td>
-          <td>${item.currency}</td>
-          <td>${item.base_weight ?? '-'}</td>
+          <td><span class="mono">${item.currency}</span></td>
+          <td><span class="mono">${item.base_weight ?? '—'}</span></td>
         </tr>
       `).join('');
       host.className = '';
       host.innerHTML = `
-        <div class="notice" style="margin-top:0; margin-bottom:12px;">
-          ${detail.version_name} · 종목 ${detail.instrument_count}개 · ${detail.is_active ? 'active' : 'inactive'}
+        <div class="notice">
+          <strong style="color:var(--fg); font-family:var(--font-ui);">${detail.version_name}</strong>  ·  종목 ${detail.instrument_count}개  ·  ${detail.is_active ? '<span class="pill ok" style="margin-left:6px;">Active</span>' : '<span class="pill warn" style="margin-left:6px;">Inactive</span>'}
         </div>
-        <div style="margin-bottom:16px;">
-          <strong style="display:block; margin-bottom:8px;">자산군별 role</strong>
+        <div style="margin: var(--sp-4) 0 var(--sp-2); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.12em;">Asset Roles</div>
+        <div style="overflow-x:auto; border:1px solid var(--line); border-radius: var(--r-2); margin-bottom: var(--sp-5);">
           <table>
             <thead>
               <tr>
@@ -1060,20 +1506,23 @@ def render_admin_page() -> HTMLResponse:
             <tbody>${roleRows}</tbody>
           </table>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>티커</th>
-              <th>종목명</th>
-              <th>자산군 코드</th>
-              <th>자산군 이름</th>
-              <th>시장</th>
-              <th>통화</th>
-              <th>기본가중치</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
+        <div style="margin: 0 0 var(--sp-2); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.12em;">Instruments</div>
+        <div style="overflow-x:auto; border:1px solid var(--line); border-radius: var(--r-2);">
+          <table>
+            <thead>
+              <tr>
+                <th>티커</th>
+                <th>종목명</th>
+                <th>자산군 코드</th>
+                <th>자산군 이름</th>
+                <th>시장</th>
+                <th>통화</th>
+                <th>기본가중치</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
       `;
     }
 
@@ -1081,15 +1530,15 @@ def render_admin_page() -> HTMLResponse:
       const host = $('#readiness-panel');
       const issues = readiness.issues.length
         ? '<ul class="readiness-list">' + readiness.issues.map((item) => `<li>${item}</li>`).join('') + '</ul>'
-        : '<div>문제 없음</div>';
+        : '<div style="color:var(--fg-3);">문제 없음</div>';
       const shortHistory = readiness.short_history_instruments.length
         ? '<ul class="readiness-list">' + readiness.short_history_instruments.map((item) => `<li>${item.ticker} · ${item.history_years}년 · ${item.first_price_date || '-'} ~ ${item.last_price_date || '-'}</li>`).join('') + '</ul>'
-        : '<div>짧은 이력 종목 없음</div>';
+        : '<div style="color:var(--fg-3);">짧은 이력 종목 없음</div>';
       host.innerHTML = `
-        <strong>${readiness.ready ? '준비 완료' : '준비 미완료'}</strong>
-        <div style="margin-top:8px;">${readiness.summary}</div>
-        <div style="margin-top:12px;"><strong>이슈</strong>${issues}</div>
-        <div style="margin-top:12px;"><strong>짧은 이력 종목</strong>${shortHistory}</div>
+        <strong style="color:var(--fg); font-family:var(--font-ui);">${readiness.ready ? '준비 완료' : '준비 미완료'}</strong>
+        <div style="margin-top:6px;">${readiness.summary}</div>
+        <div style="margin-top:10px;"><strong style="font-family:var(--font-mono); font-size:var(--text-2xs); text-transform:uppercase; letter-spacing:0.12em; color:var(--fg-3);">이슈</strong>${issues}</div>
+        <div style="margin-top:10px;"><strong style="font-family:var(--font-mono); font-size:var(--text-2xs); text-transform:uppercase; letter-spacing:0.12em; color:var(--fg-3);">짧은 이력 종목</strong>${shortHistory}</div>
       `;
       host.style.display = 'block';
       host.className = readiness.ready ? 'notice' : 'error';
