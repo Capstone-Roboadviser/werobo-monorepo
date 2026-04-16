@@ -811,84 +811,52 @@ def render_admin_page() -> HTMLResponse:
       margin-top: 2px;
     }
 
-    /* ─ Detail container ─ */
-    #detail-modal-body .notice {
+    /* ─ Inline detail panel (accordion) ─ */
+    .version-detail-panel {
+      display: grid;
+      grid-template-rows: 0fr;
+      transition: grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .version-detail-panel > .panel-inner {
+      overflow: hidden;
+      min-height: 0;
+    }
+    .version-detail-panel.open { grid-template-rows: 1fr; }
+    .version-detail-panel.open > .panel-inner {
+      margin-top: var(--sp-3);
+      padding: var(--sp-4);
+      border: 1px solid var(--line);
+      border-radius: var(--r-3);
+      background: var(--surface-2);
+    }
+    .version-detail-panel .notice {
       margin-top: 0;
       margin-bottom: var(--sp-3);
-    }
-
-    /* ─ Modal ─ */
-    .modal {
-      position: fixed;
-      inset: 0;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: var(--sp-5);
-    }
-    .modal[hidden] { display: none; }
-    .modal-backdrop {
-      position: absolute;
-      inset: 0;
-      background: oklch(10% 0.015 255 / 0.55);
-      backdrop-filter: blur(3px);
-    }
-    .modal-shell {
-      position: relative;
-      width: 100%;
-      max-width: 1100px;
-      max-height: 100%;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: var(--r-4);
-      box-shadow: var(--shadow-md);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-    .modal-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: var(--sp-4);
-      padding: var(--sp-5) var(--sp-6);
-      border-bottom: 1px solid var(--line);
       background: var(--surface);
     }
-    .modal-head .eyebrow {
+    .version-detail-panel .detail-section-label {
       font-family: var(--font-mono);
       font-size: var(--text-2xs);
       color: var(--fg-3);
       text-transform: uppercase;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.12em;
+      margin: var(--sp-4) 0 var(--sp-2);
     }
-    .modal-head h2 {
-      margin: 4px 0 0;
-      font-size: var(--text-xl);
-      font-weight: 600;
-      letter-spacing: -0.005em;
+    .version-detail-panel .detail-table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: var(--r-2);
+      margin-bottom: var(--sp-3);
+      background: var(--surface);
     }
-    .modal-sub {
-      margin: 6px 0 0;
-      color: var(--fg-3);
-      font-size: var(--text-sm);
-      line-height: 1.5;
-    }
-    .modal-close {
-      font-size: var(--text-lg);
-      line-height: 1;
-      padding: 6px 10px;
-    }
-    .modal-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: var(--sp-5) var(--sp-6);
-    }
-    @media (max-width: 980px) {
-      .modal { padding: var(--sp-3); }
-      .modal-head { padding: var(--sp-4); }
-      .modal-body { padding: var(--sp-4); }
+    .version-detail-panel .detail-table-wrap:last-child { margin-bottom: 0; }
+    .version-detail-panel table { min-width: max-content; }
+    .version-detail-panel th,
+    .version-detail-panel td { white-space: nowrap; }
+    .version-item.detail-open .detail-btn {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: color-mix(in oklab, var(--accent) 35%, var(--line-2));
     }
 
     @media (max-width: 980px) {
@@ -1066,21 +1034,6 @@ def render_admin_page() -> HTMLResponse:
       <p class="helper">active 전환, 상세 조회, 삭제를 이곳에서 처리합니다.</p>
       <div id="version-list" class="notice">버전 목록을 불러오는 중입니다.</div>
     </section>
-  </div>
-
-  <div id="detail-modal" class="modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
-    <div class="modal-backdrop" data-modal-close></div>
-    <div class="modal-shell" role="document">
-      <header class="modal-head">
-        <div>
-          <span class="eyebrow">Detail</span>
-          <h2 id="detail-modal-title">버전 상세</h2>
-          <p class="modal-sub">선택한 유니버스 버전의 종목 구성을 확인합니다.</p>
-        </div>
-        <button class="ghost modal-close" type="button" data-modal-close aria-label="닫기">✕</button>
-      </header>
-      <div class="modal-body" id="detail-modal-body"></div>
-    </div>
   </div>
 
   <template id="instrument-row-template">
@@ -1666,6 +1619,7 @@ def render_admin_page() -> HTMLResponse:
       versions.forEach((version) => {
         const wrap = document.createElement('div');
         wrap.className = 'version-item';
+        wrap.dataset.versionId = String(version.version_id);
         const stamp = formatVersionTimestamp(version.created_at);
         const memoHtml = version.notes
           ? `<p class="version-memo">${escapeHtml(version.notes)}</p>`
@@ -1693,12 +1647,13 @@ def render_admin_page() -> HTMLResponse:
           </dl>
           ${memoHtml}
           <div class="actions">
-            <button class="secondary mini detail-btn">상세</button>
+            <button class="secondary mini detail-btn" aria-expanded="false">상세</button>
             <button class="secondary mini edit-btn">수정</button>
             <button class="secondary mini activate-btn">활성화</button>
             <button class="secondary mini version-refresh-btn">리프레시</button>
             <button class="danger mini delete-btn">삭제</button>
           </div>
+          <div class="version-detail-panel"><div class="panel-inner"></div></div>
         `;
         wrap.querySelector('.detail-btn').addEventListener('click', () => loadVersionDetail(version.version_id));
         wrap.querySelector('.edit-btn').addEventListener('click', () => startEditVersion(version.version_id));
@@ -1709,8 +1664,7 @@ def render_admin_page() -> HTMLResponse:
       });
     }
 
-    function renderVersionDetail(detail) {
-      const host = $('#detail-modal-body');
+    function renderVersionDetail(detail, host) {
       const roleRows = (detail.asset_roles || []).map((item) => `
         <tr>
           <td>${item.asset_name}</td>
@@ -1733,13 +1687,12 @@ def render_admin_page() -> HTMLResponse:
           <td><span class="mono">${item.base_weight ?? '—'}</span></td>
         </tr>
       `).join('');
-      host.className = '';
       host.innerHTML = `
         <div class="notice">
           <strong style="color:var(--fg); font-family:var(--font-ui);">${detail.version_name}</strong>  ·  종목 ${detail.instrument_count}개  ·  ${detail.is_active ? '<span class="pill ok" style="margin-left:6px;">Active</span>' : '<span class="pill warn" style="margin-left:6px;">Inactive</span>'}
         </div>
-        <div style="margin: var(--sp-4) 0 var(--sp-2); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.12em;">Asset Roles</div>
-        <div style="overflow-x:auto; border:1px solid var(--line); border-radius: var(--r-2); margin-bottom: var(--sp-5);">
+        <div class="detail-section-label">Asset Roles</div>
+        <div class="detail-table-wrap">
           <table>
             <thead>
               <tr>
@@ -1755,8 +1708,8 @@ def render_admin_page() -> HTMLResponse:
             <tbody>${roleRows}</tbody>
           </table>
         </div>
-        <div style="margin: 0 0 var(--sp-2); font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--fg-3); text-transform: uppercase; letter-spacing: 0.12em;">Instruments</div>
-        <div style="overflow-x:auto; border:1px solid var(--line); border-radius: var(--r-2);">
+        <div class="detail-section-label">Instruments</div>
+        <div class="detail-table-wrap">
           <table>
             <thead>
               <tr>
@@ -1815,10 +1768,48 @@ def render_admin_page() -> HTMLResponse:
       syncAllInstrumentAssetSelections();
     }
 
+    function collapseAllDetailPanels(exceptItem = null) {
+      document.querySelectorAll('.version-item.detail-open').forEach((el) => {
+        if (el === exceptItem) return;
+        el.classList.remove('detail-open');
+        el.querySelector('.version-detail-panel').classList.remove('open');
+        const btn = el.querySelector('.detail-btn');
+        btn.textContent = '상세';
+        btn.setAttribute('aria-expanded', 'false');
+      });
+    }
+
     async function loadVersionDetail(versionId) {
-      const detail = await requestJson(`/admin/api/universe/versions/${versionId}`);
-      renderVersionDetail(detail);
-      openDetailModal();
+      const item = document.querySelector(`.version-item[data-version-id="${versionId}"]`);
+      if (!item) return;
+      const panel = item.querySelector('.version-detail-panel');
+      const inner = panel.querySelector('.panel-inner');
+      const btn = item.querySelector('.detail-btn');
+      const wasOpen = panel.classList.contains('open');
+
+      collapseAllDetailPanels(item);
+
+      if (wasOpen) {
+        panel.classList.remove('open');
+        item.classList.remove('detail-open');
+        btn.textContent = '상세';
+        btn.setAttribute('aria-expanded', 'false');
+        return;
+      }
+
+      panel.classList.add('open');
+      item.classList.add('detail-open');
+      btn.textContent = '접기';
+      btn.setAttribute('aria-expanded', 'true');
+      inner.innerHTML = '<div class="notice">로딩 중...</div>';
+
+      try {
+        const detail = await requestJson(`/admin/api/universe/versions/${versionId}`);
+        renderVersionDetail(detail, inner);
+        requestAnimationFrame(() => panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+      } catch (err) {
+        inner.innerHTML = `<div class="error">상세 정보를 불러오지 못했습니다: ${err.message || err}</div>`;
+      }
     }
 
     async function startEditVersion(versionId) {
@@ -1826,20 +1817,6 @@ def render_admin_page() -> HTMLResponse:
       hideMessage('#create-error');
       const detail = await requestJson(`/admin/api/universe/versions/${versionId}`);
       enterEditMode(detail);
-    }
-
-    function openDetailModal() {
-      const modal = $('#detail-modal');
-      modal.hidden = false;
-      modal.setAttribute('aria-hidden', 'false');
-      document.body.style.overflow = 'hidden';
-    }
-
-    function closeDetailModal() {
-      const modal = $('#detail-modal');
-      modal.hidden = true;
-      modal.setAttribute('aria-hidden', 'true');
-      document.body.style.overflow = '';
     }
 
     async function loadReadiness() {
@@ -1856,7 +1833,6 @@ def render_admin_page() -> HTMLResponse:
     async function deleteVersion(versionId) {
       if (!confirm('이 유니버스 버전을 삭제할까요?')) return;
       await requestJson(`/admin/api/universe/versions/${versionId}`, { method: 'DELETE' });
-      closeDetailModal();
       await reloadAll();
     }
 
@@ -1933,14 +1909,6 @@ def render_admin_page() -> HTMLResponse:
 
     $('#reload-all').addEventListener('click', reloadAll);
     $('#add-row').addEventListener('click', () => addInstrumentRow());
-    $$('#detail-modal [data-modal-close]').forEach((el) => {
-      el.addEventListener('click', closeDetailModal);
-    });
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape' && !$('#detail-modal').hidden) {
-        closeDetailModal();
-      }
-    });
     $('#reset-asset-roles').addEventListener('click', () => {
       if (editingVersionId !== null) return;
       renderAssetRoleSelectors(defaultAssetRoleMap());
