@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 
 def render_admin_comparison_page() -> HTMLResponse:
     html = """<!DOCTYPE html>
-<html lang="ko" data-theme="light">
+<html lang="ko" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -933,8 +933,8 @@ def render_admin_comparison_page() -> HTMLResponse:
       <a href="/admin/comparison" aria-current="page">비교 보드</a>
     </nav>
     <div class="theme-toggle" role="group" aria-label="테마 전환">
-      <button type="button" data-theme-set="light" aria-pressed="true">DAY</button>
-      <button type="button" data-theme-set="dark" aria-pressed="false">NIGHT</button>
+      <button type="button" data-theme-set="light" aria-pressed="false">DAY</button>
+      <button type="button" data-theme-set="dark" aria-pressed="true">NIGHT</button>
     </div>
   </div>
 
@@ -1068,9 +1068,7 @@ def render_admin_comparison_page() -> HTMLResponse:
     (function(){
       const root = document.documentElement;
       const stored = localStorage.getItem('werobo-theme');
-      const initial = stored === 'dark' || stored === 'light'
-        ? stored
-        : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      const initial = stored === 'dark' || stored === 'light' ? stored : 'dark';
       root.setAttribute('data-theme', initial);
       document.querySelectorAll('[data-theme-set]').forEach(btn => {
         const target = btn.getAttribute('data-theme-set');
@@ -1146,10 +1144,23 @@ def render_admin_comparison_page() -> HTMLResponse:
     }
 
     async function api(path, init) {
-      const res = await fetch(path, {
-        headers: { 'content-type': 'application/json' },
-        ...init,
-      });
+      // Hard timeout so a hung upstream surfaces as an error instead of leaving
+      // the UI stuck on "계산 중…" forever.
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 45000);
+      let res;
+      try {
+        res = await fetch(path, {
+          headers: { 'content-type': 'application/json' },
+          signal: ctl.signal,
+          ...init,
+        });
+      } catch (e) {
+        clearTimeout(timer);
+        if (e.name === 'AbortError') throw new Error('응답 시간 초과 (45s)');
+        throw e;
+      }
+      clearTimeout(timer);
       if (!res.ok) {
         let msg = `HTTP ${res.status}`;
         try {
@@ -1176,6 +1187,12 @@ def render_admin_comparison_page() -> HTMLResponse:
           start_date: g.startDate,
           point_index: g.pointIndex,
           hidden_lines: Array.from(g.hiddenLines || []),
+          // Preloaded chart data so reopening the snapshot skips /frontier + /backtest calls.
+          cached: (g.frontier && g.backtest && g.selection) ? {
+            frontier: g.frontier,
+            selection: g.selection,
+            backtest: g.backtest,
+          } : null,
         })),
       };
     }
@@ -1476,6 +1493,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           startDate: item.start_date,
           pointIndex: item.point_index,
           hiddenLines: item.hidden_lines || [],
+          cached: item.cached || null,
         }, { silent: true });
       }
       updateEmptyState();
@@ -1556,7 +1574,21 @@ def render_admin_comparison_page() -> HTMLResponse:
       $('#graph-grid').appendChild(node);
       updateEmptyState();
       if (!silent) setDirty(true);
-      refreshFrontier(state);
+
+      const cache = initial?.cached;
+      if (cache?.frontier?.points?.length && cache?.backtest?.lines && cache?.selection) {
+        // Hydrate from snapshot payload so charts render without refetching.
+        state.frontier = cache.frontier;
+        state.selection = cache.selection;
+        state.backtest = cache.backtest;
+        renderFrontier(state);
+        renderSelectionSummary(state);
+        renderBacktest(state);
+        const profitStatus = $('.profit-status', state.rootEl);
+        profitStatus.textContent = `${cache.backtest.start_date} → ${cache.backtest.end_date}`;
+      } else {
+        refreshFrontier(state);
+      }
     }
 
     function removeGraphSet(id) {
