@@ -118,8 +118,13 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     .graph-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(540px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(880px, 1fr));
       gap: 16px;
+    }
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
     }
     .graph-set {
       background: white;
@@ -174,7 +179,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       border-radius: 12px;
       background: #fbfcfe;
       padding: 12px;
-      margin-bottom: 10px;
+      min-width: 0;
     }
     .chart-title {
       display: flex;
@@ -259,8 +264,9 @@ def render_admin_comparison_page() -> HTMLResponse:
     }
     .nav-link:hover { text-decoration: underline; }
 
-    @media (max-width: 720px) {
+    @media (max-width: 980px) {
       .graph-grid { grid-template-columns: 1fr; }
+      .charts-row { grid-template-columns: 1fr; }
       .controls { grid-template-columns: 1fr 1fr; }
     }
   </style>
@@ -316,21 +322,23 @@ def render_admin_comparison_page() -> HTMLResponse:
           <input type="date" class="ctrl-start" />
         </div>
       </div>
-      <div class="chart-block">
-        <div class="chart-title">
-          <strong>Efficient Frontier</strong>
-          <span class="frontier-status">유니버스를 선택하세요.</span>
+      <div class="charts-row">
+        <div class="chart-block">
+          <div class="chart-title">
+            <strong>Efficient Frontier</strong>
+            <span class="frontier-status">유니버스를 선택하세요.</span>
+          </div>
+          <svg class="chart-svg frontier-svg" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
+          <div class="selection-summary"></div>
         </div>
-        <svg class="chart-svg frontier-svg" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
-        <div class="selection-summary"></div>
-      </div>
-      <div class="chart-block">
-        <div class="chart-title">
-          <strong>Backtest Profit</strong>
-          <span class="profit-status">포트폴리오를 선택하세요.</span>
+        <div class="chart-block">
+          <div class="chart-title">
+            <strong>Backtest Profit</strong>
+            <span class="profit-status">포트폴리오를 선택하세요.</span>
+          </div>
+          <svg class="chart-svg profit-svg" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
+          <div class="legend"></div>
         </div>
-        <svg class="chart-svg profit-svg" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
-        <div class="legend"></div>
       </div>
       <div class="err graph-error" style="display:none"></div>
     </div>
