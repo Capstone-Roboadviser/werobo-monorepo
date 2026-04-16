@@ -17,6 +17,8 @@ class InsightDetailPage extends StatefulWidget {
 }
 
 class _InsightDetailPageState extends State<InsightDetailPage> {
+  final Set<String> _expandedTradeGroups = <String>{};
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -25,14 +27,84 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
     }
   }
 
+  void _toggleTradeGroup(String assetCode) {
+    setState(() {
+      if (_expandedTradeGroups.contains(assetCode)) {
+        _expandedTradeGroups.remove(assetCode);
+      } else {
+        _expandedTradeGroups.add(assetCode);
+      }
+    });
+  }
+
+  List<_InsightTradeGroup> _buildTradeGroups(
+    List<RebalanceInsightTrade> trades,
+    List<RebalanceInsightAllocation> allocations,
+  ) {
+    final allocationByCode = <String, RebalanceInsightAllocation>{
+      for (final allocation in allocations) allocation.assetCode: allocation,
+    };
+    final allocationOrder = <String, int>{
+      for (int i = 0; i < allocations.length; i++) allocations[i].assetCode: i,
+    };
+    final grouped = <String, List<RebalanceInsightTrade>>{};
+
+    for (final trade in trades) {
+      final key = trade.assetCode.isNotEmpty
+          ? trade.assetCode
+          : (trade.assetName.isNotEmpty ? trade.assetName : trade.ticker);
+      grouped.putIfAbsent(key, () => <RebalanceInsightTrade>[]).add(trade);
+    }
+
+    final groups = grouped.entries.map((entry) {
+      final groupTrades = entry.value.toList()
+        ..sort((a, b) => b.amount.compareTo(a.amount));
+      final firstTrade = groupTrades.first;
+      final allocation = allocationByCode[entry.key];
+
+      return _InsightTradeGroup(
+        assetCode: entry.key,
+        assetName: firstTrade.assetName.isNotEmpty
+            ? firstTrade.assetName
+            : (allocation?.displayName ?? entry.key),
+        color: allocation?.color ?? const Color(0xFF888888),
+        trades: groupTrades,
+      );
+    }).toList();
+
+    groups.sort((a, b) {
+      final orderA = allocationOrder[a.assetCode] ?? 1 << 20;
+      final orderB = allocationOrder[b.assetCode] ?? 1 << 20;
+      if (orderA != orderB) {
+        return orderA.compareTo(orderB);
+      }
+      return b.totalAmount.compareTo(a.totalAmount);
+    });
+
+    return groups;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final insight = widget.insight;
     final allocationChanges = insight.visibleAllocationChanges;
-    final fallbackTradeDetails = allocationChanges.isEmpty
-        ? insight.visibleTradeDetails
-        : const <RebalanceInsightTrade>[];
+    final tradeGroups = _buildTradeGroups(
+      insight.visibleTradeDetails,
+      insight.allocations,
+    );
+    final tradeGroupByCode = <String, _InsightTradeGroup>{
+      for (final group in tradeGroups) group.assetCode: group,
+    };
+    final remainingTradeGroups = <_InsightTradeGroup>[];
+    for (final group in tradeGroups) {
+      final hasVisibleAllocation = allocationChanges.any(
+        (allocation) => allocation.assetCode == group.assetCode,
+      );
+      if (!hasVisibleAllocation) {
+        remainingTradeGroups.add(group);
+      }
+    }
 
     return Scaffold(
       backgroundColor: tc.background,
@@ -181,19 +253,59 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
                     // Allocation changes list (skip 0% delta)
                     if (allocationChanges.isNotEmpty)
                       ...allocationChanges.map(
-                        (alloc) => _AllocationChangeRow(allocation: alloc),
+                        (alloc) {
+                          final tradeGroup = tradeGroupByCode[alloc.assetCode];
+                          return _AllocationChangeRow(
+                            allocation: alloc,
+                            tradeGroup: tradeGroup,
+                            expanded: tradeGroup != null &&
+                                _expandedTradeGroups.contains(
+                                  tradeGroup.assetCode,
+                                ),
+                            onToggle: tradeGroup == null
+                                ? null
+                                : () => _toggleTradeGroup(tradeGroup.assetCode),
+                          );
+                        },
                       )
-                    else if (fallbackTradeDetails.isNotEmpty) ...[
+                    else if (tradeGroups.isNotEmpty) ...[
                       Text(
-                        '실제 조정 내역',
+                        '실제 조정 티커',
                         style: WeRoboTypography.bodySmall.copyWith(
                           color: tc.textPrimary,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      ...fallbackTradeDetails.map(
-                        (trade) => _TradeDetailRow(trade: trade),
+                      ...tradeGroups.map(
+                        (group) => _TradeDetailGroupRow(
+                          group: group,
+                          expanded: _expandedTradeGroups.contains(
+                            group.assetCode,
+                          ),
+                          onToggle: () => _toggleTradeGroup(group.assetCode),
+                        ),
+                      ),
+                    ],
+                    if (remainingTradeGroups.isNotEmpty &&
+                        allocationChanges.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        '같은 자산군 안에서 조정된 티커',
+                        style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...remainingTradeGroups.map(
+                        (group) => _TradeDetailGroupRow(
+                          group: group,
+                          expanded: _expandedTradeGroups.contains(
+                            group.assetCode,
+                          ),
+                          onToggle: () => _toggleTradeGroup(group.assetCode),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 32),
@@ -248,8 +360,16 @@ class _CashFlowRow extends StatelessWidget {
 
 class _AllocationChangeRow extends StatelessWidget {
   final RebalanceInsightAllocation allocation;
+  final _InsightTradeGroup? tradeGroup;
+  final bool expanded;
+  final VoidCallback? onToggle;
 
-  const _AllocationChangeRow({required this.allocation});
+  const _AllocationChangeRow({
+    required this.allocation,
+    this.tradeGroup,
+    this.expanded = false,
+    this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -262,54 +382,178 @@ class _AllocationChangeRow extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              color: allocation.color,
-              shape: BoxShape.circle,
-            ),
+          Row(
+            children: [
+              Container(
+                width: 12,
+                height: 12,
+                decoration: BoxDecoration(
+                  color: allocation.color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  allocation.displayName,
+                  style: WeRoboTypography.bodySmall.copyWith(
+                    color: tc.textPrimary,
+                  ),
+                ),
+              ),
+              Text(
+                '${allocation.beforeDisplay.toStringAsFixed(1)}%',
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textTertiary,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 14,
+                  color: tc.textTertiary,
+                ),
+              ),
+              Text(
+                '${allocation.afterDisplay.toStringAsFixed(1)}%',
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: deltaColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                deltaText,
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: deltaColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              allocation.displayName,
-              style: WeRoboTypography.bodySmall.copyWith(
-                color: tc.textPrimary,
+          if (tradeGroup != null && onToggle != null) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 22),
+              child: Pressable(
+                onTap: onToggle,
+                child: Row(
+                  children: [
+                    Text(
+                      expanded
+                          ? '조정된 ${tradeGroup!.tradeCount}개 티커 숨기기'
+                          : '조정된 ${tradeGroup!.tradeCount}개 티커 보기',
+                      style: WeRoboTypography.caption.copyWith(
+                        color: WeRoboColors.primary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    AnimatedRotation(
+                      turns: expanded ? 0.5 : 0.0,
+                      duration: const Duration(milliseconds: 180),
+                      child: const Icon(
+                        Icons.expand_more_rounded,
+                        size: 16,
+                        color: WeRoboColors.primary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          Text(
-            '${allocation.beforeDisplay.toStringAsFixed(1)}%',
-            style: WeRoboTypography.bodySmall.copyWith(
-              color: tc.textTertiary,
+          ],
+          if (tradeGroup != null && expanded) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 22),
+              child: Column(
+                children: tradeGroup!.trades
+                    .map((trade) => _TradeDetailRow(trade: trade))
+                    .toList(),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _TradeDetailGroupRow extends StatelessWidget {
+  final _InsightTradeGroup group;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  const _TradeDetailGroupRow({
+    required this.group,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Pressable(
+            onTap: onToggle,
+            child: Row(
+              children: [
+                Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: group.color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    group.assetName,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${group.tradeCount}개 티커',
+                  style: WeRoboTypography.caption.copyWith(
+                    color: tc.textTertiary,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                AnimatedRotation(
+                  turns: expanded ? 0.5 : 0.0,
+                  duration: const Duration(milliseconds: 180),
+                  child: Icon(
+                    Icons.expand_more_rounded,
+                    size: 16,
+                    color: tc.textTertiary,
+                  ),
+                ),
+              ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Icon(
-              Icons.arrow_forward_rounded,
-              size: 14,
-              color: tc.textTertiary,
+          if (expanded) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.only(left: 22),
+              child: Column(
+                children: group.trades
+                    .map((trade) => _TradeDetailRow(trade: trade))
+                    .toList(),
+              ),
             ),
-          ),
-          Text(
-            '${allocation.afterDisplay.toStringAsFixed(1)}%',
-            style: WeRoboTypography.bodySmall.copyWith(
-              color: deltaColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            deltaText,
-            style: WeRoboTypography.bodySmall.copyWith(
-              color: deltaColor,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
+          ],
         ],
       ),
     );
@@ -377,6 +621,24 @@ class _TradeDetailRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _InsightTradeGroup {
+  final String assetCode;
+  final String assetName;
+  final Color color;
+  final List<RebalanceInsightTrade> trades;
+
+  const _InsightTradeGroup({
+    required this.assetCode,
+    required this.assetName,
+    required this.color,
+    required this.trades,
+  });
+
+  int get tradeCount => trades.length;
+  double get totalAmount =>
+      trades.fold(0.0, (sum, trade) => sum + trade.amount);
 }
 
 String _formatWon(double amount) {
