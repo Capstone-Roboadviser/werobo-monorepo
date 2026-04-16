@@ -191,16 +191,24 @@ class PortfolioAnalyticsService:
         data_source: SimulationDataSource,
         stock_weights: dict[str, float] | None = None,
         portfolio_code: str | None = None,
+        version_id: int | None = None,
+        start_date: str | None = None,
+        per_asset_lines: bool = False,
     ) -> ComparisonResult:
         if stock_weights:
             return self._build_fixed_weight_comparison_backtest(
                 data_source=data_source,
                 stock_weights=stock_weights,
                 portfolio_code=portfolio_code,
+                version_id=version_id,
+                start_date=start_date,
+                per_asset_lines=per_asset_lines,
             )
 
-        assets = self._load_comparison_assets(data_source)
-        instruments, prices, combination_prefix = self._load_comparison_universe(data_source)
+        assets = self._load_comparison_assets(data_source, version_id=version_id)
+        instruments, prices, combination_prefix = self._load_comparison_universe(
+            data_source, version_id=version_id
+        )
         prices = prices.copy()
         prices["date"] = pd.to_datetime(prices["date"]).dt.normalize()
         if prices.empty:
@@ -263,11 +271,19 @@ class PortfolioAnalyticsService:
         data_source: SimulationDataSource,
         stock_weights: dict[str, float],
         portfolio_code: str | None = None,
+        version_id: int | None = None,
+        start_date: str | None = None,
+        per_asset_lines: bool = False,
     ) -> ComparisonResult:
-        assets = self._load_comparison_assets(data_source)
-        instruments, prices, _ = self._load_comparison_universe(data_source)
+        assets = self._load_comparison_assets(data_source, version_id=version_id)
+        instruments, prices, _ = self._load_comparison_universe(
+            data_source, version_id=version_id
+        )
         prices = prices.copy()
         prices["date"] = pd.to_datetime(prices["date"]).dt.normalize()
+        if start_date is not None:
+            cutoff = pd.Timestamp(start_date).normalize()
+            prices = prices[prices["date"] >= cutoff].copy()
         if prices.empty:
             raise ValueError("비교 백테스트에 사용할 가격 데이터가 없습니다.")
 
@@ -314,19 +330,20 @@ class PortfolioAnalyticsService:
             instruments=instruments,
             prices=prices,
             date_index=pivoted.index,
+            per_asset_lines=per_asset_lines,
         )
 
         line_key = str(portfolio_code or "selected").strip() or "selected"
         try:
-            start_date = pivoted.index[0].strftime("%Y-%m-%d")
+            backtest_start = pivoted.index[0].strftime("%Y-%m-%d")
             return build_comparison(
                 pivoted,
                 {line_key: portfolio_weights},
                 {},
                 benchmark_series,
                 extra_lines=extra_lines,
-                train_start_date=start_date,
-                train_end_date=start_date,
+                train_start_date=backtest_start,
+                train_end_date=backtest_start,
                 split_ratio=1.0,
             )
         except Exception as exc:
@@ -335,30 +352,46 @@ class PortfolioAnalyticsService:
     def _load_comparison_assets(
         self,
         data_source: SimulationDataSource,
+        *,
+        version_id: int | None = None,
     ) -> list:
         if data_source == SimulationDataSource.MANAGED_UNIVERSE:
-            active_version = self.portfolio_service.managed_universe_service.get_active_version()
-            if active_version is None:
-                raise RuntimeError("활성화된 관리자 유니버스 버전이 없습니다.")
-            return self.portfolio_service.list_assets(version_id=active_version.version_id)
+            mus = self.portfolio_service.managed_universe_service
+            if version_id is None:
+                version = mus.get_active_version()
+                if version is None:
+                    raise RuntimeError("활성화된 관리자 유니버스 버전이 없습니다.")
+            else:
+                version = mus.get_version(version_id)
+                if version is None:
+                    raise RuntimeError(f"유니버스 버전 {version_id}를 찾을 수 없습니다.")
+            return self.portfolio_service.list_assets(version_id=version.version_id)
         return self.portfolio_service.list_assets()
 
     def _load_comparison_universe(
         self,
         data_source: SimulationDataSource,
+        *,
+        version_id: int | None = None,
     ) -> tuple[list, pd.DataFrame, str]:
         if data_source == SimulationDataSource.MANAGED_UNIVERSE:
-            active_version = self.portfolio_service.managed_universe_service.get_active_version()
-            if active_version is None:
-                raise RuntimeError("활성화된 관리자 유니버스 버전이 없습니다.")
-            instruments = self.portfolio_service.managed_universe_service.get_active_instruments()
+            mus = self.portfolio_service.managed_universe_service
+            if version_id is None:
+                version = mus.get_active_version()
+                if version is None:
+                    raise RuntimeError("활성화된 관리자 유니버스 버전이 없습니다.")
+            else:
+                version = mus.get_version(version_id)
+                if version is None:
+                    raise RuntimeError(f"유니버스 버전 {version_id}를 찾을 수 없습니다.")
+            instruments = mus.get_instruments_for_version(version.version_id)
             if not instruments:
-                raise RuntimeError("활성 관리자 유니버스에 등록된 종목이 없습니다.")
-            prices = self.portfolio_service.managed_universe_service.load_prices_for_instruments(
+                raise RuntimeError("관리자 유니버스 버전에 등록된 종목이 없습니다.")
+            prices = mus.load_prices_for_instruments(
                 instruments,
-                version_id=active_version.version_id,
+                version_id=version.version_id,
             )
-            return instruments, prices, active_version.version_name
+            return instruments, prices, version.version_name
 
         if data_source == SimulationDataSource.STOCK_COMBINATION_DEMO:
             instruments = self.portfolio_service.list_stocks(SimulationDataSource.STOCK_COMBINATION_DEMO)
@@ -423,17 +456,27 @@ class PortfolioAnalyticsService:
         instruments: list[StockInstrument],
         prices: pd.DataFrame,
         date_index: pd.DatetimeIndex,
+        per_asset_lines: bool = False,
     ) -> list[ComparisonLine]:
         lines: list[ComparisonLine] = []
 
-        benchmark_line = self._build_equal_weight_asset_benchmark_line(
-            assets=assets,
-            instruments=instruments,
-            prices=prices,
-            date_index=date_index,
-        )
-        if benchmark_line is not None:
-            lines.append(benchmark_line)
+        if per_asset_lines:
+            asset_lines = self._build_per_asset_class_lines(
+                assets=assets,
+                instruments=instruments,
+                prices=prices,
+                date_index=date_index,
+            )
+            lines.extend(asset_lines)
+        else:
+            benchmark_line = self._build_equal_weight_asset_benchmark_line(
+                assets=assets,
+                instruments=instruments,
+                prices=prices,
+                date_index=date_index,
+            )
+            if benchmark_line is not None:
+                lines.append(benchmark_line)
 
         bond_line = self._build_fixed_bond_line(
             date_index=date_index,
@@ -442,6 +485,67 @@ class PortfolioAnalyticsService:
         if bond_line is not None:
             lines.append(bond_line)
 
+        return lines
+
+    def _build_per_asset_class_lines(
+        self,
+        *,
+        assets: list[AssetClass],
+        instruments: list[StockInstrument],
+        prices: pd.DataFrame,
+        date_index: pd.DatetimeIndex,
+    ) -> list[ComparisonLine]:
+        if prices.empty or len(date_index) < 2:
+            return []
+
+        grouped: dict[str, list[StockInstrument]] = {}
+        for instrument in instruments:
+            grouped.setdefault(instrument.sector_code, []).append(instrument)
+
+        price_table = (
+            prices.assign(
+                ticker=prices["ticker"].astype(str).str.upper(),
+                date=pd.to_datetime(prices["date"]).dt.normalize(),
+            )
+            .pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
+            .sort_index()
+            .ffill()
+            .bfill()
+        )
+        if price_table.empty:
+            return []
+
+        lines: list[ComparisonLine] = []
+        for asset in assets:
+            sector_instruments = grouped.get(asset.code) or []
+            if not sector_instruments:
+                continue
+
+            sector_path = self._build_sector_basket_path(
+                asset=asset,
+                sector_instruments=sector_instruments,
+                price_table=price_table,
+                date_index=date_index,
+            )
+            if sector_path is None:
+                continue
+
+            color = getattr(asset, "color", None) or "#64748B"
+            lines.append(
+                ComparisonLine(
+                    key=f"asset_{asset.code}",
+                    label=asset.name,
+                    color=str(color),
+                    style="solid",
+                    points=[
+                        (
+                            date.strftime("%Y-%m-%d"),
+                            round((float(value) - 1.0) * 100, 4),
+                        )
+                        for date, value in sector_path.items()
+                    ],
+                )
+            )
         return lines
 
     def _build_equal_weight_asset_benchmark_line(
