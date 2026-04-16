@@ -192,13 +192,13 @@ def render_admin_comparison_page() -> HTMLResponse:
     .chart-title strong { color: var(--text); font-size: 13px; font-weight: 600; }
     .chart-svg {
       width: 100%;
-      height: 240px;
+      height: 360px;
       display: block;
       cursor: grab;
       touch-action: none;
     }
     .chart-svg.dragging { cursor: grabbing; }
-    .profit-svg { height: 240px; cursor: default; }
+    .profit-svg { height: 360px; cursor: crosshair; }
 
     .legend {
       display: flex;
@@ -208,7 +208,18 @@ def render_admin_comparison_page() -> HTMLResponse:
       font-size: 11px;
       color: var(--muted);
     }
-    .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      cursor: pointer;
+      user-select: none;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .legend-item:hover { background: rgba(19, 60, 122, 0.08); }
+    .legend-item.muted { opacity: 0.35; }
+    .legend-item.muted .legend-swatch { background: #b0b8c4 !important; }
     .legend-swatch {
       width: 12px;
       height: 3px;
@@ -328,7 +339,7 @@ def render_admin_comparison_page() -> HTMLResponse:
             <strong>Efficient Frontier</strong>
             <span class="frontier-status">유니버스를 선택하세요.</span>
           </div>
-          <svg class="chart-svg frontier-svg" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
+          <svg class="chart-svg frontier-svg" viewBox="0 0 600 360" preserveAspectRatio="none"></svg>
           <div class="selection-summary"></div>
         </div>
         <div class="chart-block">
@@ -336,7 +347,7 @@ def render_admin_comparison_page() -> HTMLResponse:
             <strong>Backtest Profit</strong>
             <span class="profit-status">포트폴리오를 선택하세요.</span>
           </div>
-          <svg class="chart-svg profit-svg" viewBox="0 0 600 240" preserveAspectRatio="none"></svg>
+          <svg class="chart-svg profit-svg" viewBox="0 0 600 360" preserveAspectRatio="none"></svg>
           <div class="legend"></div>
         </div>
       </div>
@@ -447,6 +458,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           as_of_date: g.asOfDate,
           start_date: g.startDate,
           point_index: g.pointIndex,
+          hidden_lines: Array.from(g.hiddenLines || []),
         })),
       };
       try {
@@ -490,6 +502,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           asOfDate: item.as_of_date,
           startDate: item.start_date,
           pointIndex: item.point_index,
+          hiddenLines: item.hidden_lines || [],
         });
       }
       updateEmptyState();
@@ -512,6 +525,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         frontier: null,
         selection: null,
         backtest: null,
+        hiddenLines: new Set(initial?.hiddenLines || []),
         rootEl: null,
       };
       graphSets.set(id, state);
@@ -681,7 +695,7 @@ def render_admin_comparison_page() -> HTMLResponse:
     // ── Frontier rendering ──
     function renderFrontier(state) {
       const svg = $('.frontier-svg', state.rootEl);
-      const W = 600, H = 240;
+      const W = 600, H = 360;
       const padL = 40, padR = 24, padT = 16, padB = 30;
       const cw = W - padL - padR;
       const ch = H - padT - padB;
@@ -854,23 +868,16 @@ def render_admin_comparison_page() -> HTMLResponse:
     }
 
     // ── Backtest rendering ──
-    function renderBacktest(state) {
-      const svg = $('.profit-svg', state.rootEl);
-      const legendEl = $('.legend', state.rootEl);
-      const W = 600, H = 240;
-      const padL = 40, padR = 18, padT = 12, padB = 24;
-      const cw = W - padL - padR;
-      const ch = H - padT - padB;
-      while (svg.firstChild) svg.removeChild(svg.firstChild);
-      legendEl.innerHTML = '';
+    const MU_KEY = '__mu__';
 
+    function buildBacktestLines(state) {
       const data = state.backtest;
-      if (!data || !data.lines.length) return;
+      if (!data || !data.lines.length) return [];
 
       // Filter lines: per-asset (asset_*) excluding new_growth, plus treasury,
       // plus the selected portfolio line so users can compare performance.
       const PORTFOLIO_KEYS = new Set(['selected', 'balanced', 'conservative', 'growth']);
-      const visibleLines = data.lines.filter(line => {
+      const lines = data.lines.filter(line => {
         if (line.key === TREASURY_KEY) return true;
         if (line.key.startsWith('asset_')) {
           const assetCode = line.key.replace(/^asset_/, '');
@@ -884,12 +891,52 @@ def render_admin_comparison_page() -> HTMLResponse:
         return line;
       });
 
-      if (!visibleLines.length) return;
+      // μ line: linear projection from the selected portfolio's expected_return.
+      const mu = state.selection?.expected_return;
+      if (mu !== undefined && mu !== null && lines.length) {
+        const allDates = new Set();
+        lines.forEach(line => line.points.forEach(p => allDates.add(p.date)));
+        const sortedDates = Array.from(allDates).sort();
+        if (sortedDates.length >= 2) {
+          const start = new Date(sortedDates[0]);
+          const muPoints = sortedDates.map(d => {
+            const years = (new Date(d) - start) / (365.25 * 86400000);
+            return { date: d, return_pct: mu * 100 * years };
+          });
+          lines.push({
+            key: MU_KEY,
+            label: `μ 기대수익 (${(mu * 100).toFixed(1)}%/y)`,
+            color: '#E76F51',
+            style: 'dashed',
+            points: muPoints,
+            _mu: true,
+          });
+        }
+      }
+      return lines;
+    }
 
-      // Build x,y range
+    function renderBacktest(state) {
+      const svg = $('.profit-svg', state.rootEl);
+      const legendEl = $('.legend', state.rootEl);
+      const W = 600, H = 360;
+      const padL = 40, padR = 18, padT = 12, padB = 24;
+      const cw = W - padL - padR;
+      const ch = H - padT - padB;
+      while (svg.firstChild) svg.removeChild(svg.firstChild);
+      legendEl.innerHTML = '';
+
+      const allLines = buildBacktestLines(state);
+      if (!allLines.length) return;
+
+      const hidden = state.hiddenLines || new Set();
+      const visibleLines = allLines.filter(line => !hidden.has(line.key));
+
+      // y-range from visible lines only (so toggling auto-rescales the axis)
       const allDates = new Set();
       let minY = Infinity, maxY = -Infinity;
-      visibleLines.forEach(line => {
+      const sourceLines = visibleLines.length ? visibleLines : allLines;
+      sourceLines.forEach(line => {
         line.points.forEach(p => {
           allDates.add(p.date);
           if (p.return_pct < minY) minY = p.return_pct;
@@ -907,13 +954,13 @@ def render_admin_comparison_page() -> HTMLResponse:
       const sy = v => padT + (1 - (v - y0) / (y1 - y0)) * ch;
 
       // grid
-      for (let i = 0; i <= 4; i++) {
-        const y = padT + (ch * i) / 4;
+      for (let i = 0; i <= 5; i++) {
+        const y = padT + (ch * i) / 5;
         svg.appendChild(svgEl('line', {
           x1: padL, y1: y, x2: W - padR, y2: y,
           stroke: '#d8e0ea', 'stroke-width': '0.5', opacity: '0.5',
         }));
-        const labelVal = y1 - ((y1 - y0) * i) / 4;
+        const labelVal = y1 - ((y1 - y0) * i) / 5;
         const t = svgEl('text', {
           x: 4, y: y + 3, fill: '#5b6b7f', 'font-size': '9',
         });
@@ -928,9 +975,9 @@ def render_admin_comparison_page() -> HTMLResponse:
           stroke: '#5b6b7f', 'stroke-width': '0.6', 'stroke-dasharray': '3,4',
         }));
       }
-      // x-axis labels (5 ticks)
-      for (let i = 0; i < 5 && dateCount > 1; i++) {
-        const idx = Math.round(((dateCount - 1) * i) / 4);
+      // x-axis labels (6 ticks)
+      for (let i = 0; i < 6 && dateCount > 1; i++) {
+        const idx = Math.round(((dateCount - 1) * i) / 5);
         const date = sortedDates[idx];
         const x = sx(idx);
         const t = svgEl('text', {
@@ -940,8 +987,11 @@ def render_admin_comparison_page() -> HTMLResponse:
         svg.appendChild(t);
       }
 
-      // lines (draw markets first, portfolio last so it's on top)
-      const sortedLines = [...visibleLines].sort((a, b) => (a._portfolio ? 1 : 0) - (b._portfolio ? 1 : 0));
+      // lines (markets first, portfolio next, μ on top)
+      const sortedLines = [...visibleLines].sort((a, b) => {
+        const ord = l => l._mu ? 2 : (l._portfolio ? 1 : 0);
+        return ord(a) - ord(b);
+      });
       sortedLines.forEach(line => {
         const pts = line.points
           .map(p => [dateIdx.get(p.date), p.return_pct])
@@ -950,18 +1000,82 @@ def render_admin_comparison_page() -> HTMLResponse:
         const d = pts.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${sx(pt[0]).toFixed(2)} ${sy(pt[1]).toFixed(2)}`).join(' ');
         svg.appendChild(svgEl('path', {
           d, fill: 'none', stroke: line.color || '#64748B',
-          'stroke-width': line._portfolio ? '2.6' : '1.6',
+          'stroke-width': line._portfolio ? '2.6' : (line._mu ? '1.8' : '1.6'),
           'stroke-linecap': 'round', 'stroke-linejoin': 'round',
           'stroke-dasharray': line.style === 'dashed' ? '5,4' : null,
-          opacity: line._portfolio ? '1' : '0.85',
+          opacity: line._portfolio ? '1' : '0.9',
         }));
       });
 
-      // legend
-      visibleLines.forEach(line => {
+      // crosshair group (updated on pointer move)
+      const cross = svgEl('g', { class: 'crosshair', style: 'pointer-events:none; display:none' });
+      const crossLine = svgEl('line', {
+        y1: padT, y2: padT + ch,
+        stroke: '#5b6b7f', 'stroke-width': '0.8', 'stroke-dasharray': '3,3',
+      });
+      cross.appendChild(crossLine);
+      const crossDots = svgEl('g');
+      cross.appendChild(crossDots);
+      const tip = svgEl('g');
+      cross.appendChild(tip);
+      svg.appendChild(cross);
+
+      const showCrosshair = (clientX) => {
+        if (!dateCount) return;
+        const rect = svg.getBoundingClientRect();
+        const localX = ((clientX - rect.left) / rect.width) * W;
+        const t = (localX - padL) / cw;
+        const idx = Math.max(0, Math.min(dateCount - 1, Math.round(t * (dateCount - 1))));
+        const date = sortedDates[idx];
+        const x = sx(idx);
+        crossLine.setAttribute('x1', x);
+        crossLine.setAttribute('x2', x);
+        while (crossDots.firstChild) crossDots.removeChild(crossDots.firstChild);
+        const tipRows = [date];
+        visibleLines.forEach(line => {
+          const pt = line.points.find(p => p.date === date);
+          if (!pt) return;
+          const y = sy(pt.return_pct);
+          const dot = svgEl('circle', { cx: x, cy: y, r: 3.5, fill: line.color || '#64748B', stroke: 'white', 'stroke-width': '1' });
+          crossDots.appendChild(dot);
+          tipRows.push(`${line.label}: ${pt.return_pct.toFixed(2)}%`);
+        });
+        while (tip.firstChild) tip.removeChild(tip.firstChild);
+        const lineH = 12;
+        const tipW = 170;
+        const tipH = 8 + tipRows.length * lineH;
+        let tipX = x + 10;
+        if (tipX + tipW > W - padR) tipX = x - 10 - tipW;
+        const tipY = padT + 4;
+        const bg = svgEl('rect', {
+          x: tipX, y: tipY, width: tipW, height: tipH, rx: 6,
+          fill: 'white', stroke: '#d8e0ea', 'stroke-width': '0.6', opacity: '0.96',
+        });
+        tip.appendChild(bg);
+        tipRows.forEach((row, i) => {
+          const text = svgEl('text', {
+            x: tipX + 8, y: tipY + 14 + i * lineH,
+            fill: i === 0 ? '#5b6b7f' : '#122033',
+            'font-size': i === 0 ? '9' : '10',
+            'font-weight': i === 0 ? '500' : '600',
+          });
+          text.textContent = row;
+          tip.appendChild(text);
+        });
+        cross.style.display = '';
+      };
+      const hideCrosshair = () => { cross.style.display = 'none'; };
+
+      svg.addEventListener('pointermove', (ev) => showCrosshair(ev.clientX));
+      svg.addEventListener('pointerdown', (ev) => showCrosshair(ev.clientX));
+      svg.addEventListener('pointerleave', hideCrosshair);
+
+      // legend (clickable to toggle; show all lines, muted state for hidden)
+      allLines.forEach(line => {
         const item = document.createElement('span');
-        item.className = 'legend-item';
-        item.style.color = line.color || '#64748B';
+        const isHidden = hidden.has(line.key);
+        item.className = 'legend-item' + (isHidden ? ' muted' : '');
+        item.title = isHidden ? '클릭하여 다시 표시' : '클릭하여 숨김';
         const sw = document.createElement('span');
         sw.className = 'legend-swatch' + (line.style === 'dashed' ? ' dashed' : '');
         sw.style.background = line.style === 'dashed' ? 'transparent' : (line.color || '#64748B');
@@ -971,6 +1085,12 @@ def render_admin_comparison_page() -> HTMLResponse:
         label.textContent = line.label;
         label.style.color = '#122033';
         item.appendChild(label);
+        item.addEventListener('click', () => {
+          if (!state.hiddenLines) state.hiddenLines = new Set();
+          if (state.hiddenLines.has(line.key)) state.hiddenLines.delete(line.key);
+          else state.hiddenLines.add(line.key);
+          renderBacktest(state);
+        });
         legendEl.appendChild(item);
       });
     }
