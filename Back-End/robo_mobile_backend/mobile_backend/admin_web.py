@@ -654,28 +654,71 @@ def render_admin_page() -> HTMLResponse:
     .asset-role-card {
       border: 1px solid var(--line);
       border-radius: var(--r-2);
-      padding: 12px;
+      padding: 14px 14px 12px;
       background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .asset-role-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: var(--sp-3);
+      line-height: 1.15;
     }
     .asset-role-name {
-      font-size: var(--text-sm);
-      font-weight: 600;
-      margin-bottom: 2px;
+      font-size: var(--text-md);
+      font-weight: 500;
+      letter-spacing: -0.005em;
+      color: var(--fg);
     }
-    .asset-role-meta {
+    .asset-role-code {
       font-family: var(--font-mono);
       font-size: var(--text-2xs);
-      color: var(--fg-3);
-      letter-spacing: 0.04em;
-      margin-bottom: 8px;
+      color: var(--fg-4);
+      letter-spacing: 0.06em;
+      flex-shrink: 0;
     }
     .asset-role-card select { margin-top: 2px; }
-    .asset-role-help {
-      margin-top: 8px;
+    .asset-role-spec {
+      margin: 2px 0 0;
+      padding: 10px 0 0;
+      border-top: 1px dashed var(--line);
+      display: grid;
+      gap: 5px;
+    }
+    .asset-role-spec-row {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      align-items: baseline;
+      column-gap: 10px;
+    }
+    .asset-role-spec dt {
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      font-weight: 500;
+      color: var(--fg-4);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .asset-role-spec dd {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: var(--text-xs);
+      color: var(--fg-2);
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+    .asset-role-spec dd.is-empty {
+      color: var(--fg-4);
+    }
+    .asset-role-note {
+      margin: 2px 0 0;
       color: var(--fg-3);
       font-size: var(--text-xs);
-      line-height: 1.5;
-      white-space: pre-line;
+      line-height: 1.55;
+      max-width: 52ch;
     }
 
     /* ─ Version list ─ */
@@ -687,30 +730,85 @@ def render_admin_page() -> HTMLResponse:
     #version-list.notice { display: block; }
     .version-item {
       border-top: 1px solid var(--line);
-      padding: 14px 0;
+      padding: 18px 0 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
-    .version-item:first-child { border-top: 0; }
+    .version-item:first-child { border-top: 0; padding-top: 4px; }
     .version-head {
       display: grid;
       grid-template-columns: 1fr auto;
       gap: var(--sp-3);
-      align-items: center;
-      margin-bottom: 10px;
+      align-items: baseline;
     }
-    .version-head strong {
+    .version-title {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      min-width: 0;
+    }
+    .version-title strong {
       font-size: var(--text-md);
       font-weight: 600;
-      letter-spacing: -0.005em;
+      letter-spacing: -0.01em;
+      color: var(--fg);
     }
-    .version-meta {
-      color: var(--fg-3);
+    .version-stats {
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-wrap: wrap;
+      column-gap: var(--sp-6);
+      row-gap: var(--sp-3);
+      align-items: baseline;
+      max-width: 640px;
+    }
+    .version-stat {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      min-width: 0;
+    }
+    .version-stat dt {
       font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      color: var(--fg-4);
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      line-height: 1;
+      margin: 0;
+    }
+    .version-stat dd {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: var(--text-sm);
+      color: var(--fg);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+    .version-stat dd .unit {
+      color: var(--fg-3);
+      margin-left: 4px;
+      font-size: var(--text-2xs);
+      letter-spacing: 0.06em;
+    }
+    .version-memo {
+      margin: 0;
+      color: var(--fg-2);
       font-size: var(--text-xs);
       line-height: 1.55;
-      margin-top: 3px;
+      max-width: 60ch;
+      text-indent: -1em;
+      padding-left: 1em;
+    }
+    .version-memo::before {
+      content: '— ';
+      color: var(--fg-4);
     }
     .version-item .actions {
-      margin-top: 6px;
+      margin-top: 2px;
     }
 
     /* ─ Detail container ─ */
@@ -1197,11 +1295,34 @@ def render_admin_page() -> HTMLResponse:
     }
 
     function updateRoleCardDescription(card, roleKey) {
-      const help = card.querySelector('.asset-role-help');
       const template = findRoleTemplate(roleKey);
-      help.textContent = template
-        ? `${template.name} · ${template.selection_mode} / ${template.weighting_mode} / ${template.return_mode}\n${template.description}`
-        : '선택한 role 정보를 찾을 수 없습니다.';
+      const setSpec = (field, value) => {
+        const dd = card.querySelector(`[data-spec="${field}"]`);
+        if (!dd) return;
+        if (value) {
+          dd.textContent = value;
+          dd.classList.remove('is-empty');
+        } else {
+          dd.textContent = '—';
+          dd.classList.add('is-empty');
+        }
+      };
+      const note = card.querySelector('.asset-role-note');
+      if (template) {
+        setSpec('key', template.key);
+        setSpec('sel', template.selection_mode);
+        setSpec('wgt', template.weighting_mode);
+        setSpec('ret', template.return_mode);
+        note.textContent = template.description || '';
+        note.style.display = template.description ? '' : 'none';
+      } else {
+        setSpec('key', '');
+        setSpec('sel', '');
+        setSpec('wgt', '');
+        setSpec('ret', '');
+        note.textContent = '선택한 role 정보를 찾을 수 없습니다.';
+        note.style.display = '';
+      }
     }
 
     function renderAssetRoleSelectors(selectedMap = {}) {
@@ -1217,17 +1338,25 @@ def render_admin_page() -> HTMLResponse:
         const selectedRoleKey = selectedMap[asset.code] || asset.role_key;
         const options = assetRoleTemplates.map((template) => `
           <option value="${template.key}" ${template.key === selectedRoleKey ? 'selected' : ''}>
-            ${template.name} (${template.key})
+            ${template.name}
           </option>
         `).join('');
         return `
           <div class="asset-role-card" data-asset-code="${asset.code}">
-            <div class="asset-role-name">${asset.name}</div>
-            <div class="asset-role-meta">${asset.code}</div>
+            <div class="asset-role-head">
+              <span class="asset-role-name">${asset.name}</span>
+              <span class="asset-role-code">${asset.code}</span>
+            </div>
             <select data-role-select="${asset.code}">
               ${options}
             </select>
-            <div class="asset-role-help"></div>
+            <dl class="asset-role-spec">
+              <div class="asset-role-spec-row"><dt>KEY</dt><dd data-spec="key"></dd></div>
+              <div class="asset-role-spec-row"><dt>SEL</dt><dd data-spec="sel"></dd></div>
+              <div class="asset-role-spec-row"><dt>WGT</dt><dd data-spec="wgt"></dd></div>
+              <div class="asset-role-spec-row"><dt>RET</dt><dd data-spec="ret"></dd></div>
+            </dl>
+            <p class="asset-role-note"></p>
           </div>
         `;
       }).join('');
@@ -1506,6 +1635,19 @@ def render_admin_page() -> HTMLResponse:
       showMessage('#status-log', log, false);
     }
 
+    function formatVersionTimestamp(iso) {
+      if (!iso) return { date: '—', time: '' };
+      const match = String(iso).match(/^(\\d{4}-\\d{2}-\\d{2})[T ](\\d{2}:\\d{2})/);
+      if (!match) return { date: String(iso), time: '' };
+      return { date: match[1], time: match[2] };
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+      }[c]));
+    }
+
     function renderVersionList(versions) {
       const host = $('#version-list');
       if (!versions.length) {
@@ -1518,15 +1660,32 @@ def render_admin_page() -> HTMLResponse:
       versions.forEach((version) => {
         const wrap = document.createElement('div');
         wrap.className = 'version-item';
+        const stamp = formatVersionTimestamp(version.created_at);
+        const memoHtml = version.notes
+          ? `<p class="version-memo">${escapeHtml(version.notes)}</p>`
+          : '';
         wrap.innerHTML = `
           <div class="version-head">
-            <div>
-              <strong>${version.version_name}</strong>
-              <div class="version-meta">ID ${version.version_id}  ·  종목 ${version.instrument_count}개  ·  생성 ${version.created_at}</div>
-              <div class="version-meta">${version.notes || '— 메모 없음'}</div>
+            <div class="version-title">
+              <strong>${escapeHtml(version.version_name)}</strong>
             </div>
             <div>${version.is_active ? '<span class="pill ok">Active</span>' : '<span class="pill warn">Inactive</span>'}</div>
           </div>
+          <dl class="version-stats">
+            <div class="version-stat">
+              <dt>ID</dt>
+              <dd>#${version.version_id}</dd>
+            </div>
+            <div class="version-stat">
+              <dt>Holdings</dt>
+              <dd>${version.instrument_count}<span class="unit">종목</span></dd>
+            </div>
+            <div class="version-stat">
+              <dt>Created</dt>
+              <dd>${stamp.date}${stamp.time ? `<span class="unit">${stamp.time} UTC</span>` : ''}</dd>
+            </div>
+          </dl>
+          ${memoHtml}
           <div class="actions">
             <button class="secondary mini detail-btn">상세</button>
             <button class="secondary mini edit-btn">수정</button>
