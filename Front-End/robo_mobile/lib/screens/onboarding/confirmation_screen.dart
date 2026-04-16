@@ -235,6 +235,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
             volatilityPoints: _volatilityPoints,
             comparisonLines: _comparisonLines,
             rebalanceDates: _rebalanceDates,
+            expectedAnnualReturn: _portfolio.expectedReturn,
             useFallbackMock: false,
           ),
         ),
