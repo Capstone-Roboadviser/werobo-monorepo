@@ -725,8 +725,9 @@ def render_admin_page() -> HTMLResponse:
       inset: 0;
       z-index: 100;
       display: flex;
-      align-items: stretch;
+      align-items: center;
       justify-content: center;
+      padding: var(--sp-5);
     }
     .modal[hidden] { display: none; }
     .modal-backdrop {
@@ -738,8 +739,12 @@ def render_admin_page() -> HTMLResponse:
     .modal-shell {
       position: relative;
       width: 100%;
-      max-width: 100%;
+      max-width: 1100px;
+      max-height: 100%;
       background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-4);
+      box-shadow: var(--shadow-md);
       display: flex;
       flex-direction: column;
       overflow: hidden;
@@ -783,6 +788,7 @@ def render_admin_page() -> HTMLResponse:
       padding: var(--sp-5) var(--sp-6);
     }
     @media (max-width: 980px) {
+      .modal { padding: var(--sp-3); }
       .modal-head { padding: var(--sp-4); }
       .modal-body { padding: var(--sp-4); }
     }
