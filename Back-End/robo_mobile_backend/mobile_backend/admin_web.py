@@ -702,9 +702,77 @@ def render_admin_page() -> HTMLResponse:
     }
 
     /* ─ Detail container ─ */
-    #version-detail .notice {
+    #detail-modal-body .notice {
       margin-top: 0;
       margin-bottom: var(--sp-3);
+    }
+
+    /* ─ Modal ─ */
+    .modal {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+    .modal[hidden] { display: none; }
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: oklch(10% 0.015 255 / 0.55);
+      backdrop-filter: blur(3px);
+    }
+    .modal-shell {
+      position: relative;
+      width: 100%;
+      max-width: 100%;
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .modal-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: var(--sp-4);
+      padding: var(--sp-5) var(--sp-6);
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .modal-head .eyebrow {
+      font-family: var(--font-mono);
+      font-size: var(--text-2xs);
+      color: var(--fg-3);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+    .modal-head h2 {
+      margin: 4px 0 0;
+      font-size: var(--text-xl);
+      font-weight: 600;
+      letter-spacing: -0.005em;
+    }
+    .modal-sub {
+      margin: 6px 0 0;
+      color: var(--fg-3);
+      font-size: var(--text-sm);
+      line-height: 1.5;
+    }
+    .modal-close {
+      font-size: var(--text-lg);
+      line-height: 1;
+      padding: 6px 10px;
+    }
+    .modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: var(--sp-5) var(--sp-6);
+    }
+    @media (max-width: 980px) {
+      .modal-head { padding: var(--sp-4); }
+      .modal-body { padding: var(--sp-4); }
     }
 
     @media (max-width: 980px) {
@@ -882,17 +950,21 @@ def render_admin_page() -> HTMLResponse:
       <p class="helper">active 전환, 상세 조회, 삭제를 이곳에서 처리합니다.</p>
       <div id="version-list" class="notice">버전 목록을 불러오는 중입니다.</div>
     </section>
+  </div>
 
-    <section class="card">
-      <div class="card-head">
+  <div id="detail-modal" class="modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="detail-modal-title">
+    <div class="modal-backdrop" data-modal-close></div>
+    <div class="modal-shell" role="document">
+      <header class="modal-head">
         <div>
-          <span class="eyebrow">Section 05 · Detail</span>
-          <h2>버전 상세</h2>
+          <span class="eyebrow">Detail</span>
+          <h2 id="detail-modal-title">버전 상세</h2>
+          <p class="modal-sub">선택한 유니버스 버전의 종목 구성을 확인합니다.</p>
         </div>
-      </div>
-      <p class="helper">선택한 유니버스 버전의 종목 구성을 확인합니다.</p>
-      <div id="version-detail" class="notice">상세를 보려면 버전 목록에서 "상세"를 눌러주세요.</div>
-    </section>
+        <button class="ghost modal-close" type="button" data-modal-close aria-label="닫기">✕</button>
+      </header>
+      <div class="modal-body" id="detail-modal-body"></div>
+    </div>
   </div>
 
   <template id="instrument-row-template">
@@ -1461,7 +1533,7 @@ def render_admin_page() -> HTMLResponse:
     }
 
     function renderVersionDetail(detail) {
-      const host = $('#version-detail');
+      const host = $('#detail-modal-body');
       const roleRows = (detail.asset_roles || []).map((item) => `
         <tr>
           <td>${item.asset_name}</td>
@@ -1569,14 +1641,28 @@ def render_admin_page() -> HTMLResponse:
     async function loadVersionDetail(versionId) {
       const detail = await requestJson(`/admin/api/universe/versions/${versionId}`);
       renderVersionDetail(detail);
+      openDetailModal();
     }
 
     async function startEditVersion(versionId) {
       hideMessage('#create-result');
       hideMessage('#create-error');
       const detail = await requestJson(`/admin/api/universe/versions/${versionId}`);
-      renderVersionDetail(detail);
       enterEditMode(detail);
+    }
+
+    function openDetailModal() {
+      const modal = $('#detail-modal');
+      modal.hidden = false;
+      modal.setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDetailModal() {
+      const modal = $('#detail-modal');
+      modal.hidden = true;
+      modal.setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
     }
 
     async function loadReadiness() {
@@ -1593,8 +1679,7 @@ def render_admin_page() -> HTMLResponse:
     async function deleteVersion(versionId) {
       if (!confirm('이 유니버스 버전을 삭제할까요?')) return;
       await requestJson(`/admin/api/universe/versions/${versionId}`, { method: 'DELETE' });
-      $('#version-detail').className = 'notice';
-      $('#version-detail').textContent = '상세를 보려면 버전 목록에서 "상세"를 눌러주세요.';
+      closeDetailModal();
       await reloadAll();
     }
 
@@ -1671,6 +1756,14 @@ def render_admin_page() -> HTMLResponse:
 
     $('#reload-all').addEventListener('click', reloadAll);
     $('#add-row').addEventListener('click', () => addInstrumentRow());
+    $$('#detail-modal [data-modal-close]').forEach((el) => {
+      el.addEventListener('click', closeDetailModal);
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && !$('#detail-modal').hidden) {
+        closeDetailModal();
+      }
+    });
     $('#reset-asset-roles').addEventListener('click', () => {
       if (editingVersionId !== null) return;
       renderAssetRoleSelectors(defaultAssetRoleMap());
