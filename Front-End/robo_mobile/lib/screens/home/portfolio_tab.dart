@@ -236,6 +236,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
                       volatilityPoints: _volatilityPoints,
                       comparisonLines: lines,
                       rebalanceDates: rebalanceDates,
+                      expectedAnnualReturn: portfolioState.expectedReturn,
                       isLoading: _isLoadingHistory,
                     ),
             ),
@@ -566,6 +567,7 @@ class _TrendView extends StatelessWidget {
   final List<ChartPoint>? volatilityPoints;
   final List<ChartLine> comparisonLines;
   final List<DateTime> rebalanceDates;
+  final double? expectedAnnualReturn;
   final bool isLoading;
 
   const _TrendView({
@@ -574,6 +576,7 @@ class _TrendView extends StatelessWidget {
     this.volatilityPoints,
     required this.comparisonLines,
     required this.rebalanceDates,
+    this.expectedAnnualReturn,
     this.isLoading = false,
   });
 
@@ -597,6 +600,7 @@ class _TrendView extends StatelessWidget {
         volatilityPoints: volatilityPoints,
         comparisonLines: comparisonLines.isNotEmpty ? comparisonLines : null,
         rebalanceDates: rebalanceDates.isNotEmpty ? rebalanceDates : null,
+        expectedAnnualReturn: expectedAnnualReturn,
         useFallbackMock: false,
       ),
     );

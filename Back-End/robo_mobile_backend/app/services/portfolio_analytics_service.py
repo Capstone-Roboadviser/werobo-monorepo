@@ -455,6 +455,13 @@ class PortfolioAnalyticsService:
         if prices.empty or len(date_index) < 2:
             return None
 
+        benchmark_assets = [
+            asset for asset in assets
+            if not self._exclude_from_equal_weight_asset_benchmark(asset)
+        ]
+        if not benchmark_assets:
+            return None
+
         grouped: dict[str, list[StockInstrument]] = {}
         for instrument in instruments:
             grouped.setdefault(instrument.sector_code, []).append(instrument)
@@ -472,7 +479,7 @@ class PortfolioAnalyticsService:
             return None
 
         sector_paths: dict[str, pd.Series] = {}
-        for asset in assets:
+        for asset in benchmark_assets:
             sector_path = self._build_sector_basket_path(
                 asset=asset,
                 sector_instruments=grouped.get(asset.code, []),
@@ -483,7 +490,7 @@ class PortfolioAnalyticsService:
                 return None
             sector_paths[asset.code] = sector_path
 
-        expected_asset_codes = [asset.code for asset in assets]
+        expected_asset_codes = [asset.code for asset in benchmark_assets]
         if not expected_asset_codes:
             return None
 
@@ -499,7 +506,7 @@ class PortfolioAnalyticsService:
 
         return ComparisonLine(
             key="benchmark_avg",
-            label="7자산 단순평균",
+            label=f"{len(expected_asset_codes)}자산 단순평균",
             color="#999999",
             style="dashed",
             points=[
@@ -510,6 +517,9 @@ class PortfolioAnalyticsService:
                 for date, value in benchmark_path.items()
             ],
         )
+
+    def _exclude_from_equal_weight_asset_benchmark(self, asset: AssetClass) -> bool:
+        return self._uses_fixed_five_percent_conservative_return(asset)
 
     def _build_sector_basket_path(
         self,

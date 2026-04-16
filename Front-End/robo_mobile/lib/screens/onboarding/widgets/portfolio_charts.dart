@@ -13,6 +13,7 @@ class PortfolioCharts extends StatefulWidget {
   final List<ChartPoint>? volatilityPoints;
   final List<ChartLine>? comparisonLines;
   final List<DateTime>? rebalanceDates;
+  final double? expectedAnnualReturn;
   final bool useFallbackMock;
 
   const PortfolioCharts({
@@ -21,6 +22,7 @@ class PortfolioCharts extends StatefulWidget {
     this.volatilityPoints,
     this.comparisonLines,
     this.rebalanceDates,
+    this.expectedAnnualReturn,
     this.useFallbackMock = true,
   });
 
@@ -77,6 +79,7 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
                     type: widget.type,
                     comparisonLines: widget.comparisonLines,
                     rebalanceDates: widget.rebalanceDates,
+                    expectedAnnualReturn: widget.expectedAnnualReturn,
                     useFallbackMock: widget.useFallbackMock,
                   ),
           ),
@@ -288,6 +291,7 @@ class _ComparisonView extends StatefulWidget {
   final InvestmentType type;
   final List<ChartLine>? comparisonLines;
   final List<DateTime>? rebalanceDates;
+  final double? expectedAnnualReturn;
   final bool useFallbackMock;
 
   const _ComparisonView({
@@ -295,6 +299,7 @@ class _ComparisonView extends StatefulWidget {
     required this.type,
     this.comparisonLines,
     this.rebalanceDates,
+    this.expectedAnnualReturn,
     required this.useFallbackMock,
   });
 
@@ -307,7 +312,8 @@ class _ComparisonViewState extends State<_ComparisonView>
   late AnimationController _drawCtrl;
   int? _touchIndex;
   int _range = 4; // index into _ranges
-  bool _show7AssetAvg = true;
+  bool _showAssetAvg = true;
+  bool _showExpectedReturn = true;
   bool _showBondTrend = true;
 
   static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
@@ -339,11 +345,17 @@ class _ComparisonViewState extends State<_ComparisonView>
     return result;
   }
 
-  /// Use the explicit 7-asset-class benchmark line from the backend.
+  /// Use the explicit asset-benchmark line from the backend.
   ChartLine? _buildBenchmarkLine(List<ChartLine> rawLines) {
     for (final line in rawLines) {
       if (line.key == 'benchmark_avg') {
-        return line;
+        return ChartLine(
+          key: line.key,
+          label: '시장',
+          color: line.color,
+          dashed: line.dashed,
+          points: line.points,
+        );
       }
     }
     return null;
@@ -400,8 +412,8 @@ class _ComparisonViewState extends State<_ComparisonView>
       ));
     }
 
-    // 7-asset average benchmark (toggle-controlled)
-    if (_show7AssetAvg) {
+    // Asset-class average benchmark (toggle-controlled)
+    if (_showAssetAvg) {
       final bench = _buildBenchmarkLine(rawLines);
       if (bench != null) result.add(bench);
     }
@@ -469,6 +481,36 @@ class _ComparisonViewState extends State<_ComparisonView>
     }).toList();
   }
 
+  ChartLine? _buildExpectedReturnLine(List<ChartLine> rangedLines) {
+    final expectedAnnualReturn = widget.expectedAnnualReturn;
+    if (expectedAnnualReturn == null) {
+      return null;
+    }
+
+    final portfolioLine = rangedLines
+        .where((line) => line.key != 'benchmark_avg' && line.key != 'treasury')
+        .firstOrNull;
+    if (portfolioLine == null || portfolioLine.points.length < 2) {
+      return null;
+    }
+
+    final first = portfolioLine.points.first;
+    final last = portfolioLine.points.last;
+    final elapsedDays = max(0, last.date.difference(first.date).inDays);
+    final expectedReturn = expectedAnnualReturn * (elapsedDays / 365.25);
+
+    return ChartLine(
+      key: 'expected_return',
+      label: '연 기대수익률',
+      color: WeRoboColors.chartGreen.withValues(alpha: 0.85),
+      dashed: true,
+      points: [
+        ChartPoint(date: first.date, value: 0.0),
+        ChartPoint(date: last.date, value: expectedReturn),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
@@ -479,12 +521,18 @@ class _ComparisonViewState extends State<_ComparisonView>
     final typedLines = allLines.isEmpty ? allLines : _filterByType(allLines);
     var lines = typedLines.isEmpty ? typedLines : _filterByRange(typedLines);
 
+    if (_showExpectedReturn) {
+      final expectedReturnLine = _buildExpectedReturnLine(lines);
+      if (expectedReturnLine != null) {
+        lines = [...lines, expectedReturnLine];
+      }
+    }
+
     // Build bond trend from range-filtered treasury, then replace treasury
     if (_showBondTrend) {
       final rangedTreasury =
           lines.where((l) => l.key == 'treasury').firstOrNull;
-      if (rangedTreasury != null &&
-          rangedTreasury.points.length >= 2) {
+      if (rangedTreasury != null && rangedTreasury.points.length >= 2) {
         final first = rangedTreasury.points.first;
         final last = rangedTreasury.points.last;
         lines = [
@@ -492,16 +540,13 @@ class _ComparisonViewState extends State<_ComparisonView>
           ChartLine(
             key: 'bond_trend',
             label: '채권 수익률',
-            color: const Color(0xFF999999)
-                .withValues(alpha: 0.4),
+            color: const Color(0xFF999999).withValues(alpha: 0.4),
             dashed: true,
             points: [first, last],
           ),
         ];
       } else {
-        lines = lines
-            .where((l) => l.key != 'treasury')
-            .toList();
+        lines = lines.where((l) => l.key != 'treasury').toList();
       }
     }
 
@@ -513,10 +558,20 @@ class _ComparisonViewState extends State<_ComparisonView>
           Row(
             children: [
               _buildToggleButton(
-                label: '7자산 평균',
-                active: _show7AssetAvg,
+                label: '시장',
+                active: _showAssetAvg,
                 onTap: () {
-                  setState(() => _show7AssetAvg = !_show7AssetAvg);
+                  setState(() => _showAssetAvg = !_showAssetAvg);
+                  _drawCtrl.forward(from: 0);
+                },
+                tc: tc,
+              ),
+              const SizedBox(width: 6),
+              _buildToggleButton(
+                label: '연 기대수익률',
+                active: _showExpectedReturn,
+                onTap: () {
+                  setState(() => _showExpectedReturn = !_showExpectedReturn);
                   _drawCtrl.forward(from: 0);
                 },
                 tc: tc,

@@ -545,7 +545,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
                     },
                     {
                         "key": "benchmark_avg",
-                        "label": "7자산 단순평균",
+                        "label": "6자산 단순평균",
                         "color": "#999999",
                         "style": "dashed",
                         "points": [
@@ -615,7 +615,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
                     ),
                     SimpleNamespace(
                         key="benchmark_avg",
-                        label="7자산 단순평균",
+                        label="6자산 단순평균",
                         color="#999999",
                         style="dashed",
                         points=[

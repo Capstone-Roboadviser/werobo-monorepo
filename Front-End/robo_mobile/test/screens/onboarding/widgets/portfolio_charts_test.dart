@@ -22,7 +22,7 @@ void main() {
         ),
         ChartLine(
           key: 'benchmark_avg',
-          label: '7자산 단순평균',
+          label: '6자산 단순평균',
           color: Colors.grey,
           dashed: true,
           points: [
@@ -51,6 +51,7 @@ void main() {
               child: PortfolioCharts(
                 type: InvestmentType.balanced,
                 comparisonLines: comparisonLines,
+                expectedAnnualReturn: 0.12,
                 useFallbackMock: false,
               ),
             ),
@@ -61,7 +62,9 @@ void main() {
       await tester.tap(find.text('포트폴리오 비교'));
       await tester.pumpAndSettle();
 
-      expect(find.text('선택 포트폴리오'), findsOneWidget);
+      expect(find.text('시장'), findsNWidgets(2));
+      expect(find.text('포트폴리오'), findsOneWidget);
+      expect(find.text('연 기대수익률'), findsNWidgets(2));
       expect(find.text('채권 수익률'), findsNWidgets(2));
     },
   );
@@ -83,7 +86,7 @@ void main() {
         ),
         ChartLine(
           key: 'benchmark_avg',
-          label: '7자산 단순평균',
+          label: '6자산 단순평균',
           color: Colors.grey,
           dashed: true,
           points: [
@@ -114,6 +117,7 @@ void main() {
               child: PortfolioCharts(
                 type: InvestmentType.balanced,
                 comparisonLines: comparisonLines,
+                expectedAnnualReturn: 0.12,
                 useFallbackMock: false,
               ),
             ),
@@ -138,8 +142,13 @@ void main() {
       final painter = customPaint.painter as dynamic;
       final lines = painter.lines as List<ChartLine>;
       final bondTrend = lines.singleWhere((line) => line.key == 'bond_trend');
+      final expectedReturn =
+          lines.singleWhere((line) => line.key == 'expected_return');
 
       expect(bondTrend.points, hasLength(2));
+      expect(expectedReturn.points, hasLength(2));
+      expect(expectedReturn.points.first.value, 0.0);
+      expect(expectedReturn.points.last.value, greaterThan(0.0));
     },
   );
 }
