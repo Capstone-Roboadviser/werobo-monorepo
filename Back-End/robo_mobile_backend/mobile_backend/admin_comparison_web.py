@@ -83,38 +83,228 @@ def render_admin_comparison_page() -> HTMLResponse:
       gap: 10px;
       flex-wrap: wrap;
     }
-    .snapshot-list {
+    .snapshot-picker { position: relative; }
+    .snapshot-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: white;
+      color: var(--text);
+      border: 1px solid var(--line);
+      min-width: 280px;
+      max-width: 420px;
+      justify-content: space-between;
+      font-weight: 500;
+    }
+    .snapshot-trigger .snapshot-current {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .snapshot-trigger.dirty .snapshot-current::after {
+      content: ' •';
+      color: var(--warn);
+    }
+    .snapshot-trigger .caret { color: var(--muted); font-size: 11px; }
+    .snapshot-panel {
+      position: absolute;
+      left: 0;
+      top: calc(100% + 6px);
+      width: 540px;
+      max-width: 92vw;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(17, 24, 39, 0.14);
+      z-index: 30;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .snapshot-panel[hidden] { display: none; }
+    .snapshot-panel-head {
+      display: grid;
+      grid-template-columns: 1fr 180px;
+      gap: 8px;
+    }
+    .snapshot-panel-head input,
+    .snapshot-panel-head select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 13px;
+      background: white;
+    }
+    .snapshot-panel-filters {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
-      flex: 1;
     }
-    .snapshot-chip {
+    .snapshot-panel-filters details {
+      flex: 1;
+      min-width: 200px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fbfcfe;
+    }
+    .snapshot-panel-filters summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      user-select: none;
+    }
+    .snapshot-panel-filters summary::-webkit-details-marker { display: none; }
+    .snapshot-panel-filters summary::after { content: ' ▾'; }
+    .snapshot-panel-filters details[open] summary::after { content: ' ▴'; }
+    .filter-options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 0 10px 10px;
+    }
+    .filter-chip {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 6px 10px;
+      gap: 4px;
+      padding: 4px 8px;
       border: 1px solid var(--line);
       border-radius: 999px;
-      background: #fbfcfe;
-      font-size: 13px;
+      background: white;
+      font-size: 11px;
       cursor: pointer;
+      color: var(--muted);
+      user-select: none;
     }
-    .snapshot-chip.active {
-      border-color: var(--primary-accent);
+    .filter-chip.on {
       background: var(--primary-soft);
+      border-color: var(--primary-accent);
       color: var(--primary);
       font-weight: 600;
     }
-    .snapshot-chip .x {
-      border: none;
-      background: transparent;
-      color: var(--muted);
-      cursor: pointer;
-      padding: 0 2px;
-      font-size: 14px;
+    .snapshot-results {
+      max-height: 360px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
-    .snapshot-chip .x:hover { color: var(--danger); }
+    .snapshot-folder {
+      display: block;
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      padding: 8px 8px 2px;
+    }
+    .snapshot-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 8px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .snapshot-row:hover { background: #f5f7fb; }
+    .snapshot-row.active {
+      background: var(--primary-soft);
+      border-color: var(--primary-accent);
+    }
+    .snapshot-row-body { flex: 1; min-width: 0; }
+    .snapshot-row-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 2px;
+    }
+    .snapshot-row-meta {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .snapshot-row-universes {
+      margin-top: 4px;
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+    .universe-tag {
+      display: inline-block;
+      padding: 1px 7px;
+      background: #eef2f7;
+      color: #122033;
+      font-size: 10px;
+      border-radius: 6px;
+      font-weight: 500;
+    }
+    .snapshot-row-actions { display: flex; gap: 4px; }
+    .snapshot-row-actions button {
+      padding: 4px 8px;
+      font-size: 11px;
+      border: 1px solid var(--line);
+      background: white;
+      color: var(--muted);
+      border-radius: 6px;
+    }
+    .snapshot-row-actions button:hover { color: var(--danger); border-color: var(--danger); }
+    .snapshot-results-empty {
+      padding: 20px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* Save modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(17, 24, 39, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+    .modal-backdrop[hidden] { display: none; }
+    .modal-card {
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      width: 420px;
+      max-width: 92vw;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    }
+    .modal-card h3 { margin: 0 0 14px; font-size: 17px; }
+    .modal-card .field { margin-bottom: 12px; }
+    .modal-card label {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .modal-card input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font: inherit;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
 
     .graph-grid {
       display: grid;
@@ -296,16 +486,61 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     <section class="card">
       <h2>스냅샷</h2>
-      <p class="helper">현재 보드 상태를 저장하고 나중에 불러올 수 있어요.</p>
+      <p class="helper">보드 상태를 저장·불러오기, 폴더로 정리하고 유니버스로 필터링할 수 있어요.</p>
       <div class="snapshot-bar">
-        <button id="save-snapshot">현재 상태 저장</button>
-        <button class="secondary" id="add-graph-set">+ 그래프 세트 추가</button>
-        <div class="snapshot-list" id="snapshot-list">
-          <span class="loading" id="snapshot-loading">스냅샷을 불러오는 중...</span>
+        <div class="snapshot-picker">
+          <button class="snapshot-trigger" id="snapshot-trigger" type="button">
+            <span class="snapshot-current" id="snapshot-current">— 새 보드 —</span>
+            <span class="caret">▾</span>
+          </button>
+          <div class="snapshot-panel" id="snapshot-panel" hidden>
+            <div class="snapshot-panel-head">
+              <input type="search" id="snapshot-search" placeholder="이름·폴더·유니버스 검색" />
+              <select id="snapshot-sort">
+                <option value="updated_desc">최근 수정 순</option>
+                <option value="updated_asc">오래된 수정 순</option>
+                <option value="created_desc">최근 생성 순</option>
+                <option value="name_asc">이름 (가나다)</option>
+              </select>
+            </div>
+            <div class="snapshot-panel-filters">
+              <details>
+                <summary>유니버스 필터</summary>
+                <div class="filter-options" id="snapshot-filter-universes"></div>
+              </details>
+              <details>
+                <summary>폴더 필터</summary>
+                <div class="filter-options" id="snapshot-filter-folders"></div>
+              </details>
+            </div>
+            <div class="snapshot-results" id="snapshot-results"></div>
+          </div>
         </div>
+        <button id="save-snapshot-changes" disabled title="선택된 스냅샷에 현재 상태를 덮어쓰기">변경사항 저장</button>
+        <button class="secondary" id="save-snapshot-as">다른 이름으로 저장</button>
+        <button class="secondary" id="add-graph-set">+ 그래프 세트 추가</button>
       </div>
       <div class="err" id="snapshot-error" style="display:none"></div>
     </section>
+
+    <div class="modal-backdrop" id="save-modal" hidden>
+      <div class="modal-card">
+        <h3 id="save-modal-title">스냅샷 저장</h3>
+        <div class="field">
+          <label for="save-modal-name">이름</label>
+          <input type="text" id="save-modal-name" />
+        </div>
+        <div class="field">
+          <label for="save-modal-folder">폴더 (선택)</label>
+          <input type="text" id="save-modal-folder" list="folder-suggest" placeholder="예: 2026-Q2 비교" />
+          <datalist id="folder-suggest"></datalist>
+        </div>
+        <div class="modal-actions">
+          <button class="ghost" id="save-modal-cancel" type="button">취소</button>
+          <button id="save-modal-confirm" type="button">저장</button>
+        </div>
+      </div>
+    </div>
 
     <div class="graph-grid" id="graph-grid"></div>
     <div class="empty-state" id="empty-state" style="display:none">
@@ -361,10 +596,19 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     let catalog = { assets: [], versions: [] };
     let assetByCode = {};
+    let versionById = {};
     const graphSets = new Map(); // id -> state
     let snapshots = [];
     let activeSnapshotId = null;
+    let dirty = false;
     let graphSetSeq = 0;
+    const snapshotFilter = {
+      query: '',
+      sort: 'updated_desc',
+      universes: new Set(),
+      folders: new Set(),
+    };
+    let saveModalState = { mode: 'create' }; // or 'rename'
 
     const NEW_GROWTH_CODE = 'new_growth';
     const TREASURY_KEY = 'treasury';
@@ -403,55 +647,12 @@ def render_admin_comparison_page() -> HTMLResponse:
     async function loadCatalog() {
       catalog = await api('/admin/api/comparison/catalog');
       assetByCode = Object.fromEntries(catalog.assets.map(a => [a.code, a]));
+      versionById = Object.fromEntries(catalog.versions.map(v => [v.version_id, v]));
     }
 
     // ── Snapshots ──
-    async function loadSnapshots() {
-      try {
-        const data = await api('/admin/api/comparison/snapshots');
-        snapshots = data.snapshots || [];
-      } catch (e) {
-        snapshots = [];
-        $('#snapshot-error').style.display = 'block';
-        $('#snapshot-error').textContent = `스냅샷 불러오기 실패: ${e.message}`;
-      }
-      renderSnapshots();
-    }
-
-    function renderSnapshots() {
-      const list = $('#snapshot-list');
-      list.innerHTML = '';
-      if (!snapshots.length) {
-        const span = document.createElement('span');
-        span.className = 'loading';
-        span.textContent = '저장된 스냅샷이 없습니다.';
-        list.appendChild(span);
-        return;
-      }
-      snapshots.forEach(snap => {
-        const chip = document.createElement('span');
-        chip.className = 'snapshot-chip' + (snap.id === activeSnapshotId ? ' active' : '');
-        const label = document.createElement('span');
-        label.textContent = snap.name;
-        label.onclick = () => loadSnapshot(snap.id);
-        const xBtn = document.createElement('button');
-        xBtn.className = 'x';
-        xBtn.textContent = '×';
-        xBtn.title = '삭제';
-        xBtn.onclick = (ev) => {
-          ev.stopPropagation();
-          deleteSnapshot(snap.id);
-        };
-        chip.appendChild(label);
-        chip.appendChild(xBtn);
-        list.appendChild(chip);
-      });
-    }
-
-    async function saveSnapshot() {
-      const name = prompt('저장할 스냅샷 이름을 입력하세요.', `보드 ${new Date().toLocaleString()}`);
-      if (!name) return;
-      const payload = {
+    function buildPayload() {
+      return {
         graph_sets: Array.from(graphSets.values()).map(g => ({
           name: g.name,
           version_id: g.versionId,
@@ -461,14 +662,272 @@ def render_admin_comparison_page() -> HTMLResponse:
           hidden_lines: Array.from(g.hiddenLines || []),
         })),
       };
+    }
+
+    function snapshotUniverseIds(snap) {
+      const sets = snap?.payload?.graph_sets || [];
+      const ids = new Set();
+      sets.forEach(s => { if (s.version_id != null) ids.add(s.version_id); });
+      return Array.from(ids);
+    }
+
+    function snapshotUniverseNames(snap) {
+      return snapshotUniverseIds(snap).map(id => versionById[id]?.version_name || `v${id}`);
+    }
+
+    function fmtDate(iso) {
+      if (!iso) return '-';
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleString();
+    }
+
+    function setDirty(value) {
+      const next = !!value;
+      if (dirty === next) return;
+      dirty = next;
+      updateSaveButtons();
+    }
+
+    function updateSaveButtons() {
+      const trigger = $('#snapshot-trigger');
+      const saveChanges = $('#save-snapshot-changes');
+      const current = $('#snapshot-current');
+      const active = snapshots.find(s => s.id === activeSnapshotId);
+      if (active) {
+        current.textContent = active.folder ? `${active.folder} / ${active.name}` : active.name;
+      } else {
+        current.textContent = '— 새 보드 —';
+      }
+      trigger.classList.toggle('dirty', dirty && !!activeSnapshotId);
+      saveChanges.disabled = !activeSnapshotId || !dirty;
+      saveChanges.title = !activeSnapshotId
+        ? '먼저 저장된 스냅샷을 선택하세요.'
+        : (!dirty ? '바뀐 내용이 없습니다.' : '선택된 스냅샷을 덮어씁니다.');
+    }
+
+    async function loadSnapshots() {
+      try {
+        const data = await api('/admin/api/comparison/snapshots');
+        snapshots = data.snapshots || [];
+      } catch (e) {
+        snapshots = [];
+        $('#snapshot-error').style.display = 'block';
+        $('#snapshot-error').textContent = `스냅샷 불러오기 실패: ${e.message}`;
+      }
+      renderSnapshotPanel();
+      updateSaveButtons();
+    }
+
+    function renderSnapshotPanel() {
+      // Filter chips
+      const universesEl = $('#snapshot-filter-universes');
+      universesEl.innerHTML = '';
+      catalog.versions.forEach(v => {
+        const chip = document.createElement('span');
+        chip.className = 'filter-chip' + (snapshotFilter.universes.has(v.version_id) ? ' on' : '');
+        chip.textContent = v.version_name;
+        chip.onclick = () => {
+          if (snapshotFilter.universes.has(v.version_id)) snapshotFilter.universes.delete(v.version_id);
+          else snapshotFilter.universes.add(v.version_id);
+          renderSnapshotPanel();
+        };
+        universesEl.appendChild(chip);
+      });
+      const foldersEl = $('#snapshot-filter-folders');
+      foldersEl.innerHTML = '';
+      const folderSet = new Set();
+      snapshots.forEach(s => folderSet.add(s.folder || ''));
+      const folderList = Array.from(folderSet).sort((a, b) => a.localeCompare(b));
+      folderList.forEach(f => {
+        const chip = document.createElement('span');
+        chip.className = 'filter-chip' + (snapshotFilter.folders.has(f) ? ' on' : '');
+        chip.textContent = f || '(폴더 없음)';
+        chip.onclick = () => {
+          if (snapshotFilter.folders.has(f)) snapshotFilter.folders.delete(f);
+          else snapshotFilter.folders.add(f);
+          renderSnapshotPanel();
+        };
+        foldersEl.appendChild(chip);
+      });
+
+      // Folder suggestions for save dialog
+      const dl = $('#folder-suggest');
+      dl.innerHTML = '';
+      folderList.filter(Boolean).forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f;
+        dl.appendChild(opt);
+      });
+
+      // Filter + sort
+      const q = snapshotFilter.query.trim().toLowerCase();
+      let rows = snapshots.filter(s => {
+        if (snapshotFilter.universes.size) {
+          const ids = snapshotUniverseIds(s);
+          if (!ids.some(id => snapshotFilter.universes.has(id))) return false;
+        }
+        if (snapshotFilter.folders.size) {
+          if (!snapshotFilter.folders.has(s.folder || '')) return false;
+        }
+        if (q) {
+          const haystack = [
+            s.name,
+            s.folder || '',
+            ...snapshotUniverseNames(s),
+          ].join(' ').toLowerCase();
+          if (!haystack.includes(q)) return false;
+        }
+        return true;
+      });
+      rows = rows.sort((a, b) => {
+        switch (snapshotFilter.sort) {
+          case 'name_asc': return (a.name || '').localeCompare(b.name || '');
+          case 'created_desc': return (b.created_at || '').localeCompare(a.created_at || '');
+          case 'updated_asc': return (a.updated_at || '').localeCompare(b.updated_at || '');
+          case 'updated_desc':
+          default:
+            return (b.updated_at || '').localeCompare(a.updated_at || '');
+        }
+      });
+
+      const resultsEl = $('#snapshot-results');
+      resultsEl.innerHTML = '';
+      if (!rows.length) {
+        const empty = document.createElement('div');
+        empty.className = 'snapshot-results-empty';
+        empty.textContent = snapshots.length
+          ? '필터에 해당하는 스냅샷이 없습니다.'
+          : '저장된 스냅샷이 없습니다. "다른 이름으로 저장"으로 첫 스냅샷을 만들어보세요.';
+        resultsEl.appendChild(empty);
+        return;
+      }
+
+      // Group by folder
+      const byFolder = new Map();
+      rows.forEach(r => {
+        const key = r.folder || '';
+        if (!byFolder.has(key)) byFolder.set(key, []);
+        byFolder.get(key).push(r);
+      });
+      const folderOrder = Array.from(byFolder.keys()).sort((a, b) => {
+        if (!a) return 1;
+        if (!b) return -1;
+        return a.localeCompare(b);
+      });
+      folderOrder.forEach(folder => {
+        if (folderOrder.length > 1 || folder) {
+          const head = document.createElement('span');
+          head.className = 'snapshot-folder';
+          head.textContent = folder ? `📁 ${folder}` : '폴더 없음';
+          resultsEl.appendChild(head);
+        }
+        byFolder.get(folder).forEach(snap => resultsEl.appendChild(buildSnapshotRow(snap)));
+      });
+    }
+
+    function buildSnapshotRow(snap) {
+      const row = document.createElement('div');
+      row.className = 'snapshot-row' + (snap.id === activeSnapshotId ? ' active' : '');
+      row.onclick = () => { loadSnapshot(snap.id); closeSnapshotPanel(); };
+
+      const body = document.createElement('div');
+      body.className = 'snapshot-row-body';
+      const name = document.createElement('div');
+      name.className = 'snapshot-row-name';
+      name.textContent = snap.name;
+      body.appendChild(name);
+
+      const meta = document.createElement('div');
+      meta.className = 'snapshot-row-meta';
+      const updated = document.createElement('span');
+      updated.textContent = `수정: ${fmtDate(snap.updated_at)}`;
+      meta.appendChild(updated);
+      const created = document.createElement('span');
+      created.textContent = `생성: ${fmtDate(snap.created_at)}`;
+      meta.appendChild(created);
+      body.appendChild(meta);
+
+      const universes = snapshotUniverseNames(snap);
+      if (universes.length) {
+        const tags = document.createElement('div');
+        tags.className = 'snapshot-row-universes';
+        universes.forEach(name => {
+          const tag = document.createElement('span');
+          tag.className = 'universe-tag';
+          tag.textContent = name;
+          tags.appendChild(tag);
+        });
+        body.appendChild(tags);
+      }
+      row.appendChild(body);
+
+      const actions = document.createElement('div');
+      actions.className = 'snapshot-row-actions';
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.textContent = '삭제';
+      del.onclick = (ev) => { ev.stopPropagation(); deleteSnapshot(snap.id); };
+      actions.appendChild(del);
+      row.appendChild(actions);
+      return row;
+    }
+
+    function openSnapshotPanel() {
+      $('#snapshot-panel').hidden = false;
+      $('#snapshot-search').focus();
+    }
+    function closeSnapshotPanel() { $('#snapshot-panel').hidden = true; }
+    function toggleSnapshotPanel() {
+      const panel = $('#snapshot-panel');
+      panel.hidden ? openSnapshotPanel() : closeSnapshotPanel();
+    }
+
+    function openSaveModal({ mode, name, folder }) {
+      saveModalState = { mode };
+      $('#save-modal-title').textContent = mode === 'rename'
+        ? '스냅샷 이름·폴더 변경'
+        : '새 스냅샷 저장';
+      $('#save-modal-name').value = name || `보드 ${new Date().toLocaleString()}`;
+      $('#save-modal-folder').value = folder || '';
+      $('#save-modal').hidden = false;
+      setTimeout(() => $('#save-modal-name').focus(), 0);
+    }
+    function closeSaveModal() { $('#save-modal').hidden = true; }
+
+    async function confirmSaveModal() {
+      const name = $('#save-modal-name').value.trim();
+      const folder = $('#save-modal-folder').value.trim() || null;
+      if (!name) { alert('이름을 입력하세요.'); return; }
+      const payload = buildPayload();
       try {
         const created = await api('/admin/api/comparison/snapshots', {
           method: 'POST',
-          body: JSON.stringify({ name, payload }),
+          body: JSON.stringify({ name, folder, payload }),
         });
-        snapshots.unshift(created);
+        snapshots = [created, ...snapshots];
         activeSnapshotId = created.id;
-        renderSnapshots();
+        setDirty(false);
+        closeSaveModal();
+        renderSnapshotPanel();
+        updateSaveButtons();
+      } catch (e) {
+        alert(`저장 실패: ${e.message}`);
+      }
+    }
+
+    async function saveCurrentChanges() {
+      if (!activeSnapshotId) return;
+      const payload = buildPayload();
+      try {
+        const updated = await api(`/admin/api/comparison/snapshots/${activeSnapshotId}`, {
+          method: 'PUT',
+          body: JSON.stringify({ payload }),
+        });
+        snapshots = snapshots.map(s => s.id === updated.id ? updated : s);
+        setDirty(false);
+        renderSnapshotPanel();
+        updateSaveButtons();
       } catch (e) {
         alert(`저장 실패: ${e.message}`);
       }
@@ -479,8 +938,12 @@ def render_admin_comparison_page() -> HTMLResponse:
       try {
         await api(`/admin/api/comparison/snapshots/${id}`, { method: 'DELETE' });
         snapshots = snapshots.filter(s => s.id !== id);
-        if (activeSnapshotId === id) activeSnapshotId = null;
-        renderSnapshots();
+        if (activeSnapshotId === id) {
+          activeSnapshotId = null;
+          setDirty(false);
+        }
+        renderSnapshotPanel();
+        updateSaveButtons();
       } catch (e) {
         alert(`삭제 실패: ${e.message}`);
       }
@@ -490,8 +953,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       const snap = snapshots.find(s => s.id === id);
       if (!snap) return;
       activeSnapshotId = id;
-      renderSnapshots();
-      // Clear and rebuild graph sets
+      // Clear and rebuild graph sets without marking dirty
       graphSets.clear();
       $('#graph-grid').innerHTML = '';
       const sets = snap.payload?.graph_sets || [];
@@ -503,9 +965,12 @@ def render_admin_comparison_page() -> HTMLResponse:
           startDate: item.start_date,
           pointIndex: item.point_index,
           hiddenLines: item.hidden_lines || [],
-        });
+        }, { silent: true });
       }
       updateEmptyState();
+      setDirty(false);
+      renderSnapshotPanel();
+      updateSaveButtons();
     }
 
     // ── Graph set lifecycle ──
@@ -513,7 +978,8 @@ def render_admin_comparison_page() -> HTMLResponse:
       $('#empty-state').style.display = graphSets.size === 0 ? 'block' : 'none';
     }
 
-    function addGraphSet(initial) {
+    function addGraphSet(initial, opts) {
+      const silent = !!opts?.silent;
       const id = nextGraphSetId();
       const state = {
         id,
@@ -538,7 +1004,10 @@ def render_admin_comparison_page() -> HTMLResponse:
 
       const titleInput = $('.title-input', root);
       titleInput.value = state.name;
-      titleInput.addEventListener('input', () => { state.name = titleInput.value; });
+      titleInput.addEventListener('input', () => {
+        state.name = titleInput.value;
+        setDirty(true);
+      });
 
       const versionSelect = $('.ctrl-version', root);
       versionSelect.innerHTML = '';
@@ -552,6 +1021,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       versionSelect.addEventListener('change', () => {
         state.versionId = parseInt(versionSelect.value, 10);
         state.pointIndex = null;
+        setDirty(true);
         refreshFrontier(state);
       });
 
@@ -559,6 +1029,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       if (state.asOfDate) asOf.value = state.asOfDate;
       asOf.addEventListener('change', () => {
         state.asOfDate = asOf.value || null;
+        setDirty(true);
         refreshFrontier(state);
       });
 
@@ -566,6 +1037,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       if (state.startDate) startInput.value = state.startDate;
       startInput.addEventListener('change', () => {
         state.startDate = startInput.value || null;
+        setDirty(true);
         refreshBacktest(state);
       });
 
@@ -573,6 +1045,7 @@ def render_admin_comparison_page() -> HTMLResponse:
 
       $('#graph-grid').appendChild(node);
       updateEmptyState();
+      if (!silent) setDirty(true);
       refreshFrontier(state);
     }
 
@@ -582,6 +1055,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       st.rootEl?.remove();
       graphSets.delete(id);
       updateEmptyState();
+      setDirty(true);
     }
 
     // ── Frontier fetch + render ──
@@ -821,6 +1295,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         const nearest = findNearest(cx, cy);
         if (nearest.index !== state.pointIndex) {
           state.pointIndex = nearest.index;
+          setDirty(true);
           renderFrontier(state); // re-render dot
           applySelectionFromFrontier(state); // instant summary update from cached data
           // Debounce backtest call — only one heavyweight request after drag settles.
@@ -1089,6 +1564,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           if (!state.hiddenLines) state.hiddenLines = new Set();
           if (state.hiddenLines.has(line.key)) state.hiddenLines.delete(line.key);
           else state.hiddenLines.add(line.key);
+          setDirty(true);
           renderBacktest(state);
         });
         legendEl.appendChild(item);
@@ -1098,16 +1574,56 @@ def render_admin_comparison_page() -> HTMLResponse:
     // ── Boot ──
     document.addEventListener('DOMContentLoaded', async () => {
       $('#add-graph-set').addEventListener('click', () => addGraphSet());
-      $('#save-snapshot').addEventListener('click', saveSnapshot);
+      $('#save-snapshot-changes').addEventListener('click', saveCurrentChanges);
+      $('#save-snapshot-as').addEventListener('click', () => {
+        const active = snapshots.find(s => s.id === activeSnapshotId);
+        openSaveModal({
+          mode: 'create',
+          name: active ? `${active.name} 복사본` : '',
+          folder: active?.folder || '',
+        });
+      });
+
+      // Snapshot picker dropdown
+      $('#snapshot-trigger').addEventListener('click', toggleSnapshotPanel);
+      document.addEventListener('click', (ev) => {
+        const picker = document.querySelector('.snapshot-picker');
+        if (picker && !picker.contains(ev.target)) closeSnapshotPanel();
+      });
+      $('#snapshot-search').addEventListener('input', (ev) => {
+        snapshotFilter.query = ev.target.value;
+        renderSnapshotPanel();
+      });
+      $('#snapshot-sort').addEventListener('change', (ev) => {
+        snapshotFilter.sort = ev.target.value;
+        renderSnapshotPanel();
+      });
+
+      // Save modal
+      $('#save-modal-cancel').addEventListener('click', closeSaveModal);
+      $('#save-modal-confirm').addEventListener('click', confirmSaveModal);
+      $('#save-modal').addEventListener('click', (ev) => {
+        if (ev.target.id === 'save-modal') closeSaveModal();
+      });
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') {
+          closeSaveModal();
+          closeSnapshotPanel();
+        }
+      });
+
       try {
         await loadCatalog();
       } catch (e) {
-        $('#snapshot-loading').textContent = `카탈로그 로딩 실패: ${e.message}`;
+        const loading = $('#snapshot-error');
+        loading.style.display = 'block';
+        loading.textContent = `카탈로그 로딩 실패: ${e.message}`;
         return;
       }
       await loadSnapshots();
+      updateSaveButtons();
       // Add one default graph set on first load
-      if (graphSets.size === 0) addGraphSet();
+      if (graphSets.size === 0) addGraphSet({}, { silent: true });
     });
   </script>
 </body>

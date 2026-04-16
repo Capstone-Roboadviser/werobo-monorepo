@@ -54,11 +54,15 @@ class BacktestRequest(BaseModel):
 
 class SnapshotCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=120)
+    folder: str | None = Field(default=None, max_length=120)
     payload: dict = Field(default_factory=dict)
 
 
 class SnapshotUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
+    # Use a sentinel: omit folder to keep, send null/"" to clear, send string to set.
+    folder: str | None = Field(default=None, max_length=120)
+    folder_set: bool = Field(default=False, description="true이면 folder 필드를 적용합니다.")
     payload: dict | None = None
 
 
@@ -344,6 +348,7 @@ def create_snapshot(payload: SnapshotCreateRequest) -> dict[str, object]:
     return managed_universe_service.repository.create_admin_comparison_snapshot(
         name=payload.name,
         payload=payload.payload or {},
+        folder=payload.folder,
     )
 
 
@@ -352,11 +357,14 @@ def update_snapshot(
     snapshot_id: int, payload: SnapshotUpdateRequest
 ) -> dict[str, object]:
     _ensure_db_configured()
-    snap = managed_universe_service.repository.update_admin_comparison_snapshot(
-        snapshot_id=snapshot_id,
-        name=payload.name,
-        payload=payload.payload,
-    )
+    kwargs: dict[str, object] = {
+        "snapshot_id": snapshot_id,
+        "name": payload.name,
+        "payload": payload.payload,
+    }
+    if payload.folder_set:
+        kwargs["folder"] = payload.folder
+    snap = managed_universe_service.repository.update_admin_comparison_snapshot(**kwargs)
     if snap is None:
         raise HTTPException(status_code=404, detail=f"스냅샷 {snapshot_id}을(를) 찾을 수 없습니다.")
     return snap
