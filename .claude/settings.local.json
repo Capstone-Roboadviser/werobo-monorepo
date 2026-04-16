@@ -7,7 +7,8 @@
       "Bash(mv Back-End/robo_mobile_backend Back-End/robo_mobile_backend_old)",
       "Bash(mv Front-End/robo_mobile Front-End/robo_mobile_old)",
       "Bash(brew upgrade:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(python -m pytest tests/test_portfolio_analytics_service.py -x --tb=short)"
     ]
   }
 }

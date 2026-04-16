@@ -468,6 +468,14 @@ class PortfolioAnalyticsService:
                 date_index=date_index,
             )
             lines.extend(asset_lines)
+            market_line = self._build_market_equal_weight_line(
+                assets=assets,
+                instruments=instruments,
+                prices=prices,
+                date_index=date_index,
+            )
+            if market_line is not None:
+                lines.append(market_line)
         else:
             benchmark_line = self._build_equal_weight_asset_benchmark_line(
                 assets=assets,
@@ -619,6 +627,68 @@ class PortfolioAnalyticsService:
                     round((float(value) - 1.0) * 100, 4),
                 )
                 for date, value in benchmark_path.items()
+            ],
+        )
+
+    def _build_market_equal_weight_line(
+        self,
+        *,
+        assets: list[AssetClass],
+        instruments: list[StockInstrument],
+        prices: pd.DataFrame,
+        date_index: pd.DatetimeIndex,
+    ) -> ComparisonLine | None:
+        """시장 benchmark: equal-weight across every asset class except 성장주 (us_growth)."""
+        if prices.empty or len(date_index) < 2:
+            return None
+
+        market_assets = [asset for asset in assets if asset.code != "us_growth"]
+        if not market_assets:
+            return None
+
+        grouped: dict[str, list[StockInstrument]] = {}
+        for instrument in instruments:
+            grouped.setdefault(instrument.sector_code, []).append(instrument)
+
+        price_table = (
+            prices.assign(
+                ticker=prices["ticker"].astype(str).str.upper(),
+                date=pd.to_datetime(prices["date"]).dt.normalize(),
+            )
+            .pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
+            .sort_index()
+        )
+        if price_table.empty:
+            return None
+
+        sector_paths: dict[str, pd.Series] = {}
+        for asset in market_assets:
+            sector_path = self._build_sector_basket_path(
+                asset=asset,
+                sector_instruments=grouped.get(asset.code, []),
+                price_table=price_table,
+                date_index=date_index,
+            )
+            if sector_path is None:
+                return None
+            sector_paths[asset.code] = sector_path
+
+        market_path = pd.DataFrame(sector_paths).mean(axis=1)
+        market_path = market_path.replace([np.inf, -np.inf], np.nan).dropna()
+        if market_path.empty:
+            return None
+
+        return ComparisonLine(
+            key="market",
+            label="시장",
+            color="#475569",
+            style="dashed",
+            points=[
+                (
+                    date.strftime("%Y-%m-%d"),
+                    round((float(value) - 1.0) * 100, 4),
+                )
+                for date, value in market_path.items()
             ],
         )
 

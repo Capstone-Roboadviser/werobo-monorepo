@@ -228,6 +228,76 @@ def test_build_equal_weight_asset_benchmark_line_ignores_missing_fixed_five_perc
     ]
 
 
+def test_build_market_equal_weight_line_excludes_us_growth() -> None:
+    service = PortfolioAnalyticsService()
+    date_index = pd.to_datetime(["2026-03-01", "2026-03-02", "2026-03-03"])
+    prices = pd.DataFrame(
+        [
+            {"date": "2026-03-01", "ticker": "AAA", "adjusted_close": 100.0},
+            {"date": "2026-03-02", "ticker": "AAA", "adjusted_close": 110.0},
+            {"date": "2026-03-03", "ticker": "AAA", "adjusted_close": 120.0},
+            {"date": "2026-03-01", "ticker": "BBB", "adjusted_close": 200.0},
+            {"date": "2026-03-02", "ticker": "BBB", "adjusted_close": 220.0},
+            {"date": "2026-03-03", "ticker": "BBB", "adjusted_close": 240.0},
+            {"date": "2026-03-01", "ticker": "CCC", "adjusted_close": 100.0},
+            {"date": "2026-03-02", "ticker": "CCC", "adjusted_close": 150.0},
+            {"date": "2026-03-03", "ticker": "CCC", "adjusted_close": 200.0},
+        ]
+    )
+    instruments = [
+        StockInstrument(
+            ticker="AAA",
+            name="Value",
+            sector_code="us_value",
+            sector_name="미국 가치주",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+        StockInstrument(
+            ticker="BBB",
+            name="Gold",
+            sector_code="gold",
+            sector_name="금",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+        StockInstrument(
+            ticker="CCC",
+            name="Growth",
+            sector_code="us_growth",
+            sector_name="미국 성장주",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+    ]
+    assets = [
+        _asset("us_value", "미국 가치주"),
+        _asset("gold", "금"),
+        _asset("us_growth", "미국 성장주"),
+    ]
+
+    line = service._build_market_equal_weight_line(
+        assets=assets,
+        instruments=instruments,
+        prices=prices,
+        date_index=date_index,
+    )
+
+    # 시장 averages us_value (+10%/day) and gold (+10%/day) only; CCC is dropped.
+    assert line is not None
+    assert line.key == "market"
+    assert line.label == "시장"
+    assert line.style == "dashed"
+    assert line.points == [
+        ("2026-03-01", 0.0),
+        ("2026-03-02", 10.0),
+        ("2026-03-03", 20.0),
+    ]
+
+
 def test_build_fixed_bond_line_is_linear() -> None:
     service = PortfolioAnalyticsService()
     date_index = pd.to_datetime(["2026-03-01", "2026-09-01", "2027-03-01"])
