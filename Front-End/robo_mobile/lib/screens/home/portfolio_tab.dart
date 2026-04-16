@@ -10,6 +10,25 @@ import '../../services/mobile_backend_api.dart';
 import '../onboarding/widgets/portfolio_charts.dart';
 import '../onboarding/widgets/vestor_pie_chart.dart';
 
+List<ChartLine> buildHomePortfolioComparisonLines(
+  PortfolioState portfolioState,
+) {
+  // Keep the raw backtest series so Home and Confirmation render the same
+  // comparison baseline.
+  return portfolioState.comparisonLines;
+}
+
+List<DateTime> buildHomePortfolioRebalanceDates(
+  PortfolioState portfolioState,
+) {
+  final portfolioStartedAt =
+      DateTime.tryParse(portfolioState.accountSummary?.startedAt ?? '');
+  return filterDatesFromStartDate(
+    portfolioState.rebalanceDates,
+    startDate: portfolioStartedAt,
+  );
+}
+
 class PortfolioTab extends StatefulWidget {
   const PortfolioTab({super.key});
 
@@ -146,20 +165,11 @@ class _PortfolioTabState extends State<PortfolioTab> {
     final tc = WeRoboThemeColors.of(context);
     final portfolioState = PortfolioStateProvider.of(context);
     final type = portfolioState.type;
-    final portfolioStartedAt =
-        DateTime.tryParse(portfolioState.accountSummary?.startedAt ?? '');
     final selectedPortfolio = portfolioState.selectedPortfolio;
     final categories = portfolioState.categories;
     final details = portfolioState.categoryDetails;
-    final lines = filterChartLinesFromStartDate(
-      portfolioState.comparisonLines,
-      startDate: portfolioStartedAt,
-      rebaseToZero: true,
-    );
-    final rebalanceDates = filterDatesFromStartDate(
-      portfolioState.rebalanceDates,
-      startDate: portfolioStartedAt,
-    );
+    final comparisonLines = buildHomePortfolioComparisonLines(portfolioState);
+    final rebalanceDates = buildHomePortfolioRebalanceDates(portfolioState);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -234,7 +244,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
                       key: ValueKey('trend_${type.name}'),
                       type: type,
                       volatilityPoints: _volatilityPoints,
-                      comparisonLines: lines,
+                      comparisonLines: comparisonLines,
                       rebalanceDates: rebalanceDates,
                       expectedAnnualReturn: portfolioState.expectedReturn,
                       isLoading: _isLoadingHistory,
