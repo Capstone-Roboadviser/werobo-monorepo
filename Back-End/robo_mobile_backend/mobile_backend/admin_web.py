@@ -1929,10 +1929,17 @@ def render_admin_page() -> HTMLResponse:
       setRefreshLoadingState(true, targetLabel);
       try {
         const payload = {
-          version_id: versionId,
           refresh_mode: $('#refresh-mode').value,
           full_lookback_years: Number($('#lookback-years').value || '5'),
         };
+        const normalizedVersionId = typeof versionId === 'number'
+          ? versionId
+          : (typeof versionId === 'string' && versionId.trim()
+            ? Number(versionId)
+            : null);
+        if (Number.isInteger(normalizedVersionId) && normalizedVersionId > 0) {
+          payload.version_id = normalizedVersionId;
+        }
         const result = await requestJson('/admin/api/prices/refresh', {
           method: 'POST',
           body: JSON.stringify(payload),
