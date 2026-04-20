@@ -1556,14 +1556,57 @@ def render_admin_page() -> HTMLResponse:
       }).filter((item) => item.ticker && item.name && item.sector_code && item.sector_name && item.market && item.currency);
     }
 
+    function formatErrorDetail(detail) {
+      if (typeof detail === 'string') {
+        return detail.trim();
+      }
+      if (Array.isArray(detail)) {
+        return detail
+          .map((item) => formatErrorDetail(item))
+          .filter(Boolean)
+          .join('\\n');
+      }
+      if (detail && typeof detail === 'object') {
+        const loc = Array.isArray(detail.loc)
+          ? detail.loc.map((item) => String(item)).join(' > ')
+          : '';
+        const msg = typeof detail.msg === 'string'
+          ? detail.msg
+          : (typeof detail.message === 'string' ? detail.message : '');
+        if (msg) {
+          return loc ? `${loc}: ${msg}` : msg;
+        }
+        return Object.entries(detail)
+          .map(([key, value]) => {
+            const nested = formatErrorDetail(value);
+            return nested ? `${key}: ${nested}` : '';
+          })
+          .filter(Boolean)
+          .join('\\n');
+      }
+      return '';
+    }
+
     async function requestJson(url, options = {}) {
       const response = await fetch(url, {
         headers: { 'Content-Type': 'application/json' },
         ...options,
       });
-      const data = await response.json().catch(() => ({}));
+      const rawText = await response.text();
+      let data = {};
+      if (rawText) {
+        try {
+          data = JSON.parse(rawText);
+        } catch (_) {
+          data = { detail: rawText };
+        }
+      }
       if (!response.ok) {
-        throw new Error(data.detail || '요청 처리 중 오류가 발생했습니다.');
+        const detail =
+          formatErrorDetail(data.detail)
+          || formatErrorDetail(data)
+          || `요청 처리 중 오류가 발생했습니다. (HTTP ${response.status})`;
+        throw new Error(detail);
       }
       return data;
     }
