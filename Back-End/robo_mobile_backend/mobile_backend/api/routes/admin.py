@@ -265,6 +265,12 @@ def delete_universe_version(version_id: int) -> ManagedUniverseDeleteResponse:
 def activate_universe_version(version_id: int) -> ManagedUniverseVersionResponse:
     try:
         version = managed_universe_service.activate_version(version_id)
+        frontier_snapshot_service.rebuild_managed_universe_snapshots(
+            version_id=version.version_id,
+        )
+        comparison_backtest_snapshot_service.rebuild_managed_universe_snapshots(
+            version_id=version.version_id,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _version_response(version)
