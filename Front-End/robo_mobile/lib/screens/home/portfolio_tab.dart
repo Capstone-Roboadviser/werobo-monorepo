@@ -13,9 +13,12 @@ import '../onboarding/widgets/vestor_pie_chart.dart';
 List<ChartLine> buildHomePortfolioComparisonLines(
   PortfolioState portfolioState,
 ) {
-  // Keep the raw backtest series so Home and Confirmation render the same
-  // comparison baseline.
-  return portfolioState.comparisonLines;
+  final portfolioStartedAt =
+      DateTime.tryParse(portfolioState.accountSummary?.startedAt ?? '');
+  return filterChartLinesFromStartDate(
+    portfolioState.comparisonLines,
+    startDate: portfolioStartedAt,
+  );
 }
 
 List<DateTime> buildHomePortfolioRebalanceDates(

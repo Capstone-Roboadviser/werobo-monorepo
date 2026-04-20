@@ -131,12 +131,13 @@ void main() {
       state.dispose();
     });
 
-    test('keeps raw comparison lines even when account started later', () {
+    test('filters comparison lines from the account start date', () {
       final lines = buildHomePortfolioComparisonLines(state);
       final portfolioLine = lines.singleWhere((line) => line.key == 'balanced');
 
-      expect(portfolioLine.points, hasLength(3));
-      expect(portfolioLine.points.first.value, 0.02);
+      expect(portfolioLine.points, hasLength(2));
+      expect(portfolioLine.points.first.date, DateTime(2026, 3, 1));
+      expect(portfolioLine.points.first.value, 0.07);
       expect(portfolioLine.points.last.value, 0.09);
     });
 
