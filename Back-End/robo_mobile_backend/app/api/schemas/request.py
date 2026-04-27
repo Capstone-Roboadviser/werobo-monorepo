@@ -138,6 +138,10 @@ class ComparisonBacktestRequest(BaseModel):
         default=None,
         description="현재 선택 포트폴리오 코드. 없으면 `selected` 라인 키를 사용합니다.",
     )
+    start_date: str | None = Field(
+        default=None,
+        description="비교 백테스트 시작일 (YYYY-MM-DD). 있으면 해당 날짜 이후 데이터만 사용합니다.",
+    )
 
 
 class RebalanceSimulationRequest(BaseModel):

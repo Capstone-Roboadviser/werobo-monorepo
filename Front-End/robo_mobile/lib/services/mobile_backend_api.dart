@@ -213,6 +213,7 @@ class MobileBackendApi {
     String? preferredDataSource,
     Map<String, double>? stockWeights,
     String? portfolioCode,
+    DateTime? startDate,
   }) {
     return _postWithFallback(
       path: '/portfolios/comparison-backtest',
@@ -221,6 +222,7 @@ class MobileBackendApi {
         if (stockWeights != null) 'stock_weights': stockWeights,
         if (portfolioCode != null && portfolioCode.isNotEmpty)
           'portfolio_code': portfolioCode,
+        if (startDate != null) 'start_date': _formatDate(startDate),
       },
       parser: MobileComparisonBacktestResponse.fromJson,
       timeout: _defaultTimeout,

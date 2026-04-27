@@ -64,6 +64,7 @@ class _HomeShellState extends State<HomeShell> {
             state.accountSummary?.dataSource,
         stockWeights: portfolio?.stockWeights,
         portfolioCode: portfolio?.code,
+        startDate: DateTime.tryParse(state.accountSummary?.startedAt ?? ''),
       );
       if (!mounted) return;
       PortfolioStateProvider.of(context).setBacktest(bt);

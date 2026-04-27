@@ -137,8 +137,8 @@ void main() {
 
       expect(portfolioLine.points, hasLength(2));
       expect(portfolioLine.points.first.date, DateTime(2026, 3, 1));
-      expect(portfolioLine.points.first.value, 0.07);
-      expect(portfolioLine.points.last.value, 0.09);
+      expect(portfolioLine.points.first.value, 0.0);
+      expect(portfolioLine.points.last.value, closeTo(0.02, 1e-9));
     });
 
     test('still filters rebalance dates from the account start date', () {

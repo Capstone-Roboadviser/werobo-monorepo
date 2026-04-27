@@ -18,6 +18,7 @@ List<ChartLine> buildHomePortfolioComparisonLines(
   return filterChartLinesFromStartDate(
     portfolioState.comparisonLines,
     startDate: portfolioStartedAt,
+    rebaseToZero: true,
   );
 }
 
@@ -80,14 +81,16 @@ class _PortfolioTabState extends State<PortfolioTab> {
   }
 
   String _backtestSignature(MobilePortfolioRecommendation? portfolio) {
+    final startedAt =
+        PortfolioStateProvider.of(context).accountSummary?.startedAt ?? '';
     if (portfolio == null) {
-      return 'generic';
+      return 'generic|$startedAt';
     }
     final sortedKeys = portfolio.stockWeights.keys.toList()..sort();
     final pairs = sortedKeys
         .map((key) => '$key:${portfolio.stockWeights[key]}')
         .join(',');
-    return '${portfolio.code}|$pairs';
+    return '${portfolio.code}|$pairs|$startedAt';
   }
 
   Future<void> _fetchBacktest(MobilePortfolioRecommendation? portfolio) async {
@@ -100,6 +103,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
             state.accountSummary?.dataSource,
         stockWeights: portfolio?.stockWeights,
         portfolioCode: portfolio?.code,
+        startDate: DateTime.tryParse(state.accountSummary?.startedAt ?? ''),
       );
       if (!mounted) return;
       if (_loadedBacktestSignature != signature) return;
