@@ -46,8 +46,8 @@ class _DigestScreenState extends State<DigestScreen> {
     try {
       if (alreadySeen) {
         // Skip loading animation for already-seen digests
-        final result = await MobileBackendApi.instance
-            .fetchDigest(accessToken: token);
+        final result =
+            await MobileBackendApi.instance.fetchDigest(accessToken: token);
         if (mounted) {
           setState(() {
             _digest = result;
@@ -58,13 +58,11 @@ class _DigestScreenState extends State<DigestScreen> {
         // Show full loading animation for new digests
         const minDuration = Duration(milliseconds: 5500);
         final results = await Future.wait([
-          MobileBackendApi.instance
-              .fetchDigest(accessToken: token),
+          MobileBackendApi.instance.fetchDigest(accessToken: token),
           Future<void>.delayed(minDuration),
         ]);
         if (mounted) {
-          final result =
-              results[0] as MobileDigestResponse;
+          final result = results[0] as MobileDigestResponse;
           await state.markDigestSeen(result.digestDate);
           setState(() {
             _digest = result;
@@ -75,7 +73,10 @@ class _DigestScreenState extends State<DigestScreen> {
     } on MobileBackendException catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.message;
+          _error = e.statusCode == 422
+              ? '주간 다이제스트를 만들기 위한 최근 데이터가 아직 부족합니다. '
+                  '다음 가격 갱신 후 다시 확인해주세요.'
+              : e.message;
           _loading = false;
         });
       }
@@ -167,8 +168,7 @@ class _DigestContent extends StatelessWidget {
         const SizedBox(height: WeRoboSpacing.xl),
 
         // Asset return bar chart
-        if (digest.drivers.isNotEmpty ||
-            digest.detractors.isNotEmpty) ...[
+        if (digest.drivers.isNotEmpty || digest.detractors.isNotEmpty) ...[
           ReturnBarChart(
             drivers: digest.drivers,
             detractors: digest.detractors,
@@ -260,8 +260,7 @@ class _SummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final isNegative = digest.totalReturnWon < 0;
-    final returnColor =
-        isNegative ? WeRoboColors.error : tc.accent;
+    final returnColor = isNegative ? WeRoboColors.error : tc.accent;
     final sign = isNegative ? '' : '+';
     final wonStr = _formatWon(digest.totalReturnWon);
 
@@ -305,8 +304,7 @@ class _SummaryCard extends StatelessWidget {
           if (digest.sourcesUsed.isNotEmpty) ...[
             const SizedBox(height: 12),
             Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
               ),
@@ -339,9 +337,7 @@ class _SummaryCard extends StatelessWidget {
     if (names.isEmpty) return TextSpan(text: narrative);
 
     // Build regex matching any asset name
-    final escaped = names
-        .map((n) => RegExp.escape(n))
-        .toList()
+    final escaped = names.map((n) => RegExp.escape(n)).toList()
       ..sort((a, b) => b.length.compareTo(a.length));
     final pattern = RegExp(escaped.join('|'));
 
@@ -378,16 +374,14 @@ class _SummaryCard extends StatelessWidget {
       '시장 대비 $sign7${excess7.toStringAsFixed(1)}%',
     ];
     if (d.benchmarkBondReturnPct != null) {
-      final excessBond =
-          d.totalReturnPct - d.benchmarkBondReturnPct!;
+      final excessBond = d.totalReturnPct - d.benchmarkBondReturnPct!;
       final signBond = excessBond >= 0 ? '+' : '';
       parts.add(
         '채권 대비 $signBond${excessBond.toStringAsFixed(1)}%',
       );
     }
     final verb = excess7 >= 0 ? '초과 수익' : '하회';
-    final benchmarkSentence =
-        '${parts.join(", ")} $verb을 기록했습니다.';
+    final benchmarkSentence = '${parts.join(", ")} $verb을 기록했습니다.';
 
     final dotIdx = narrative.indexOf('. ');
     if (dotIdx >= 0) {
@@ -401,9 +395,9 @@ class _SummaryCard extends StatelessWidget {
   String _formatWon(double won) {
     final abs = won.abs().round();
     final formatted = abs.toString().replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]},',
-    );
+          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]},',
+        );
     return won < 0 ? '-₩$formatted' : '₩$formatted';
   }
 }

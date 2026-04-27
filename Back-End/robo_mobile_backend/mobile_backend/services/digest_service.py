@@ -6,10 +6,14 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
-from app.core.config import RISK_FREE_RATE
+import pandas as pd
+
+from app.core.config import DEMO_STOCK_PRICES_PATH, RISK_FREE_RATE
 from app.data.managed_universe_repository import ManagedUniverseRepository
+from app.data.stock_repository import StockDataRepository
 from mobile_backend.data.account_repository import PortfolioAccountRepository
 from mobile_backend.data.digest_repository import DigestRepository
+from mobile_backend.domain.enums import SimulationDataSource
 from mobile_backend.services.news_aggregator import (
     fetch_news_for_tickers,
     get_sources_used,
@@ -336,6 +340,49 @@ class DigestService:
     def initialize_storage(self) -> None:
         self.digest_repo.initialize()
 
+    def _load_digest_prices(
+        self,
+        *,
+        account: dict,
+        tickers: list[str],
+        start_date: str,
+        end_date: str,
+    ) -> pd.DataFrame:
+        data_source_value = str(
+            account.get("data_source") or SimulationDataSource.MANAGED_UNIVERSE.value
+        )
+        try:
+            data_source = SimulationDataSource(data_source_value)
+        except ValueError:
+            data_source = SimulationDataSource.MANAGED_UNIVERSE
+
+        if data_source == SimulationDataSource.STOCK_COMBINATION_DEMO:
+            prices_df = StockDataRepository().load_stock_prices(str(DEMO_STOCK_PRICES_PATH)).copy()
+            prices_df["ticker"] = prices_df["ticker"].astype(str).str.strip().str.upper()
+            prices_df["date"] = pd.to_datetime(prices_df["date"], errors="coerce").dt.normalize()
+            prices_df["adjusted_close"] = pd.to_numeric(
+                prices_df["adjusted_close"],
+                errors="coerce",
+            )
+            start_ts = pd.Timestamp(start_date).normalize()
+            end_ts = pd.Timestamp(end_date).normalize()
+            prices_df = prices_df[
+                prices_df["ticker"].isin(sorted({str(ticker).strip().upper() for ticker in tickers if ticker}))
+            ]
+            prices_df = prices_df[
+                (prices_df["date"] >= start_ts)
+                & (prices_df["date"] <= end_ts)
+            ]
+            return prices_df.dropna(subset=["date", "ticker", "adjusted_close"])[
+                ["date", "ticker", "adjusted_close"]
+            ]
+
+        return self.universe_repo.load_prices_for_tickers(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
     def generate(self, account: dict) -> dict:
         """Generate or return cached digest for an account.
 
@@ -376,7 +423,8 @@ class DigestService:
 
         # Load prices
         tickers = [a["ticker"] for a in stock_allocations]
-        prices_df = self.universe_repo.load_prices_for_tickers(
+        prices_df = self._load_digest_prices(
+            account=account,
             tickers=tickers,
             start_date=start_date.isoformat(),
             end_date=end_date.isoformat(),
