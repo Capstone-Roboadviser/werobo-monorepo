@@ -132,7 +132,6 @@ def _basis_date_window(version_id: int) -> dict[str, object] | None:
             aggfunc="last",
         )
         .sort_index()
-        .ffill()
         .dropna(how="any")
     )
     if len(common_prices.index) < MINIMUM_HISTORY_ROWS + 2:
