@@ -221,4 +221,89 @@ void main() {
       expect(portfolioLine.points.first.value, 0.0);
     },
   );
+
+  testWidgets(
+    'keeps portfolio and benchmark styles stable when market is enabled',
+    (tester) async {
+      final comparisonLines = [
+        ChartLine(
+          key: 'balanced_expected',
+          label: '균형형 기대수익',
+          color: WeRoboColors.chartGreen,
+          dashed: true,
+          points: [
+            ChartPoint(date: DateTime(2026, 1, 1), value: 0.00),
+            ChartPoint(date: DateTime(2026, 2, 1), value: 0.02),
+          ],
+        ),
+        ChartLine(
+          key: 'account_portfolio',
+          label: '계좌 포트폴리오',
+          color: Colors.orange,
+          dashed: true,
+          points: [
+            ChartPoint(date: DateTime(2026, 1, 1), value: 0.00),
+            ChartPoint(date: DateTime(2026, 2, 1), value: 0.06),
+          ],
+        ),
+        ChartLine(
+          key: 'benchmark_avg',
+          label: '6자산 단순평균',
+          color: WeRoboColors.chartGreen,
+          dashed: true,
+          points: [
+            ChartPoint(date: DateTime(2026, 1, 1), value: 0.00),
+            ChartPoint(date: DateTime(2026, 2, 1), value: 0.03),
+          ],
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WeRoboTheme.light,
+          home: Scaffold(
+            body: SizedBox(
+              height: 640,
+              child: PortfolioCharts(
+                type: InvestmentType.balanced,
+                comparisonLines: comparisonLines,
+                expectedAnnualReturn: 0.12,
+                useFallbackMock: false,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('포트폴리오 비교'));
+      await tester.pumpAndSettle();
+
+      final customPaint =
+          tester.widgetList<CustomPaint>(find.byType(CustomPaint)).firstWhere(
+                (widget) =>
+                    widget.painter != null &&
+                    widget.painter.runtimeType
+                        .toString()
+                        .contains('MultiLineChartPainter'),
+              );
+      final painter = customPaint.painter as dynamic;
+      final lines = painter.lines as List<ChartLine>;
+      final portfolioLine =
+          lines.singleWhere((line) => line.key == 'account_portfolio');
+      final marketLine =
+          lines.singleWhere((line) => line.key == 'benchmark_avg');
+      final expectedReturnLine =
+          lines.singleWhere((line) => line.key == 'expected_return');
+
+      expect(portfolioLine.label, '포트폴리오');
+      expect(portfolioLine.color, WeRoboColors.primary);
+      expect(portfolioLine.dashed, isFalse);
+      expect(marketLine.label, '시장');
+      expect(marketLine.color, const Color(0xFF64748B));
+      expect(marketLine.dashed, isFalse);
+      expect(expectedReturnLine.color,
+          WeRoboColors.chartGreen.withValues(alpha: 0.85));
+      expect(expectedReturnLine.dashed, isTrue);
+    },
+  );
 }

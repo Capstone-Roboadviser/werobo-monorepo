@@ -352,8 +352,8 @@ class _ComparisonViewState extends State<_ComparisonView>
         return ChartLine(
           key: line.key,
           label: '시장',
-          color: line.color,
-          dashed: line.dashed,
+          color: const Color(0xFF64748B),
+          dashed: false,
           points: line.points,
         );
       }
@@ -371,19 +371,23 @@ class _ComparisonViewState extends State<_ComparisonView>
     }
 
     for (final line in rawLines) {
-      if (line.key == 'benchmark_avg' || line.key == 'treasury') {
-        continue;
+      if (_isPortfolioCandidateLine(line)) {
+        return _normalizePortfolioLine(line);
       }
-      return _normalizePortfolioLine(line);
     }
     return null;
   }
 
-  ChartLine _normalizePortfolioLine(ChartLine line) {
-    if (line.key != 'selected') {
-      return line;
-    }
+  bool _isPortfolioCandidateLine(ChartLine line) {
+    return line.key != 'benchmark_avg' &&
+        line.key != 'treasury' &&
+        line.key != 'bond_trend' &&
+        line.key != 'expected_return' &&
+        !line.key.endsWith('_expected') &&
+        !line.label.contains('기대수익');
+  }
 
+  ChartLine _normalizePortfolioLine(ChartLine line) {
     final normalizedLabel =
         line.label.trim().isEmpty || line.label == 'selected'
             ? '선택 포트폴리오'
@@ -406,8 +410,8 @@ class _ComparisonViewState extends State<_ComparisonView>
       result.add(ChartLine(
         key: portfolioLine.key,
         label: '포트폴리오',
-        color: portfolioLine.color,
-        dashed: portfolioLine.dashed,
+        color: WeRoboColors.primary,
+        dashed: false,
         points: portfolioLine.points,
       ));
     }
