@@ -20,7 +20,11 @@ from app.domain.models import (
     StockInstrument,
 )
 from app.engine.comparison import ComparisonLine, ComparisonResult, build_comparison
+from app.engine.rebalance import DRIFT_THRESHOLD_DEFAULT, simulate_two_stage_rebalance
 from app.services.portfolio_service import PortfolioSimulationService
+
+
+_CONTRIBUTION_SIMULATION_BASE_INVESTMENT = 1_000_000.0
 
 
 class PortfolioAnalyticsService:
@@ -382,6 +386,16 @@ class PortfolioAnalyticsService:
             date_index=pivoted.index,
             per_asset_lines=per_asset_lines,
         )
+        if per_asset_lines:
+            extra_lines.extend(
+                self._build_portfolio_contribution_lines(
+                    assets=assets,
+                    instruments=instruments,
+                    price_table=pivoted,
+                    portfolio_weights=portfolio_weights,
+                    rebalance_enabled=rebalance_enabled,
+                )
+            )
 
         line_key = str(portfolio_code or "selected").strip() or "selected"
         try:
@@ -633,6 +647,149 @@ class PortfolioAnalyticsService:
                 )
             )
         return lines
+
+    def _build_portfolio_contribution_lines(
+        self,
+        *,
+        assets: list[AssetClass],
+        instruments: list[StockInstrument],
+        price_table: pd.DataFrame,
+        portfolio_weights: dict[str, float],
+        rebalance_enabled: bool,
+    ) -> list[ComparisonLine]:
+        if price_table.empty or len(price_table.index) < 2:
+            return []
+
+        available_weights = {
+            str(ticker).upper(): float(weight)
+            for ticker, weight in portfolio_weights.items()
+            if str(ticker).upper() in price_table.columns and float(weight) > 0
+        }
+        total_weight = sum(available_weights.values())
+        if total_weight <= 0:
+            return []
+
+        normalized_weights = {
+            ticker: weight / total_weight
+            for ticker, weight in available_weights.items()
+        }
+        tickers = list(normalized_weights.keys())
+        sector_by_ticker = {
+            instrument.ticker.upper(): instrument.sector_code
+            for instrument in instruments
+        }
+        tickers_by_sector: dict[str, list[str]] = {}
+        for ticker in tickers:
+            sector_code = sector_by_ticker.get(ticker)
+            if sector_code is None:
+                continue
+            tickers_by_sector.setdefault(sector_code, []).append(ticker)
+        if not tickers_by_sector:
+            return []
+
+        aligned_prices = price_table[tickers].astype(float).copy()
+        if rebalance_enabled:
+            contribution_points = self._build_rebalanced_contribution_points(
+                aligned_prices=aligned_prices,
+                portfolio_weights=normalized_weights,
+                tickers_by_sector=tickers_by_sector,
+            )
+        else:
+            contribution_points = self._build_buy_and_hold_contribution_points(
+                aligned_prices=aligned_prices,
+                portfolio_weights=normalized_weights,
+                tickers_by_sector=tickers_by_sector,
+            )
+
+        lines: list[ComparisonLine] = []
+        for asset in assets:
+            points = contribution_points.get(asset.code)
+            if not points:
+                continue
+            color = getattr(asset, "color", None) or "#64748B"
+            lines.append(
+                ComparisonLine(
+                    key=f"contribution_{asset.code}",
+                    label=f"{asset.name} 기여도",
+                    color=str(color),
+                    style="solid",
+                    points=points,
+                )
+            )
+        return lines
+
+    def _build_buy_and_hold_contribution_points(
+        self,
+        *,
+        aligned_prices: pd.DataFrame,
+        portfolio_weights: dict[str, float],
+        tickers_by_sector: dict[str, list[str]],
+    ) -> dict[str, list[tuple[str, float]]]:
+        base_prices = aligned_prices.iloc[0].replace(0, np.nan)
+        relative_returns = (
+            aligned_prices.divide(base_prices)
+            .replace([np.inf, -np.inf], np.nan)
+            .subtract(1.0)
+        )
+
+        contribution_points: dict[str, list[tuple[str, float]]] = {}
+        for sector_code, tickers in tickers_by_sector.items():
+            sector_contribution = relative_returns[tickers].mul(
+                pd.Series({ticker: portfolio_weights[ticker] for ticker in tickers}),
+                axis=1,
+            ).sum(axis=1, min_count=1)
+            sector_contribution = sector_contribution.replace(
+                [np.inf, -np.inf],
+                np.nan,
+            ).dropna()
+            if sector_contribution.empty:
+                continue
+            contribution_points[sector_code] = [
+                (
+                    date.strftime("%Y-%m-%d"),
+                    round(float(value) * 100, 4),
+                )
+                for date, value in sector_contribution.items()
+            ]
+        return contribution_points
+
+    def _build_rebalanced_contribution_points(
+        self,
+        *,
+        aligned_prices: pd.DataFrame,
+        portfolio_weights: dict[str, float],
+        tickers_by_sector: dict[str, list[str]],
+    ) -> dict[str, list[tuple[str, float]]]:
+        simulation = simulate_two_stage_rebalance(
+            aligned_prices,
+            portfolio_weights,
+            _CONTRIBUTION_SIMULATION_BASE_INVESTMENT,
+            drift_threshold=DRIFT_THRESHOLD_DEFAULT,
+            max_points=None,
+        )
+        initial_values = {
+            ticker: _CONTRIBUTION_SIMULATION_BASE_INVESTMENT * weight
+            for ticker, weight in portfolio_weights.items()
+        }
+
+        contribution_points: dict[str, list[tuple[str, float]]] = {}
+        for sector_code, tickers in tickers_by_sector.items():
+            initial_sector_value = sum(initial_values[ticker] for ticker in tickers)
+            points: list[tuple[str, float]] = []
+            for point in simulation.time_series:
+                sector_value = sum(
+                    point.asset_values.get(ticker, 0.0)
+                    for ticker in tickers
+                )
+                contribution_pct = (
+                    (sector_value - initial_sector_value)
+                    / _CONTRIBUTION_SIMULATION_BASE_INVESTMENT
+                    * 100
+                )
+                points.append((point.date, round(contribution_pct, 4)))
+            if points:
+                contribution_points[sector_code] = points
+        return contribution_points
 
     def _build_equal_weight_asset_benchmark_line(
         self,

@@ -795,6 +795,13 @@ def render_admin_comparison_page() -> HTMLResponse:
     .backtest-picker {
       width: min(320px, 100%);
     }
+    .backtest-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .mode-tabs {
       display: inline-flex;
       gap: 4px;
@@ -813,6 +820,20 @@ def render_admin_comparison_page() -> HTMLResponse:
       background: var(--accent);
       color: var(--accent-fg);
       border-color: var(--accent);
+    }
+    .contribution-toggle {
+      min-width: 74px;
+      background: var(--surface-2);
+      color: var(--fg-2);
+      border-color: var(--line);
+    }
+    .contribution-toggle[aria-pressed="true"] {
+      background: var(--fg);
+      color: var(--surface);
+      border-color: var(--fg);
+    }
+    .contribution-toggle[hidden] {
+      display: none;
     }
     .backtest-chart {
       min-height: 520px;
@@ -981,6 +1002,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       .controls { grid-template-columns: 1fr; }
       .board-toolbar, .backtest-toolbar { align-items: stretch; flex-direction: column; }
       .board-toolbar .field, .backtest-picker { width: 100%; max-width: none; }
+      .backtest-actions { justify-content: flex-start; }
       .rail { padding: 10px var(--sp-4); flex-wrap: wrap; }
       .shell { padding: var(--sp-4); }
     }
@@ -1096,9 +1118,12 @@ def render_admin_comparison_page() -> HTMLResponse:
           <label for="single-graph-select">포트폴리오 선택</label>
           <select id="single-graph-select"></select>
         </div>
-        <div class="mode-tabs" role="group" aria-label="백테스트 모드">
-          <button type="button" id="mode-single" aria-pressed="true">단일</button>
-          <button type="button" id="mode-compare" aria-pressed="false">비교</button>
+        <div class="backtest-actions">
+          <div class="mode-tabs" role="group" aria-label="백테스트 모드">
+            <button type="button" id="mode-single" aria-pressed="true">단일</button>
+            <button type="button" id="mode-compare" aria-pressed="false">비교</button>
+          </div>
+          <button type="button" id="contribution-toggle" class="contribution-toggle" aria-pressed="false">기여도</button>
         </div>
       </div>
       <div class="chart-block backtest-chart">
@@ -1199,6 +1224,7 @@ def render_admin_comparison_page() -> HTMLResponse:
     let boardBasisDate = null;
     let backtestMode = 'single';
     let selectedBacktestGraphId = null;
+    let contributionMode = false;
     let compareHiddenLines = new Set();
     const snapshotFilter = {
       query: '',
@@ -1268,6 +1294,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       return {
         board_basis_date: boardBasisDate,
         backtest_mode: backtestMode,
+        contribution_mode: contributionMode,
         selected_graph_index: selectedGraphIndex >= 0 ? selectedGraphIndex : 0,
         compare_hidden_lines: Array.from(compareHiddenLines),
         graph_sets: graphList.map(g => {
@@ -1597,6 +1624,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       }
       const graphList = Array.from(graphSets.values());
       backtestMode = snap.payload?.backtest_mode === 'compare' ? 'compare' : 'single';
+      contributionMode = snap.payload?.contribution_mode === true;
       compareHiddenLines = new Set(snap.payload?.compare_hidden_lines || []);
       const selectedIndex = Number.isInteger(snap.payload?.selected_graph_index)
         ? snap.payload.selected_graph_index
@@ -1712,7 +1740,11 @@ def render_admin_comparison_page() -> HTMLResponse:
         state.backtest = cache.backtest;
         renderFrontier(state);
         renderSelectionSummary(state);
-        renderBoardBacktest();
+        if (backtestHasContributionLines(state.backtest)) {
+          renderBoardBacktest();
+        } else {
+          refreshBacktest(state);
+        }
       } else {
         refreshFrontier(state);
       }
@@ -2116,13 +2148,14 @@ def render_admin_comparison_page() -> HTMLResponse:
     }
 
     const MU_KEY = '__mu__';
+    const PORTFOLIO_KEYS = new Set(['selected', 'balanced', 'conservative', 'growth']);
+    const CONTRIBUTION_PREFIX = 'contribution_';
 
     function buildBacktestLines(state) {
       const data = state.backtest;
       if (!data || !data.lines.length) return [];
 
       const C = chartColors();
-      const PORTFOLIO_KEYS = new Set(['selected', 'balanced', 'conservative', 'growth']);
       const lines = data.lines.filter(line => {
         if (line.key === TREASURY_KEY) return true;
         if (line.key === MARKET_KEY) return true;
@@ -2159,6 +2192,26 @@ def render_admin_comparison_page() -> HTMLResponse:
       return lines;
     }
 
+    function buildContributionLines(state) {
+      const data = state.backtest;
+      if (!data || !data.lines.length) return [];
+
+      const C = chartColors();
+      return data.lines.filter(line => {
+        if (line.key.startsWith(CONTRIBUTION_PREFIX)) return true;
+        return PORTFOLIO_KEYS.has(line.key);
+      }).map(line => {
+        if (PORTFOLIO_KEYS.has(line.key)) {
+          return { ...line, label: '선택 포트폴리오', color: C.portfolio, _portfolio: true };
+        }
+        return { ...line, _contribution: true };
+      });
+    }
+
+    function backtestHasContributionLines(backtest) {
+      return !!backtest?.lines?.some(line => line.key?.startsWith(CONTRIBUTION_PREFIX));
+    }
+
     function labelForGraphSet(state) {
       const versionName = versionById[state.versionId]?.version_name;
       return (state.name || '').trim() || versionName || `유니버스 ${state.id}`;
@@ -2188,6 +2241,15 @@ def render_admin_comparison_page() -> HTMLResponse:
       select.disabled = backtestMode !== 'single' || graphSets.size === 0;
       $('#mode-single').setAttribute('aria-pressed', String(backtestMode === 'single'));
       $('#mode-compare').setAttribute('aria-pressed', String(backtestMode === 'compare'));
+      const contributionToggle = $('#contribution-toggle');
+      if (contributionToggle) {
+        contributionToggle.hidden = backtestMode !== 'single';
+        contributionToggle.disabled = graphSets.size === 0;
+        contributionToggle.setAttribute('aria-pressed', String(contributionMode));
+        contributionToggle.title = contributionMode
+          ? '기여도 보기를 끕니다.'
+          : '선택 포트폴리오 성장 기여도를 봅니다.';
+      }
     }
 
     function setBacktestMode(mode) {
@@ -2198,11 +2260,10 @@ def render_admin_comparison_page() -> HTMLResponse:
     }
 
     function buildCompareBacktestLines() {
-      const portfolioKeys = new Set(['selected', 'balanced', 'conservative', 'growth']);
       return Array.from(graphSets.values())
         .filter(state => state.backtest?.lines?.length)
         .map((state, idx) => {
-          const line = state.backtest.lines.find(item => portfolioKeys.has(item.key));
+          const line = state.backtest.lines.find(item => PORTFOLIO_KEYS.has(item.key));
           if (!line) return null;
           return {
             ...line,
@@ -2271,13 +2332,15 @@ def render_admin_comparison_page() -> HTMLResponse:
         statusEl.textContent = '계산 중...';
         return;
       }
-      const lines = buildBacktestLines(selected);
+      const lines = contributionMode
+        ? buildContributionLines(selected)
+        : buildBacktestLines(selected);
       if (!lines.length) {
         clearProfitSvg();
-        statusEl.textContent = selected.backtestLoading ? '계산 중...' : '백테스트 데이터 없음';
+        statusEl.textContent = selected.backtestLoading ? '계산 중...' : (contributionMode ? '기여도 데이터 없음' : '백테스트 데이터 없음');
         return;
       }
-      statusEl.textContent = `${labelForGraphSet(selected)} · ${selected.backtest.start_date} → ${selected.backtest.end_date}`;
+      statusEl.textContent = `${labelForGraphSet(selected)} · ${selected.backtest.start_date} → ${selected.backtest.end_date}${contributionMode ? ' · 기여도' : ''}`;
       renderBacktestChart({
         lines,
         hidden: selected.hiddenLines || new Set(),
@@ -2622,6 +2685,12 @@ def render_admin_comparison_page() -> HTMLResponse:
       });
       $('#mode-single').addEventListener('click', () => setBacktestMode('single'));
       $('#mode-compare').addEventListener('click', () => setBacktestMode('compare'));
+      $('#contribution-toggle').addEventListener('click', () => {
+        contributionMode = !contributionMode;
+        setDirty(true);
+        updateBacktestControls();
+        renderBoardBacktest();
+      });
       $('#save-snapshot-changes').addEventListener('click', saveCurrentChanges);
       $('#save-snapshot-as').addEventListener('click', () => {
         const active = snapshots.find(s => s.id === activeSnapshotId);

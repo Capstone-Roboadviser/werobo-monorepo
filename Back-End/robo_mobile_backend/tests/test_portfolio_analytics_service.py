@@ -380,6 +380,83 @@ def test_build_comparison_backtest_uses_current_fixed_stock_weights() -> None:
     assert result.lines[0].points[0] == ("2026-03-01", 0.0)
 
 
+def test_build_comparison_backtest_adds_portfolio_contribution_lines() -> None:
+    service = PortfolioAnalyticsService()
+    prices = pd.DataFrame(
+        [
+            {"date": "2026-03-01", "ticker": "AAA", "adjusted_close": 100.0},
+            {"date": "2026-03-02", "ticker": "AAA", "adjusted_close": 110.0},
+            {"date": "2026-03-03", "ticker": "AAA", "adjusted_close": 120.0},
+            {"date": "2026-03-01", "ticker": "BBB", "adjusted_close": 200.0},
+            {"date": "2026-03-02", "ticker": "BBB", "adjusted_close": 210.0},
+            {"date": "2026-03-03", "ticker": "BBB", "adjusted_close": 220.0},
+        ]
+    )
+    instruments = [
+        StockInstrument(
+            ticker="AAA",
+            name="Asset A",
+            sector_code="us_value",
+            sector_name="미국 가치주",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+        StockInstrument(
+            ticker="BBB",
+            name="Asset B",
+            sector_code="gold",
+            sector_name="금",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+    ]
+    assets = [
+        _asset("us_value", "미국 가치주"),
+        _asset("gold", "금"),
+    ]
+    service._load_comparison_assets = lambda data_source, **_: assets
+    service._load_comparison_universe = lambda data_source, **_: (
+        instruments,
+        prices,
+        "demo",
+    )
+    service._fetch_benchmark_prices = lambda start_date: {}
+
+    result = service.build_comparison_backtest(
+        data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+        stock_weights={"AAA": 0.6, "BBB": 0.4},
+        portfolio_code="balanced",
+        per_asset_lines=True,
+        rebalance_enabled=False,
+    )
+
+    portfolio_line = next(line for line in result.lines if line.key == "balanced")
+    value_contribution = next(
+        line for line in result.lines if line.key == "contribution_us_value"
+    )
+    gold_contribution = next(
+        line for line in result.lines if line.key == "contribution_gold"
+    )
+
+    assert portfolio_line.points == [
+        ("2026-03-01", 0.0),
+        ("2026-03-02", 8.0),
+        ("2026-03-03", 16.0),
+    ]
+    assert value_contribution.points == [
+        ("2026-03-01", 0.0),
+        ("2026-03-02", 6.0),
+        ("2026-03-03", 12.0),
+    ]
+    assert gold_contribution.points == [
+        ("2026-03-01", 0.0),
+        ("2026-03-02", 2.0),
+        ("2026-03-03", 4.0),
+    ]
+
+
 def test_build_comparison_backtest_preserves_fixed_weight_daily_points() -> None:
     service = PortfolioAnalyticsService()
     dates = pd.date_range("2026-01-01", periods=300, freq="B")
