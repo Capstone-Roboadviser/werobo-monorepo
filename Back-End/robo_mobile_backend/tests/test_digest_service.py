@@ -142,3 +142,55 @@ def test_below_threshold_returns_unavailable_sentinel(
     assert news_calls == []  # below-threshold path skips news fetch
     assert narrative_calls == []  # below-threshold path skips LLM
     assert digest["total_return_pct"] == 2.0
+
+
+def test_above_positive_threshold_keeps_drivers_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
+    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
+    monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
+    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    # 80/20 with +10/-10 yields +6% total — above the +5% threshold.
+    digest = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {
+                    "ticker": "AAA",
+                    "name": "Alpha Asset",
+                    "sector_code": "us_growth",
+                    "sector_name": "미국 성장주",
+                    "weight": 0.8,
+                },
+                {
+                    "ticker": "BBB",
+                    "name": "Beta Bond",
+                    "sector_code": "bond",
+                    "sector_name": "채권",
+                    "weight": 0.2,
+                },
+            ],
+        }
+    )
+
+    assert digest["available"] is True
+    assert digest["total_return_pct"] == 6.0
+    assert len(digest["drivers"]) == 1
+    assert digest["drivers"][0]["ticker"] == "AAA"
+    assert digest["detractors"] == []

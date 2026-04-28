@@ -463,6 +463,13 @@ class DigestService:
 
         drivers, detractors = top_drivers_detractors(attributions)
 
+        # Sign-based narrowing: positive moves show drivers only,
+        # negative moves show detractors only.
+        if total_return_pct >= DIGEST_THRESHOLD_PCT:
+            detractors = []
+        elif total_return_pct <= -DIGEST_THRESHOLD_PCT:
+            drivers = []
+
         # Threshold gate: only surface a digest for ±5% moves.
         if abs(total_return_pct) < DIGEST_THRESHOLD_PCT:
             now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
