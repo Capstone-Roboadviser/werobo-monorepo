@@ -2239,7 +2239,7 @@ def render_admin_comparison_page() -> HTMLResponse:
               : null;
             return {
               ...point,
-              return_pct: contributionShare ?? 0,
+              return_pct: rawContribution,
               raw_return_pct: rawContribution,
               total_return_pct: Number.isFinite(totalReturn) ? totalReturn : null,
               contribution_share_pct: contributionShare,
@@ -2414,6 +2414,9 @@ def render_admin_comparison_page() -> HTMLResponse:
       const allLines = lines;
       if (!allLines.length) return;
       const isContributionChart = allLines.some(line => line._contribution);
+      const formatAxisValue = (value, digits = 1) => (
+        isContributionChart ? `${value.toFixed(digits)}%p` : `${value.toFixed(digits)}%`
+      );
 
       const visibleLines = allLines.filter(line => !hidden.has(line.key));
 
@@ -2465,7 +2468,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           x: W - padR + 6, y: y + 3.5, fill: C.axis, 'font-size': '9.5',
           'font-family': 'Azeret Mono, monospace', 'text-anchor': 'start',
         });
-        t.textContent = `${labelVal.toFixed(0)}%`;
+        t.textContent = formatAxisValue(labelVal, 0);
         svg.appendChild(t);
         svg.appendChild(svgEl('line', {
           x1: W - padR, y1: y, x2: W - padR + 3, y2: y,
@@ -2556,7 +2559,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           fill: C.selectedStroke, 'font-size': '10', 'font-weight': '700',
           'font-family': 'Azeret Mono, monospace', 'text-anchor': 'middle',
         });
-        text.textContent = `${lv.value.toFixed(1)}%`;
+        text.textContent = formatAxisValue(lv.value, 1);
         svg.appendChild(text);
       });
 
@@ -2644,7 +2647,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         pricePillBg.setAttribute('y', ppY);
         pricePillText.setAttribute('x', W - padR + 54 / 2);
         pricePillText.setAttribute('y', ppY + ppH / 2 + 3.5);
-        pricePillText.textContent = `${invY.toFixed(1)}%`;
+        pricePillText.textContent = formatAxisValue(invY, 1);
 
         cross.style.display = '';
 
