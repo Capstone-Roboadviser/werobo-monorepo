@@ -671,7 +671,7 @@ class _FrontierPainter extends CustomPainter {
     }
 
     // Asset dots — positioned at fixed layout slots around the frontier.
-    // Appear when weight > 10%, sized by weight, with percentage labels.
+    // Keep low-weight assets visible so the frontier does not look incomplete.
     if (dotProgress > 0) {
       final weights = _interpolateWeights(selectedPosition);
 
@@ -680,29 +680,31 @@ class _FrontierPainter extends CustomPainter {
       // Slots positioned well clear of the frontier curve which
       // arcs from bottom-left (~0.15, 0.86) up to right (~0.85, 0.20).
       const slotsByCode = <String, Offset>{
-        'short_term_bond': Offset(0.52, 0.72), // below curve, center
-        'cash_equivalents': Offset(0.72, 0.72), // below curve, right
-        'infra_bond': Offset(0.08, 0.14), // top-left corner
-        'gold': Offset(0.35, 0.10), // top, left-center
-        'us_value': Offset(0.62, 0.04), // top, right-center
-        'new_growth': Offset(0.92, 0.38), // far right, mid
-        'us_growth': Offset(0.92, 0.55), // far right, lower
+        'short_term_bond': Offset(0.47, 0.74), // below curve, center
+        'cash_equivalents': Offset(0.67, 0.76), // below curve, right
+        'infra_bond': Offset(0.08, 0.17), // top-left corner
+        'gold': Offset(0.31, 0.11), // top, left-center
+        'us_value': Offset(0.56, 0.08), // top, right-center
+        'new_growth': Offset(0.78, 0.36), // right, mid
+        'us_growth': Offset(0.78, 0.55), // right, lower
       };
 
       for (final asset in _kAssetDots) {
         final weight = weights[asset.code] ?? 0.0;
-        if (weight <= 0.10) continue;
+        if (weight <= 0.005) continue;
         final slot = slotsByCode[asset.code];
         if (slot == null) continue;
 
         final pos = Offset(w * slot.dx, h * slot.dy);
-        // Scale: 3px at 10% → 8px at 30%+, with pulse.
-        final baseRadius = 3 + (weight - 0.10).clamp(0.0, 0.20) * 25;
+        // Scale: small but visible at 3% → prominent at 30%+.
+        final baseRadius = 2.5 + weight.clamp(0.0, 0.30) * 18;
         final radius =
             (baseRadius + sin(pulseValue * 2 * pi) * 0.5) * dotProgress;
+        final alpha =
+            (0.42 + weight.clamp(0.0, 0.30) * 1.6).clamp(0.42, 0.9).toDouble();
         final assetPaint = Paint()
           ..style = PaintingStyle.fill
-          ..color = asset.color.withValues(alpha: 0.85 * dotProgress);
+          ..color = asset.color.withValues(alpha: alpha * dotProgress);
         canvas.drawCircle(pos, radius, assetPaint);
         // Border ring
         final assetRingPaint = Paint()
@@ -712,8 +714,9 @@ class _FrontierPainter extends CustomPainter {
         canvas.drawCircle(pos, radius, assetRingPaint);
 
         // Asset name
-        _drawText(
+        _drawBoundedText(
           canvas,
+          size,
           asset.name,
           Offset(pos.dx + radius + 4, pos.dy - 6),
           labelStyle.copyWith(
@@ -724,8 +727,9 @@ class _FrontierPainter extends CustomPainter {
         );
         // Weight percentage
         final pctText = '${(weight * 100).toStringAsFixed(0)}%';
-        _drawText(
+        _drawBoundedText(
           canvas,
+          size,
           pctText,
           Offset(pos.dx + radius + 4, pos.dy + 5),
           labelStyle.copyWith(
@@ -944,6 +948,23 @@ class _FrontierPainter extends CustomPainter {
     );
     tp.layout();
     tp.paint(canvas, offset);
+  }
+
+  void _drawBoundedText(
+    Canvas canvas,
+    Size size,
+    String text,
+    Offset offset,
+    TextStyle style,
+  ) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+    );
+    tp.layout();
+    final dx = offset.dx.clamp(4.0, max(4.0, size.width - tp.width - 4.0));
+    final dy = offset.dy.clamp(4.0, max(4.0, size.height - tp.height - 4.0));
+    tp.paint(canvas, Offset(dx.toDouble(), dy.toDouble()));
   }
 
   @override
