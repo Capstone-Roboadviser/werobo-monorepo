@@ -892,6 +892,9 @@ def render_admin_comparison_page() -> HTMLResponse:
     .chart-hover-legend .hl-dot.dashed {
       background-image: repeating-linear-gradient(to right, currentColor 0 3px, transparent 3px 6px) !important;
     }
+    .chart-hover-legend .hl-dot.dotted {
+      background-image: repeating-linear-gradient(to right, currentColor 0 1px, transparent 1px 4px) !important;
+    }
     .chart-hover-legend .hl-label {
       font-family: var(--font-ui);
       font-size: 11px;
@@ -945,6 +948,11 @@ def render_admin_comparison_page() -> HTMLResponse:
     .legend-swatch.dashed {
       background: repeating-linear-gradient(
         to right, currentColor 0 4px, transparent 4px 8px
+      );
+    }
+    .legend-swatch.dotted {
+      background: repeating-linear-gradient(
+        to right, currentColor 0 1px, transparent 1px 5px
       );
     }
 
@@ -1239,6 +1247,7 @@ def render_admin_comparison_page() -> HTMLResponse:
     let selectedBacktestGraphId = null;
     let contributionMode = false;
     let compareHiddenLines = new Set();
+    let compareEnabledAuxLines = new Set();
     const snapshotFilter = {
       query: '',
       sort: 'updated_desc',
@@ -1391,6 +1400,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         contribution_mode: contributionMode,
         selected_graph_index: selectedGraphIndex >= 0 ? selectedGraphIndex : 0,
         compare_hidden_lines: Array.from(compareHiddenLines),
+        compare_enabled_aux_lines: Array.from(compareEnabledAuxLines),
         graph_sets: graphList.map(g => {
           const basisDate = boardBasisDate || g.asOfDate || g.startDate || null;
           return {
@@ -1720,6 +1730,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       backtestMode = snap.payload?.backtest_mode === 'compare' ? 'compare' : 'single';
       contributionMode = snap.payload?.contribution_mode === true;
       compareHiddenLines = new Set(snap.payload?.compare_hidden_lines || []);
+      compareEnabledAuxLines = new Set(snap.payload?.compare_enabled_aux_lines || []);
       const selectedIndex = Number.isInteger(snap.payload?.selected_graph_index)
         ? snap.payload.selected_graph_index
         : 0;
@@ -2439,29 +2450,117 @@ def render_admin_comparison_page() -> HTMLResponse:
       return points.length ? { ...line, points } : null;
     }
 
+    function buildExpectedGuideLine(state, portfolioLine, color) {
+      const mu = Number(state.selection?.expected_return);
+      if (!Number.isFinite(mu) || !portfolioLine?.points?.length) return null;
+      const start = new Date(portfolioLine.points[0].date);
+      const label = labelForGraphSet(state);
+      return {
+        key: `compare_expected_${state.id}`,
+        label: `${label} · 연 기대수익률 (${fmtPct(mu, 1)}/y)`,
+        color,
+        style: 'dotted',
+        points: portfolioLine.points.map(point => {
+          const years = (new Date(point.date) - start) / (365.25 * 86400000);
+          return {
+            date: point.date,
+            return_pct: Math.round(mu * 100 * years * 10000) / 10000,
+          };
+        }),
+        _mu: true,
+        _aux: true,
+      };
+    }
+
+    function buildCompareAuxLines(items, commonStartDate) {
+      const auxLines = [];
+      items.forEach(item => {
+        const label = labelForGraphSet(item.state);
+        const marketSource = item.state.backtest?.lines?.find(line =>
+          line.key === MARKET_KEY || line.key === 'benchmark_avg'
+        );
+        if (marketSource) {
+          const marketLine = rebaseLineAtDate({
+            ...marketSource,
+            key: `compare_market_${item.state.id}`,
+            label: `${label} · 시장`,
+            color: item.color,
+            style: 'dashed',
+            _aux: true,
+          }, commonStartDate);
+          if (marketLine) auxLines.push(marketLine);
+        }
+
+        const expectedLine = buildExpectedGuideLine(
+          item.state,
+          item.rebasedPortfolioLine,
+          item.color,
+        );
+        if (expectedLine) auxLines.push(expectedLine);
+      });
+
+      const treasurySource = items
+        .map(item => item.state.backtest?.lines?.find(line => line.key === TREASURY_KEY))
+        .find(Boolean);
+      if (treasurySource) {
+        const treasuryLine = rebaseLineAtDate({
+          ...treasurySource,
+          key: 'compare_treasury',
+          label: '채권 수익률',
+          color: '#78716c',
+          style: 'dashed',
+          _aux: true,
+        }, commonStartDate);
+        if (treasuryLine) auxLines.push(treasuryLine);
+      }
+
+      return auxLines;
+    }
+
     function buildCompareBacktestLines() {
-      const lines = Array.from(graphSets.values())
+      const items = Array.from(graphSets.values())
         .filter(state => state.backtest?.lines?.length)
         .map((state, idx) => {
           const line = state.backtest.lines.find(item => PORTFOLIO_KEYS.has(item.key));
           if (!line) return null;
+          const color = COMPARE_COLORS[idx % COMPARE_COLORS.length];
           return {
-            ...line,
-            key: `compare_${state.id}`,
-            label: `${labelForGraphSet(state)} · ${state.rebalanceEnabled === false ? '리밸 OFF' : '리밸 ON'}`,
-            color: COMPARE_COLORS[idx % COMPARE_COLORS.length],
-            style: 'solid',
-            _portfolio: true,
+            state,
+            color,
+            portfolioLine: {
+              ...line,
+              key: `compare_${state.id}`,
+              label: `${labelForGraphSet(state)} · ${state.rebalanceEnabled === false ? '리밸 OFF' : '리밸 ON'}`,
+              color,
+              style: 'solid',
+              _portfolio: true,
+            },
           };
         })
         .filter(Boolean);
-      const commonStartDate = findCommonStartDate(lines);
-      if (!commonStartDate) return { lines, commonStartDate: null };
-      return {
-        lines: lines
-          .map(line => rebaseLineAtDate(line, commonStartDate))
-          .filter(Boolean),
+      const commonStartDate = findCommonStartDate(items.map(item => item.portfolioLine));
+      if (!commonStartDate) {
+        return {
+          lines: items.map(item => item.portfolioLine),
+          commonStartDate: null,
+          auxKeys: new Set(),
+        };
+      }
+      const portfolioLines = items
+        .map(item => {
+          const rebased = rebaseLineAtDate(item.portfolioLine, commonStartDate);
+          item.rebasedPortfolioLine = rebased;
+          return rebased;
+        })
+        .filter(Boolean);
+      const auxLines = buildCompareAuxLines(
+        items.filter(item => item.rebasedPortfolioLine),
         commonStartDate,
+      );
+      return {
+        lines: [...portfolioLines, ...auxLines],
+        commonStartDate,
+        auxKeys: new Set(auxLines.map(line => line.key)),
       };
     }
 
@@ -2483,26 +2582,37 @@ def render_admin_comparison_page() -> HTMLResponse:
         const loading = compareStates.some(state => state.backtestLoading);
         const compareBacktest = buildCompareBacktestLines();
         const lines = compareBacktest.lines;
+        const portfolioLineCount = lines.filter(line => line._portfolio).length;
         if (compareStates.length < 2) {
           clearProfitSvg();
           statusEl.textContent = '비교할 유니버스를 2개 이상 추가하세요.';
           return;
         }
-        if (loading && lines.length < compareStates.length) {
+        if (loading && portfolioLineCount < compareStates.length) {
           statusEl.textContent = '계산 중...';
         } else {
-          statusEl.textContent = `${lines.length}개 유니버스 비교${compareBacktest.commonStartDate ? ` · ${compareBacktest.commonStartDate}부터` : ''}`;
+          statusEl.textContent = `${portfolioLineCount}개 유니버스 비교${compareBacktest.commonStartDate ? ` · ${compareBacktest.commonStartDate}부터` : ''}`;
         }
-        if (!lines.length) {
+        if (!portfolioLineCount) {
           clearProfitSvg();
           return;
         }
+        const compareEffectiveHidden = new Set(compareHiddenLines);
+        compareBacktest.auxKeys.forEach(key => {
+          if (!compareEnabledAuxLines.has(key)) compareEffectiveHidden.add(key);
+        });
         renderBacktestChart({
           lines,
-          hidden: compareHiddenLines,
+          hidden: compareEffectiveHidden,
           onToggle: key => {
-            if (compareHiddenLines.has(key)) compareHiddenLines.delete(key);
-            else compareHiddenLines.add(key);
+            if (compareBacktest.auxKeys.has(key)) {
+              if (compareEnabledAuxLines.has(key)) compareEnabledAuxLines.delete(key);
+              else compareEnabledAuxLines.add(key);
+            } else if (compareHiddenLines.has(key)) {
+              compareHiddenLines.delete(key);
+            } else {
+              compareHiddenLines.add(key);
+            }
             setDirty(true);
             renderBoardBacktest();
           },
@@ -2576,6 +2686,12 @@ def render_admin_comparison_page() -> HTMLResponse:
       const isContributionChart = allLines.some(line => line._contribution);
       const formatAxisValue = (value, digits = 1) => (
         isContributionChart ? `${value.toFixed(digits)}%p` : `${value.toFixed(digits)}%`
+      );
+      const lineDash = line => (
+        line.style === 'dotted' ? '1,5' : (line.style === 'dashed' ? '4,4' : null)
+      );
+      const lineStyleClass = line => (
+        line.style === 'dotted' ? 'dotted' : (line.style === 'dashed' ? 'dashed' : '')
       );
 
       const visibleLines = allLines.filter(line => !hidden.has(line.key));
@@ -2680,7 +2796,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           d, fill: 'none', stroke: line.color || C.mutedLine,
           'stroke-width': line._portfolio ? '2.2' : (line._mu ? '1.4' : '1.2'),
           'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-          'stroke-dasharray': line.style === 'dashed' ? '4,4' : null,
+          'stroke-dasharray': lineDash(line),
           opacity: line._portfolio ? '1' : (line._mu ? '0.85' : '0.82'),
         }));
       });
@@ -2830,7 +2946,8 @@ def render_admin_comparison_page() -> HTMLResponse:
           sortedHover.forEach(({ line, value, point }) => {
             const cls = ['hl-row'];
             if (line._portfolio) cls.push('portfolio');
-            const dotStyle = line.style === 'dashed'
+            const styleClass = lineStyleClass(line);
+            const dotStyle = styleClass
               ? `background: transparent; color: ${line.color || 'currentColor'};`
               : `background: ${line.color || 'currentColor'};`;
             let valCls = value < 0 ? 'hl-val neg' : (value > 0 ? 'hl-val pos' : 'hl-val');
@@ -2848,7 +2965,7 @@ def render_admin_comparison_page() -> HTMLResponse:
                 valueHtml += `<span class="hl-subval">포폴=100 기준 ${fmtSignedPctRaw(share, 1)}</span>`;
               }
             }
-            html += `<div class="${cls.join(' ')}"><span class="hl-dot ${line.style === 'dashed' ? 'dashed' : ''}" style="${dotStyle}"></span><span class="hl-label">${line.label}</span><span class="${valCls}">${valueHtml}</span></div>`;
+            html += `<div class="${cls.join(' ')}"><span class="hl-dot ${styleClass}" style="${dotStyle}"></span><span class="hl-label">${line.label}</span><span class="${valCls}">${valueHtml}</span></div>`;
           });
           hoverEl.innerHTML = html;
           hoverEl.setAttribute('data-visible', 'true');
@@ -2870,8 +2987,9 @@ def render_admin_comparison_page() -> HTMLResponse:
         item.className = 'legend-item' + (isHidden ? ' muted' : '');
         item.title = isHidden ? '클릭하여 다시 표시' : '클릭하여 숨김';
         const sw = document.createElement('span');
-        sw.className = 'legend-swatch' + (line.style === 'dashed' ? ' dashed' : '');
-        sw.style.background = line.style === 'dashed' ? 'transparent' : (line.color || C.mutedLine);
+        const styleClass = lineStyleClass(line);
+        sw.className = 'legend-swatch' + (styleClass ? ` ${styleClass}` : '');
+        sw.style.background = styleClass ? 'transparent' : (line.color || C.mutedLine);
         sw.style.color = line.color || C.mutedLine;
         item.appendChild(sw);
         const label = document.createElement('span');
