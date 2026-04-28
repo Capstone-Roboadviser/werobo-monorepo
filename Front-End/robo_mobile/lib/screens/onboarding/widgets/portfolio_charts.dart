@@ -1008,15 +1008,25 @@ class _MultiLineChartPainter extends CustomPainter {
     const padB = 18.0;
     final w = size.width - padL - padR;
     final h = size.height - padB;
+    final allPoints = [
+      for (final line in lines)
+        for (final point in line.points) point,
+    ];
+    if (allPoints.isEmpty) return;
+
+    var minDate = allPoints.first.date;
+    var maxDate = allPoints.first.date;
+    for (final point in allPoints) {
+      if (point.date.isBefore(minDate)) minDate = point.date;
+      if (point.date.isAfter(maxDate)) maxDate = point.date;
+    }
 
     // Y range across all lines
     double minY = double.infinity;
     double maxY = double.negativeInfinity;
-    for (final line in lines) {
-      for (final p in line.points) {
-        if (p.value < minY) minY = p.value;
-        if (p.value > maxY) maxY = p.value;
-      }
+    for (final p in allPoints) {
+      if (p.value < minY) minY = p.value;
+      if (p.value > maxY) maxY = p.value;
     }
     final rangeY = (maxY - minY).clamp(0.001, double.infinity);
 
@@ -1045,7 +1055,7 @@ class _MultiLineChartPainter extends CustomPainter {
       final pathPoints = _interpolatedPathPoints(
         n: count,
         progress: progress,
-        xAt: (i) => padL + w * i / (count - 1),
+        xAt: (i) => _xForDate(pts[i].date, minDate, maxDate, padL, w),
         yAt: (i) => h - ((pts[i].value - minY) / rangeY) * h,
       );
       if (pathPoints == null) continue;
@@ -1077,7 +1087,8 @@ class _MultiLineChartPainter extends CustomPainter {
     if (touchIndex != null && lines.isNotEmpty) {
       final pts = lines[0].points;
       if (touchIndex! < pts.length) {
-        final tx = padL + w * touchIndex! / (pts.length - 1);
+        final touchDate = pts[touchIndex!].date;
+        final tx = _xForDate(touchDate, minDate, maxDate, padL, w);
         canvas.drawLine(
             Offset(tx, 0),
             Offset(tx, h),
@@ -1087,8 +1098,9 @@ class _MultiLineChartPainter extends CustomPainter {
 
         // Dots for each line
         for (final line in lines) {
-          if (touchIndex! < line.points.length) {
-            final val = line.points[touchIndex!].value;
+          final nearestIndex = _nearestPointIndexByDate(line.points, touchDate);
+          if (nearestIndex != null) {
+            final val = line.points[nearestIndex].value;
             final ty = h - ((val - minY) / rangeY) * h;
             canvas.drawCircle(Offset(tx, ty), 4, Paint()..color = line.color);
             canvas.drawCircle(
@@ -1097,14 +1109,13 @@ class _MultiLineChartPainter extends CustomPainter {
         }
 
         // Tooltip
-        final date = pts[touchIndex!].date;
-        final dateStr =
-            '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+        final dateStr = _formatDate(touchDate);
         var tooltipLines = dateStr;
         for (final line in lines) {
-          if (!line.dashed && touchIndex! < line.points.length) {
+          final nearestIndex = _nearestPointIndexByDate(line.points, touchDate);
+          if (!line.dashed && nearestIndex != null) {
             tooltipLines +=
-                '\n${line.label}: ${(line.points[touchIndex!].value * 100).toStringAsFixed(1)}%';
+                '\n${line.label}: ${(line.points[nearestIndex].value * 100).toStringAsFixed(1)}%';
           }
         }
         _drawTooltip(canvas, Offset(tx, 10), tooltipLines, size.width);
@@ -1112,18 +1123,21 @@ class _MultiLineChartPainter extends CustomPainter {
     }
 
     // X-axis labels
-    if (lines.isNotEmpty && lines[0].points.length > 1) {
-      final pts = lines[0].points;
+    if (maxDate.isAfter(minDate)) {
       final dateStyle = TextStyle(
         fontSize: 8,
         color: textTertiaryColor,
         fontFamily: WeRoboFonts.english,
       );
       for (int i = 0; i < 5; i++) {
-        final idx = (pts.length - 1) * i ~/ 4;
-        final d = pts[idx].date;
+        final d = minDate.add(
+          Duration(
+            milliseconds:
+                (maxDate.difference(minDate).inMilliseconds * i / 4).round(),
+          ),
+        );
         final label = '${d.year}-${d.month.toString().padLeft(2, '0')}';
-        final x = padL + w * idx / (pts.length - 1);
+        final x = _xForDate(d, minDate, maxDate, padL, w);
         _drawText(canvas, label, Offset(x - 16, h + 4), dateStyle);
       }
     }
@@ -1169,6 +1183,38 @@ class _MultiLineChartPainter extends CustomPainter {
       old.lines != lines ||
       old.progress != progress ||
       old.touchIndex != touchIndex;
+}
+
+double _xForDate(
+  DateTime date,
+  DateTime minDate,
+  DateTime maxDate,
+  double padL,
+  double width,
+) {
+  final totalMs = maxDate.difference(minDate).inMilliseconds;
+  if (totalMs <= 0) return padL;
+  final elapsedMs = date.difference(minDate).inMilliseconds;
+  return padL + width * (elapsedMs / totalMs).clamp(0.0, 1.0);
+}
+
+int? _nearestPointIndexByDate(List<ChartPoint> points, DateTime targetDate) {
+  if (points.isEmpty) return null;
+  var nearestIndex = 0;
+  var nearestDistance =
+      points.first.date.difference(targetDate).inMilliseconds.abs();
+  for (var i = 1; i < points.length; i++) {
+    final distance = points[i].date.difference(targetDate).inMilliseconds.abs();
+    if (distance < nearestDistance) {
+      nearestIndex = i;
+      nearestDistance = distance;
+    }
+  }
+  return nearestIndex;
+}
+
+String _formatDate(DateTime date) {
+  return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
 }
 
 // ── Shared helpers ──
