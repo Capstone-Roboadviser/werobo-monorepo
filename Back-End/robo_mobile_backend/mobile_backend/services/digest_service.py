@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 DIGEST_PERIOD_DAYS = 7
 TOP_N = 2
+DIGEST_THRESHOLD_PCT = 5.0
 
 
 class DigestError(Exception):
@@ -462,6 +463,35 @@ class DigestService:
 
         drivers, detractors = top_drivers_detractors(attributions)
 
+        # Threshold gate: only surface a digest for ±5% moves.
+        if abs(total_return_pct) < DIGEST_THRESHOLD_PCT:
+            now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            unavailable = {
+                "digest_date": end_date.isoformat(),
+                "period_start": start_date.isoformat(),
+                "period_end": end_date.isoformat(),
+                "total_return_pct": total_return_pct,
+                "total_return_won": total_return_won,
+                "available": False,
+                "narrative_ko": None,
+                "has_narrative": False,
+                "drivers": [],
+                "detractors": [],
+                "sources_used": [],
+                "disclaimer": "이 내용은 투자 조언이 아닙니다. AI가 생성한 요약이며 투자 결정의 근거로 사용하지 마세요.",
+                "generated_at": now_utc,
+                "degradation_level": 0,
+                "benchmark_7asset_return_pct": None,
+                "benchmark_bond_return_pct": None,
+            }
+            self.digest_repo.cache(account_id, unavailable)
+            logger.info(
+                "digest.generate.below_threshold account_id=%s total_return_pct=%s",
+                account_id,
+                total_return_pct,
+            )
+            return unavailable
+
         # Benchmark returns
         benchmark_7asset, benchmark_bond = _compute_benchmark_returns(
             universe_repo=self.universe_repo,
@@ -506,6 +536,7 @@ class DigestService:
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         digest = {
             "digest_date": end_date.isoformat(),
+            "available": True,
             "period_start": start_date.isoformat(),
             "period_end": end_date.isoformat(),
             "total_return_pct": total_return_pct,

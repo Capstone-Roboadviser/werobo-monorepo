@@ -76,7 +76,7 @@ class FakeStockDataRepository:
         )
 
 
-def test_generate_digest_uses_demo_price_source_for_demo_accounts(
+def test_below_threshold_returns_unavailable_sentinel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = digest_module.DigestService()
@@ -92,9 +92,20 @@ def test_generate_digest_uses_demo_price_source_for_demo_accounts(
     service.universe_repo = FakeUniverseRepository()
 
     monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
-    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
     monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
-    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    news_calls: list[list[str]] = []
+    narrative_calls: list[dict] = []
+    monkeypatch.setattr(
+        digest_module,
+        "fetch_news_for_tickers",
+        lambda tickers: news_calls.append(list(tickers)) or {},
+    )
+    monkeypatch.setattr(
+        digest_module,
+        "generate_narrative",
+        lambda **kwargs: narrative_calls.append(kwargs) or None,
+    )
 
     digest = service.generate(
         {
@@ -120,8 +131,14 @@ def test_generate_digest_uses_demo_price_source_for_demo_accounts(
         }
     )
 
-    assert service.universe_repo.load_prices_calls == 0
-    assert digest["digest_date"]
-    assert digest["drivers"][0]["ticker"] == "AAA"
-    assert digest["detractors"][0]["ticker"] == "BBB"
+    # 60/40 with +10/-10 yields +2% total — below the ±5% threshold.
+    assert service.universe_repo.load_prices_calls == 0  # demo source still used
+    assert digest["available"] is False
+    assert digest["drivers"] == []
+    assert digest["detractors"] == []
     assert digest["has_narrative"] is False
+    assert digest["narrative_ko"] is None
+    assert digest["sources_used"] == []
+    assert news_calls == []  # below-threshold path skips news fetch
+    assert narrative_calls == []  # below-threshold path skips LLM
+    assert digest["total_return_pct"] == 2.0
