@@ -777,7 +777,7 @@ def render_admin_comparison_page() -> HTMLResponse:
     }
     .frontier-svg { height: 280px; }
     .chart-svg.dragging { cursor: grabbing; }
-    .profit-svg { height: 430px; cursor: crosshair; }
+    .profit-svg { height: clamp(400px, 34vw, 520px); cursor: crosshair; }
 
     .backtest-panel {
       background: var(--surface);
@@ -2398,12 +2398,23 @@ def render_admin_comparison_page() -> HTMLResponse:
       renderBoardBacktest();
     }
 
+    function measureSvgViewport(svg, fallbackWidth, fallbackHeight) {
+      const rect = svg.getBoundingClientRect();
+      const width = Math.max(1, Math.round(rect.width || fallbackWidth));
+      const height = Math.max(1, Math.round(rect.height || fallbackHeight));
+      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+      return { width, height };
+    }
+
     function renderBacktestChart({ lines, hidden, onToggle }) {
       const svg = $('#profit-svg');
       const legendEl = $('#backtest-legend');
       const hoverEl = $('#profit-legend');
-      const W = 600, H = 360;
-      const padL = 14, padR = 62, padT = 22, padB = 28;
+      const { width: W, height: H } = measureSvgViewport(svg, 600, 430);
+      const padL = Math.max(14, Math.round(W * 0.024));
+      const padR = Math.max(62, Math.round(W * 0.095));
+      const padT = Math.max(22, Math.round(H * 0.06));
+      const padB = Math.max(28, Math.round(H * 0.078));
       const cw = W - padL - padR;
       const ch = H - padT - padB;
       while (svg.firstChild) svg.removeChild(svg.firstChild);
@@ -2729,6 +2740,17 @@ def render_admin_comparison_page() -> HTMLResponse:
         if (state.frontier) renderFrontier(state);
       });
       renderBoardBacktest();
+    });
+
+    let backtestResizeFrame = null;
+    window.addEventListener('resize', () => {
+      if (backtestResizeFrame !== null) {
+        cancelAnimationFrame(backtestResizeFrame);
+      }
+      backtestResizeFrame = requestAnimationFrame(() => {
+        backtestResizeFrame = null;
+        renderBoardBacktest();
+      });
     });
 
     document.addEventListener('DOMContentLoaded', async () => {
