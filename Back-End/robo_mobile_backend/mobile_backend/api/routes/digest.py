@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 
 from mobile_backend.api.routes.auth import _extract_bearer_token
 from mobile_backend.api.schemas.digest import DigestResponse
@@ -83,3 +83,29 @@ def bust_digest_cache(
         raise HTTPException(status_code=404, detail="자산 계정을 찾지 못했습니다.")
     digest_service.digest_repo.bust_cache(int(account["id"]))
     return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------
+# [QA] Temporary endpoint for iOS simulator verification of the
+# ±5% threshold logic. Remove before launch.
+# ---------------------------------------------------------------------
+@router.post(
+    "/digest/qa-force",
+    response_model=DigestResponse,
+    summary="[QA] 다이제스트 임시 강제 생성 (출시 전 제거)",
+    description=(
+        "QA 용 임시 엔드포인트. 합성된 다이제스트를 캐시에 저장합니다. "
+        "mode=positive (드라이버만), negative (디트랙터만), unavailable (sentinel)."
+    ),
+    responses=DIGEST_ERROR_RESPONSES,
+)
+def force_qa_digest(
+    mode: str = Query(..., pattern="^(positive|negative|unavailable)$"),
+    authorization: str | None = Header(default=None),
+) -> DigestResponse:
+    user_id = _current_user_id(authorization)
+    account = account_service.repository.get_account_by_user_id(user_id)
+    if account is None:
+        raise HTTPException(status_code=404, detail="자산 계정을 찾지 못했습니다.")
+    digest = digest_service.synthesize_for_qa(int(account["id"]), mode)
+    return DigestResponse(**digest)
