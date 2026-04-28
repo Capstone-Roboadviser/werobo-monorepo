@@ -1488,6 +1488,7 @@ class MobileDigestResponse {
   final String periodEnd;
   final double totalReturnPct;
   final double totalReturnWon;
+  final bool available;
   final String? narrativeKo;
   final bool hasNarrative;
   final List<DigestDriver> drivers;
@@ -1505,6 +1506,7 @@ class MobileDigestResponse {
     required this.periodEnd,
     required this.totalReturnPct,
     required this.totalReturnWon,
+    this.available = true,
     this.narrativeKo,
     required this.hasNarrative,
     required this.drivers,
@@ -1524,6 +1526,7 @@ class MobileDigestResponse {
       periodEnd: json['period_end']?.toString() ?? '',
       totalReturnPct: _asDouble(json['total_return_pct']),
       totalReturnWon: _asDouble(json['total_return_won']),
+      available: json['available'] is bool ? json['available'] as bool : true,
       narrativeKo: json['narrative_ko']?.toString(),
       hasNarrative: json['has_narrative'] == true,
       drivers: (json['drivers'] as List<dynamic>?)
