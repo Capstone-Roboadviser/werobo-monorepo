@@ -155,6 +155,11 @@ class _DigestContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!digest.available) {
+      return const _ErrorState(
+        message: '이번 주에는 표시할 다이제스트가 없습니다.',
+      );
+    }
     final tc = WeRoboThemeColors.of(context);
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
