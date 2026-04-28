@@ -21,6 +21,16 @@ class _AssetDot {
   });
 }
 
+class _WeightedAsset {
+  final _AssetDot asset;
+  final double weight;
+
+  const _WeightedAsset({
+    required this.asset,
+    required this.weight,
+  });
+}
+
 /// Hardcoded asset positions estimated from backend data.
 /// Volatility = individual asset std-dev; expectedReturn = individual
 /// expected annual return.  Values are rough estimates that place each
@@ -689,19 +699,21 @@ class _FrontierPainter extends CustomPainter {
         'us_growth': Offset(0.78, 0.55), // right, lower
       };
 
+      final visibleAssets = <_WeightedAsset>[];
       for (final asset in _kAssetDots) {
         final weight = weights[asset.code] ?? 0.0;
         if (weight <= 0.005) continue;
+        visibleAssets.add(_WeightedAsset(asset: asset, weight: weight));
         final slot = slotsByCode[asset.code];
         if (slot == null) continue;
 
         final pos = Offset(w * slot.dx, h * slot.dy);
         // Scale: small but visible at 3% → prominent at 30%+.
-        final baseRadius = 2.5 + weight.clamp(0.0, 0.30) * 18;
+        final baseRadius = 4 + weight.clamp(0.0, 0.30) * 18;
         final radius =
             (baseRadius + sin(pulseValue * 2 * pi) * 0.5) * dotProgress;
         final alpha =
-            (0.42 + weight.clamp(0.0, 0.30) * 1.6).clamp(0.42, 0.9).toDouble();
+            (0.62 + weight.clamp(0.0, 0.30) * 1.1).clamp(0.62, 0.95).toDouble();
         final assetPaint = Paint()
           ..style = PaintingStyle.fill
           ..color = asset.color.withValues(alpha: alpha * dotProgress);
@@ -739,6 +751,87 @@ class _FrontierPainter extends CustomPainter {
           ),
         );
       }
+      _drawAllocationLegend(
+        canvas,
+        size,
+        visibleAssets,
+        labelStyle,
+        dotProgress,
+      );
+    }
+  }
+
+  void _drawAllocationLegend(
+    Canvas canvas,
+    Size size,
+    List<_WeightedAsset> assets,
+    TextStyle labelStyle,
+    double opacity,
+  ) {
+    if (assets.isEmpty || opacity <= 0) return;
+    final sorted = [...assets]..sort((a, b) => b.weight.compareTo(a.weight));
+
+    const margin = 8.0;
+    const gap = 4.0;
+    const rowHeight = 17.0;
+    const rows = 2;
+    final chipWidth = (size.width - margin * 2 - gap * 3) / 4;
+    final legendHeight = rowHeight * rows + gap;
+    final startY = size.height - legendHeight - margin;
+
+    for (var i = 0; i < sorted.length; i++) {
+      final row = i ~/ 4;
+      if (row >= rows) break;
+      final itemsInRow = row == 0 ? min(4, sorted.length) : sorted.length - 4;
+      final rowCount = min(4, max(0, itemsInRow));
+      if (rowCount == 0) continue;
+      final rowWidth = chipWidth * rowCount + gap * (rowCount - 1);
+      final startX = (size.width - rowWidth) / 2;
+      final col = i % 4;
+      final asset = sorted[i];
+      final rect = Rect.fromLTWH(
+        startX + col * (chipWidth + gap),
+        startY + row * (rowHeight + gap),
+        chipWidth,
+        rowHeight,
+      );
+
+      final bgPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = WeRoboColors.black.withValues(alpha: 0.45 * opacity);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(8)),
+        bgPaint,
+      );
+
+      final dotPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = asset.asset.color.withValues(alpha: 0.95 * opacity);
+      canvas.drawCircle(
+        Offset(rect.left + 8, rect.center.dy),
+        3.2,
+        dotPaint,
+      );
+
+      final text = '${asset.asset.name} ${(asset.weight * 100).round()}%';
+      final tp = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: labelStyle.copyWith(
+            color: asset.asset.color.withValues(alpha: opacity),
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        maxLines: 1,
+        ellipsis: '…',
+        textDirection: TextDirection.ltr,
+      );
+      tp.layout(maxWidth: chipWidth - 16);
+      tp.paint(
+        canvas,
+        Offset(rect.left + 14, rect.top + (rowHeight - tp.height) / 2),
+      );
     }
   }
 
