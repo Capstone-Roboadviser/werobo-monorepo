@@ -57,6 +57,7 @@ def build_comparison(
     train_start_date: str,
     train_end_date: str,
     split_ratio: float = 0.9,
+    rebalance_enabled: bool = True,
     max_sample_points: int | None = 250,
 ) -> ComparisonResult:
     """Build comparison backtest data.
@@ -82,26 +83,44 @@ def build_comparison(
         total_w = sum(w.values())
         w = {t: v / total_w for t, v in w.items()}
 
-        simulation = simulate_two_stage_rebalance(
-            prices[available].copy(),
-            w,
-            _COMPARISON_SIMULATION_BASE_INVESTMENT,
-            drift_threshold=DRIFT_THRESHOLD_DEFAULT,
-            max_points=None,
-        )
-        rebalance_date_set.update(event.date for event in simulation.rebalance_events)
-        return_points = [
-            (
-                point.date,
-                round(
-                    (point.total_value - simulation.investment_amount)
-                    / simulation.investment_amount
-                    * 100,
-                    4,
-                ),
+        if rebalance_enabled:
+            simulation = simulate_two_stage_rebalance(
+                prices[available].copy(),
+                w,
+                _COMPARISON_SIMULATION_BASE_INVESTMENT,
+                drift_threshold=DRIFT_THRESHOLD_DEFAULT,
+                max_points=None,
             )
-            for point in simulation.time_series
-        ]
+            rebalance_date_set.update(event.date for event in simulation.rebalance_events)
+            return_points = [
+                (
+                    point.date,
+                    round(
+                        (point.total_value - simulation.investment_amount)
+                        / simulation.investment_amount
+                        * 100,
+                        4,
+                    ),
+                )
+                for point in simulation.time_series
+            ]
+        else:
+            aligned_prices = prices[available].astype(float).copy()
+            base_prices = aligned_prices.iloc[0].replace(0, np.nan)
+            relative_prices = aligned_prices.divide(base_prices).replace(
+                [np.inf, -np.inf],
+                np.nan,
+            )
+            portfolio_path = (
+                relative_prices.mul(pd.Series(w), axis=1).sum(axis=1).dropna()
+            )
+            return_points = [
+                (
+                    date.strftime("%Y-%m-%d"),
+                    round((float(value) - 1.0) * 100, 4),
+                )
+                for date, value in portfolio_path.items()
+            ]
 
         color = _PROFILE_COLORS.get(profile_name, "#64748B")
         label = _PROFILE_LABELS.get(profile_name, profile_name)

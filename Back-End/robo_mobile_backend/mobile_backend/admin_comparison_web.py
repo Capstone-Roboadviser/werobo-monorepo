@@ -1119,7 +1119,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       <div class="graph-set-head">
         <input type="text" class="title-input" placeholder="유니버스 이름" />
         <div class="graph-set-actions">
-          <button class="secondary mini btn-toggle" type="button" aria-pressed="true">ON</button>
+          <button class="secondary mini btn-toggle" type="button" aria-pressed="true">리밸 ON</button>
           <button class="ghost mini btn-remove" type="button">삭제</button>
         </div>
       </div>
@@ -1275,7 +1275,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           return {
             name: g.name,
             version_id: g.versionId,
-            enabled: g.enabled !== false,
+            rebalance_enabled: g.rebalanceEnabled !== false,
             as_of_date: basisDate,
             start_date: basisDate,
             point_index: g.pointIndex,
@@ -1587,7 +1587,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         addGraphSet({
           name: item.name,
           versionId: item.version_id,
-          enabled: item.enabled !== false,
+          rebalanceEnabled: item.rebalance_enabled !== false,
           asOfDate: basisDate,
           startDate: basisDate,
           pointIndex: item.point_index,
@@ -1634,7 +1634,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         id,
         name: initial?.name || `유니버스 ${graphSets.size + 1}`,
         versionId: initial?.versionId || (catalog.versions.find(v => v.is_active)?.version_id ?? catalog.versions[0]?.version_id ?? null),
-        enabled: initial?.enabled !== false,
+        rebalanceEnabled: initial?.rebalanceEnabled !== false,
         asOfDate: basisDate,
         startDate: basisDate,
         pointIndex: initial?.pointIndex ?? null,
@@ -1663,15 +1663,20 @@ def render_admin_comparison_page() -> HTMLResponse:
 
       const toggleButton = $('.btn-toggle', root);
       const syncToggle = () => {
-        toggleButton.textContent = state.enabled ? 'ON' : 'OFF';
-        toggleButton.setAttribute('aria-pressed', String(state.enabled));
+        toggleButton.textContent = state.rebalanceEnabled ? '리밸 ON' : '리밸 OFF';
+        toggleButton.title = state.rebalanceEnabled
+          ? '클릭하면 리밸런싱 미적용 백테스트로 전환합니다.'
+          : '클릭하면 리밸런싱 적용 백테스트로 전환합니다.';
+        toggleButton.setAttribute('aria-pressed', String(state.rebalanceEnabled));
       };
       syncToggle();
       toggleButton.addEventListener('click', () => {
-        state.enabled = !state.enabled;
+        state.rebalanceEnabled = !state.rebalanceEnabled;
+        state.backtest = null;
         syncToggle();
         setDirty(true);
-        renderBoardBacktest();
+        if (state.selection) refreshBacktest(state);
+        else renderBoardBacktest();
       });
 
       const versionSelect = $('.ctrl-version', root);
@@ -1792,6 +1797,7 @@ def render_admin_comparison_page() -> HTMLResponse:
             version_id: state.versionId,
             stock_weights: state.selection.stock_weights,
             start_date: state.startDate,
+            rebalance_enabled: state.rebalanceEnabled !== false,
           }),
         });
         state.backtest = data;
@@ -2194,14 +2200,14 @@ def render_admin_comparison_page() -> HTMLResponse:
     function buildCompareBacktestLines() {
       const portfolioKeys = new Set(['selected', 'balanced', 'conservative', 'growth']);
       return Array.from(graphSets.values())
-        .filter(state => state.enabled !== false && state.backtest?.lines?.length)
+        .filter(state => state.backtest?.lines?.length)
         .map((state, idx) => {
           const line = state.backtest.lines.find(item => portfolioKeys.has(item.key));
           if (!line) return null;
           return {
             ...line,
             key: `compare_${state.id}`,
-            label: labelForGraphSet(state),
+            label: `${labelForGraphSet(state)} · ${state.rebalanceEnabled === false ? '리밸 OFF' : '리밸 ON'}`,
             color: COMPARE_COLORS[idx % COMPARE_COLORS.length],
             style: 'solid',
             _portfolio: true,
@@ -2224,15 +2230,15 @@ def render_admin_comparison_page() -> HTMLResponse:
       }
 
       if (backtestMode === 'compare') {
-        const enabledStates = Array.from(graphSets.values()).filter(state => state.enabled !== false);
-        const loading = enabledStates.some(state => state.backtestLoading);
+        const compareStates = Array.from(graphSets.values());
+        const loading = compareStates.some(state => state.backtestLoading);
         const lines = buildCompareBacktestLines();
-        if (enabledStates.length < 2) {
+        if (compareStates.length < 2) {
           clearProfitSvg();
-          statusEl.textContent = '비교할 유니버스를 2개 이상 ON으로 설정하세요.';
+          statusEl.textContent = '비교할 유니버스를 2개 이상 추가하세요.';
           return;
         }
-        if (loading && lines.length < enabledStates.length) {
+        if (loading && lines.length < compareStates.length) {
           statusEl.textContent = '계산 중...';
         } else {
           statusEl.textContent = `${lines.length}개 유니버스 비교`;

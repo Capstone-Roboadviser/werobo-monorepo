@@ -226,6 +226,7 @@ class PortfolioAnalyticsService:
         version_id: int | None = None,
         start_date: str | None = None,
         per_asset_lines: bool = False,
+        rebalance_enabled: bool = True,
     ) -> ComparisonResult:
         if stock_weights:
             return self._build_fixed_weight_comparison_backtest(
@@ -235,6 +236,7 @@ class PortfolioAnalyticsService:
                 version_id=version_id,
                 start_date=start_date,
                 per_asset_lines=per_asset_lines,
+                rebalance_enabled=rebalance_enabled,
             )
 
         assets = self._load_comparison_assets(data_source, version_id=version_id)
@@ -301,6 +303,7 @@ class PortfolioAnalyticsService:
                 train_start_date=train_start_date.strftime("%Y-%m-%d"),
                 train_end_date=train_end_date.strftime("%Y-%m-%d"),
                 split_ratio=0.9,
+                rebalance_enabled=rebalance_enabled,
             )
         except Exception as exc:
             raise RuntimeError(f"비교 백테스트 계산 중 오류: {exc}") from exc
@@ -314,6 +317,7 @@ class PortfolioAnalyticsService:
         version_id: int | None = None,
         start_date: str | None = None,
         per_asset_lines: bool = False,
+        rebalance_enabled: bool = True,
     ) -> ComparisonResult:
         assets = self._load_comparison_assets(data_source, version_id=version_id)
         instruments, prices, _ = self._load_comparison_universe(
@@ -391,6 +395,7 @@ class PortfolioAnalyticsService:
                 train_start_date=backtest_start,
                 train_end_date=backtest_start,
                 split_ratio=1.0,
+                rebalance_enabled=rebalance_enabled,
                 max_sample_points=None,
             )
         except Exception as exc:

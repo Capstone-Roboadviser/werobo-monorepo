@@ -26,3 +26,31 @@ def test_build_comparison_preserves_sub_percent_daily_moves() -> None:
     assert balanced_line.points[0] == ("2026-03-02", 0.0)
     assert abs(balanced_line.points[1][1] - 0.12) < 0.001
     assert abs(balanced_line.points[2][1] - 0.24) < 0.001
+
+
+def test_build_comparison_can_disable_rebalancing() -> None:
+    prices = pd.DataFrame(
+        {
+            "AAA": [100.0, 200.0, 200.0],
+            "BBB": [100.0, 100.0, 200.0],
+        },
+        index=pd.to_datetime(["2026-03-02", "2026-03-03", "2026-03-04"]),
+    )
+
+    result = build_comparison(
+        prices,
+        portfolios={"balanced": {"AAA": 0.5, "BBB": 0.5}},
+        expected_returns={},
+        train_start_date="2026-01-01",
+        train_end_date="2026-03-01",
+        rebalance_enabled=False,
+    )
+
+    balanced_line = next(line for line in result.lines if line.key == "balanced")
+
+    assert result.rebalance_dates == []
+    assert balanced_line.points == [
+        ("2026-03-02", 0.0),
+        ("2026-03-03", 50.0),
+        ("2026-03-04", 100.0),
+    ]

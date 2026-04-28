@@ -46,6 +46,7 @@ class BacktestRequest(BaseModel):
     version_id: int = Field(..., description="대상 유니버스 버전 ID")
     stock_weights: dict[str, float] = Field(..., description="선택 포트폴리오의 종목 비중")
     portfolio_code: str | None = Field(default=None, description="라인 키로 사용할 코드")
+    rebalance_enabled: bool = Field(default=True, description="리밸런싱 적용 여부")
     start_date: date | None = Field(
         default=None,
         description="백테스트 시작일. 이 날짜 이후 가격만 사용합니다.",
@@ -291,6 +292,7 @@ def get_backtest(payload: BacktestRequest) -> dict[str, object]:
             version_id=payload.version_id,
             start_date=None if payload.start_date is None else payload.start_date.isoformat(),
             per_asset_lines=True,
+            rebalance_enabled=payload.rebalance_enabled,
         )
     except RuntimeError as exc:
         raise _http_422(exc) from exc
