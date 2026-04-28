@@ -246,3 +246,85 @@ def test_above_negative_threshold_keeps_detractors_only(
     assert digest["drivers"] == []
     assert len(digest["detractors"]) == 1
     assert digest["detractors"][0]["ticker"] == "BBB"
+
+
+def test_boundary_exactly_positive_5pct_is_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
+    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
+    monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
+    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    # 75/25 with +10/-10 yields exactly +5.0% total.
+    digest = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {"ticker": "AAA", "name": "Alpha Asset", "sector_code": "us_growth",
+                 "sector_name": "미국 성장주", "weight": 0.75},
+                {"ticker": "BBB", "name": "Beta Bond", "sector_code": "bond",
+                 "sector_name": "채권", "weight": 0.25},
+            ],
+        }
+    )
+
+    assert digest["total_return_pct"] == 5.0
+    assert digest["available"] is True
+    assert len(digest["drivers"]) == 1
+    assert digest["detractors"] == []
+
+
+def test_boundary_exactly_negative_5pct_is_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
+    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
+    monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
+    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    # 25/75 with +10/-10 yields exactly -5.0% total.
+    digest = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {"ticker": "AAA", "name": "Alpha Asset", "sector_code": "us_growth",
+                 "sector_name": "미국 성장주", "weight": 0.25},
+                {"ticker": "BBB", "name": "Beta Bond", "sector_code": "bond",
+                 "sector_name": "채권", "weight": 0.75},
+            ],
+        }
+    )
+
+    assert digest["total_return_pct"] == -5.0
+    assert digest["available"] is True
+    assert digest["drivers"] == []
+    assert len(digest["detractors"]) == 1
