@@ -686,7 +686,7 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     .controls {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: var(--sp-2);
       margin-bottom: var(--sp-3);
     }
@@ -1032,12 +1032,8 @@ def render_admin_comparison_page() -> HTMLResponse:
           <select class="ctrl-version"></select>
         </div>
         <div class="field">
-          <label>Frontier 기준일</label>
-          <input type="date" class="ctrl-as-of" />
-        </div>
-        <div class="field">
-          <label>백테스트 시작일</label>
-          <input type="date" class="ctrl-start" />
+          <label>기준일</label>
+          <input type="date" class="ctrl-basis-date" />
         </div>
       </div>
       <div class="charts-row">
@@ -1180,20 +1176,23 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     function buildPayload() {
       return {
-        graph_sets: Array.from(graphSets.values()).map(g => ({
-          name: g.name,
-          version_id: g.versionId,
-          as_of_date: g.asOfDate,
-          start_date: g.startDate,
-          point_index: g.pointIndex,
-          hidden_lines: Array.from(g.hiddenLines || []),
-          // Preloaded chart data so reopening the snapshot skips /frontier + /backtest calls.
-          cached: (g.frontier && g.backtest && g.selection) ? {
-            frontier: g.frontier,
-            selection: g.selection,
-            backtest: g.backtest,
-          } : null,
-        })),
+        graph_sets: Array.from(graphSets.values()).map(g => {
+          const basisDate = g.asOfDate || g.startDate || null;
+          return {
+            name: g.name,
+            version_id: g.versionId,
+            as_of_date: basisDate,
+            start_date: basisDate,
+            point_index: g.pointIndex,
+            hidden_lines: Array.from(g.hiddenLines || []),
+            // Preloaded chart data so reopening the snapshot skips /frontier + /backtest calls.
+            cached: (g.frontier && g.backtest && g.selection) ? {
+              frontier: g.frontier,
+              selection: g.selection,
+              backtest: g.backtest,
+            } : null,
+          };
+        }),
       };
     }
 
@@ -1486,11 +1485,12 @@ def render_admin_comparison_page() -> HTMLResponse:
       $('#graph-grid').innerHTML = '';
       const sets = snap.payload?.graph_sets || [];
       for (const item of sets) {
+        const basisDate = item.as_of_date || item.start_date || null;
         addGraphSet({
           name: item.name,
           versionId: item.version_id,
-          asOfDate: item.as_of_date,
-          startDate: item.start_date,
+          asOfDate: basisDate,
+          startDate: basisDate,
           pointIndex: item.point_index,
           hiddenLines: item.hidden_lines || [],
           cached: item.cached || null,
@@ -1509,12 +1509,13 @@ def render_admin_comparison_page() -> HTMLResponse:
     function addGraphSet(initial, opts) {
       const silent = !!opts?.silent;
       const id = nextGraphSetId();
+      const basisDate = initial?.asOfDate || initial?.startDate || null;
       const state = {
         id,
         name: initial?.name || `그래프 세트 ${graphSets.size + 1}`,
         versionId: initial?.versionId || (catalog.versions.find(v => v.is_active)?.version_id ?? catalog.versions[0]?.version_id ?? null),
-        asOfDate: initial?.asOfDate || null,
-        startDate: initial?.startDate || null,
+        asOfDate: basisDate,
+        startDate: basisDate,
         pointIndex: initial?.pointIndex ?? null,
         frontier: null,
         selection: null,
@@ -1553,20 +1554,14 @@ def render_admin_comparison_page() -> HTMLResponse:
         refreshFrontier(state);
       });
 
-      const asOf = $('.ctrl-as-of', root);
-      if (state.asOfDate) asOf.value = state.asOfDate;
-      asOf.addEventListener('change', () => {
-        state.asOfDate = asOf.value || null;
+      const basisDateInput = $('.ctrl-basis-date', root);
+      if (basisDate) basisDateInput.value = basisDate;
+      basisDateInput.addEventListener('change', () => {
+        const nextDate = basisDateInput.value || null;
+        state.asOfDate = nextDate;
+        state.startDate = nextDate;
         setDirty(true);
         refreshFrontier(state);
-      });
-
-      const startInput = $('.ctrl-start', root);
-      if (state.startDate) startInput.value = state.startDate;
-      startInput.addEventListener('change', () => {
-        state.startDate = startInput.value || null;
-        setDirty(true);
-        refreshBacktest(state);
       });
 
       $('.btn-remove', root).addEventListener('click', () => removeGraphSet(id));
