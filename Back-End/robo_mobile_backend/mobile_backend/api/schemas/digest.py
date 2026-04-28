@@ -19,6 +19,10 @@ class DigestResponse(BaseModel):
     period_end: str = Field(..., description="분석 종료일", examples=["2026-04-14"])
     total_return_pct: float = Field(..., description="주간 총 수익률(%)", examples=[-1.2])
     total_return_won: float = Field(..., description="주간 총 수익(원)", examples=[-32400])
+    available: bool = Field(
+        default=True,
+        description="이번 주 다이제스트 노출 여부 (총 수익률이 ±5% 이상일 때만 true)",
+    )
     narrative_ko: str | None = Field(None, description="AI 생성 한국어 요약")
     has_narrative: bool = Field(..., description="AI 요약 포함 여부")
     drivers: list[DigestDriverResponse] = Field(..., description="상승 기여 종목 (최대 2)")

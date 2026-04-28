@@ -88,7 +88,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final hasResolvedPortfolio =
         state.selectedPortfolio != null || state.accountSummary != null;
     final hasInsightBanner = state.unreadInsightCount > 0;
-    final hasDigestBanner = !state.hasSeenCurrentDigest;
+    final hasDigestBanner =
+        state.isWeeklyDigestAvailable && !state.hasSeenCurrentDigest;
     int staggerIdx = 0;
 
     return SafeArea(

@@ -222,5 +222,61 @@ void main() {
       expect(state.categories, isNotEmpty);
       expect(state.categoryDetails, isNotEmpty);
     });
+
+    test('isWeeklyDigestAvailable defaults to false', () {
+      expect(state.isWeeklyDigestAvailable, isFalse);
+      expect(state.weeklyDigest, isNull);
+    });
+
+    test('setWeeklyDigest updates state and notifies', () {
+      var notified = 0;
+      state.addListener(() => notified += 1);
+
+      final digest = MobileDigestResponse(
+        digestDate: '2026-04-29',
+        periodStart: '2026-04-22',
+        periodEnd: '2026-04-29',
+        totalReturnPct: 6.0,
+        totalReturnWon: 600000,
+        hasNarrative: false,
+        available: true,
+        drivers: const [],
+        detractors: const [],
+        sourcesUsed: const [],
+        disclaimer: '',
+        generatedAt: '2026-04-29T00:00:00Z',
+        degradationLevel: 0,
+      );
+
+      state.setWeeklyDigest(digest);
+
+      expect(state.weeklyDigest, same(digest));
+      expect(state.isWeeklyDigestAvailable, isTrue);
+      expect(notified, 1);
+    });
+
+    test('isWeeklyDigestAvailable is false when digest.available is false',
+        () {
+      final digest = MobileDigestResponse(
+        digestDate: '2026-04-29',
+        periodStart: '2026-04-22',
+        periodEnd: '2026-04-29',
+        totalReturnPct: 1.5,
+        totalReturnWon: 150000,
+        hasNarrative: false,
+        available: false,
+        drivers: const [],
+        detractors: const [],
+        sourcesUsed: const [],
+        disclaimer: '',
+        generatedAt: '2026-04-29T00:00:00Z',
+        degradationLevel: 0,
+      );
+
+      state.setWeeklyDigest(digest);
+
+      expect(state.weeklyDigest, same(digest));
+      expect(state.isWeeklyDigestAvailable, isFalse);
+    });
   });
 }

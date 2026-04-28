@@ -76,7 +76,7 @@ class FakeStockDataRepository:
         )
 
 
-def test_generate_digest_uses_demo_price_source_for_demo_accounts(
+def test_below_threshold_returns_unavailable_sentinel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     service = digest_module.DigestService()
@@ -92,9 +92,20 @@ def test_generate_digest_uses_demo_price_source_for_demo_accounts(
     service.universe_repo = FakeUniverseRepository()
 
     monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
-    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
     monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
-    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    news_calls: list[list[str]] = []
+    narrative_calls: list[dict] = []
+    monkeypatch.setattr(
+        digest_module,
+        "fetch_news_for_tickers",
+        lambda tickers: news_calls.append(list(tickers)) or {},
+    )
+    monkeypatch.setattr(
+        digest_module,
+        "generate_narrative",
+        lambda **kwargs: narrative_calls.append(kwargs) or None,
+    )
 
     digest = service.generate(
         {
@@ -120,8 +131,335 @@ def test_generate_digest_uses_demo_price_source_for_demo_accounts(
         }
     )
 
-    assert service.universe_repo.load_prices_calls == 0
-    assert digest["digest_date"]
-    assert digest["drivers"][0]["ticker"] == "AAA"
-    assert digest["detractors"][0]["ticker"] == "BBB"
+    # 60/40 with +10/-10 yields +2% total — below the ±5% threshold.
+    assert service.universe_repo.load_prices_calls == 0  # demo source still used
+    assert digest["available"] is False
+    assert digest["drivers"] == []
+    assert digest["detractors"] == []
     assert digest["has_narrative"] is False
+    assert digest["narrative_ko"] is None
+    assert digest["sources_used"] == []
+    assert news_calls == []  # below-threshold path skips news fetch
+    assert narrative_calls == []  # below-threshold path skips LLM
+    assert digest["total_return_pct"] == 2.0
+
+
+def test_above_positive_threshold_keeps_drivers_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
+    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
+    monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
+    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    # 80/20 with +10/-10 yields +6% total — above the +5% threshold.
+    digest = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {
+                    "ticker": "AAA",
+                    "name": "Alpha Asset",
+                    "sector_code": "us_growth",
+                    "sector_name": "미국 성장주",
+                    "weight": 0.8,
+                },
+                {
+                    "ticker": "BBB",
+                    "name": "Beta Bond",
+                    "sector_code": "bond",
+                    "sector_name": "채권",
+                    "weight": 0.2,
+                },
+            ],
+        }
+    )
+
+    assert digest["available"] is True
+    assert digest["total_return_pct"] == 6.0
+    assert len(digest["drivers"]) == 1
+    assert digest["drivers"][0]["ticker"] == "AAA"
+    assert digest["detractors"] == []
+
+
+def test_above_negative_threshold_keeps_detractors_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
+    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
+    monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
+    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    # 20/80 with +10/-10 yields -6% total — below the -5% threshold.
+    digest = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {
+                    "ticker": "AAA",
+                    "name": "Alpha Asset",
+                    "sector_code": "us_growth",
+                    "sector_name": "미국 성장주",
+                    "weight": 0.2,
+                },
+                {
+                    "ticker": "BBB",
+                    "name": "Beta Bond",
+                    "sector_code": "bond",
+                    "sector_name": "채권",
+                    "weight": 0.8,
+                },
+            ],
+        }
+    )
+
+    assert digest["available"] is True
+    assert digest["total_return_pct"] == -6.0
+    assert digest["drivers"] == []
+    assert len(digest["detractors"]) == 1
+    assert digest["detractors"][0]["ticker"] == "BBB"
+
+
+def test_boundary_exactly_positive_5pct_is_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
+    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
+    monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
+    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    # 75/25 with +10/-10 yields exactly +5.0% total.
+    digest = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {"ticker": "AAA", "name": "Alpha Asset", "sector_code": "us_growth",
+                 "sector_name": "미국 성장주", "weight": 0.75},
+                {"ticker": "BBB", "name": "Beta Bond", "sector_code": "bond",
+                 "sector_name": "채권", "weight": 0.25},
+            ],
+        }
+    )
+
+    assert digest["total_return_pct"] == 5.0
+    assert digest["available"] is True
+    assert len(digest["drivers"]) == 1
+    assert digest["detractors"] == []
+
+
+def test_boundary_exactly_negative_5pct_is_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
+    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
+    monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
+    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    # 25/75 with +10/-10 yields exactly -5.0% total.
+    digest = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {"ticker": "AAA", "name": "Alpha Asset", "sector_code": "us_growth",
+                 "sector_name": "미국 성장주", "weight": 0.25},
+                {"ticker": "BBB", "name": "Beta Bond", "sector_code": "bond",
+                 "sector_name": "채권", "weight": 0.75},
+            ],
+        }
+    )
+
+    assert digest["total_return_pct"] == -5.0
+    assert digest["available"] is True
+    assert digest["drivers"] == []
+    assert len(digest["detractors"]) == 1
+
+
+def test_build_user_prompt_omits_drivers_header_when_empty() -> None:
+    prompt = digest_module._build_user_prompt(
+        total_return_pct=-6.0,
+        total_return_won=-600_000,
+        portfolio_type="균형형",
+        drivers=[],
+        detractors=[
+            {
+                "ticker": "BBB",
+                "name_ko": "채권",
+                "weight_pct": 80.0,
+                "return_pct": -10.0,
+                "contribution_won": -800_000,
+            }
+        ],
+        news={},
+    )
+    assert "상승 기여 종목:" not in prompt
+    assert "하락 기여 종목:" in prompt
+    assert "BBB" in prompt
+    assert "\n\n\n" not in prompt  # no double blank lines
+    assert "위 데이터를 바탕으로:" in prompt
+
+
+def test_below_threshold_cache_hit_returns_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cached unavailable sentinel must short-circuit, not trigger regeneration."""
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    # Pre-seed the cache with an unavailable sentinel.
+    sentinel = {
+        "digest_date": "2026-04-29",
+        "period_start": "2026-04-22",
+        "period_end": "2026-04-29",
+        "total_return_pct": 2.0,
+        "total_return_won": 200_000,
+        "available": False,
+        "narrative_ko": None,
+        "has_narrative": False,
+        "drivers": [],
+        "detractors": [],
+        "sources_used": [],
+        "disclaimer": "...",
+        "generated_at": "2026-04-29T00:00:00Z",
+        "degradation_level": 0,
+        "benchmark_7asset_return_pct": None,
+        "benchmark_bond_return_pct": None,
+    }
+    service.digest_repo.cache(1, sentinel)
+
+    # Spy: assert these are NOT called on a cache hit.
+    stock_repo_calls = []
+    monkeypatch.setattr(
+        digest_module,
+        "StockDataRepository",
+        lambda *a, **kw: stock_repo_calls.append(1) or FakeStockDataRepository(),
+    )
+    news_calls: list[list[str]] = []
+    narrative_calls: list[dict] = []
+    monkeypatch.setattr(
+        digest_module,
+        "fetch_news_for_tickers",
+        lambda tickers: news_calls.append(list(tickers)) or {},
+    )
+    monkeypatch.setattr(
+        digest_module,
+        "generate_narrative",
+        lambda **kwargs: narrative_calls.append(kwargs) or None,
+    )
+
+    result = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {
+                    "ticker": "AAA",
+                    "name": "Alpha Asset",
+                    "sector_code": "us_growth",
+                    "sector_name": "미국 성장주",
+                    "weight": 0.6,
+                },
+                {
+                    "ticker": "BBB",
+                    "name": "Beta Bond",
+                    "sector_code": "bond",
+                    "sector_name": "채권",
+                    "weight": 0.4,
+                },
+            ],
+        }
+    )
+
+    assert result == sentinel
+    assert stock_repo_calls == []  # no price load
+    assert news_calls == []
+    assert narrative_calls == []
+
+
+def test_build_user_prompt_omits_detractors_header_when_empty() -> None:
+    prompt = digest_module._build_user_prompt(
+        total_return_pct=6.0,
+        total_return_won=600_000,
+        portfolio_type="균형형",
+        drivers=[
+            {
+                "ticker": "AAA",
+                "name_ko": "미국 성장주",
+                "weight_pct": 80.0,
+                "return_pct": 10.0,
+                "contribution_won": 800_000,
+            }
+        ],
+        detractors=[],
+        news={},
+    )
+    assert "상승 기여 종목:" in prompt
+    assert "하락 기여 종목:" not in prompt
+    assert "AAA" in prompt
+    assert "\n\n\n" not in prompt  # no double blank lines
+    assert "위 데이터를 바탕으로:" in prompt

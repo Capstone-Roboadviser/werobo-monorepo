@@ -21,6 +21,7 @@ class _HomeShellState extends State<HomeShell> {
   bool _backtestFetched = false;
   bool _accountFetched = false;
   bool _insightsFetched = false;
+  bool _digestFetched = false;
 
   static const _tabs = [
     HomeTab(),
@@ -52,6 +53,10 @@ class _HomeShellState extends State<HomeShell> {
     if (!_insightsFetched) {
       _insightsFetched = true;
       _fetchInsights();
+    }
+    if (!_digestFetched) {
+      _digestFetched = true;
+      _fetchWeeklyDigest();
     }
   }
 
@@ -85,6 +90,16 @@ class _HomeShellState extends State<HomeShell> {
     final state = PortfolioStateProvider.of(context);
     try {
       await state.refreshInsights(notify: true);
+    } catch (_) {}
+  }
+
+  Future<void> _fetchWeeklyDigest() async {
+    final state = PortfolioStateProvider.of(context);
+    if (!state.isLoggedIn) {
+      return;
+    }
+    try {
+      await state.refreshWeeklyDigest(notify: true);
     } catch (_) {}
   }
 

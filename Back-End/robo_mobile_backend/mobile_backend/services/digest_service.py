@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 DIGEST_PERIOD_DAYS = 7
 TOP_N = 2
+DIGEST_THRESHOLD_PCT = 5.0
 
 
 class DigestError(Exception):
@@ -215,21 +216,25 @@ def _build_user_prompt(
     lines = [
         f"총 수익률: {total_return_pct:.1f}% ({total_return_won:+,.0f}원)",
         f"포트폴리오 유형: {portfolio_type}",
-        "",
-        "상승 기여 종목:",
     ]
-    for d in drivers:
-        lines.append(
-            f"  - {d['ticker']} ({d['name_ko']}): 비중 {d['weight_pct']}%, "
-            f"수익률 {d['return_pct']:+.1f}%, 기여 {d['contribution_won']:+,}원"
-        )
-    lines.append("")
-    lines.append("하락 기여 종목:")
-    for d in detractors:
-        lines.append(
-            f"  - {d['ticker']} ({d['name_ko']}): 비중 {d['weight_pct']}%, "
-            f"수익률 {d['return_pct']:+.1f}%, 기여 {d['contribution_won']:+,}원"
-        )
+
+    if drivers:
+        lines.append("")
+        lines.append("상승 기여 종목:")
+        for d in drivers:
+            lines.append(
+                f"  - {d['ticker']} ({d['name_ko']}): 비중 {d['weight_pct']}%, "
+                f"수익률 {d['return_pct']:+.1f}%, 기여 {d['contribution_won']:+,}원"
+            )
+
+    if detractors:
+        lines.append("")
+        lines.append("하락 기여 종목:")
+        for d in detractors:
+            lines.append(
+                f"  - {d['ticker']} ({d['name_ko']}): 비중 {d['weight_pct']}%, "
+                f"수익률 {d['return_pct']:+.1f}%, 기여 {d['contribution_won']:+,}원"
+            )
 
     if news:
         lines.append("")
@@ -242,13 +247,30 @@ def _build_user_prompt(
         lines.append("")
         lines.append("이번 주에 리밸런싱이 실행되었습니다.")
 
+    if drivers and not detractors:
+        instruction_focus = (
+            "1. 요약 문단 (3~5문장): 주간 성과를 설명하고, 상위 상승 종목을 원화 금액과 "
+            "함께 언급하며, 관련 뉴스 맥락을 포함해 주세요. 차분하고 사실 기반의 톤을 "
+            "유지해주세요.\n"
+            "2. 각 상승 기여 종목에 대해 2~3문장의 한국어 설명을 작성해주세요."
+        )
+    elif detractors and not drivers:
+        instruction_focus = (
+            "1. 요약 문단 (3~5문장): 주간 성과를 설명하고, 상위 하락 종목을 원화 금액과 "
+            "함께 언급하며, 관련 뉴스 맥락을 포함하고, 정상적인 변동 범위인지 평가해주세요. "
+            "차분하고 안심을 주는 톤을 유지해주세요.\n"
+            "2. 각 하락 기여 종목에 대해 2~3문장의 한국어 설명을 작성해주세요."
+        )
+    else:
+        instruction_focus = (
+            "1. 요약 문단 (3~5문장): 주간 성과를 설명하고, 상위 상승/하락 종목을 원화 금액과 "
+            "함께 언급하며, 관련 뉴스 맥락을 포함하고, 정상 변동인지 평가해주세요.\n"
+            "2. 각 상승/하락 기여 종목에 대해 2~3문장의 한국어 설명을 작성해주세요."
+        )
+
     lines.append("")
-    lines.append(
-        "위 데이터를 바탕으로:\n"
-        "1. 요약 문단 (3~5문장): 주간 성과를 설명하고, 상위 상승/하락 종목을 원화 금액과 "
-        "함께 언급하며, 관련 뉴스 맥락을 포함하고, 정상 변동인지 평가해주세요.\n"
-        "2. 각 상승/하락 기여 종목에 대해 2~3문장의 한국어 설명을 작성해주세요."
-    )
+    lines.append("위 데이터를 바탕으로:")
+    lines.append(instruction_focus)
     lines.append("")
     lines.append(
         'JSON으로 응답해주세요: {"narrative_ko": "...", "explanations": {"TICKER": "...", ...}}'
@@ -394,7 +416,7 @@ class DigestService:
         # Check cache (with read-time rebalance bust)
         cached = self.digest_repo.get_cached(account_id)
         if cached is not None:
-            if cached.get("has_narrative"):
+            if cached.get("has_narrative") or cached.get("available") is False:
                 logger.info("digest.cache.hit account_id=%s", account_id)
                 return cached
             logger.info(
@@ -462,6 +484,42 @@ class DigestService:
 
         drivers, detractors = top_drivers_detractors(attributions)
 
+        # Sign-based narrowing: positive moves show drivers only,
+        # negative moves show detractors only.
+        if total_return_pct >= DIGEST_THRESHOLD_PCT:
+            detractors = []
+        elif total_return_pct <= -DIGEST_THRESHOLD_PCT:
+            drivers = []
+
+        # Threshold gate: only surface a digest for ±5% moves.
+        if abs(total_return_pct) < DIGEST_THRESHOLD_PCT:
+            now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+            unavailable = {
+                "digest_date": end_date.isoformat(),
+                "period_start": start_date.isoformat(),
+                "period_end": end_date.isoformat(),
+                "total_return_pct": total_return_pct,
+                "total_return_won": total_return_won,
+                "available": False,
+                "narrative_ko": None,
+                "has_narrative": False,
+                "drivers": [],
+                "detractors": [],
+                "sources_used": [],
+                "disclaimer": "이 내용은 투자 조언이 아닙니다. AI가 생성한 요약이며 투자 결정의 근거로 사용하지 마세요.",
+                "generated_at": now_utc,
+                "degradation_level": 0,
+                "benchmark_7asset_return_pct": None,
+                "benchmark_bond_return_pct": None,
+            }
+            self.digest_repo.cache(account_id, unavailable)
+            logger.info(
+                "digest.generate.below_threshold account_id=%s total_return_pct=%s",
+                account_id,
+                total_return_pct,
+            )
+            return unavailable
+
         # Benchmark returns
         benchmark_7asset, benchmark_bond = _compute_benchmark_returns(
             universe_repo=self.universe_repo,
@@ -506,6 +564,7 @@ class DigestService:
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         digest = {
             "digest_date": end_date.isoformat(),
+            "available": True,
             "period_start": start_date.isoformat(),
             "period_end": end_date.isoformat(),
             "total_return_pct": total_return_pct,
