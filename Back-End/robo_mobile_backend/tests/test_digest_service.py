@@ -354,6 +354,93 @@ def test_build_user_prompt_omits_drivers_header_when_empty() -> None:
     assert "위 데이터를 바탕으로:" in prompt
 
 
+def test_below_threshold_cache_hit_returns_sentinel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A cached unavailable sentinel must short-circuit, not trigger regeneration."""
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    # Pre-seed the cache with an unavailable sentinel.
+    sentinel = {
+        "digest_date": "2026-04-29",
+        "period_start": "2026-04-22",
+        "period_end": "2026-04-29",
+        "total_return_pct": 2.0,
+        "total_return_won": 200_000,
+        "available": False,
+        "narrative_ko": None,
+        "has_narrative": False,
+        "drivers": [],
+        "detractors": [],
+        "sources_used": [],
+        "disclaimer": "...",
+        "generated_at": "2026-04-29T00:00:00Z",
+        "degradation_level": 0,
+        "benchmark_7asset_return_pct": None,
+        "benchmark_bond_return_pct": None,
+    }
+    service.digest_repo.cache(1, sentinel)
+
+    # Spy: assert these are NOT called on a cache hit.
+    stock_repo_calls = []
+    monkeypatch.setattr(
+        digest_module,
+        "StockDataRepository",
+        lambda *a, **kw: stock_repo_calls.append(1) or FakeStockDataRepository(),
+    )
+    news_calls: list[list[str]] = []
+    narrative_calls: list[dict] = []
+    monkeypatch.setattr(
+        digest_module,
+        "fetch_news_for_tickers",
+        lambda tickers: news_calls.append(list(tickers)) or {},
+    )
+    monkeypatch.setattr(
+        digest_module,
+        "generate_narrative",
+        lambda **kwargs: narrative_calls.append(kwargs) or None,
+    )
+
+    result = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {
+                    "ticker": "AAA",
+                    "name": "Alpha Asset",
+                    "sector_code": "us_growth",
+                    "sector_name": "미국 성장주",
+                    "weight": 0.6,
+                },
+                {
+                    "ticker": "BBB",
+                    "name": "Beta Bond",
+                    "sector_code": "bond",
+                    "sector_name": "채권",
+                    "weight": 0.4,
+                },
+            ],
+        }
+    )
+
+    assert result == sentinel
+    assert stock_repo_calls == []  # no price load
+    assert news_calls == []
+    assert narrative_calls == []
+
+
 def test_build_user_prompt_omits_detractors_header_when_empty() -> None:
     prompt = digest_module._build_user_prompt(
         total_return_pct=6.0,

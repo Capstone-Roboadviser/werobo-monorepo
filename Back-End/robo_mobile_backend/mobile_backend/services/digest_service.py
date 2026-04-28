@@ -416,7 +416,7 @@ class DigestService:
         # Check cache (with read-time rebalance bust)
         cached = self.digest_repo.get_cached(account_id)
         if cached is not None:
-            if cached.get("has_narrative"):
+            if cached.get("has_narrative") or cached.get("available") is False:
                 logger.info("digest.cache.hit account_id=%s", account_id)
                 return cached
             logger.info(
