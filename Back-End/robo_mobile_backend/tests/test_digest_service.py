@@ -328,3 +328,51 @@ def test_boundary_exactly_negative_5pct_is_available(
     assert digest["available"] is True
     assert digest["drivers"] == []
     assert len(digest["detractors"]) == 1
+
+
+def test_build_user_prompt_omits_drivers_header_when_empty() -> None:
+    prompt = digest_module._build_user_prompt(
+        total_return_pct=-6.0,
+        total_return_won=-600_000,
+        portfolio_type="균형형",
+        drivers=[],
+        detractors=[
+            {
+                "ticker": "BBB",
+                "name_ko": "채권",
+                "weight_pct": 80.0,
+                "return_pct": -10.0,
+                "contribution_won": -800_000,
+            }
+        ],
+        news={},
+    )
+    assert "상승 기여 종목:" not in prompt
+    assert "하락 기여 종목:" in prompt
+    assert "BBB" in prompt
+    assert "\n\n\n" not in prompt  # no double blank lines
+    assert "위 데이터를 바탕으로:" in prompt
+
+
+def test_build_user_prompt_omits_detractors_header_when_empty() -> None:
+    prompt = digest_module._build_user_prompt(
+        total_return_pct=6.0,
+        total_return_won=600_000,
+        portfolio_type="균형형",
+        drivers=[
+            {
+                "ticker": "AAA",
+                "name_ko": "미국 성장주",
+                "weight_pct": 80.0,
+                "return_pct": 10.0,
+                "contribution_won": 800_000,
+            }
+        ],
+        detractors=[],
+        news={},
+    )
+    assert "상승 기여 종목:" in prompt
+    assert "하락 기여 종목:" not in prompt
+    assert "AAA" in prompt
+    assert "\n\n\n" not in prompt  # no double blank lines
+    assert "위 데이터를 바탕으로:" in prompt
