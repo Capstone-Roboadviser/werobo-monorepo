@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.config import MINIMUM_HISTORY_ROWS
+from app.data.stock_repository import StockDataRepository
 from app.services.portfolio_analytics_service import PortfolioAnalyticsService
 from app.services.portfolio_service import PortfolioSimulationService
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
@@ -108,6 +109,42 @@ def _representative_indices(total_point_count: int) -> dict[str, int]:
     }
 
 
+def _basis_date_has_representative_history(
+    *,
+    version_id: int,
+    instruments: list[object],
+    prices: pd.DataFrame,
+) -> bool:
+    try:
+        stock_returns = StockDataRepository().build_stock_returns(prices)
+    except RuntimeError:
+        return False
+    if stock_returns.empty:
+        return False
+
+    try:
+        assets = portfolio_simulation_service.list_assets(version_id=version_id)
+        candidate_map = portfolio_simulation_service._build_sector_candidate_map(
+            assets,
+            instruments,
+            stock_returns,
+        )
+        combinations = portfolio_simulation_service._build_representative_combinations(candidate_map)
+    except RuntimeError:
+        return False
+
+    for combination in combinations:
+        try:
+            portfolio_simulation_service._prepare_selected_stock_returns(
+                stock_returns,
+                combination,
+            )
+        except RuntimeError:
+            continue
+        return True
+    return False
+
+
 def _basis_date_window(version_id: int) -> dict[str, object] | None:
     instruments = managed_universe_service.get_instruments_for_version(version_id)
     if not instruments:
@@ -120,11 +157,12 @@ def _basis_date_window(version_id: int) -> dict[str, object] | None:
     if prices.empty:
         return None
 
+    normalized_prices = prices.assign(
+        ticker=prices["ticker"].astype(str).str.upper(),
+        date=pd.to_datetime(prices["date"]).dt.normalize(),
+    )
     common_prices = (
-        prices.assign(
-            ticker=prices["ticker"].astype(str).str.upper(),
-            date=pd.to_datetime(prices["date"]).dt.normalize(),
-        )
+        normalized_prices
         .pivot_table(
             index="date",
             columns="ticker",
@@ -137,11 +175,36 @@ def _basis_date_window(version_id: int) -> dict[str, object] | None:
     if len(common_prices.index) < MINIMUM_HISTORY_ROWS + 2:
         return None
 
-    min_basis_date = common_prices.index[MINIMUM_HISTORY_ROWS]
-    max_basis_date = common_prices.index[-2]
-    if min_basis_date > max_basis_date:
+    min_index = MINIMUM_HISTORY_ROWS
+    max_index = len(common_prices.index) - 2
+    if min_index > max_index:
         return None
 
+    def can_build_at(index: int) -> bool:
+        basis_date = common_prices.index[index]
+        window_prices = normalized_prices[normalized_prices["date"] <= basis_date].copy()
+        return _basis_date_has_representative_history(
+            version_id=version_id,
+            instruments=instruments,
+            prices=window_prices,
+        )
+
+    if not can_build_at(max_index):
+        return None
+
+    best_index = max_index
+    low_index = min_index
+    high_index = max_index
+    while low_index <= high_index:
+        candidate_index = (low_index + high_index) // 2
+        if can_build_at(candidate_index):
+            best_index = candidate_index
+            high_index = candidate_index - 1
+        else:
+            low_index = candidate_index + 1
+
+    min_basis_date = common_prices.index[best_index]
+    max_basis_date = common_prices.index[max_index]
     return {
         "first_price_date": common_prices.index[0].strftime("%Y-%m-%d"),
         "last_price_date": common_prices.index[-1].strftime("%Y-%m-%d"),

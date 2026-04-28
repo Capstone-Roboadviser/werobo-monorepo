@@ -34,6 +34,11 @@ def test_comparison_catalog_exposes_valid_basis_date_window(monkeypatch) -> None
     )
 
     monkeypatch.setattr(comparison_routes, "managed_universe_service", fake_service)
+    monkeypatch.setattr(
+        comparison_routes,
+        "_basis_date_has_representative_history",
+        lambda **kwargs: True,
+    )
 
     response = comparison_routes.get_comparison_catalog()
     window = response["versions"][0]["basis_date_window"]
@@ -75,6 +80,11 @@ def test_comparison_catalog_basis_window_ignores_forward_filled_gaps(
     )
 
     monkeypatch.setattr(comparison_routes, "managed_universe_service", fake_service)
+    monkeypatch.setattr(
+        comparison_routes,
+        "_basis_date_has_representative_history",
+        lambda **kwargs: True,
+    )
 
     response = comparison_routes.get_comparison_catalog()
     window = response["versions"][0]["basis_date_window"]
@@ -118,3 +128,48 @@ def test_comparison_catalog_omits_basis_window_without_post_basis_data(
     response = comparison_routes.get_comparison_catalog()
 
     assert response["versions"][0]["basis_date_window"] is None
+
+
+def test_comparison_catalog_advances_basis_until_representative_history(
+    monkeypatch,
+) -> None:
+    dates = pd.date_range("2020-01-02", periods=265, freq="B")
+    prices = pd.DataFrame(
+        [
+            {"date": date, "ticker": ticker, "adjusted_close": 100.0 + idx}
+            for idx, date in enumerate(dates)
+            for ticker in ("AAA", "BBB")
+        ]
+    )
+    version = SimpleNamespace(
+        version_id=7,
+        version_name="test universe",
+        is_active=True,
+        notes=None,
+    )
+    fake_service = SimpleNamespace(
+        list_assets=lambda: [],
+        list_versions=lambda: [version],
+        get_instruments_for_version=lambda version_id: [
+            SimpleNamespace(ticker="AAA"),
+            SimpleNamespace(ticker="BBB"),
+        ],
+        load_prices_for_instruments=lambda instruments, **kwargs: prices,
+    )
+    first_buildable_date = dates[MINIMUM_HISTORY_ROWS + 3]
+
+    def has_representative_history(**kwargs) -> bool:
+        max_date = pd.to_datetime(kwargs["prices"]["date"]).max().normalize()
+        return max_date >= first_buildable_date
+
+    monkeypatch.setattr(comparison_routes, "managed_universe_service", fake_service)
+    monkeypatch.setattr(
+        comparison_routes,
+        "_basis_date_has_representative_history",
+        has_representative_history,
+    )
+
+    response = comparison_routes.get_comparison_catalog()
+    window = response["versions"][0]["basis_date_window"]
+
+    assert window["min_basis_date"] == first_buildable_date.strftime("%Y-%m-%d")
