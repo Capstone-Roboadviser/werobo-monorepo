@@ -92,7 +92,19 @@ void main() {
       expect(filtered, hasLength(1));
       expect(filtered.single.points, hasLength(2));
       expect(filtered.single.points[0].value, 0.0);
-      expect(filtered.single.points[1].value, closeTo(0.03, 1e-9));
+      expect(filtered.single.points[1].value, closeTo(0.0277777778, 1e-9));
+    });
+
+    test('rebases large cumulative returns as period returns', () {
+      final points = [
+        ChartPoint(date: DateTime(2026, 4, 10), value: 1.715352),
+        ChartPoint(date: DateTime(2026, 4, 13), value: 1.31584),
+      ];
+
+      final rebased = rebaseChartPointsToFirstValue(points);
+
+      expect(rebased[0].value, 0.0);
+      expect(rebased[1].value, closeTo(-0.1471308324, 1e-9));
     });
   });
 

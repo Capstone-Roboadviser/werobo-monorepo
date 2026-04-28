@@ -83,6 +83,10 @@ class ComparisonBacktestRequest(BaseModel):
         default=None,
         description="현재 선택 포트폴리오 코드. 없으면 `selected` 라인 키를 사용합니다.",
     )
+    start_date: date | None = Field(
+        default=None,
+        description="비교 백테스트 시작일 (YYYY-MM-DD). 계정 성과 비교에서는 포트폴리오 시작일을 전달합니다.",
+    )
 
 
 class SignupRequest(BaseModel):

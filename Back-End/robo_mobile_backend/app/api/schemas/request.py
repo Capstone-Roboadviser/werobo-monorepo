@@ -157,12 +157,12 @@ class RebalanceSimulationRequest(BaseModel):
 class PriceRefreshRequest(BaseModel):
     version_id: int | None = Field(default=None, description="가격 갱신 대상 유니버스 버전. 없으면 active 버전 사용")
     refresh_mode: PriceRefreshMode = Field(default=PriceRefreshMode.INCREMENTAL, description="증분 갱신 또는 전체 백필")
-    full_lookback_years: int = Field(default=5, ge=1, le=20, description="full 모드에서 가져올 연수")
+    full_lookback_years: int = Field(default=20, ge=1, le=20, description="full 모드에서 가져올 연수")
 
 
 class ActivePriceRefreshRequest(BaseModel):
     refresh_mode: PriceRefreshMode = Field(default=PriceRefreshMode.INCREMENTAL, description="active 유니버스에 대한 증분 갱신 또는 전체 백필")
-    full_lookback_years: int = Field(default=5, ge=1, le=20, description="full 모드에서 가져올 연수")
+    full_lookback_years: int = Field(default=20, ge=1, le=20, description="full 모드에서 가져올 연수")
 
 
 class AccountSnapshotBackfillRequest(BaseModel):

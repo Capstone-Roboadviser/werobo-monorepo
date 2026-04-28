@@ -66,10 +66,18 @@ List<ChartPoint> rebaseChartPointsToFirstValue(List<ChartPoint> points) {
       .map(
         (point) => ChartPoint(
           date: point.date,
-          value: point.value - baseValue,
+          value: _rebaseCumulativeReturn(point.value, baseValue),
         ),
       )
       .toList();
+}
+
+double _rebaseCumulativeReturn(double value, double baseValue) {
+  final baseGrowth = 1 + baseValue;
+  if (baseGrowth <= 0) {
+    return value - baseValue;
+  }
+  return ((1 + value) / baseGrowth) - 1;
 }
 
 List<DateTime> filterDatesFromStartDate(

@@ -678,11 +678,13 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             data_source=SimulationDataSource.MANAGED_UNIVERSE,
             stock_weights={"VTV": 0.7, "VUG": 0.3},
             portfolio_code="balanced",
+            start_date="2026-03-01",
         )
 
         self.assertEqual(response["data_source"], SimulationDataSource.MANAGED_UNIVERSE)
         self.assertEqual(response["stock_weights"], {"VTV": 0.7, "VUG": 0.3})
         self.assertEqual(response["portfolio_code"], "balanced")
+        self.assertEqual(response["start_date"], "2026-03-01")
         self.assertEqual(captured["status"], "bypass")
 
 

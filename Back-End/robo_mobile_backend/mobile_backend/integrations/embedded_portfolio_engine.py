@@ -1244,6 +1244,7 @@ class EmbeddedPortfolioEngineAdapter:
         data_source: SimulationDataSource,
         stock_weights: dict[str, float] | None = None,
         portfolio_code: str | None = None,
+        start_date: str | None = None,
     ) -> dict[str, object]:
         if stock_weights:
             normalized_weights = {
@@ -1266,6 +1267,13 @@ class EmbeddedPortfolioEngineAdapter:
                 data_source=data_source,
                 stock_weights=normalized_weights,
                 portfolio_code=portfolio_code,
+                start_date=start_date,
+            )
+
+        if start_date is not None:
+            return self.build_materialized_comparison_backtest(
+                data_source=data_source,
+                start_date=start_date,
             )
 
         if data_source == SimulationDataSource.MANAGED_UNIVERSE:
@@ -1303,11 +1311,13 @@ class EmbeddedPortfolioEngineAdapter:
         data_source: SimulationDataSource,
         stock_weights: dict[str, float] | None = None,
         portfolio_code: str | None = None,
+        start_date: str | None = None,
     ) -> dict[str, object]:
         response = self.portfolio_analytics_service.build_comparison_backtest(
             data_source=self._to_core_data_source(data_source),
             stock_weights=stock_weights,
             portfolio_code=portfolio_code,
+            start_date=start_date,
         )
         return {
             "train_start_date": response.train_start_date,

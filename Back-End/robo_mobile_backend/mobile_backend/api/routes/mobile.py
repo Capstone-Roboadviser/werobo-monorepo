@@ -170,6 +170,7 @@ def get_comparison_backtest(
             data_source=payload.data_source,
             stock_weights=payload.stock_weights,
             portfolio_code=payload.portfolio_code,
+            start_date=None if payload.start_date is None else payload.start_date.isoformat(),
         )
         return ComparisonBacktestResponse(**response)
     except Exception as exc:

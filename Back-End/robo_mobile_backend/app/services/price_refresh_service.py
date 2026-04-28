@@ -145,7 +145,9 @@ class PriceRefreshService:
 
         latest = latest_dates.get(ticker)
         if latest:
-            return (datetime.fromisoformat(latest) - timedelta(days=7)).date()
+            # Adjusted close can be restated far back after splits/distributions.
+            # A 7-day overlap leaves stale pre-adjustment rows and creates false drawdowns.
+            return (datetime.now(timezone.utc) - timedelta(days=365 * full_lookback_years)).date()
         return (datetime.now(timezone.utc) - timedelta(days=365 * full_lookback_years)).date()
 
     def _build_refresh_tickers(
