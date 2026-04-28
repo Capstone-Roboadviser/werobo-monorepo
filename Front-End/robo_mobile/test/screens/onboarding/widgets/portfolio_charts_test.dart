@@ -151,4 +151,74 @@ void main() {
       expect(expectedReturn.points.last.value, greaterThan(0.0));
     },
   );
+
+  testWidgets(
+    'filters comparison ranges from the latest available data date',
+    (tester) async {
+      final comparisonLines = [
+        ChartLine(
+          key: 'selected',
+          label: 'selected',
+          color: Colors.grey,
+          dashed: false,
+          points: [
+            ChartPoint(date: DateTime(2026, 1, 1), value: 0.00),
+            ChartPoint(date: DateTime(2026, 3, 26), value: 0.05),
+            ChartPoint(date: DateTime(2026, 4, 1), value: 0.07),
+          ],
+        ),
+        ChartLine(
+          key: 'benchmark_avg',
+          label: '6자산 단순평균',
+          color: Colors.grey,
+          dashed: true,
+          points: [
+            ChartPoint(date: DateTime(2026, 1, 1), value: 0.00),
+            ChartPoint(date: DateTime(2026, 3, 26), value: 0.02),
+            ChartPoint(date: DateTime(2026, 4, 1), value: 0.03),
+          ],
+        ),
+      ];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WeRoboTheme.light,
+          home: Scaffold(
+            body: SizedBox(
+              height: 640,
+              child: PortfolioCharts(
+                type: InvestmentType.balanced,
+                comparisonLines: comparisonLines,
+                expectedAnnualReturn: 0.12,
+                useFallbackMock: false,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('포트폴리오 비교'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('1주'));
+      await tester.pumpAndSettle();
+
+      final customPaint =
+          tester.widgetList<CustomPaint>(find.byType(CustomPaint)).firstWhere(
+                (widget) =>
+                    widget.painter != null &&
+                    widget.painter.runtimeType
+                        .toString()
+                        .contains('MultiLineChartPainter'),
+              );
+      final painter = customPaint.painter as dynamic;
+      final lines = painter.lines as List<ChartLine>;
+      final portfolioLine = lines.singleWhere((line) => line.key == 'selected');
+
+      expect(portfolioLine.points, hasLength(2));
+      expect(portfolioLine.points.first.date, DateTime(2026, 3, 26));
+      expect(portfolioLine.points.last.date, DateTime(2026, 4, 1));
+      expect(portfolioLine.points.first.value, 0.0);
+    },
+  );
 }

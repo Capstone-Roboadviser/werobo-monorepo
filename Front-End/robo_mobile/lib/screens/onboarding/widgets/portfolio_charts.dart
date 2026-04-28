@@ -465,10 +465,11 @@ class _ComparisonViewState extends State<_ComparisonView>
   }
 
   List<ChartLine> _filterByRange(List<ChartLine> rawLines) {
-    final cutoff = DateTime.now().subtract(Duration(days: _rangeDays[_range]));
+    final latestDate = _latestPointDate(rawLines) ?? DateTime.now();
+    final cutoff = latestDate.subtract(Duration(days: _rangeDays[_range]));
     return rawLines.map((line) {
       final filtered =
-          line.points.where((p) => p.date.isAfter(cutoff)).toList();
+          line.points.where((p) => !p.date.isBefore(cutoff)).toList();
       final rangedPoints = filtered.isNotEmpty ? filtered : line.points;
       final rebasedPoints = rebaseChartPointsToFirstValue(rangedPoints);
       return ChartLine(
@@ -479,6 +480,18 @@ class _ComparisonViewState extends State<_ComparisonView>
         points: rebasedPoints,
       );
     }).toList();
+  }
+
+  DateTime? _latestPointDate(List<ChartLine> lines) {
+    DateTime? latest;
+    for (final line in lines) {
+      for (final point in line.points) {
+        if (latest == null || point.date.isAfter(latest)) {
+          latest = point.date;
+        }
+      }
+    }
+    return latest;
   }
 
   ChartLine? _buildExpectedReturnLine(List<ChartLine> rangedLines) {

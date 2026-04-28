@@ -57,6 +57,7 @@ def build_comparison(
     train_start_date: str,
     train_end_date: str,
     split_ratio: float = 0.9,
+    max_sample_points: int | None = 250,
 ) -> ComparisonResult:
     """Build comparison backtest data.
 
@@ -92,20 +93,27 @@ def build_comparison(
         return_points = [
             (
                 point.date,
-                round((point.total_value - simulation.investment_amount) / simulation.investment_amount * 100, 4),
+                round(
+                    (point.total_value - simulation.investment_amount)
+                    / simulation.investment_amount
+                    * 100,
+                    4,
+                ),
             )
             for point in simulation.time_series
         ]
 
         color = _PROFILE_COLORS.get(profile_name, "#64748B")
         label = _PROFILE_LABELS.get(profile_name, profile_name)
-        lines.append(ComparisonLine(
-            key=profile_name,
-            label=label,
-            color=color,
-            style="solid",
-            points=return_points,
-        ))
+        lines.append(
+            ComparisonLine(
+                key=profile_name,
+                label=label,
+                color=color,
+                style="solid",
+                points=return_points,
+            )
+        )
 
     rebalance_dates: list[str] = sorted(rebalance_date_set)
 
@@ -122,15 +130,19 @@ def build_comparison(
             days_elapsed = (dates[i] - start_date).days
             years_elapsed = days_elapsed / 365.25
             cumulative_return = ((1 + annual_er) ** years_elapsed - 1) * 100
-            expected_points.append((dates[i].strftime("%Y-%m-%d"), round(cumulative_return, 4)))
+            expected_points.append(
+                (dates[i].strftime("%Y-%m-%d"), round(cumulative_return, 4))
+            )
 
-        lines.append(ComparisonLine(
-            key=f"{profile_name}_expected",
-            label=label,
-            color=color,
-            style="dashed",
-            points=expected_points,
-        ))
+        lines.append(
+            ComparisonLine(
+                key=f"{profile_name}_expected",
+                label=label,
+                color=color,
+                style="dashed",
+                points=expected_points,
+            )
+        )
 
     # --- Benchmark lines ---
     benchmark_configs = {
@@ -150,34 +162,45 @@ def build_comparison(
             for i in range(len(dates)):
                 ret = (aligned.iloc[i] - base) / base * 100
                 bm_points.append((dates[i].strftime("%Y-%m-%d"), round(float(ret), 4)))
-            lines.append(ComparisonLine(
-                key=bm_key,
-                label=cfg["label"],
-                color=cfg["color"],
-                style="solid",
-                points=bm_points,
-            ))
+            lines.append(
+                ComparisonLine(
+                    key=bm_key,
+                    label=cfg["label"],
+                    color=cfg["color"],
+                    style="solid",
+                    points=bm_points,
+                )
+            )
 
     if extra_lines:
         lines.extend(extra_lines)
 
-    # --- Subsample all lines to ~250 points ---
-    n = len(dates)
-    step = max(1, n // 250)
-    sampled_indices = list(range(0, n, step))
-    if sampled_indices[-1] != n - 1:
-        sampled_indices.append(n - 1)
+    sampled_lines = lines
+    if (
+        max_sample_points is not None
+        and max_sample_points > 0
+        and len(dates) > max_sample_points
+    ):
+        n = len(dates)
+        step = max(1, n // max_sample_points)
+        sampled_indices = list(range(0, n, step))
+        if sampled_indices[-1] != n - 1:
+            sampled_indices.append(n - 1)
 
-    sampled_lines: list[ComparisonLine] = []
-    for line in lines:
-        sampled_pts = [line.points[i] for i in sampled_indices if i < len(line.points)]
-        sampled_lines.append(ComparisonLine(
-            key=line.key,
-            label=line.label,
-            color=line.color,
-            style=line.style,
-            points=sampled_pts,
-        ))
+        sampled_lines = []
+        for line in lines:
+            sampled_pts = [
+                line.points[i] for i in sampled_indices if i < len(line.points)
+            ]
+            sampled_lines.append(
+                ComparisonLine(
+                    key=line.key,
+                    label=line.label,
+                    color=line.color,
+                    style=line.style,
+                    points=sampled_pts,
+                )
+            )
 
     return ComparisonResult(
         train_start_date=train_start_date,

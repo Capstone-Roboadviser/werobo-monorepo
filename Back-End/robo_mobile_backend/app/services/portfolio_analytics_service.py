@@ -13,7 +13,12 @@ from app.core.config import (
 )
 from app.data.stock_repository import StockDataRepository
 from app.domain.enums import SimulationDataSource
-from app.domain.models import AssetClass, PortfolioHistoryPoint, PortfolioHistorySeries, StockInstrument
+from app.domain.models import (
+    AssetClass,
+    PortfolioHistoryPoint,
+    PortfolioHistorySeries,
+    StockInstrument,
+)
 from app.engine.comparison import ComparisonLine, ComparisonResult, build_comparison
 from app.services.portfolio_service import PortfolioSimulationService
 
@@ -38,7 +43,9 @@ class PortfolioAnalyticsService:
         tickers: list[str],
         data_source: SimulationDataSource,
     ) -> pd.DataFrame:
-        normalized_tickers = sorted({str(ticker).strip().upper() for ticker in tickers if ticker})
+        normalized_tickers = sorted(
+            {str(ticker).strip().upper() for ticker in tickers if ticker}
+        )
         if not normalized_tickers:
             raise ValueError("비중 정보가 비어 있습니다.")
 
@@ -53,7 +60,9 @@ class PortfolioAnalyticsService:
             prices = repo.load_stock_prices(str(DEMO_STOCK_PRICES_PATH))
             prices["ticker"] = prices["ticker"].astype(str).str.upper()
         else:
-            raise ValueError("종목 히스토리 조회는 관리자 유니버스 또는 데모 종목 유니버스에서만 지원합니다.")
+            raise ValueError(
+                "종목 히스토리 조회는 관리자 유니버스 또는 데모 종목 유니버스에서만 지원합니다."
+            )
 
         if prices.empty:
             raise ValueError("요청한 종목의 가격 데이터가 없습니다.")
@@ -61,7 +70,9 @@ class PortfolioAnalyticsService:
         prices = prices.copy()
         prices["ticker"] = prices["ticker"].astype(str).str.upper()
         available_tickers = set(prices["ticker"].unique())
-        matched = [ticker for ticker in normalized_tickers if ticker in available_tickers]
+        matched = [
+            ticker for ticker in normalized_tickers if ticker in available_tickers
+        ]
         if not matched:
             raise ValueError("요청한 종목의 가격 데이터가 없습니다.")
 
@@ -78,25 +89,30 @@ class PortfolioAnalyticsService:
     ) -> tuple[pd.Series, pd.DatetimeIndex]:
         try:
             tickers = [ticker.upper() for ticker in weights.keys()]
-            weights_upper = {ticker.upper(): weight for ticker, weight in weights.items()}
+            weights_upper = {
+                ticker.upper(): weight for ticker, weight in weights.items()
+            }
             prices = self.load_history_prices(tickers=tickers, data_source=data_source)
-            pivoted = (
-                prices.pivot_table(
-                    index="date",
-                    columns="ticker",
-                    values="adjusted_close",
-                    aggfunc="last",
-                )
-                .sort_index()
-            )
+            pivoted = prices.pivot_table(
+                index="date",
+                columns="ticker",
+                values="adjusted_close",
+                aggfunc="last",
+            ).sort_index()
             if pivoted.empty:
                 raise ValueError("요청한 종목의 가격 데이터가 없습니다.")
 
             returns = pivoted.pct_change().dropna(how="all")
             if returns.empty:
-                raise ValueError("요청한 종목으로 유효 수익률 시계열을 만들지 못했습니다.")
+                raise ValueError(
+                    "요청한 종목으로 유효 수익률 시계열을 만들지 못했습니다."
+                )
 
-            weight_series = pd.Series(weights_upper, dtype=float).reindex(returns.columns).fillna(0.0)
+            weight_series = (
+                pd.Series(weights_upper, dtype=float)
+                .reindex(returns.columns)
+                .fillna(0.0)
+            )
             total = float(weight_series.sum())
             if total <= 0:
                 raise ValueError("포트폴리오 비중 합계가 0보다 커야 합니다.")
@@ -104,12 +120,16 @@ class PortfolioAnalyticsService:
 
             portfolio_returns = returns.fillna(0.0).dot(weight_series)
             if portfolio_returns.empty:
-                raise ValueError("요청한 종목으로 포트폴리오 수익률을 만들지 못했습니다.")
+                raise ValueError(
+                    "요청한 종목으로 포트폴리오 수익률을 만들지 못했습니다."
+                )
             return portfolio_returns, pivoted.index
         except ValueError:
             raise
         except Exception as exc:
-            raise RuntimeError(f"포트폴리오 히스토리 시계열을 만드는 중 오류가 발생했습니다: {exc}") from exc
+            raise RuntimeError(
+                f"포트폴리오 히스토리 시계열을 만드는 중 오류가 발생했습니다: {exc}"
+            ) from exc
 
     def build_volatility_history(
         self,
@@ -124,9 +144,9 @@ class PortfolioAnalyticsService:
                 data_source=data_source,
             )
             rolling_vol = (
-                portfolio_returns
-                .rolling(window=rolling_window, min_periods=rolling_window)
-                .std()
+                portfolio_returns.rolling(
+                    window=rolling_window, min_periods=rolling_window
+                ).std()
                 * math.sqrt(252)
             ).dropna()
             return PortfolioHistorySeries(
@@ -138,15 +158,21 @@ class PortfolioAnalyticsService:
                     for date, vol in rolling_vol.items()
                     if np.isfinite(vol)
                 ],
-                earliest_data_date=all_dates.min().strftime("%Y-%m-%d") if len(all_dates) > 0 else "",
-                latest_data_date=all_dates.max().strftime("%Y-%m-%d") if len(all_dates) > 0 else "",
+                earliest_data_date=(
+                    all_dates.min().strftime("%Y-%m-%d") if len(all_dates) > 0 else ""
+                ),
+                latest_data_date=(
+                    all_dates.max().strftime("%Y-%m-%d") if len(all_dates) > 0 else ""
+                ),
             )
         except ValueError:
             raise
         except RuntimeError:
             raise
         except Exception as exc:
-            raise RuntimeError(f"변동성 추이 계산 중 오류가 발생했습니다: {exc}") from exc
+            raise RuntimeError(
+                f"변동성 추이 계산 중 오류가 발생했습니다: {exc}"
+            ) from exc
 
     def build_return_history(
         self,
@@ -161,9 +187,9 @@ class PortfolioAnalyticsService:
                 data_source=data_source,
             )
             rolling_ret = (
-                portfolio_returns
-                .rolling(window=rolling_window, min_periods=rolling_window)
-                .mean()
+                portfolio_returns.rolling(
+                    window=rolling_window, min_periods=rolling_window
+                ).mean()
                 * 252
             ).dropna()
             return PortfolioHistorySeries(
@@ -175,15 +201,21 @@ class PortfolioAnalyticsService:
                     for date, ret in rolling_ret.items()
                     if np.isfinite(ret)
                 ],
-                earliest_data_date=all_dates.min().strftime("%Y-%m-%d") if len(all_dates) > 0 else "",
-                latest_data_date=all_dates.max().strftime("%Y-%m-%d") if len(all_dates) > 0 else "",
+                earliest_data_date=(
+                    all_dates.min().strftime("%Y-%m-%d") if len(all_dates) > 0 else ""
+                ),
+                latest_data_date=(
+                    all_dates.max().strftime("%Y-%m-%d") if len(all_dates) > 0 else ""
+                ),
             )
         except ValueError:
             raise
         except RuntimeError:
             raise
         except Exception as exc:
-            raise RuntimeError(f"기대수익률 추이 계산 중 오류가 발생했습니다: {exc}") from exc
+            raise RuntimeError(
+                f"기대수익률 추이 계산 중 오류가 발생했습니다: {exc}"
+            ) from exc
 
     def build_comparison_backtest(
         self,
@@ -214,9 +246,11 @@ class PortfolioAnalyticsService:
         if prices.empty:
             raise ValueError("비교 백테스트에 사용할 가격 데이터가 없습니다.")
 
-        train_prices, test_prices, train_end_date, test_start_date = self._split_prices_train_test(
-            prices,
-            split_ratio=0.9,
+        train_prices, test_prices, train_end_date, test_start_date = (
+            self._split_prices_train_test(
+                prices,
+                split_ratio=0.9,
+            )
         )
         train_start_date = pd.Timestamp(train_prices["date"].min()).normalize()
 
@@ -233,7 +267,9 @@ class PortfolioAnalyticsService:
 
         pivoted = (
             test_prices[test_prices["ticker"].astype(str).str.upper().isin(all_tickers)]
-            .pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
+            .pivot_table(
+                index="date", columns="ticker", values="adjusted_close", aggfunc="last"
+            )
             .sort_index()
             .ffill()
             .dropna(how="any")
@@ -242,8 +278,12 @@ class PortfolioAnalyticsService:
             raise RuntimeError("test 구간에서 공통 가격 데이터를 만들지 못했습니다.")
 
         portfolios = {name: weights for name, (weights, _) in profile_data.items()}
-        expected_returns = {name: expected_return for name, (_, expected_return) in profile_data.items()}
-        benchmark_series = self._fetch_benchmark_prices(test_start_date.strftime("%Y-%m-%d"))
+        expected_returns = {
+            name: expected_return for name, (_, expected_return) in profile_data.items()
+        }
+        benchmark_series = self._fetch_benchmark_prices(
+            test_start_date.strftime("%Y-%m-%d")
+        )
         extra_lines = self._build_comparison_extra_lines(
             assets=assets,
             instruments=instruments,
@@ -296,18 +336,24 @@ class PortfolioAnalyticsService:
             raise ValueError("stock_weights에 0보다 큰 비중이 하나 이상 있어야 합니다.")
 
         pivoted = (
-            prices[prices["ticker"].astype(str).str.upper().isin(normalized_weights.keys())]
+            prices[
+                prices["ticker"].astype(str).str.upper().isin(normalized_weights.keys())
+            ]
             .assign(
                 ticker=lambda frame: frame["ticker"].astype(str).str.upper(),
                 date=lambda frame: pd.to_datetime(frame["date"]).dt.normalize(),
             )
-            .pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
+            .pivot_table(
+                index="date", columns="ticker", values="adjusted_close", aggfunc="last"
+            )
             .sort_index()
             .ffill()
             .dropna(how="any")
         )
         if pivoted.empty:
-            raise RuntimeError("선택 포트폴리오의 공통 가격 데이터를 만들지 못했습니다.")
+            raise RuntimeError(
+                "선택 포트폴리오의 공통 가격 데이터를 만들지 못했습니다."
+            )
 
         available_weights = {
             ticker: weight
@@ -345,9 +391,12 @@ class PortfolioAnalyticsService:
                 train_start_date=backtest_start,
                 train_end_date=backtest_start,
                 split_ratio=1.0,
+                max_sample_points=None,
             )
         except Exception as exc:
-            raise RuntimeError(f"선택 포트폴리오 비교 백테스트 계산 중 오류: {exc}") from exc
+            raise RuntimeError(
+                f"선택 포트폴리오 비교 백테스트 계산 중 오류: {exc}"
+            ) from exc
 
     def _load_comparison_assets(
         self,
@@ -364,7 +413,9 @@ class PortfolioAnalyticsService:
             else:
                 version = mus.get_version(version_id)
                 if version is None:
-                    raise RuntimeError(f"유니버스 버전 {version_id}를 찾을 수 없습니다.")
+                    raise RuntimeError(
+                        f"유니버스 버전 {version_id}를 찾을 수 없습니다."
+                    )
             return self.portfolio_service.list_assets(version_id=version.version_id)
         return self.portfolio_service.list_assets()
 
@@ -383,7 +434,9 @@ class PortfolioAnalyticsService:
             else:
                 version = mus.get_version(version_id)
                 if version is None:
-                    raise RuntimeError(f"유니버스 버전 {version_id}를 찾을 수 없습니다.")
+                    raise RuntimeError(
+                        f"유니버스 버전 {version_id}를 찾을 수 없습니다."
+                    )
             instruments = mus.get_instruments_for_version(version.version_id)
             if not instruments:
                 raise RuntimeError("관리자 유니버스 버전에 등록된 종목이 없습니다.")
@@ -394,11 +447,17 @@ class PortfolioAnalyticsService:
             return instruments, prices, version.version_name
 
         if data_source == SimulationDataSource.STOCK_COMBINATION_DEMO:
-            instruments = self.portfolio_service.list_stocks(SimulationDataSource.STOCK_COMBINATION_DEMO)
-            prices = StockDataRepository().load_stock_prices(str(DEMO_STOCK_PRICES_PATH))
+            instruments = self.portfolio_service.list_stocks(
+                SimulationDataSource.STOCK_COMBINATION_DEMO
+            )
+            prices = StockDataRepository().load_stock_prices(
+                str(DEMO_STOCK_PRICES_PATH)
+            )
             return instruments, prices, "demo-stock-universe"
 
-        raise ValueError("포트폴리오 비교 백테스트는 관리자 유니버스 또는 데모 종목 유니버스에서만 지원합니다.")
+        raise ValueError(
+            "포트폴리오 비교 백테스트는 관리자 유니버스 또는 데모 종목 유니버스에서만 지원합니다."
+        )
 
     def _split_prices_train_test(
         self,
@@ -409,18 +468,26 @@ class PortfolioAnalyticsService:
         if prices.empty:
             raise ValueError("비교 백테스트에 사용할 가격 데이터가 없습니다.")
 
-        unique_dates = pd.Index(sorted(pd.to_datetime(prices["date"]).dt.normalize().unique()))
+        unique_dates = pd.Index(
+            sorted(pd.to_datetime(prices["date"]).dt.normalize().unique())
+        )
         required_rows = max(MINIMUM_HISTORY_ROWS + 1, 30)
         if len(unique_dates) < required_rows:
-            raise RuntimeError(f"비교 백테스트를 위해서는 최소 {required_rows}영업일 이상의 가격 이력이 필요합니다.")
+            raise RuntimeError(
+                f"비교 백테스트를 위해서는 최소 {required_rows}영업일 이상의 가격 이력이 필요합니다."
+            )
 
         split_index = int(len(unique_dates) * split_ratio)
         split_index = min(max(split_index, MINIMUM_HISTORY_ROWS), len(unique_dates) - 1)
         train_end_date = pd.Timestamp(unique_dates[split_index - 1]).normalize()
         test_start_date = pd.Timestamp(unique_dates[split_index]).normalize()
 
-        train_prices = prices[pd.to_datetime(prices["date"]).dt.normalize() <= train_end_date].copy()
-        test_prices = prices[pd.to_datetime(prices["date"]).dt.normalize() >= test_start_date].copy()
+        train_prices = prices[
+            pd.to_datetime(prices["date"]).dt.normalize() <= train_end_date
+        ].copy()
+        test_prices = prices[
+            pd.to_datetime(prices["date"]).dt.normalize() >= test_start_date
+        ].copy()
         if train_prices.empty or test_prices.empty:
             raise RuntimeError("train/test 분할 후 사용할 가격 데이터가 부족합니다.")
         return train_prices, test_prices, train_end_date, test_start_date
@@ -435,11 +502,15 @@ class PortfolioAnalyticsService:
             tickers = {"sp500": "SPY", "treasury": "IEF"}
             for key, ticker in tickers.items():
                 try:
-                    data = yf.download(ticker, start=start_date, progress=False, auto_adjust=True)
+                    data = yf.download(
+                        ticker, start=start_date, progress=False, auto_adjust=True
+                    )
                     if data is not None and not data.empty:
                         close = data["Close"].squeeze()
                         if hasattr(close, "droplevel"):
-                            close = close.droplevel(1) if close.index.nlevels > 1 else close
+                            close = (
+                                close.droplevel(1) if close.index.nlevels > 1 else close
+                            )
                         if hasattr(close.index, "tz_localize"):
                             close.index = close.index.tz_localize(None)
                         benchmarks[key] = close
@@ -515,7 +586,9 @@ class PortfolioAnalyticsService:
                 ticker=prices["ticker"].astype(str).str.upper(),
                 date=pd.to_datetime(prices["date"]).dt.normalize(),
             )
-            .pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
+            .pivot_table(
+                index="date", columns="ticker", values="adjusted_close", aggfunc="last"
+            )
             .sort_index()
             .ffill()
             .bfill()
@@ -568,7 +641,8 @@ class PortfolioAnalyticsService:
             return None
 
         benchmark_assets = [
-            asset for asset in assets
+            asset
+            for asset in assets
             if not self._exclude_from_equal_weight_asset_benchmark(asset)
         ]
         if not benchmark_assets:
@@ -583,7 +657,9 @@ class PortfolioAnalyticsService:
                 ticker=prices["ticker"].astype(str).str.upper(),
                 date=pd.to_datetime(prices["date"]).dt.normalize(),
             )
-            .pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
+            .pivot_table(
+                index="date", columns="ticker", values="adjusted_close", aggfunc="last"
+            )
             .sort_index()
         )
 
@@ -655,7 +731,9 @@ class PortfolioAnalyticsService:
                 ticker=prices["ticker"].astype(str).str.upper(),
                 date=pd.to_datetime(prices["date"]).dt.normalize(),
             )
-            .pivot_table(index="date", columns="ticker", values="adjusted_close", aggfunc="last")
+            .pivot_table(
+                index="date", columns="ticker", values="adjusted_close", aggfunc="last"
+            )
             .sort_index()
         )
         if price_table.empty:
@@ -775,9 +853,7 @@ class PortfolioAnalyticsService:
         date_index: pd.DatetimeIndex,
     ) -> pd.Series:
         annual_return = (
-            self.portfolio_service
-            .fixed_five_percent_role_return_service
-            .conservative_expected_return()
+            self.portfolio_service.fixed_five_percent_role_return_service.conservative_expected_return()
         )
         trading_years = np.arange(len(date_index), dtype=float) / 252.0
         cumulative = np.power(1.0 + annual_return, trading_years)
@@ -834,7 +910,9 @@ class PortfolioAnalyticsService:
         for date in date_index:
             years_elapsed = (date - start_date).days / 365.25
             cumulative_return = annual_yield * years_elapsed * 100
-            points.append((date.strftime("%Y-%m-%d"), round(float(cumulative_return), 4)))
+            points.append(
+                (date.strftime("%Y-%m-%d"), round(float(cumulative_return), 4))
+            )
 
         return ComparisonLine(
             key="treasury",

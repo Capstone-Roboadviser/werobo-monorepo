@@ -116,7 +116,9 @@ def test_build_equal_weight_asset_benchmark_line_requires_all_asset_classes() ->
     assert line is None
 
 
-def test_build_equal_weight_asset_benchmark_line_excludes_fixed_five_percent_role() -> None:
+def test_build_equal_weight_asset_benchmark_line_excludes_fixed_five_percent_role() -> (
+    None
+):
     service = PortfolioAnalyticsService()
     date_index = pd.to_datetime(["2026-03-01", "2026-03-02", "2026-03-03"])
     prices = pd.DataFrame(
@@ -178,7 +180,9 @@ def test_build_equal_weight_asset_benchmark_line_excludes_fixed_five_percent_rol
     ]
 
 
-def test_build_equal_weight_asset_benchmark_line_ignores_missing_fixed_five_percent_asset_data() -> None:
+def test_build_equal_weight_asset_benchmark_line_ignores_missing_fixed_five_percent_asset_data() -> (
+    None
+):
     service = PortfolioAnalyticsService()
     date_index = pd.to_datetime(["2026-03-01", "2026-03-02", "2026-03-03"])
     prices = pd.DataFrame(
@@ -351,7 +355,11 @@ def test_build_comparison_backtest_uses_current_fixed_stock_weights() -> None:
         _asset("gold", "금"),
     ]
     service._load_comparison_assets = lambda data_source, **_: assets
-    service._load_comparison_universe = lambda data_source, **_: (instruments, prices, "demo")
+    service._load_comparison_universe = lambda data_source, **_: (
+        instruments,
+        prices,
+        "demo",
+    )
     service._fetch_benchmark_prices = lambda start_date: {}
 
     result = service.build_comparison_backtest(
@@ -364,5 +372,64 @@ def test_build_comparison_backtest_uses_current_fixed_stock_weights() -> None:
     assert result.start_date == "2026-03-01"
     assert result.train_start_date == "2026-03-01"
     assert result.train_end_date == "2026-03-01"
-    assert [line.key for line in result.lines] == ["balanced", "benchmark_avg", "treasury"]
+    assert [line.key for line in result.lines] == [
+        "balanced",
+        "benchmark_avg",
+        "treasury",
+    ]
     assert result.lines[0].points[0] == ("2026-03-01", 0.0)
+
+
+def test_build_comparison_backtest_preserves_fixed_weight_daily_points() -> None:
+    service = PortfolioAnalyticsService()
+    dates = pd.date_range("2026-01-01", periods=300, freq="B")
+    prices = pd.DataFrame(
+        [
+            {"date": date, "ticker": ticker, "adjusted_close": base + idx}
+            for idx, date in enumerate(dates)
+            for ticker, base in (("AAA", 100.0), ("BBB", 200.0))
+        ]
+    )
+    instruments = [
+        StockInstrument(
+            ticker="AAA",
+            name="Asset A",
+            sector_code="us_value",
+            sector_name="미국 가치주",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+        StockInstrument(
+            ticker="BBB",
+            name="Asset B",
+            sector_code="gold",
+            sector_name="금",
+            market="USA",
+            currency="USD",
+            base_weight=1.0,
+        ),
+    ]
+    assets = [
+        _asset("us_value", "미국 가치주"),
+        _asset("gold", "금"),
+    ]
+    service._load_comparison_assets = lambda data_source, **_: assets
+    service._load_comparison_universe = lambda data_source, **_: (
+        instruments,
+        prices,
+        "demo",
+    )
+    service._fetch_benchmark_prices = lambda start_date: {}
+
+    result = service.build_comparison_backtest(
+        data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+        stock_weights={"AAA": 0.6, "BBB": 0.4},
+        portfolio_code="balanced",
+    )
+
+    balanced_line = next(line for line in result.lines if line.key == "balanced")
+
+    assert len(balanced_line.points) == len(dates)
+    assert balanced_line.points[0][0] == dates[0].strftime("%Y-%m-%d")
+    assert balanced_line.points[-1][0] == dates[-1].strftime("%Y-%m-%d")
