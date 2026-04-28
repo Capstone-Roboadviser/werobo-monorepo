@@ -2313,13 +2313,14 @@ def render_admin_comparison_page() -> HTMLResponse:
       const data = state.backtest;
       if (!data || !data.lines.length) return [];
 
+      const C = chartColors();
       const portfolioLine = data.lines.find(line => PORTFOLIO_KEYS.has(line.key));
       if (!portfolioLine) return [];
 
       const totalReturnByDate = new Map(
         portfolioLine.points.map(point => [point.date, Number(point.return_pct)])
       );
-      return data.lines
+      const contributionLines = data.lines
         .filter(line => line.key.startsWith(CONTRIBUTION_PREFIX))
         .map(line => ({
           ...line,
@@ -2342,6 +2343,17 @@ def render_admin_comparison_page() -> HTMLResponse:
             };
           }),
         }));
+      if (!contributionLines.length) return [];
+      return [{
+        ...portfolioLine,
+        label: '선택 포트폴리오 기준선',
+        color: C.portfolio,
+        _portfolio: true,
+        points: portfolioLine.points.map(point => ({
+          ...point,
+          total_return_pct: Number(point.return_pct),
+        })),
+      }, ...contributionLines];
     }
 
     function backtestHasContributionLines(backtest) {
@@ -2517,7 +2529,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         statusEl.textContent = selected.backtestLoading ? '계산 중...' : (contributionMode ? '기여도 데이터 없음' : '백테스트 데이터 없음');
         return;
       }
-      statusEl.textContent = `${labelForGraphSet(selected)} · ${selected.backtest.start_date} → ${selected.backtest.end_date}${contributionMode ? ' · 전체 수익률 대비 기여도' : ''}`;
+      statusEl.textContent = `${labelForGraphSet(selected)} · ${selected.backtest.start_date} → ${selected.backtest.end_date}${contributionMode ? ' · 포트폴리오 기준선 + 자산군 기여도(%p)' : ''}`;
       renderBacktestChart({
         lines,
         hidden: selected.hiddenLines || new Set(),
@@ -2807,10 +2819,12 @@ def render_admin_comparison_page() -> HTMLResponse:
             return ord(a) - ord(b);
           });
           const totalReturn = sortedHover.find(item =>
+            item.line._portfolio && Number.isFinite(item.value)
+          )?.value ?? sortedHover.find(item =>
             Number.isFinite(item.point?.total_return_pct)
           )?.point?.total_return_pct;
           const totalHtml = isContributionChart && Number.isFinite(totalReturn)
-            ? `<span class="hl-total">전체 수익률 ${fmtSignedPctRaw(totalReturn)}</span>`
+            ? `<span class="hl-total">포트폴리오 총수익률 ${fmtSignedPctRaw(totalReturn)} · 포폴=100 기준</span>`
             : '';
           let html = `<div class="hl-date">${date}${totalHtml}</div>`;
           sortedHover.forEach(({ line, value, point }) => {
@@ -2824,14 +2838,14 @@ def render_admin_comparison_page() -> HTMLResponse:
             if (line._contribution) {
               const share = point?.contribution_share_pct;
               const rawContribution = point?.raw_return_pct;
-              valCls = Number.isFinite(share) && share < 0
+              valCls = Number.isFinite(rawContribution) && rawContribution < 0
                 ? 'hl-val neg'
-                : (Number.isFinite(share) && share > 0 ? 'hl-val pos' : 'hl-val');
-              valueHtml = Number.isFinite(share)
-                ? `${share.toFixed(1)}% 기여`
+                : (Number.isFinite(rawContribution) && rawContribution > 0 ? 'hl-val pos' : 'hl-val');
+              valueHtml = Number.isFinite(rawContribution)
+                ? fmtSignedPctPoint(rawContribution)
                 : '-';
-              if (Number.isFinite(rawContribution)) {
-                valueHtml += `<span class="hl-subval">${fmtSignedPctPoint(rawContribution)}</span>`;
+              if (Number.isFinite(share)) {
+                valueHtml += `<span class="hl-subval">포폴=100 기준 ${fmtSignedPctRaw(share, 1)}</span>`;
               }
             }
             html += `<div class="${cls.join(' ')}"><span class="hl-dot ${line.style === 'dashed' ? 'dashed' : ''}" style="${dotStyle}"></span><span class="hl-label">${line.label}</span><span class="${valCls}">${valueHtml}</span></div>`;
