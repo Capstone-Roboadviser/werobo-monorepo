@@ -641,16 +641,27 @@ def render_admin_comparison_page() -> HTMLResponse:
       margin-top: var(--sp-4);
     }
 
-    /* Graph grid */
+    /* Board controls */
+    .board-toolbar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: var(--sp-3);
+      margin-top: var(--sp-4);
+      padding-top: var(--sp-4);
+      border-top: 1px solid var(--line);
+    }
+    .board-toolbar .field {
+      min-width: 210px;
+      max-width: 260px;
+    }
+
+    /* Frontier grid */
     .graph-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(880px, 1fr));
+      grid-template-columns: repeat(3, minmax(260px, 1fr));
       gap: var(--sp-4);
-    }
-    .charts-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: var(--sp-3);
+      margin-bottom: var(--sp-4);
     }
     .graph-set {
       background: var(--surface);
@@ -683,10 +694,24 @@ def render_admin_comparison_page() -> HTMLResponse:
       border-color: var(--line-2);
       background: var(--surface-2);
     }
+    .graph-set-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .btn-toggle[aria-pressed="true"] {
+      color: var(--pos);
+      border-color: color-mix(in oklab, var(--pos) 35%, var(--line-2));
+      background: var(--pos-soft);
+    }
+    .btn-toggle[aria-pressed="false"] {
+      color: var(--fg-3);
+    }
 
     .controls {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
       gap: var(--sp-2);
       margin-bottom: var(--sp-3);
     }
@@ -750,8 +775,48 @@ def render_admin_comparison_page() -> HTMLResponse:
       cursor: crosshair;
       touch-action: none;
     }
+    .frontier-svg { height: 280px; }
     .chart-svg.dragging { cursor: grabbing; }
-    .profit-svg { height: 360px; cursor: crosshair; }
+    .profit-svg { height: 430px; cursor: crosshair; }
+
+    .backtest-panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: var(--r-3);
+      padding: var(--sp-4);
+    }
+    .backtest-toolbar {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: var(--sp-3);
+      margin-bottom: var(--sp-3);
+    }
+    .backtest-picker {
+      width: min(320px, 100%);
+    }
+    .mode-tabs {
+      display: inline-flex;
+      gap: 4px;
+      padding: 3px;
+      border: 1px solid var(--line);
+      border-radius: var(--r-2);
+      background: var(--surface-2);
+    }
+    .mode-tabs button {
+      background: transparent;
+      color: var(--fg-2);
+      border-color: transparent;
+      min-width: 64px;
+    }
+    .mode-tabs button[aria-pressed="true"] {
+      background: var(--accent);
+      color: var(--accent-fg);
+      border-color: var(--accent);
+    }
+    .backtest-chart {
+      min-height: 520px;
+    }
 
     .chart-hover-legend {
       position: absolute;
@@ -913,8 +978,9 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     @media (max-width: 980px) {
       .graph-grid { grid-template-columns: 1fr; }
-      .charts-row { grid-template-columns: 1fr; }
-      .controls { grid-template-columns: 1fr 1fr; }
+      .controls { grid-template-columns: 1fr; }
+      .board-toolbar, .backtest-toolbar { align-items: stretch; flex-direction: column; }
+      .board-toolbar .field, .backtest-picker { width: 100%; max-width: none; }
       .rail { padding: 10px var(--sp-4); flex-wrap: wrap; }
       .shell { padding: var(--sp-4); }
     }
@@ -989,8 +1055,13 @@ def render_admin_comparison_page() -> HTMLResponse:
         </div>
         <button id="save-snapshot-changes" disabled title="선택된 스냅샷에 현재 상태를 덮어쓰기">변경사항 저장</button>
         <button class="secondary" id="save-snapshot-as">다른 이름으로 저장</button>
-        <div style="flex:1"></div>
-        <button class="secondary" id="add-graph-set">+ 그래프 세트 추가</button>
+      </div>
+      <div class="board-toolbar">
+        <button class="secondary" id="add-graph-set" type="button">+ 유니버스 추가</button>
+        <div class="field">
+          <label for="board-basis-date">기준일</label>
+          <input type="date" id="board-basis-date" />
+        </div>
       </div>
       <div class="err" id="snapshot-error" style="display:none"></div>
     </section>
@@ -1016,44 +1087,55 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     <div class="graph-grid" id="graph-grid"></div>
     <div class="empty-state" id="empty-state" style="display:none">
-      그래프 세트가 없습니다. "+ 그래프 세트 추가"를 눌러주세요.
+      유니버스가 없습니다. "+ 유니버스 추가"를 눌러주세요.
     </div>
+
+    <section class="backtest-panel">
+      <div class="backtest-toolbar">
+        <div class="field backtest-picker">
+          <label for="single-graph-select">포트폴리오 선택</label>
+          <select id="single-graph-select"></select>
+        </div>
+        <div class="mode-tabs" role="group" aria-label="백테스트 모드">
+          <button type="button" id="mode-single" aria-pressed="true">단일</button>
+          <button type="button" id="mode-compare" aria-pressed="false">비교</button>
+        </div>
+      </div>
+      <div class="chart-block backtest-chart">
+        <div class="chart-title">
+          <strong>Backtest Profit</strong>
+          <span id="profit-status">포트폴리오를 선택하세요.</span>
+        </div>
+        <svg class="chart-svg profit-svg" id="profit-svg" viewBox="0 0 600 360" preserveAspectRatio="none"></svg>
+        <div class="chart-hover-legend profit-legend" id="profit-legend" aria-hidden="true"></div>
+        <div class="legend" id="backtest-legend"></div>
+      </div>
+      <div class="err" id="backtest-error" style="display:none"></div>
+    </section>
   </div>
 
   <template id="graph-set-template">
     <div class="graph-set" data-graph-id="">
       <div class="graph-set-head">
-        <input type="text" class="title-input" placeholder="그래프 세트 이름" />
-        <button class="ghost mini btn-remove">삭제</button>
+        <input type="text" class="title-input" placeholder="유니버스 이름" />
+        <div class="graph-set-actions">
+          <button class="secondary mini btn-toggle" type="button" aria-pressed="true">ON</button>
+          <button class="ghost mini btn-remove" type="button">삭제</button>
+        </div>
       </div>
       <div class="controls">
         <div class="field">
           <label>유니버스</label>
           <select class="ctrl-version"></select>
         </div>
-        <div class="field">
-          <label>기준일</label>
-          <input type="date" class="ctrl-basis-date" />
-        </div>
       </div>
-      <div class="charts-row">
-        <div class="chart-block">
-          <div class="chart-title">
-            <strong>Efficient Frontier</strong>
-            <span class="frontier-status">유니버스를 선택하세요.</span>
-          </div>
-          <svg class="chart-svg frontier-svg" viewBox="0 0 600 360" preserveAspectRatio="none"></svg>
-          <div class="selection-summary"></div>
+      <div class="chart-block">
+        <div class="chart-title">
+          <strong>Efficient Frontier</strong>
+          <span class="frontier-status">유니버스를 선택하세요.</span>
         </div>
-        <div class="chart-block">
-          <div class="chart-title">
-            <strong>Backtest Profit</strong>
-            <span class="profit-status">포트폴리오를 선택하세요.</span>
-          </div>
-          <svg class="chart-svg profit-svg" viewBox="0 0 600 360" preserveAspectRatio="none"></svg>
-          <div class="chart-hover-legend profit-legend" aria-hidden="true"></div>
-          <div class="legend"></div>
-        </div>
+        <svg class="chart-svg frontier-svg" viewBox="0 0 600 360" preserveAspectRatio="none"></svg>
+        <div class="selection-summary"></div>
       </div>
       <div class="err graph-error" style="display:none"></div>
     </div>
@@ -1114,6 +1196,10 @@ def render_admin_comparison_page() -> HTMLResponse:
     let activeSnapshotId = null;
     let dirty = false;
     let graphSetSeq = 0;
+    let boardBasisDate = null;
+    let backtestMode = 'single';
+    let selectedBacktestGraphId = null;
+    let compareHiddenLines = new Set();
     const snapshotFilter = {
       query: '',
       sort: 'updated_desc',
@@ -1124,6 +1210,8 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     const TREASURY_KEY = 'treasury';
     const MARKET_KEY = 'market';
+    const MAX_GRAPH_SETS = 3;
+    const COMPARE_COLORS = ['#2563eb', '#f97316', '#10b981'];
 
     function nextGraphSetId() {
       graphSetSeq += 1;
@@ -1175,12 +1263,19 @@ def render_admin_comparison_page() -> HTMLResponse:
     }
 
     function buildPayload() {
+      const graphList = Array.from(graphSets.values());
+      const selectedGraphIndex = graphList.findIndex(g => g.id === selectedBacktestGraphId);
       return {
-        graph_sets: Array.from(graphSets.values()).map(g => {
-          const basisDate = g.asOfDate || g.startDate || null;
+        board_basis_date: boardBasisDate,
+        backtest_mode: backtestMode,
+        selected_graph_index: selectedGraphIndex >= 0 ? selectedGraphIndex : 0,
+        compare_hidden_lines: Array.from(compareHiddenLines),
+        graph_sets: graphList.map(g => {
+          const basisDate = boardBasisDate || g.asOfDate || g.startDate || null;
           return {
             name: g.name,
             version_id: g.versionId,
+            enabled: g.enabled !== false,
             as_of_date: basisDate,
             start_date: basisDate,
             point_index: g.pointIndex,
@@ -1484,11 +1579,15 @@ def render_admin_comparison_page() -> HTMLResponse:
       graphSets.clear();
       $('#graph-grid').innerHTML = '';
       const sets = snap.payload?.graph_sets || [];
+      boardBasisDate = snap.payload?.board_basis_date || sets.find(item => item.as_of_date || item.start_date)?.as_of_date || sets.find(item => item.as_of_date || item.start_date)?.start_date || null;
+      $('#board-basis-date').value = boardBasisDate || '';
       for (const item of sets) {
-        const basisDate = item.as_of_date || item.start_date || null;
+        if (graphSets.size >= MAX_GRAPH_SETS) break;
+        const basisDate = boardBasisDate || item.as_of_date || item.start_date || null;
         addGraphSet({
           name: item.name,
           versionId: item.version_id,
+          enabled: item.enabled !== false,
           asOfDate: basisDate,
           startDate: basisDate,
           pointIndex: item.point_index,
@@ -1496,24 +1595,46 @@ def render_admin_comparison_page() -> HTMLResponse:
           cached: item.cached || null,
         }, { silent: true });
       }
+      const graphList = Array.from(graphSets.values());
+      backtestMode = snap.payload?.backtest_mode === 'compare' ? 'compare' : 'single';
+      compareHiddenLines = new Set(snap.payload?.compare_hidden_lines || []);
+      const selectedIndex = Number.isInteger(snap.payload?.selected_graph_index)
+        ? snap.payload.selected_graph_index
+        : 0;
+      selectedBacktestGraphId = graphList[Math.max(0, Math.min(selectedIndex, graphList.length - 1))]?.id || null;
       updateEmptyState();
       setDirty(false);
       renderSnapshotPanel();
       updateSaveButtons();
+      updateBacktestControls();
+      renderBoardBacktest();
     }
 
     function updateEmptyState() {
       $('#empty-state').style.display = graphSets.size === 0 ? 'block' : 'none';
+      const addButton = $('#add-graph-set');
+      if (addButton) {
+        addButton.disabled = graphSets.size >= MAX_GRAPH_SETS;
+        addButton.title = graphSets.size >= MAX_GRAPH_SETS
+          ? '유니버스는 최대 3개까지 추가할 수 있습니다.'
+          : '유니버스를 추가합니다.';
+      }
     }
 
     function addGraphSet(initial, opts) {
+      if (graphSets.size >= MAX_GRAPH_SETS) {
+        alert('유니버스는 최대 3개까지 추가할 수 있습니다.');
+        updateEmptyState();
+        return;
+      }
       const silent = !!opts?.silent;
       const id = nextGraphSetId();
-      const basisDate = initial?.asOfDate || initial?.startDate || null;
+      const basisDate = boardBasisDate || initial?.asOfDate || initial?.startDate || null;
       const state = {
         id,
-        name: initial?.name || `그래프 세트 ${graphSets.size + 1}`,
+        name: initial?.name || `유니버스 ${graphSets.size + 1}`,
         versionId: initial?.versionId || (catalog.versions.find(v => v.is_active)?.version_id ?? catalog.versions[0]?.version_id ?? null),
+        enabled: initial?.enabled !== false,
         asOfDate: basisDate,
         startDate: basisDate,
         pointIndex: initial?.pointIndex ?? null,
@@ -1536,6 +1657,21 @@ def render_admin_comparison_page() -> HTMLResponse:
       titleInput.addEventListener('input', () => {
         state.name = titleInput.value;
         setDirty(true);
+        updateBacktestControls();
+        renderBoardBacktest();
+      });
+
+      const toggleButton = $('.btn-toggle', root);
+      const syncToggle = () => {
+        toggleButton.textContent = state.enabled ? 'ON' : 'OFF';
+        toggleButton.setAttribute('aria-pressed', String(state.enabled));
+      };
+      syncToggle();
+      toggleButton.addEventListener('click', () => {
+        state.enabled = !state.enabled;
+        syncToggle();
+        setDirty(true);
+        renderBoardBacktest();
       });
 
       const versionSelect = $('.ctrl-version', root);
@@ -1551,23 +1687,16 @@ def render_admin_comparison_page() -> HTMLResponse:
         state.versionId = parseInt(versionSelect.value, 10);
         state.pointIndex = null;
         setDirty(true);
-        refreshFrontier(state);
-      });
-
-      const basisDateInput = $('.ctrl-basis-date', root);
-      if (basisDate) basisDateInput.value = basisDate;
-      basisDateInput.addEventListener('change', () => {
-        const nextDate = basisDateInput.value || null;
-        state.asOfDate = nextDate;
-        state.startDate = nextDate;
-        setDirty(true);
+        updateBacktestControls();
         refreshFrontier(state);
       });
 
       $('.btn-remove', root).addEventListener('click', () => removeGraphSet(id));
 
       $('#graph-grid').appendChild(node);
+      if (!selectedBacktestGraphId) selectedBacktestGraphId = id;
       updateEmptyState();
+      updateBacktestControls();
       if (!silent) setDirty(true);
 
       const cache = initial?.cached;
@@ -1578,9 +1707,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         state.backtest = cache.backtest;
         renderFrontier(state);
         renderSelectionSummary(state);
-        renderBacktest(state);
-        const profitStatus = $('.profit-status', state.rootEl);
-        profitStatus.textContent = `${cache.backtest.start_date} → ${cache.backtest.end_date}`;
+        renderBoardBacktest();
       } else {
         refreshFrontier(state);
       }
@@ -1591,7 +1718,12 @@ def render_admin_comparison_page() -> HTMLResponse:
       if (!st) return;
       st.rootEl?.remove();
       graphSets.delete(id);
+      if (selectedBacktestGraphId === id) {
+        selectedBacktestGraphId = Array.from(graphSets.keys())[0] || null;
+      }
       updateEmptyState();
+      updateBacktestControls();
+      renderBoardBacktest();
       setDirty(true);
     }
 
@@ -1601,6 +1733,9 @@ def render_admin_comparison_page() -> HTMLResponse:
         return;
       }
       setFrontierStatus(state, '계산 중…');
+      state.backtest = null;
+      state.backtestLoading = false;
+      renderBoardBacktest();
       clearError(state);
       try {
         const data = await api('/admin/api/comparison/frontier', {
@@ -1620,11 +1755,14 @@ def render_admin_comparison_page() -> HTMLResponse:
         renderFrontier(state);
         applySelectionFromFrontier(state);
         await refreshBacktest(state);
+        renderBoardBacktest();
       } catch (e) {
         state.frontier = null;
+        state.backtest = null;
         showError(state, `Frontier 계산 실패: ${e.message}`);
         setFrontierStatus(state, '오류');
         clearFrontierSvg(state);
+        renderBoardBacktest();
       }
     }
 
@@ -1645,8 +1783,8 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     async function refreshBacktest(state) {
       if (!state.selection) return;
-      const profitStatus = $('.profit-status', state.rootEl);
-      profitStatus.textContent = '계산 중…';
+      state.backtestLoading = true;
+      renderBoardBacktest();
       try {
         const data = await api('/admin/api/comparison/backtest', {
           method: 'POST',
@@ -1657,13 +1795,13 @@ def render_admin_comparison_page() -> HTMLResponse:
           }),
         });
         state.backtest = data;
-        renderBacktest(state);
-        profitStatus.textContent = `${data.start_date} → ${data.end_date}`;
+        state.backtestLoading = false;
+        renderBoardBacktest();
       } catch (e) {
         state.backtest = null;
+        state.backtestLoading = false;
         showError(state, `Backtest 계산 실패: ${e.message}`);
-        profitStatus.textContent = '오류';
-        clearProfitSvg(state);
+        renderBoardBacktest();
       }
     }
 
@@ -1685,10 +1823,13 @@ def render_admin_comparison_page() -> HTMLResponse:
       while (svg.firstChild) svg.removeChild(svg.firstChild);
       $('.selection-summary', state.rootEl).innerHTML = '';
     }
-    function clearProfitSvg(state) {
-      const svg = $('.profit-svg', state.rootEl);
+    function clearProfitSvg() {
+      const svg = $('#profit-svg');
       while (svg.firstChild) svg.removeChild(svg.firstChild);
-      $('.legend', state.rootEl).innerHTML = '';
+      $('#backtest-legend').innerHTML = '';
+      const hoverEl = $('#profit-legend');
+      hoverEl.innerHTML = '';
+      hoverEl.setAttribute('data-visible', 'false');
     }
 
     function svgEl(name, attrs = {}) {
@@ -2012,10 +2153,146 @@ def render_admin_comparison_page() -> HTMLResponse:
       return lines;
     }
 
-    function renderBacktest(state) {
-      const svg = $('.profit-svg', state.rootEl);
-      const legendEl = $('.legend', state.rootEl);
-      const hoverEl = $('.profit-legend', state.rootEl);
+    function labelForGraphSet(state) {
+      const versionName = versionById[state.versionId]?.version_name;
+      return (state.name || '').trim() || versionName || `유니버스 ${state.id}`;
+    }
+
+    function getSelectedBacktestState() {
+      if (!selectedBacktestGraphId || !graphSets.has(selectedBacktestGraphId)) {
+        selectedBacktestGraphId = Array.from(graphSets.keys())[0] || null;
+      }
+      return selectedBacktestGraphId ? graphSets.get(selectedBacktestGraphId) : null;
+    }
+
+    function updateBacktestControls() {
+      const select = $('#single-graph-select');
+      if (!select) return;
+      if (!selectedBacktestGraphId || !graphSets.has(selectedBacktestGraphId)) {
+        selectedBacktestGraphId = Array.from(graphSets.keys())[0] || null;
+      }
+      select.innerHTML = '';
+      graphSets.forEach(state => {
+        const opt = document.createElement('option');
+        opt.value = state.id;
+        opt.textContent = labelForGraphSet(state);
+        select.appendChild(opt);
+      });
+      select.value = selectedBacktestGraphId || '';
+      select.disabled = backtestMode !== 'single' || graphSets.size === 0;
+      $('#mode-single').setAttribute('aria-pressed', String(backtestMode === 'single'));
+      $('#mode-compare').setAttribute('aria-pressed', String(backtestMode === 'compare'));
+    }
+
+    function setBacktestMode(mode) {
+      backtestMode = mode === 'compare' ? 'compare' : 'single';
+      setDirty(true);
+      updateBacktestControls();
+      renderBoardBacktest();
+    }
+
+    function buildCompareBacktestLines() {
+      const portfolioKeys = new Set(['selected', 'balanced', 'conservative', 'growth']);
+      return Array.from(graphSets.values())
+        .filter(state => state.enabled !== false && state.backtest?.lines?.length)
+        .map((state, idx) => {
+          const line = state.backtest.lines.find(item => portfolioKeys.has(item.key));
+          if (!line) return null;
+          return {
+            ...line,
+            key: `compare_${state.id}`,
+            label: labelForGraphSet(state),
+            color: COMPARE_COLORS[idx % COMPARE_COLORS.length],
+            style: 'solid',
+            _portfolio: true,
+          };
+        })
+        .filter(Boolean);
+    }
+
+    function renderBoardBacktest() {
+      updateBacktestControls();
+      const statusEl = $('#profit-status');
+      const errorEl = $('#backtest-error');
+      errorEl.style.display = 'none';
+      errorEl.textContent = '';
+
+      if (graphSets.size === 0) {
+        clearProfitSvg();
+        statusEl.textContent = '유니버스를 추가하세요.';
+        return;
+      }
+
+      if (backtestMode === 'compare') {
+        const enabledStates = Array.from(graphSets.values()).filter(state => state.enabled !== false);
+        const loading = enabledStates.some(state => state.backtestLoading);
+        const lines = buildCompareBacktestLines();
+        if (enabledStates.length < 2) {
+          clearProfitSvg();
+          statusEl.textContent = '비교할 유니버스를 2개 이상 ON으로 설정하세요.';
+          return;
+        }
+        if (loading && lines.length < enabledStates.length) {
+          statusEl.textContent = '계산 중...';
+        } else {
+          statusEl.textContent = `${lines.length}개 유니버스 비교`;
+        }
+        if (!lines.length) {
+          clearProfitSvg();
+          return;
+        }
+        renderBacktestChart({
+          lines,
+          hidden: compareHiddenLines,
+          onToggle: key => {
+            if (compareHiddenLines.has(key)) compareHiddenLines.delete(key);
+            else compareHiddenLines.add(key);
+            setDirty(true);
+            renderBoardBacktest();
+          },
+        });
+        return;
+      }
+
+      const selected = getSelectedBacktestState();
+      if (!selected) {
+        clearProfitSvg();
+        statusEl.textContent = '포트폴리오를 선택하세요.';
+        return;
+      }
+      if (selected.backtestLoading && !selected.backtest) {
+        clearProfitSvg();
+        statusEl.textContent = '계산 중...';
+        return;
+      }
+      const lines = buildBacktestLines(selected);
+      if (!lines.length) {
+        clearProfitSvg();
+        statusEl.textContent = selected.backtestLoading ? '계산 중...' : '백테스트 데이터 없음';
+        return;
+      }
+      statusEl.textContent = `${labelForGraphSet(selected)} · ${selected.backtest.start_date} → ${selected.backtest.end_date}`;
+      renderBacktestChart({
+        lines,
+        hidden: selected.hiddenLines || new Set(),
+        onToggle: key => {
+          if (!selected.hiddenLines) selected.hiddenLines = new Set();
+          if (selected.hiddenLines.has(key)) selected.hiddenLines.delete(key);
+          else selected.hiddenLines.add(key);
+          setDirty(true);
+          renderBoardBacktest();
+        },
+      });
+    }
+
+    function renderBacktest() {
+      renderBoardBacktest();
+    }
+
+    function renderBacktestChart({ lines, hidden, onToggle }) {
+      const svg = $('#profit-svg');
+      const legendEl = $('#backtest-legend');
+      const hoverEl = $('#profit-legend');
       const W = 600, H = 360;
       const padL = 14, padR = 62, padT = 22, padB = 28;
       const cw = W - padL - padR;
@@ -2025,10 +2302,9 @@ def render_admin_comparison_page() -> HTMLResponse:
       if (hoverEl) { hoverEl.innerHTML = ''; hoverEl.setAttribute('data-visible', 'false'); }
 
       const C = chartColors();
-      const allLines = buildBacktestLines(state);
+      const allLines = lines;
       if (!allLines.length) return;
 
-      const hidden = state.hiddenLines || new Set();
       const visibleLines = allLines.filter(line => !hidden.has(line.key));
 
       const allDates = new Set();
@@ -2308,11 +2584,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         label.style.color = 'var(--fg-2)';
         item.appendChild(label);
         item.addEventListener('click', () => {
-          if (!state.hiddenLines) state.hiddenLines = new Set();
-          if (state.hiddenLines.has(line.key)) state.hiddenLines.delete(line.key);
-          else state.hiddenLines.add(line.key);
-          setDirty(true);
-          renderBacktest(state);
+          onToggle(line.key);
         });
         legendEl.appendChild(item);
       });
@@ -2322,12 +2594,28 @@ def render_admin_comparison_page() -> HTMLResponse:
     window.addEventListener('werobo:theme-changed', () => {
       graphSets.forEach(state => {
         if (state.frontier) renderFrontier(state);
-        if (state.backtest) renderBacktest(state);
       });
+      renderBoardBacktest();
     });
 
     document.addEventListener('DOMContentLoaded', async () => {
       $('#add-graph-set').addEventListener('click', () => addGraphSet());
+      $('#board-basis-date').addEventListener('change', (ev) => {
+        boardBasisDate = ev.target.value || null;
+        graphSets.forEach(state => {
+          state.asOfDate = boardBasisDate;
+          state.startDate = boardBasisDate;
+          refreshFrontier(state);
+        });
+        setDirty(true);
+      });
+      $('#single-graph-select').addEventListener('change', (ev) => {
+        selectedBacktestGraphId = ev.target.value || null;
+        setDirty(true);
+        renderBoardBacktest();
+      });
+      $('#mode-single').addEventListener('click', () => setBacktestMode('single'));
+      $('#mode-compare').addEventListener('click', () => setBacktestMode('compare'));
       $('#save-snapshot-changes').addEventListener('click', saveCurrentChanges);
       $('#save-snapshot-as').addEventListener('click', () => {
         const active = snapshots.find(s => s.id === activeSnapshotId);
@@ -2375,6 +2663,8 @@ def render_admin_comparison_page() -> HTMLResponse:
       await loadSnapshots();
       updateSaveButtons();
       if (graphSets.size === 0) addGraphSet({}, { silent: true });
+      updateBacktestControls();
+      renderBoardBacktest();
     });
   </script>
 </body>
