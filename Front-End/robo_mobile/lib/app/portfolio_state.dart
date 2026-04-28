@@ -30,6 +30,7 @@ class PortfolioState extends ChangeNotifier {
   List<RebalanceInsight> _insights = [];
   String? _digestSeenDate;
   bool _welcomeBannerSeen = false;
+  MobileDigestResponse? _weeklyDigest;
 
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
@@ -53,6 +54,8 @@ class PortfolioState extends ChangeNotifier {
   String? get digestSeenDate => _digestSeenDate;
   bool get hasSeenCurrentDigest => _digestSeenDate != null;
   bool get welcomeBannerSeen => _welcomeBannerSeen;
+  MobileDigestResponse? get weeklyDigest => _weeklyDigest;
+  bool get isWeeklyDigestAvailable => _weeklyDigest?.available == true;
 
   bool get isLoggedIn => _authSession != null;
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
@@ -294,6 +297,26 @@ class PortfolioState extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshWeeklyDigest({bool notify = true}) async {
+    final accessToken = _authSession?.accessToken;
+    if (accessToken == null || accessToken.isEmpty) {
+      setWeeklyDigest(null, notify: notify);
+      return;
+    }
+
+    try {
+      final digest = await MobileBackendApi.instance
+          .fetchDigest(accessToken: accessToken);
+      setWeeklyDigest(digest, notify: notify);
+    } on MobileBackendException {
+      // 422 (insufficient data), 401, network errors → leave digest null so
+      // isWeeklyDigestAvailable is false and the home banner stays hidden.
+      setWeeklyDigest(null, notify: notify);
+    } catch (_) {
+      setWeeklyDigest(null, notify: notify);
+    }
+  }
+
   Future<MobileAccountDashboard> createPrototypeAccount({
     required MobileFrontierSelectionResponse selection,
     double initialCashAmount = 10000000,
@@ -341,6 +364,16 @@ class PortfolioState extends ChangeNotifier {
     if (summary != null) {
       _type = investmentTypeFromRiskCode(summary.portfolioCode);
     }
+    if (notify) {
+      notifyListeners();
+    }
+  }
+
+  void setWeeklyDigest(
+    MobileDigestResponse? digest, {
+    bool notify = true,
+  }) {
+    _weeklyDigest = digest;
     if (notify) {
       notifyListeners();
     }
