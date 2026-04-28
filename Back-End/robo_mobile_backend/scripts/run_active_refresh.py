@@ -19,6 +19,7 @@ def main() -> int:
     admin_refresh_secret = _require_env("ADMIN_REFRESH_SECRET")
     refresh_mode = os.getenv("REFRESH_MODE", "incremental").strip() or "incremental"
     full_lookback_years = int(os.getenv("FULL_LOOKBACK_YEARS", "5"))
+    request_timeout_seconds = int(os.getenv("REFRESH_TIMEOUT_SECONDS", "900"))
 
     payload = json.dumps(
         {
@@ -37,7 +38,7 @@ def main() -> int:
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with urllib.request.urlopen(request, timeout=request_timeout_seconds) as response:
             body = response.read().decode("utf-8")
             print(body)
             return 0
