@@ -866,6 +866,13 @@ def render_admin_comparison_page() -> HTMLResponse:
       margin-bottom: 5px;
       text-transform: uppercase;
     }
+    .chart-hover-legend .hl-total {
+      display: block;
+      color: var(--fg-2);
+      letter-spacing: 0;
+      margin-top: 2px;
+      text-transform: none;
+    }
     .chart-hover-legend .hl-row {
       display: grid;
       grid-template-columns: 14px 1fr auto;
@@ -896,6 +903,12 @@ def render_admin_comparison_page() -> HTMLResponse:
       font-weight: 600;
       color: var(--fg);
       font-variant-numeric: tabular-nums;
+    }
+    .chart-hover-legend .hl-subval {
+      color: var(--fg-3);
+      font-size: 9.5px;
+      font-weight: 500;
+      margin-left: 4px;
     }
     .chart-hover-legend .hl-val.neg { color: var(--neg); }
     .chart-hover-legend .hl-val.pos { color: var(--pos); }
@@ -1251,6 +1264,14 @@ def render_admin_comparison_page() -> HTMLResponse:
     function fmtPctRaw(value, digits = 1) {
       if (value === null || value === undefined || Number.isNaN(value)) return '-';
       return `${value.toFixed(digits)}%`;
+    }
+    function fmtSignedPctRaw(value, digits = 2) {
+      if (!Number.isFinite(value)) return '-';
+      return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}%`;
+    }
+    function fmtSignedPctPoint(value, digits = 2) {
+      if (!Number.isFinite(value)) return '-';
+      return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}%p`;
     }
 
     async function api(path, init) {
@@ -2196,16 +2217,35 @@ def render_admin_comparison_page() -> HTMLResponse:
       const data = state.backtest;
       if (!data || !data.lines.length) return [];
 
-      const C = chartColors();
-      return data.lines.filter(line => {
-        if (line.key.startsWith(CONTRIBUTION_PREFIX)) return true;
-        return PORTFOLIO_KEYS.has(line.key);
-      }).map(line => {
-        if (PORTFOLIO_KEYS.has(line.key)) {
-          return { ...line, label: '선택 포트폴리오', color: C.portfolio, _portfolio: true };
-        }
-        return { ...line, _contribution: true };
-      });
+      const portfolioLine = data.lines.find(line => PORTFOLIO_KEYS.has(line.key));
+      if (!portfolioLine) return [];
+
+      const totalReturnByDate = new Map(
+        portfolioLine.points.map(point => [point.date, Number(point.return_pct)])
+      );
+      return data.lines
+        .filter(line => line.key.startsWith(CONTRIBUTION_PREFIX))
+        .map(line => ({
+          ...line,
+          _contribution: true,
+          points: line.points.map(point => {
+            const rawContribution = Number(point.return_pct);
+            const totalReturn = totalReturnByDate.get(point.date);
+            const hasShare = Number.isFinite(rawContribution)
+              && Number.isFinite(totalReturn)
+              && Math.abs(totalReturn) >= 0.0001;
+            const contributionShare = hasShare
+              ? (rawContribution / totalReturn) * 100
+              : null;
+            return {
+              ...point,
+              return_pct: contributionShare ?? 0,
+              raw_return_pct: rawContribution,
+              total_return_pct: Number.isFinite(totalReturn) ? totalReturn : null,
+              contribution_share_pct: contributionShare,
+            };
+          }),
+        }));
     }
 
     function backtestHasContributionLines(backtest) {
@@ -2340,7 +2380,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         statusEl.textContent = selected.backtestLoading ? '계산 중...' : (contributionMode ? '기여도 데이터 없음' : '백테스트 데이터 없음');
         return;
       }
-      statusEl.textContent = `${labelForGraphSet(selected)} · ${selected.backtest.start_date} → ${selected.backtest.end_date}${contributionMode ? ' · 기여도' : ''}`;
+      statusEl.textContent = `${labelForGraphSet(selected)} · ${selected.backtest.start_date} → ${selected.backtest.end_date}${contributionMode ? ' · 전체 수익률 대비 기여도' : ''}`;
       renderBacktestChart({
         lines,
         hidden: selected.hiddenLines || new Set(),
@@ -2373,6 +2413,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       const C = chartColors();
       const allLines = lines;
       if (!allLines.length) return;
+      const isContributionChart = allLines.some(line => line._contribution);
 
       const visibleLines = allLines.filter(line => !hidden.has(line.key));
 
@@ -2582,7 +2623,7 @@ def render_admin_comparison_page() -> HTMLResponse:
             cx: x, cy: yPx, r: 3.2, fill: line.color || C.mutedLine,
             stroke: C.tipBg, 'stroke-width': '1.2',
           }));
-          hoverValues.push({ line, value: pt.return_pct });
+          hoverValues.push({ line, value: pt.return_pct, point: pt });
         });
 
         // Time pill at bottom edge
@@ -2614,15 +2655,35 @@ def render_admin_comparison_page() -> HTMLResponse:
             const ord = x => x.line._portfolio ? 0 : (x.line._mu ? 2 : 1);
             return ord(a) - ord(b);
           });
-          let html = `<div class="hl-date">${date}</div>`;
-          sortedHover.forEach(({ line, value }) => {
+          const totalReturn = sortedHover.find(item =>
+            Number.isFinite(item.point?.total_return_pct)
+          )?.point?.total_return_pct;
+          const totalHtml = isContributionChart && Number.isFinite(totalReturn)
+            ? `<span class="hl-total">전체 수익률 ${fmtSignedPctRaw(totalReturn)}</span>`
+            : '';
+          let html = `<div class="hl-date">${date}${totalHtml}</div>`;
+          sortedHover.forEach(({ line, value, point }) => {
             const cls = ['hl-row'];
             if (line._portfolio) cls.push('portfolio');
             const dotStyle = line.style === 'dashed'
               ? `background: transparent; color: ${line.color || 'currentColor'};`
               : `background: ${line.color || 'currentColor'};`;
-            const valCls = value < 0 ? 'hl-val neg' : (value > 0 ? 'hl-val pos' : 'hl-val');
-            html += `<div class="${cls.join(' ')}"><span class="hl-dot ${line.style === 'dashed' ? 'dashed' : ''}" style="${dotStyle}"></span><span class="hl-label">${line.label}</span><span class="${valCls}">${value >= 0 ? '+' : ''}${value.toFixed(2)}%</span></div>`;
+            let valCls = value < 0 ? 'hl-val neg' : (value > 0 ? 'hl-val pos' : 'hl-val');
+            let valueHtml = `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
+            if (line._contribution) {
+              const share = point?.contribution_share_pct;
+              const rawContribution = point?.raw_return_pct;
+              valCls = Number.isFinite(share) && share < 0
+                ? 'hl-val neg'
+                : (Number.isFinite(share) && share > 0 ? 'hl-val pos' : 'hl-val');
+              valueHtml = Number.isFinite(share)
+                ? `${share.toFixed(1)}% 기여`
+                : '-';
+              if (Number.isFinite(rawContribution)) {
+                valueHtml += `<span class="hl-subval">${fmtSignedPctPoint(rawContribution)}</span>`;
+              }
+            }
+            html += `<div class="${cls.join(' ')}"><span class="hl-dot ${line.style === 'dashed' ? 'dashed' : ''}" style="${dotStyle}"></span><span class="hl-label">${line.label}</span><span class="${valCls}">${valueHtml}</span></div>`;
           });
           hoverEl.innerHTML = html;
           hoverEl.setAttribute('data-visible', 'true');
