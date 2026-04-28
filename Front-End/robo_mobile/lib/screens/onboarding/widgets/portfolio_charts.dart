@@ -971,7 +971,12 @@ class _AreaChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _AreaChartPainter old) =>
-      old.progress != progress || old.touchIndex != touchIndex;
+      old.points != points ||
+      old.progress != progress ||
+      old.color != color ||
+      old.touchIndex != touchIndex ||
+      old.baselineValue != baselineValue ||
+      old.baselineLabel != baselineLabel;
 }
 
 class _MultiLineChartPainter extends CustomPainter {
@@ -1161,7 +1166,9 @@ class _MultiLineChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _MultiLineChartPainter old) =>
-      old.progress != progress || old.touchIndex != touchIndex;
+      old.lines != lines ||
+      old.progress != progress ||
+      old.touchIndex != touchIndex;
 }
 
 // ── Shared helpers ──
