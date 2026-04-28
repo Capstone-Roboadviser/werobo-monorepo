@@ -1278,7 +1278,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       // Hard timeout so a hung upstream surfaces as an error instead of leaving
       // the UI stuck on "계산 중…" forever.
       const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 45000);
+      const timer = setTimeout(() => ctl.abort(), 60000);
       let res;
       try {
         res = await fetch(path, {
@@ -1288,7 +1288,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         });
       } catch (e) {
         clearTimeout(timer);
-        if (e.name === 'AbortError') throw new Error('응답 시간 초과 (45s)');
+        if (e.name === 'AbortError') throw new Error('응답 시간 초과 (60s)');
         throw e;
       }
       clearTimeout(timer);
