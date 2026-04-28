@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from datetime import date
 
+import pandas as pd
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.core.config import MINIMUM_HISTORY_ROWS
 from app.services.portfolio_analytics_service import PortfolioAnalyticsService
 from app.services.portfolio_service import PortfolioSimulationService
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
@@ -106,6 +108,51 @@ def _representative_indices(total_point_count: int) -> dict[str, int]:
     }
 
 
+def _basis_date_window(version_id: int) -> dict[str, object] | None:
+    instruments = managed_universe_service.get_instruments_for_version(version_id)
+    if not instruments:
+        return None
+
+    prices = managed_universe_service.load_prices_for_instruments(
+        instruments,
+        version_id=version_id,
+    )
+    if prices.empty:
+        return None
+
+    common_prices = (
+        prices.assign(
+            ticker=prices["ticker"].astype(str).str.upper(),
+            date=pd.to_datetime(prices["date"]).dt.normalize(),
+        )
+        .pivot_table(
+            index="date",
+            columns="ticker",
+            values="adjusted_close",
+            aggfunc="last",
+        )
+        .sort_index()
+        .ffill()
+        .dropna(how="any")
+    )
+    if len(common_prices.index) < MINIMUM_HISTORY_ROWS + 2:
+        return None
+
+    min_basis_date = common_prices.index[MINIMUM_HISTORY_ROWS]
+    max_basis_date = common_prices.index[-2]
+    if min_basis_date > max_basis_date:
+        return None
+
+    return {
+        "first_price_date": common_prices.index[0].strftime("%Y-%m-%d"),
+        "last_price_date": common_prices.index[-1].strftime("%Y-%m-%d"),
+        "min_basis_date": min_basis_date.strftime("%Y-%m-%d"),
+        "max_basis_date": max_basis_date.strftime("%Y-%m-%d"),
+        "train_return_rows": MINIMUM_HISTORY_ROWS,
+        "common_price_rows": int(len(common_prices.index)),
+    }
+
+
 # ── Catalog ──
 
 
@@ -119,6 +166,7 @@ def get_comparison_catalog() -> dict[str, object]:
                 "version_name": v.version_name,
                 "is_active": v.is_active,
                 "notes": v.notes,
+                "basis_date_window": _basis_date_window(v.version_id),
             }
             for v in managed_universe_service.list_versions()
         ]

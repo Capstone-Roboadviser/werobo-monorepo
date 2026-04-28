@@ -1309,6 +1309,79 @@ def render_admin_comparison_page() -> HTMLResponse:
       versionById = Object.fromEntries(catalog.versions.map(v => [v.version_id, v]));
     }
 
+    function getDefaultVersionId() {
+      return catalog.versions.find(v => v.is_active)?.version_id
+        ?? catalog.versions[0]?.version_id
+        ?? null;
+    }
+
+    function getBasisDateWindow(versionId) {
+      return versionById[versionId]?.basis_date_window || null;
+    }
+
+    function getBasisDateBounds() {
+      const versionIds = graphSets.size
+        ? Array.from(graphSets.values()).map(state => state.versionId)
+        : [getDefaultVersionId()];
+      const windows = versionIds.map(getBasisDateWindow);
+      if (!windows.length || windows.some(window => !window)) return null;
+
+      const sortedMinDates = windows
+        .map(window => window.min_basis_date)
+        .filter(Boolean)
+        .sort();
+      const sortedMaxDates = windows
+        .map(window => window.max_basis_date)
+        .filter(Boolean)
+        .sort();
+      const minDate = sortedMinDates[sortedMinDates.length - 1];
+      const maxDate = sortedMaxDates[0];
+      if (!minDate || !maxDate || minDate > maxDate) return null;
+      return { minDate, maxDate };
+    }
+
+    function syncBoardBasisDate(preferredDate) {
+      const input = $('#board-basis-date');
+      const previous = boardBasisDate;
+      const bounds = getBasisDateBounds();
+      if (!bounds) {
+        boardBasisDate = null;
+        if (input) {
+          input.value = '';
+          input.disabled = true;
+          input.removeAttribute('min');
+          input.removeAttribute('max');
+          input.title = '선택한 유니버스 조합에는 기준일로 사용할 수 있는 충분한 가격 이력이 없습니다.';
+        }
+        graphSets.forEach(state => {
+          state.asOfDate = null;
+          state.startDate = null;
+        });
+        return previous !== boardBasisDate;
+      }
+
+      let next = preferredDate || boardBasisDate || bounds.minDate;
+      if (next < bounds.minDate) next = bounds.minDate;
+      if (next > bounds.maxDate) next = bounds.maxDate;
+      boardBasisDate = next;
+      if (input) {
+        input.disabled = false;
+        input.min = bounds.minDate;
+        input.max = bounds.maxDate;
+        input.value = boardBasisDate;
+        input.title = `선택 가능 범위: ${bounds.minDate} ~ ${bounds.maxDate}`;
+      }
+      graphSets.forEach(state => {
+        state.asOfDate = boardBasisDate;
+        state.startDate = boardBasisDate;
+      });
+      return previous !== boardBasisDate;
+    }
+
+    function refreshAllFrontiers() {
+      graphSets.forEach(state => refreshFrontier(state));
+    }
+
     function buildPayload() {
       const graphList = Array.from(graphSets.values());
       const selectedGraphIndex = graphList.findIndex(g => g.id === selectedBacktestGraphId);
@@ -1682,7 +1755,7 @@ def render_admin_comparison_page() -> HTMLResponse:
       const state = {
         id,
         name: initial?.name || `유니버스 ${graphSets.size + 1}`,
-        versionId: initial?.versionId || (catalog.versions.find(v => v.is_active)?.version_id ?? catalog.versions[0]?.version_id ?? null),
+        versionId: initial?.versionId || getDefaultVersionId(),
         rebalanceEnabled: initial?.rebalanceEnabled !== false,
         asOfDate: basisDate,
         startDate: basisDate,
@@ -1740,21 +1813,32 @@ def render_admin_comparison_page() -> HTMLResponse:
       versionSelect.addEventListener('change', () => {
         state.versionId = parseInt(versionSelect.value, 10);
         state.pointIndex = null;
+        const basisChanged = syncBoardBasisDate();
         setDirty(true);
         updateBacktestControls();
-        refreshFrontier(state);
+        if (basisChanged) refreshAllFrontiers();
+        else refreshFrontier(state);
       });
 
       $('.btn-remove', root).addEventListener('click', () => removeGraphSet(id));
 
       $('#graph-grid').appendChild(node);
       if (!selectedBacktestGraphId) selectedBacktestGraphId = id;
+      const requestedBasisDate = basisDate || null;
+      const basisChanged = syncBoardBasisDate(requestedBasisDate);
       updateEmptyState();
       updateBacktestControls();
       if (!silent) setDirty(true);
 
       const cache = initial?.cached;
-      if (cache?.frontier?.points?.length && cache?.backtest?.lines && cache?.selection) {
+      if (basisChanged) {
+        refreshAllFrontiers();
+      } else if (
+        cache?.frontier?.points?.length
+        && cache?.backtest?.lines
+        && cache?.selection
+        && requestedBasisDate === boardBasisDate
+      ) {
         // Hydrate from snapshot payload so charts render without refetching.
         state.frontier = cache.frontier;
         state.selection = cache.selection;
@@ -1779,15 +1863,26 @@ def render_admin_comparison_page() -> HTMLResponse:
       if (selectedBacktestGraphId === id) {
         selectedBacktestGraphId = Array.from(graphSets.keys())[0] || null;
       }
+      const basisChanged = syncBoardBasisDate();
       updateEmptyState();
       updateBacktestControls();
-      renderBoardBacktest();
+      if (basisChanged) refreshAllFrontiers();
+      else renderBoardBacktest();
       setDirty(true);
     }
 
     async function refreshFrontier(state) {
       if (!state.versionId) {
         setFrontierStatus(state, '유니버스를 선택하세요.');
+        return;
+      }
+      if (!state.asOfDate) {
+        state.frontier = null;
+        state.selection = null;
+        state.backtest = null;
+        setFrontierStatus(state, '기준일 범위 없음');
+        showError(state, '최소 1년 학습 데이터와 이후 백테스트 구간을 모두 만족하는 기준일이 없습니다.');
+        renderBoardBacktest();
         return;
       }
       setFrontierStatus(state, '계산 중…');
@@ -1841,6 +1936,7 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     async function refreshBacktest(state) {
       if (!state.selection) return;
+      if (!state.startDate) return;
       state.backtestLoading = true;
       renderBoardBacktest();
       try {
@@ -2797,12 +2893,8 @@ def render_admin_comparison_page() -> HTMLResponse:
     document.addEventListener('DOMContentLoaded', async () => {
       $('#add-graph-set').addEventListener('click', () => addGraphSet());
       $('#board-basis-date').addEventListener('change', (ev) => {
-        boardBasisDate = ev.target.value || null;
-        graphSets.forEach(state => {
-          state.asOfDate = boardBasisDate;
-          state.startDate = boardBasisDate;
-          refreshFrontier(state);
-        });
+        syncBoardBasisDate(ev.target.value || null);
+        refreshAllFrontiers();
         setDirty(true);
       });
       $('#single-graph-select').addEventListener('change', (ev) => {
