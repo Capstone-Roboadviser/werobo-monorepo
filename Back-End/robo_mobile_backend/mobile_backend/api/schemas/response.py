@@ -200,6 +200,10 @@ class FrontierPreviewPointResponse(BaseModel):
     is_recommended: bool = Field(..., description="사용자 추천 위험유형에 해당하는 포인트인지 여부", examples=[False])
     representative_code: str | None = Field(default=None, description="대표 포트폴리오 코드와 일치할 때의 코드", examples=["balanced"])
     representative_label: str | None = Field(default=None, description="대표 포트폴리오 표시 이름", examples=["균형형"])
+    sector_allocations: list[SectorAllocationResponse] = Field(
+        default_factory=list,
+        description="해당 frontier 포인트의 실제 자산군 비중",
+    )
 
 
 class FrontierPreviewResponse(BaseModel):

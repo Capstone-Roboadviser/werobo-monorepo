@@ -16,7 +16,7 @@ class PortfolioState extends ChangeNotifier {
   static const String _authSessionStorageKey = 'werobo.auth_session';
   static const String _portfolioBootstrapStorageKey =
       'werobo.portfolio_bootstrap';
-  static const int _frontierPreviewStorageVersion = 2;
+  static const int _frontierPreviewStorageVersion = 3;
   static const String _digestSeenDateKey = 'werobo.digest_seen_date';
   static const String _welcomeBannerSeenKey = 'werobo.welcome_banner_seen';
 

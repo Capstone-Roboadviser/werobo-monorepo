@@ -108,9 +108,9 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
                         asset_code=asset.code,
                         asset_name=asset.name,
                         weight=weight,
-                        risk_contribution=sum(
-                            sector_risk_contributions.get(ticker, 0.0)
-                            for ticker in matching_tickers
+                        risk_contribution=sector_risk_contributions.get(
+                            asset.code,
+                            0.0,
                         ),
                     )
                 )
@@ -207,6 +207,29 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
             [False, True, False],
         )
         self.assertEqual(response["resolved_profile"]["target_volatility"], 0.12)
+        self.assertEqual(
+            response["points"][1]["sector_allocations"],
+            [
+                {
+                    "asset_code": "us_value",
+                    "asset_name": "미국 가치주",
+                    "weight": 0.35,
+                    "risk_contribution": 0.35,
+                },
+                {
+                    "asset_code": "us_growth",
+                    "asset_name": "미국 성장주",
+                    "weight": 0.3,
+                    "risk_contribution": 0.3,
+                },
+                {
+                    "asset_code": "short_term_bond",
+                    "asset_name": "단기 채권",
+                    "weight": 0.35,
+                    "risk_contribution": 0.35,
+                },
+            ],
+        )
 
     def test_build_frontier_selection_returns_selected_portfolio(self) -> None:
         adapter, _ = self._build_fake_adapter()

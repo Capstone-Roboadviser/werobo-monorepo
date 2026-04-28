@@ -8,15 +8,11 @@ import '../../../models/portfolio_data.dart';
 class _AssetDot {
   final String code;
   final String name;
-  final double volatility;
-  final double expectedReturn;
   final Color color;
 
   const _AssetDot({
     required this.code,
     required this.name,
-    required this.volatility,
-    required this.expectedReturn,
     required this.color,
   });
 }
@@ -31,65 +27,64 @@ class _WeightedAsset {
   });
 }
 
-/// Hardcoded asset positions estimated from backend data.
-/// Volatility = individual asset std-dev; expectedReturn = individual
-/// expected annual return.  Values are rough estimates that place each
-/// asset class in the right relative position on the frontier chart.
+/// Asset metadata used to color and label the surrounding allocation dots.
 const _kAssetDots = <_AssetDot>[
   _AssetDot(
     code: 'cash_equivalents',
     name: '현금성',
-    volatility: 0.02,
-    expectedReturn: 0.032,
     color: CategoryColors.cash,
   ),
   _AssetDot(
     code: 'short_term_bond',
     name: '단기채권',
-    volatility: 0.03,
-    expectedReturn: 0.038,
     color: CategoryColors.bond,
   ),
   _AssetDot(
     code: 'infra_bond',
     name: '인프라채권',
-    volatility: 0.07,
-    expectedReturn: 0.048,
     color: CategoryColors.infra,
   ),
   _AssetDot(
     code: 'gold',
     name: '금',
-    volatility: 0.15,
-    expectedReturn: 0.052,
     color: CategoryColors.gold,
   ),
   _AssetDot(
     code: 'new_growth',
     name: '신성장주',
-    volatility: 0.22,
-    expectedReturn: 0.070,
     color: CategoryColors.newGrowth,
   ),
   _AssetDot(
     code: 'us_value',
     name: '미국가치주',
-    volatility: 0.18,
-    expectedReturn: 0.075,
     color: CategoryColors.valueStock,
   ),
   _AssetDot(
     code: 'us_growth',
     name: '미국성장주',
-    volatility: 0.25,
-    expectedReturn: 0.085,
     color: CategoryColors.growthStock,
   ),
 ];
 
-/// Sector weights at sampled preview positions (0-based index into the
-/// 61-point preview array).  Values from backend frontier-selection API.
-const _kWeightsAtPosition = <int, Map<String, double>>{
+const _kAssetSlotsByCode = <String, Offset>{
+  'short_term_bond': Offset(0.47, 0.74), // below curve, center
+  'cash_equivalents': Offset(0.67, 0.76), // below curve, right
+  'infra_bond': Offset(0.08, 0.17), // top-left corner
+  'gold': Offset(0.31, 0.11), // top, left-center
+  'us_value': Offset(0.56, 0.08), // top, right-center
+  'new_growth': Offset(0.78, 0.36), // right, mid
+  'us_growth': Offset(0.78, 0.55), // right, lower
+};
+
+const _kUnknownAssetColor = Color(0xFF94A3B8);
+
+final _kAssetDotByCode = {
+  for (final asset in _kAssetDots) asset.code: asset,
+};
+
+/// Fallback weights used only for embedded/stale preview payloads that
+/// do not yet carry per-point sector allocations.
+const _kFallbackWeightsAtPosition = <int, Map<String, double>>{
   // conservative end (vol ≈ 0.057)
   0: {
     'short_term_bond': 0.30,
@@ -152,32 +147,82 @@ const _kWeightsAtPosition = <int, Map<String, double>>{
   },
 };
 
-/// Linearly interpolate asset weights between nearest keyed positions.
-Map<String, double> _interpolateWeights(int position) {
-  final keys = _kWeightsAtPosition.keys.toList()..sort();
+Map<String, double> _interpolateFallbackWeights(double scaledPosition) {
+  final keys = _kFallbackWeightsAtPosition.keys.toList()..sort();
   if (keys.isEmpty) return {};
-  if (position <= keys.first) return _kWeightsAtPosition[keys.first]!;
-  if (position >= keys.last) return _kWeightsAtPosition[keys.last]!;
+  if (scaledPosition <= keys.first) {
+    return _kFallbackWeightsAtPosition[keys.first]!;
+  }
+  if (scaledPosition >= keys.last) {
+    return _kFallbackWeightsAtPosition[keys.last]!;
+  }
 
   int lower = keys.first;
   int upper = keys.last;
   for (final k in keys) {
-    if (k <= position) lower = k;
-    if (k >= position) {
+    if (k <= scaledPosition) lower = k;
+    if (k >= scaledPosition) {
       upper = k;
       break;
     }
   }
-  if (lower == upper) return _kWeightsAtPosition[lower]!;
+  if (lower == upper) return _kFallbackWeightsAtPosition[lower]!;
 
-  final t = (position - lower) / (upper - lower);
-  final lowerW = _kWeightsAtPosition[lower]!;
-  final upperW = _kWeightsAtPosition[upper]!;
+  final t = (scaledPosition - lower) / (upper - lower);
+  final lowerW = _kFallbackWeightsAtPosition[lower]!;
+  final upperW = _kFallbackWeightsAtPosition[upper]!;
   final allCodes = {...lowerW.keys, ...upperW.keys};
   return {
     for (final code in allCodes)
       code: (lowerW[code] ?? 0.0) * (1 - t) + (upperW[code] ?? 0.0) * t,
   };
+}
+
+_AssetDot _assetDotForAllocation(MobileSectorAllocation allocation) {
+  final known = _kAssetDotByCode[allocation.assetCode];
+  if (known != null) {
+    return _AssetDot(
+      code: known.code,
+      name: allocation.assetName.isEmpty ? known.name : allocation.assetName,
+      color: known.color,
+    );
+  }
+  return _AssetDot(
+    code: allocation.assetCode,
+    name: allocation.assetName.isEmpty
+        ? allocation.assetCode
+        : allocation.assetName,
+    color: _kUnknownAssetColor,
+  );
+}
+
+List<_WeightedAsset> _weightedAssetsForPreviewPoint({
+  required MobileFrontierPreviewPoint point,
+  required int selectedPosition,
+  required int previewPointCount,
+}) {
+  if (point.sectorAllocations.isNotEmpty) {
+    return [
+      for (final allocation in point.sectorAllocations)
+        if (allocation.weight > 0)
+          _WeightedAsset(
+            asset: _assetDotForAllocation(allocation),
+            weight: allocation.weight,
+          ),
+    ];
+  }
+
+  final normalizedPosition =
+      previewPointCount <= 1 ? 0.0 : selectedPosition / (previewPointCount - 1);
+  final fallbackWeights = _interpolateFallbackWeights(normalizedPosition * 60);
+  return [
+    for (final asset in _kAssetDots)
+      if ((fallbackWeights[asset.code] ?? 0) > 0)
+        _WeightedAsset(
+          asset: asset,
+          weight: fallbackWeights[asset.code] ?? 0.0,
+        ),
+  ];
 }
 
 class EfficientFrontierChart extends StatefulWidget {
@@ -683,28 +728,18 @@ class _FrontierPainter extends CustomPainter {
     // Asset dots — positioned at fixed layout slots around the frontier.
     // Keep low-weight assets visible so the frontier does not look incomplete.
     if (dotProgress > 0) {
-      final weights = _interpolateWeights(selectedPosition);
+      final visibleAssets = _weightedAssetsForPreviewPoint(
+        point: labelPoint,
+        selectedPosition: selectedPosition,
+        previewPointCount: points.length,
+      )
+        ..removeWhere((asset) => asset.weight <= 0.005)
+        ..sort((a, b) => a.weight.compareTo(b.weight));
 
-      // Fixed (x%, y%) positions for each asset, chosen to avoid
-      // overlapping the frontier curve or each other.
-      // Slots positioned well clear of the frontier curve which
-      // arcs from bottom-left (~0.15, 0.86) up to right (~0.85, 0.20).
-      const slotsByCode = <String, Offset>{
-        'short_term_bond': Offset(0.47, 0.74), // below curve, center
-        'cash_equivalents': Offset(0.67, 0.76), // below curve, right
-        'infra_bond': Offset(0.08, 0.17), // top-left corner
-        'gold': Offset(0.31, 0.11), // top, left-center
-        'us_value': Offset(0.56, 0.08), // top, right-center
-        'new_growth': Offset(0.78, 0.36), // right, mid
-        'us_growth': Offset(0.78, 0.55), // right, lower
-      };
-
-      final visibleAssets = <_WeightedAsset>[];
-      for (final asset in _kAssetDots) {
-        final weight = weights[asset.code] ?? 0.0;
-        if (weight <= 0.005) continue;
-        visibleAssets.add(_WeightedAsset(asset: asset, weight: weight));
-        final slot = slotsByCode[asset.code];
+      for (final weightedAsset in visibleAssets) {
+        final asset = weightedAsset.asset;
+        final weight = weightedAsset.weight;
+        final slot = _kAssetSlotsByCode[asset.code];
         if (slot == null) continue;
 
         final pos = Offset(w * slot.dx, h * slot.dy);

@@ -799,6 +799,7 @@ class MobileFrontierPreviewPoint {
   final bool isRecommended;
   final String? representativeCode;
   final String? representativeLabel;
+  final List<MobileSectorAllocation> sectorAllocations;
 
   const MobileFrontierPreviewPoint({
     required this.index,
@@ -807,6 +808,7 @@ class MobileFrontierPreviewPoint {
     required this.isRecommended,
     required this.representativeCode,
     required this.representativeLabel,
+    required this.sectorAllocations,
   });
 
   factory MobileFrontierPreviewPoint.fromJson(Map<String, dynamic> json) {
@@ -817,6 +819,11 @@ class MobileFrontierPreviewPoint {
       isRecommended: json['is_recommended'] == true,
       representativeCode: json['representative_code']?.toString(),
       representativeLabel: json['representative_label']?.toString(),
+      sectorAllocations:
+          (json['sector_allocations'] as List<dynamic>? ?? const [])
+              .whereType<Map<String, dynamic>>()
+              .map(MobileSectorAllocation.fromJson)
+              .toList(),
     );
   }
 
@@ -828,6 +835,8 @@ class MobileFrontierPreviewPoint {
       'is_recommended': isRecommended,
       'representative_code': representativeCode,
       'representative_label': representativeLabel,
+      'sector_allocations':
+          sectorAllocations.map((allocation) => allocation.toJson()).toList(),
     };
   }
 }

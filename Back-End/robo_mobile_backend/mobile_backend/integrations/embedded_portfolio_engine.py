@@ -720,6 +720,12 @@ class EmbeddedPortfolioEngineAdapter:
                     "representative_label": None
                     if representative_index_lookup.get(index) is None
                     else PROFILE_LABELS[representative_index_lookup[index].value],
+                    "sector_allocations": list(
+                        dict(frontier_points[index].get("portfolio_data", {})).get(
+                            "sector_allocations",
+                            [],
+                        )
+                    ),
                 }
                 for index in preview_indices
             ],
@@ -999,7 +1005,7 @@ class EmbeddedPortfolioEngineAdapter:
                 as_of_date=as_of_date,
             )
 
-        context, _ = self._build_context_bundle(
+        context, instrument_by_ticker = self._build_context_bundle(
             investment_horizon=investment_horizon,
             data_source=data_source,
             as_of_date=as_of_date,
@@ -1046,6 +1052,13 @@ class EmbeddedPortfolioEngineAdapter:
                     "representative_label": None
                     if representative_index_lookup.get(index) is None
                     else PROFILE_LABELS[representative_index_lookup[index].value],
+                    "sector_allocations": list(
+                        self._build_portfolio_data_from_point(
+                            context=context,
+                            instrument_by_ticker=instrument_by_ticker,
+                            point=context.frontier_points[index],
+                        )["sector_allocations"]
+                    ),
                 }
                 for index in preview_indices
             ],

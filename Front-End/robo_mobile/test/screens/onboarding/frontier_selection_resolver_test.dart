@@ -29,6 +29,7 @@ void main() {
           isRecommended: false,
           representativeCode: 'conservative',
           representativeLabel: '안정형',
+          sectorAllocations: [],
         ),
         MobileFrontierPreviewPoint(
           index: 20,
@@ -37,6 +38,7 @@ void main() {
           isRecommended: true,
           representativeCode: 'balanced',
           representativeLabel: '균형형',
+          sectorAllocations: [],
         ),
         MobileFrontierPreviewPoint(
           index: 30,
@@ -45,6 +47,7 @@ void main() {
           isRecommended: false,
           representativeCode: 'growth',
           representativeLabel: '성장형',
+          sectorAllocations: [],
         ),
       ],
     );
