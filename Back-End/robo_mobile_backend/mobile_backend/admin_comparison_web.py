@@ -2299,8 +2299,40 @@ def render_admin_comparison_page() -> HTMLResponse:
       renderBoardBacktest();
     }
 
+    function findCommonStartDate(lines) {
+      const pointSets = lines.map(line => new Set(line.points.map(point => point.date)));
+      const firstDates = lines
+        .map(line => line.points[0]?.date)
+        .filter(Boolean)
+        .sort();
+      if (!pointSets.length || firstDates.length !== lines.length) return null;
+      const minAllowedDate = firstDates[firstDates.length - 1];
+      return [...pointSets[0]]
+        .filter(date => date >= minAllowedDate && pointSets.every(set => set.has(date)))
+        .sort()[0] || null;
+    }
+
+    function rebaseLineAtDate(line, startDate) {
+      const basePoint = line.points.find(point => point.date === startDate);
+      if (!basePoint) return null;
+      const baseReturn = Number(basePoint.return_pct);
+      if (!Number.isFinite(baseReturn)) return null;
+      const points = line.points
+        .filter(point => point.date >= startDate)
+        .map(point => {
+          const value = Number(point.return_pct);
+          if (!Number.isFinite(value)) return null;
+          return {
+            ...point,
+            return_pct: Math.round((value - baseReturn) * 10000) / 10000,
+          };
+        })
+        .filter(Boolean);
+      return points.length ? { ...line, points } : null;
+    }
+
     function buildCompareBacktestLines() {
-      return Array.from(graphSets.values())
+      const lines = Array.from(graphSets.values())
         .filter(state => state.backtest?.lines?.length)
         .map((state, idx) => {
           const line = state.backtest.lines.find(item => PORTFOLIO_KEYS.has(item.key));
@@ -2315,6 +2347,14 @@ def render_admin_comparison_page() -> HTMLResponse:
           };
         })
         .filter(Boolean);
+      const commonStartDate = findCommonStartDate(lines);
+      if (!commonStartDate) return { lines, commonStartDate: null };
+      return {
+        lines: lines
+          .map(line => rebaseLineAtDate(line, commonStartDate))
+          .filter(Boolean),
+        commonStartDate,
+      };
     }
 
     function renderBoardBacktest() {
@@ -2333,7 +2373,8 @@ def render_admin_comparison_page() -> HTMLResponse:
       if (backtestMode === 'compare') {
         const compareStates = Array.from(graphSets.values());
         const loading = compareStates.some(state => state.backtestLoading);
-        const lines = buildCompareBacktestLines();
+        const compareBacktest = buildCompareBacktestLines();
+        const lines = compareBacktest.lines;
         if (compareStates.length < 2) {
           clearProfitSvg();
           statusEl.textContent = '비교할 유니버스를 2개 이상 추가하세요.';
@@ -2342,7 +2383,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         if (loading && lines.length < compareStates.length) {
           statusEl.textContent = '계산 중...';
         } else {
-          statusEl.textContent = `${lines.length}개 유니버스 비교`;
+          statusEl.textContent = `${lines.length}개 유니버스 비교${compareBacktest.commonStartDate ? ` · ${compareBacktest.commonStartDate}부터` : ''}`;
         }
         if (!lines.length) {
           clearProfitSvg();
