@@ -1283,6 +1283,41 @@ def render_admin_comparison_page() -> HTMLResponse:
       return `${value >= 0 ? '+' : ''}${value.toFixed(digits)}%p`;
     }
 
+    // Compute realized CAGR and Max Drawdown from a cumulative-return points
+    // series (return_pct is percent change from the first point, so the value
+    // index is 1 + return_pct/100). Returns decimals: cagr 0.104 = 10.4%,
+    // mdd 0.084 = -8.4% drawdown. Returns null when not computable.
+    function computeBacktestMetrics(points) {
+      if (!Array.isArray(points) || points.length < 2) {
+        return { cagr: null, mdd: null };
+      }
+      const first = points[0];
+      const last = points[points.length - 1];
+      const finalPct = Number(last?.return_pct);
+      const startMs = new Date(first?.date).getTime();
+      const endMs = new Date(last?.date).getTime();
+      let cagr = null;
+      if (Number.isFinite(finalPct) && Number.isFinite(startMs) && Number.isFinite(endMs)) {
+        const years = (endMs - startMs) / (365.25 * 86400000);
+        const finalValue = 1 + finalPct / 100;
+        if (years > 0 && finalValue > 0) {
+          cagr = Math.pow(finalValue, 1 / years) - 1;
+        }
+      }
+      let peak = -Infinity;
+      let mdd = 0;
+      for (const p of points) {
+        const v = 1 + Number(p?.return_pct) / 100;
+        if (!Number.isFinite(v)) continue;
+        if (v > peak) peak = v;
+        if (peak > 0) {
+          const dd = (peak - v) / peak;
+          if (dd > mdd) mdd = dd;
+        }
+      }
+      return { cagr, mdd: peak === -Infinity ? null : mdd };
+    }
+
     async function api(path, init) {
       // Hard timeout so a hung upstream surfaces as an error instead of leaving
       // the UI stuck on "계산 중…" forever.
@@ -2639,7 +2674,17 @@ def render_admin_comparison_page() -> HTMLResponse:
         statusEl.textContent = selected.backtestLoading ? '계산 중...' : (contributionMode ? '기여도 데이터 없음' : '백테스트 데이터 없음');
         return;
       }
-      statusEl.textContent = `${labelForGraphSet(selected)} · ${selected.backtest.start_date} → ${selected.backtest.end_date}${contributionMode ? ' · 포트폴리오 기준선 + 자산군 기여도(%p)' : ''}`;
+      const portfolioLine = lines.find(line => line._portfolio);
+      const metrics = portfolioLine ? computeBacktestMetrics(portfolioLine.points) : { cagr: null, mdd: null };
+      const metricsParts = [];
+      if (Number.isFinite(metrics.cagr)) {
+        metricsParts.push(`CAGR ${fmtSignedPctRaw(metrics.cagr * 100, 1)}`);
+      }
+      if (Number.isFinite(metrics.mdd)) {
+        metricsParts.push(`MDD ${(-metrics.mdd * 100).toFixed(1)}%`);
+      }
+      const metricsSuffix = metricsParts.length ? ` · ${metricsParts.join(' · ')}` : '';
+      statusEl.textContent = `${labelForGraphSet(selected)} · ${selected.backtest.start_date} → ${selected.backtest.end_date}${contributionMode ? ' · 포트폴리오 기준선 + 자산군 기여도(%p)' : ''}${metricsSuffix}`;
       renderBacktestChart({
         lines,
         hidden: selected.hiddenLines || new Set(),
