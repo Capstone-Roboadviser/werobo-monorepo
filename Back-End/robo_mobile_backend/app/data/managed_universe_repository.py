@@ -198,6 +198,31 @@ class ManagedUniverseRepository:
                     """
                 )
                 cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS admin_comparison_frontier_cache (
+                        id BIGSERIAL PRIMARY KEY,
+                        version_id BIGINT NOT NULL REFERENCES universe_versions(id) ON DELETE CASCADE,
+                        basis_date DATE,
+                        basis_date_key TEXT NOT NULL,
+                        investment_horizon TEXT NOT NULL,
+                        sample_points INTEGER NOT NULL,
+                        cache_version TEXT NOT NULL,
+                        price_signature TEXT NOT NULL,
+                        payload JSONB NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE (
+                            version_id,
+                            basis_date_key,
+                            investment_horizon,
+                            sample_points,
+                            cache_version,
+                            price_signature
+                        )
+                    )
+                    """
+                )
+                cursor.execute(
                     "ALTER TABLE admin_comparison_snapshots ADD COLUMN IF NOT EXISTS folder TEXT"
                 )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_items_version_sector ON universe_items(version_id, sector_code)")
@@ -209,6 +234,10 @@ class ManagedUniverseRepository:
                 )
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_comparison_backtest_snapshots_version ON comparison_backtest_snapshots(version_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_admin_comparison_frontier_cache_lookup "
+                    "ON admin_comparison_frontier_cache(version_id, basis_date_key, investment_horizon, sample_points, cache_version)"
                 )
             connection.commit()
 
@@ -402,6 +431,7 @@ class ManagedUniverseRepository:
                 )
                 cursor.execute("DELETE FROM universe_price_windows WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM frontier_snapshots WHERE version_id = %s", (version_id,))
+                cursor.execute("DELETE FROM admin_comparison_frontier_cache WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM universe_items WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM universe_asset_roles WHERE version_id = %s", (version_id,))
                 cursor.executemany(
@@ -1202,6 +1232,156 @@ class ManagedUniverseRepository:
             with connection.cursor() as cursor:
                 cursor.execute("DELETE FROM comparison_backtest_snapshots WHERE version_id = %s", (version_id,))
             connection.commit()
+
+    # ── Admin comparison frontier cache ──
+
+    def get_admin_comparison_frontier_price_signature(
+        self,
+        *,
+        version_id: int,
+        basis_date: str | None,
+    ) -> str:
+        """Return a stable signature for version prices used by a frontier request."""
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(*) AS total_rows,
+                        COUNT(DISTINCT UPPER(p.ticker)) AS ticker_count,
+                        MIN(p.date)::TEXT AS min_date,
+                        MAX(p.date)::TEXT AS max_date,
+                        TO_CHAR(MAX(p.ingested_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS max_ingested_at
+                    FROM price_history p
+                    INNER JOIN universe_items i
+                        ON UPPER(i.ticker) = UPPER(p.ticker)
+                    WHERE i.version_id = %s
+                      AND (%s::date IS NULL OR p.date <= %s::date)
+                    """,
+                    (version_id, basis_date, basis_date),
+                )
+                row = cursor.fetchone()
+        return (
+            f"rows={int(row['total_rows'] or 0)}"
+            f"|tickers={int(row['ticker_count'] or 0)}"
+            f"|min={row['min_date'] or ''}"
+            f"|max={row['max_date'] or ''}"
+            f"|ingested={row['max_ingested_at'] or ''}"
+        )
+
+    def get_admin_comparison_frontier_cache(
+        self,
+        *,
+        version_id: int,
+        basis_date: str | None,
+        investment_horizon: str,
+        sample_points: int,
+        cache_version: str,
+        price_signature: str,
+    ) -> dict[str, object] | None:
+        self._ensure_ready()
+        basis_date_key = self._admin_comparison_basis_date_key(basis_date)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT payload
+                    FROM admin_comparison_frontier_cache
+                    WHERE version_id = %s
+                      AND basis_date_key = %s
+                      AND investment_horizon = %s
+                      AND sample_points = %s
+                      AND cache_version = %s
+                      AND price_signature = %s
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    (
+                        version_id,
+                        basis_date_key,
+                        investment_horizon,
+                        sample_points,
+                        cache_version,
+                        price_signature,
+                    ),
+                )
+                row = cursor.fetchone()
+        if row is None:
+            return None
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return dict(payload) if isinstance(payload, dict) else None
+
+    def upsert_admin_comparison_frontier_cache(
+        self,
+        *,
+        version_id: int,
+        basis_date: str | None,
+        investment_horizon: str,
+        sample_points: int,
+        cache_version: str,
+        price_signature: str,
+        payload: dict[str, object],
+    ) -> None:
+        self._ensure_ready()
+        basis_date_key = self._admin_comparison_basis_date_key(basis_date)
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO admin_comparison_frontier_cache (
+                        version_id,
+                        basis_date,
+                        basis_date_key,
+                        investment_horizon,
+                        sample_points,
+                        cache_version,
+                        price_signature,
+                        payload,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (
+                        version_id,
+                        basis_date_key,
+                        investment_horizon,
+                        sample_points,
+                        cache_version,
+                        price_signature
+                    ) DO UPDATE
+                    SET basis_date = EXCLUDED.basis_date,
+                        payload = EXCLUDED.payload,
+                        updated_at = NOW()
+                    """,
+                    (
+                        version_id,
+                        basis_date,
+                        basis_date_key,
+                        investment_horizon,
+                        sample_points,
+                        cache_version,
+                        price_signature,
+                        payload_json,
+                    ),
+                )
+            connection.commit()
+
+    def delete_admin_comparison_frontier_cache(self, version_id: int) -> None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM admin_comparison_frontier_cache WHERE version_id = %s",
+                    (version_id,),
+                )
+            connection.commit()
+
+    @staticmethod
+    def _admin_comparison_basis_date_key(basis_date: str | None) -> str:
+        return str(basis_date) if basis_date else "__none__"
 
     def is_empty(self) -> bool:
         if not self.is_configured():

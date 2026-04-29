@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 _FRONTIER_CACHE_TTL_SECONDS = 120
 _FRONTIER_CACHE_MAX_ITEMS = 24
+_FRONTIER_DB_CACHE_VERSION = "admin-comparison-frontier-v1"
 _FrontierCacheKey = tuple[int, str | None, str, int]
 _frontier_cache: OrderedDict[_FrontierCacheKey, tuple[float, dict[str, object]]] = OrderedDict()
 _frontier_cache_lock = Lock()
@@ -154,6 +155,70 @@ def _store_cached_frontier(key: _FrontierCacheKey, payload: dict[str, object]) -
         _frontier_cache.move_to_end(key)
         while len(_frontier_cache) > _FRONTIER_CACHE_MAX_ITEMS:
             _frontier_cache.popitem(last=False)
+
+
+def _frontier_basis_date(payload: FrontierRequest) -> str | None:
+    return None if payload.as_of_date is None else payload.as_of_date.isoformat()
+
+
+def _get_persistent_cached_frontier(
+    payload: FrontierRequest,
+) -> tuple[dict[str, object] | None, str | None]:
+    if not managed_universe_service.repository.is_configured():
+        return None, None
+    basis_date = _frontier_basis_date(payload)
+    try:
+        price_signature = (
+            managed_universe_service.repository.get_admin_comparison_frontier_price_signature(
+                version_id=payload.version_id,
+                basis_date=basis_date,
+            )
+        )
+        cached = managed_universe_service.repository.get_admin_comparison_frontier_cache(
+            version_id=payload.version_id,
+            basis_date=basis_date,
+            investment_horizon=payload.investment_horizon.value,
+            sample_points=payload.sample_points,
+            cache_version=_FRONTIER_DB_CACHE_VERSION,
+            price_signature=price_signature,
+        )
+    except Exception:
+        logger.warning(
+            "admin_comparison.frontier persistent cache lookup failed version_id=%s as_of_date=%s",
+            payload.version_id,
+            payload.as_of_date,
+            exc_info=True,
+        )
+        return None, None
+    return cached, price_signature
+
+
+def _store_persistent_cached_frontier(
+    payload: FrontierRequest,
+    response_payload: dict[str, object],
+    *,
+    price_signature: str | None,
+) -> None:
+    if not price_signature or not managed_universe_service.repository.is_configured():
+        return
+    basis_date = _frontier_basis_date(payload)
+    try:
+        managed_universe_service.repository.upsert_admin_comparison_frontier_cache(
+            version_id=payload.version_id,
+            basis_date=basis_date,
+            investment_horizon=payload.investment_horizon.value,
+            sample_points=payload.sample_points,
+            cache_version=_FRONTIER_DB_CACHE_VERSION,
+            price_signature=price_signature,
+            payload=response_payload,
+        )
+    except Exception:
+        logger.warning(
+            "admin_comparison.frontier persistent cache store failed version_id=%s as_of_date=%s",
+            payload.version_id,
+            payload.as_of_date,
+            exc_info=True,
+        )
 
 
 def _cached_basis_date_window(version_id: int) -> dict[str, object] | None:
@@ -350,12 +415,23 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
     cached = _get_cached_frontier(cache_key)
     if cached is not None:
         logger.info(
-            "admin_comparison.frontier cache hit version_id=%s as_of_date=%s sample_points=%s",
+            "admin_comparison.frontier memory cache hit version_id=%s as_of_date=%s sample_points=%s",
             payload.version_id,
             payload.as_of_date,
             payload.sample_points,
         )
         return cached
+
+    persistent_cached, price_signature = _get_persistent_cached_frontier(payload)
+    if persistent_cached is not None:
+        _store_cached_frontier(cache_key, persistent_cached)
+        logger.info(
+            "admin_comparison.frontier db cache hit version_id=%s as_of_date=%s sample_points=%s",
+            payload.version_id,
+            payload.as_of_date,
+            payload.sample_points,
+        )
+        return persistent_cached
 
     started_at = time.monotonic()
     try:
@@ -438,6 +514,11 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
         "points": points,
     }
     _store_cached_frontier(cache_key, response_payload)
+    _store_persistent_cached_frontier(
+        payload,
+        response_payload,
+        price_signature=price_signature,
+    )
     logger.info(
         "admin_comparison.frontier calculated version_id=%s as_of_date=%s sample_points=%s duration=%.2fs",
         payload.version_id,
