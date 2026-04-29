@@ -1248,6 +1248,8 @@ def render_admin_comparison_page() -> HTMLResponse:
     let contributionMode = false;
     let compareHiddenLines = new Set();
     let compareEnabledAuxLines = new Set();
+    let basisDateWindowsPromise = null;
+    let pendingBoardBasisDate = null;
     const snapshotFilter = {
       query: '',
       sort: 'updated_desc',
@@ -1352,6 +1354,11 @@ def render_admin_comparison_page() -> HTMLResponse:
 
     async function loadCatalog() {
       catalog = await api('/admin/api/comparison/catalog');
+      catalog.versions = catalog.versions.map(v => ({
+        ...v,
+        basis_date_window: v.basis_date_window || null,
+        basis_date_window_loaded: v.basis_date_window_loaded === true,
+      }));
       assetByCode = Object.fromEntries(catalog.assets.map(a => [a.code, a]));
       versionById = Object.fromEntries(catalog.versions.map(v => [v.version_id, v]));
     }
@@ -1366,10 +1373,20 @@ def render_admin_comparison_page() -> HTMLResponse:
       return versionById[versionId]?.basis_date_window || null;
     }
 
-    function getBasisDateBounds() {
-      const versionIds = graphSets.size
+    function getBasisDateVersionIds() {
+      return graphSets.size
         ? Array.from(graphSets.values()).map(state => state.versionId)
         : [getDefaultVersionId()];
+    }
+
+    function areBasisDateWindowsLoaded() {
+      const versionIds = getBasisDateVersionIds().filter(id => id != null);
+      if (!versionIds.length) return true;
+      return versionIds.every(id => versionById[id]?.basis_date_window_loaded === true);
+    }
+
+    function getBasisDateBounds() {
+      const versionIds = getBasisDateVersionIds();
       const windows = versionIds.map(getBasisDateWindow);
       if (!windows.length || windows.some(window => !window)) return null;
 
@@ -1390,6 +1407,23 @@ def render_admin_comparison_page() -> HTMLResponse:
     function syncBoardBasisDate(preferredDate) {
       const input = $('#board-basis-date');
       const previous = boardBasisDate;
+      if (!areBasisDateWindowsLoaded()) {
+        pendingBoardBasisDate = preferredDate || boardBasisDate || pendingBoardBasisDate;
+        boardBasisDate = null;
+        if (input) {
+          input.value = pendingBoardBasisDate || '';
+          input.disabled = true;
+          input.removeAttribute('min');
+          input.removeAttribute('max');
+          input.title = '기준일 가능 범위를 불러오는 중입니다.';
+        }
+        graphSets.forEach(state => {
+          state.asOfDate = null;
+          state.startDate = null;
+        });
+        return false;
+      }
+
       const bounds = getBasisDateBounds();
       if (!bounds) {
         boardBasisDate = null;
@@ -1407,10 +1441,11 @@ def render_admin_comparison_page() -> HTMLResponse:
         return previous !== boardBasisDate;
       }
 
-      let next = preferredDate || boardBasisDate || bounds.minDate;
+      let next = preferredDate || pendingBoardBasisDate || boardBasisDate || bounds.minDate;
       if (next < bounds.minDate) next = bounds.minDate;
       if (next > bounds.maxDate) next = bounds.maxDate;
       boardBasisDate = next;
+      pendingBoardBasisDate = null;
       if (input) {
         input.disabled = false;
         input.min = bounds.minDate;
@@ -1438,6 +1473,56 @@ def render_admin_comparison_page() -> HTMLResponse:
         });
       frontierRefreshQueue = run;
       return run;
+    }
+
+    function markFrontiersWaitingForBasisDate() {
+      graphSets.forEach(state => {
+        state.frontier = null;
+        state.selection = null;
+        state.backtest = null;
+        if (state.rootEl) {
+          clearError(state);
+          setFrontierStatus(state, '기준일 범위 로딩 중…');
+          clearFrontierSvg(state);
+        }
+      });
+      renderBoardBacktest();
+    }
+
+    function loadBasisDateWindows() {
+      if (basisDateWindowsPromise) return basisDateWindowsPromise;
+      const ids = catalog.versions.map(v => v.version_id).filter(id => id != null);
+      if (!ids.length) {
+        basisDateWindowsPromise = Promise.resolve();
+        return basisDateWindowsPromise;
+      }
+      basisDateWindowsPromise = api(
+        `/admin/api/comparison/basis-date-windows?version_ids=${encodeURIComponent(ids.join(','))}`,
+        { method: 'GET' },
+        FRONTIER_API_TIMEOUT_MS,
+      ).then(data => {
+        (data.windows || []).forEach(item => {
+          const version = versionById[item.version_id];
+          if (!version) return;
+          version.basis_date_window = item.basis_date_window || null;
+          version.basis_date_window_loaded = true;
+        });
+        catalog.versions = catalog.versions.map(version => versionById[version.version_id] || version);
+        const preferred = pendingBoardBasisDate || boardBasisDate || $('#board-basis-date')?.value || null;
+        const basisChanged = syncBoardBasisDate(preferred);
+        if (basisChanged) refreshAllFrontiers();
+        else graphSets.forEach(state => {
+          if (!state.frontier) queueFrontierRefresh(state);
+        });
+        updateBacktestControls();
+        renderBoardBacktest();
+      }).catch(e => {
+        basisDateWindowsPromise = null;
+        const loading = $('#snapshot-error');
+        loading.style.display = 'block';
+        loading.textContent = `기준일 범위 로딩 실패: ${e.message}`;
+      });
+      return basisDateWindowsPromise;
     }
 
     function buildPayload() {
@@ -1876,6 +1961,11 @@ def render_admin_comparison_page() -> HTMLResponse:
         const basisChanged = syncBoardBasisDate();
         setDirty(true);
         updateBacktestControls();
+        if (!areBasisDateWindowsLoaded()) {
+          markFrontiersWaitingForBasisDate();
+          loadBasisDateWindows();
+          return;
+        }
         if (basisChanged) refreshAllFrontiers();
         else queueFrontierRefresh(state);
       });
@@ -1889,6 +1979,11 @@ def render_admin_comparison_page() -> HTMLResponse:
       updateEmptyState();
       updateBacktestControls();
       if (!silent) setDirty(true);
+      if (!areBasisDateWindowsLoaded()) {
+        markFrontiersWaitingForBasisDate();
+        loadBasisDateWindows();
+        return;
+      }
 
       const cache = initial?.cached;
       if (basisChanged) {
@@ -1934,6 +2029,11 @@ def render_admin_comparison_page() -> HTMLResponse:
     async function refreshFrontier(state) {
       if (!state.versionId) {
         setFrontierStatus(state, '유니버스를 선택하세요.');
+        return;
+      }
+      if (!areBasisDateWindowsLoaded()) {
+        setFrontierStatus(state, '기준일 범위 로딩 중…');
+        loadBasisDateWindows();
         return;
       }
       if (!state.asOfDate) {

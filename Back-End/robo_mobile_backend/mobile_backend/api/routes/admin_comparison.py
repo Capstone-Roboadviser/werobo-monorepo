@@ -8,7 +8,7 @@ from threading import Lock
 import time
 
 import pandas as pd
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.core.config import MINIMUM_HISTORY_ROWS
@@ -32,6 +32,10 @@ _FRONTIER_CACHE_MAX_ITEMS = 24
 _FrontierCacheKey = tuple[int, str | None, str, int]
 _frontier_cache: OrderedDict[_FrontierCacheKey, tuple[float, dict[str, object]]] = OrderedDict()
 _frontier_cache_lock = Lock()
+_BASIS_DATE_WINDOW_CACHE_TTL_SECONDS = 300
+_BASIS_DATE_WINDOW_CACHE_MAX_ITEMS = 64
+_basis_date_window_cache: OrderedDict[int, tuple[float, dict[str, object] | None]] = OrderedDict()
+_basis_date_window_cache_lock = Lock()
 
 
 # ── Request models ──
@@ -150,6 +154,26 @@ def _store_cached_frontier(key: _FrontierCacheKey, payload: dict[str, object]) -
         _frontier_cache.move_to_end(key)
         while len(_frontier_cache) > _FRONTIER_CACHE_MAX_ITEMS:
             _frontier_cache.popitem(last=False)
+
+
+def _cached_basis_date_window(version_id: int) -> dict[str, object] | None:
+    now = time.monotonic()
+    with _basis_date_window_cache_lock:
+        cached = _basis_date_window_cache.get(version_id)
+        if cached is not None:
+            cached_at, payload = cached
+            if now - cached_at <= _BASIS_DATE_WINDOW_CACHE_TTL_SECONDS:
+                _basis_date_window_cache.move_to_end(version_id)
+                return deepcopy(payload)
+            del _basis_date_window_cache[version_id]
+
+    payload = _basis_date_window(version_id)
+    with _basis_date_window_cache_lock:
+        _basis_date_window_cache[version_id] = (time.monotonic(), deepcopy(payload))
+        _basis_date_window_cache.move_to_end(version_id)
+        while len(_basis_date_window_cache) > _BASIS_DATE_WINDOW_CACHE_MAX_ITEMS:
+            _basis_date_window_cache.popitem(last=False)
+    return payload
 
 
 def _basis_date_has_representative_history(
@@ -271,7 +295,8 @@ def get_comparison_catalog() -> dict[str, object]:
                 "version_name": v.version_name,
                 "is_active": v.is_active,
                 "notes": v.notes,
-                "basis_date_window": _basis_date_window(v.version_id),
+                "basis_date_window": None,
+                "basis_date_window_loaded": False,
             }
             for v in managed_universe_service.list_versions()
         ]
@@ -281,6 +306,39 @@ def get_comparison_catalog() -> dict[str, object]:
         "assets": _serialize_assets(),
         "versions": versions,
     }
+
+
+@router.get("/basis-date-windows")
+def get_basis_date_windows(
+    version_ids: str | None = Query(
+        default=None,
+        description="쉼표로 구분한 유니버스 버전 ID 목록. 없으면 전체 버전을 계산합니다.",
+    ),
+) -> dict[str, object]:
+    try:
+        if version_ids:
+            requested_ids = [
+                int(item)
+                for item in version_ids.split(",")
+                if item.strip()
+            ]
+        else:
+            requested_ids = [version.version_id for version in managed_universe_service.list_versions()]
+        known_ids = {version.version_id for version in managed_universe_service.list_versions()}
+        windows = [
+            {
+                "version_id": version_id,
+                "basis_date_window": _cached_basis_date_window(version_id),
+                "basis_date_window_loaded": True,
+            }
+            for version_id in requested_ids
+            if version_id in known_ids
+        ]
+    except RuntimeError as exc:
+        raise _http_422(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"version_ids 형식이 올바르지 않습니다: {exc}") from exc
+    return {"windows": windows}
 
 
 # ── Frontier preview (live, per version) ──
