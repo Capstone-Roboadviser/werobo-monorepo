@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import hashlib
 import json
 
 import pandas as pd
@@ -894,6 +895,74 @@ class ManagedUniverseRepository:
                 row = cursor.fetchone()
         return None if row is None else self._refresh_job_from_row(row)
 
+    def get_running_refresh_job(self, version_id: int | None = None) -> ManagedPriceRefreshJob | None:
+        self._ensure_ready()
+        params: tuple[object, ...] = ()
+        where_parts = ["j.status = 'running'", "j.started_at > NOW() - INTERVAL '2 hours'"]
+        if version_id is not None:
+            where_parts.append("j.version_id = %s")
+            params = (version_id,)
+        where_clause = "WHERE " + " AND ".join(where_parts)
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT
+                        j.id,
+                        j.version_id,
+                        v.version_name,
+                        j.refresh_mode,
+                        j.status,
+                        j.ticker_count,
+                        COALESCE(SUM(CASE WHEN i.status = 'success' THEN 1 ELSE 0 END), 0) AS success_count,
+                        COALESCE(SUM(CASE WHEN i.status = 'failed' THEN 1 ELSE 0 END), 0) AS failure_count,
+                        j.message,
+                        TO_CHAR(j.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,
+                        TO_CHAR(j.started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS started_at,
+                        CASE
+                            WHEN j.finished_at IS NULL THEN NULL
+                            ELSE TO_CHAR(j.finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')
+                        END AS finished_at
+                    FROM refresh_jobs j
+                    JOIN universe_versions v ON v.id = j.version_id
+                    LEFT JOIN refresh_job_items i ON i.job_id = j.id
+                    {where_clause}
+                    GROUP BY j.id, v.version_name
+                    ORDER BY j.created_at DESC
+                    LIMIT 1
+                    """,
+                    params,
+                )
+                row = cursor.fetchone()
+        return None if row is None else self._refresh_job_from_row(row)
+
+    @contextmanager
+    def admin_comparison_frontier_calculation_lock(self, lock_name: str):
+        self._ensure_ready()
+        key1, key2 = self._advisory_lock_keys(lock_name)
+        connection = psycopg.connect(self.database_url, row_factory=dict_row)
+        locked = False
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT pg_try_advisory_lock(%s, %s) AS locked",
+                    (key1, key2),
+                )
+                row = cursor.fetchone()
+            locked = bool(row["locked"]) if row is not None else False
+            yield locked
+        finally:
+            try:
+                if locked:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT pg_advisory_unlock(%s, %s)",
+                            (key1, key2),
+                        )
+            finally:
+                connection.close()
+
     def get_refresh_job_items(
         self,
         job_id: int,
@@ -1413,6 +1482,14 @@ class ManagedUniverseRepository:
             raise RuntimeError("DATABASE_URL이 설정되지 않아 관리자 유니버스를 사용할 수 없습니다.")
         if psycopg is None or dict_row is None:
             raise RuntimeError("Postgres 연결을 위해 psycopg 패키지가 필요합니다. requirements.txt를 설치하세요.")
+
+    @staticmethod
+    def _advisory_lock_keys(lock_name: str) -> tuple[int, int]:
+        digest = hashlib.sha256(lock_name.encode("utf-8")).digest()
+        return (
+            int.from_bytes(digest[:4], byteorder="big", signed=True),
+            int.from_bytes(digest[4:8], byteorder="big", signed=True),
+        )
 
     def _version_from_row(self, row: dict) -> ManagedUniverseVersion:
         return ManagedUniverseVersion(

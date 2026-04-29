@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+from contextlib import ExitStack, contextmanager
 from copy import deepcopy
 from datetime import date
 import logging
-from threading import Lock
+from threading import Event, Lock
 import time
 
 import pandas as pd
@@ -30,9 +31,12 @@ logger = logging.getLogger(__name__)
 _FRONTIER_CACHE_TTL_SECONDS = 120
 _FRONTIER_CACHE_MAX_ITEMS = 24
 _FRONTIER_DB_CACHE_VERSION = "admin-comparison-frontier-v1"
-_FrontierCacheKey = tuple[int, str | None, str, int]
+_FRONTIER_INFLIGHT_WAIT_SECONDS = 85
+_FrontierCacheKey = tuple[int, str | None, str, int, str | None]
 _frontier_cache: OrderedDict[_FrontierCacheKey, tuple[float, dict[str, object]]] = OrderedDict()
 _frontier_cache_lock = Lock()
+_frontier_inflight: dict[_FrontierCacheKey, tuple[float, Event]] = {}
+_frontier_inflight_lock = Lock()
 _BASIS_DATE_WINDOW_CACHE_TTL_SECONDS = 300
 _BASIS_DATE_WINDOW_CACHE_MAX_ITEMS = 64
 _basis_date_window_cache: OrderedDict[int, tuple[float, dict[str, object] | None]] = OrderedDict()
@@ -126,12 +130,17 @@ def _representative_indices(total_point_count: int) -> dict[str, int]:
     }
 
 
-def _frontier_cache_key(payload: FrontierRequest) -> _FrontierCacheKey:
+def _frontier_cache_key(
+    payload: FrontierRequest,
+    *,
+    price_signature: str | None,
+) -> _FrontierCacheKey:
     return (
         payload.version_id,
         None if payload.as_of_date is None else payload.as_of_date.isoformat(),
         payload.investment_horizon.value,
         payload.sample_points,
+        price_signature,
     )
 
 
@@ -157,6 +166,24 @@ def _store_cached_frontier(key: _FrontierCacheKey, payload: dict[str, object]) -
             _frontier_cache.popitem(last=False)
 
 
+def _begin_frontier_calculation(key: _FrontierCacheKey) -> tuple[bool, Event]:
+    with _frontier_inflight_lock:
+        current = _frontier_inflight.get(key)
+        if current is not None:
+            return False, current[1]
+        event = Event()
+        _frontier_inflight[key] = (time.monotonic(), event)
+        return True, event
+
+
+def _finish_frontier_calculation(key: _FrontierCacheKey, event: Event) -> None:
+    with _frontier_inflight_lock:
+        current = _frontier_inflight.get(key)
+        if current is not None and current[1] is event:
+            del _frontier_inflight[key]
+    event.set()
+
+
 def _with_frontier_cache_metadata(
     payload: dict[str, object],
     *,
@@ -168,23 +195,92 @@ def _with_frontier_cache_metadata(
     return response
 
 
+def _raise_if_refresh_running(version_id: int) -> None:
+    if not managed_universe_service.repository.is_configured():
+        return
+    try:
+        running_job = managed_universe_service.repository.get_running_refresh_job(version_id)
+    except Exception:
+        logger.warning(
+            "admin_comparison.frontier refresh guard lookup failed version_id=%s",
+            version_id,
+            exc_info=True,
+        )
+        return
+    if running_job is None:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            "가격 데이터 갱신이 진행 중이라 관리자 비교 계산을 잠시 막았습니다. "
+            f"refresh_job_id={running_job.job_id}"
+        ),
+    )
+
+
+@contextmanager
+def _frontier_distributed_calculation_lock(key: _FrontierCacheKey):
+    repository = managed_universe_service.repository
+    lock_context = getattr(
+        repository,
+        "admin_comparison_frontier_calculation_lock",
+        None,
+    )
+    if not repository.is_configured() or lock_context is None:
+        yield True
+        return
+
+    lock_name = "|".join("" if part is None else str(part) for part in key)
+    stack = ExitStack()
+    try:
+        acquired = stack.enter_context(
+            lock_context(f"{_FRONTIER_DB_CACHE_VERSION}|{lock_name}")
+        )
+    except Exception:
+        stack.close()
+        logger.warning(
+            "admin_comparison.frontier distributed lock failed key=%s",
+            key,
+            exc_info=True,
+        )
+        yield True
+        return
+    with stack:
+        yield bool(acquired)
+
+
 def _frontier_basis_date(payload: FrontierRequest) -> str | None:
     return None if payload.as_of_date is None else payload.as_of_date.isoformat()
 
 
-def _get_persistent_cached_frontier(
-    payload: FrontierRequest,
-) -> tuple[dict[str, object] | None, str | None]:
+def _get_frontier_price_signature(payload: FrontierRequest) -> str | None:
     if not managed_universe_service.repository.is_configured():
-        return None, None
+        return None
     basis_date = _frontier_basis_date(payload)
     try:
-        price_signature = (
-            managed_universe_service.repository.get_admin_comparison_frontier_price_signature(
-                version_id=payload.version_id,
-                basis_date=basis_date,
-            )
+        return managed_universe_service.repository.get_admin_comparison_frontier_price_signature(
+            version_id=payload.version_id,
+            basis_date=basis_date,
         )
+    except Exception:
+        logger.warning(
+            "admin_comparison.frontier price signature lookup failed version_id=%s as_of_date=%s",
+            payload.version_id,
+            payload.as_of_date,
+            exc_info=True,
+        )
+        return None
+
+
+def _get_persistent_cached_frontier(
+    payload: FrontierRequest,
+    *,
+    price_signature: str | None,
+) -> dict[str, object] | None:
+    if not price_signature or not managed_universe_service.repository.is_configured():
+        return None
+    basis_date = _frontier_basis_date(payload)
+    try:
         cached = managed_universe_service.repository.get_admin_comparison_frontier_cache(
             version_id=payload.version_id,
             basis_date=basis_date,
@@ -200,8 +296,8 @@ def _get_persistent_cached_frontier(
             payload.as_of_date,
             exc_info=True,
         )
-        return None, None
-    return cached, price_signature
+        return None
+    return cached
 
 
 def _store_persistent_cached_frontier(
@@ -420,31 +516,7 @@ def get_basis_date_windows(
 # ── Frontier preview (live, per version) ──
 
 
-@router.post("/frontier")
-def get_frontier(payload: FrontierRequest) -> dict[str, object]:
-    cache_key = _frontier_cache_key(payload)
-    cached = _get_cached_frontier(cache_key)
-    if cached is not None:
-        logger.info(
-            "admin_comparison.frontier memory cache hit version_id=%s as_of_date=%s sample_points=%s",
-            payload.version_id,
-            payload.as_of_date,
-            payload.sample_points,
-        )
-        return _with_frontier_cache_metadata(cached, cache_source="memory")
-
-    persistent_cached, price_signature = _get_persistent_cached_frontier(payload)
-    if persistent_cached is not None:
-        _store_cached_frontier(cache_key, persistent_cached)
-        logger.info(
-            "admin_comparison.frontier db cache hit version_id=%s as_of_date=%s sample_points=%s",
-            payload.version_id,
-            payload.as_of_date,
-            payload.sample_points,
-        )
-        return _with_frontier_cache_metadata(persistent_cached, cache_source="db")
-
-    started_at = time.monotonic()
+def _calculate_frontier_response(payload: FrontierRequest) -> dict[str, object]:
     try:
         context = portfolio_simulation_service.build_engine_context(
             risk_profile=RiskProfile.BALANCED,
@@ -515,7 +587,7 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
             }
         )
 
-    response_payload = {
+    return {
         "version_id": payload.version_id,
         "as_of_date": None if payload.as_of_date is None else payload.as_of_date.isoformat(),
         "investment_horizon": payload.investment_horizon.value,
@@ -524,20 +596,88 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
         "max_volatility": round(float(context.frontier_points[-1].volatility), 4),
         "points": points,
     }
-    _store_cached_frontier(cache_key, response_payload)
-    _store_persistent_cached_frontier(
+
+
+@router.post("/frontier")
+def get_frontier(payload: FrontierRequest) -> dict[str, object]:
+    _raise_if_refresh_running(payload.version_id)
+    price_signature = _get_frontier_price_signature(payload)
+    cache_key = _frontier_cache_key(payload, price_signature=price_signature)
+    cached = _get_cached_frontier(cache_key)
+    if cached is not None:
+        logger.info(
+            "admin_comparison.frontier memory cache hit version_id=%s as_of_date=%s sample_points=%s",
+            payload.version_id,
+            payload.as_of_date,
+            payload.sample_points,
+        )
+        return _with_frontier_cache_metadata(cached, cache_source="memory")
+
+    persistent_cached = _get_persistent_cached_frontier(
         payload,
-        response_payload,
         price_signature=price_signature,
     )
-    logger.info(
-        "admin_comparison.frontier calculated version_id=%s as_of_date=%s sample_points=%s duration=%.2fs",
-        payload.version_id,
-        payload.as_of_date,
-        payload.sample_points,
-        time.monotonic() - started_at,
-    )
-    return response_payload
+    if persistent_cached is not None:
+        _store_cached_frontier(cache_key, persistent_cached)
+        logger.info(
+            "admin_comparison.frontier db cache hit version_id=%s as_of_date=%s sample_points=%s",
+            payload.version_id,
+            payload.as_of_date,
+            payload.sample_points,
+        )
+        return _with_frontier_cache_metadata(persistent_cached, cache_source="db")
+
+    owns_calculation, inflight_event = _begin_frontier_calculation(cache_key)
+    if not owns_calculation:
+        if inflight_event.wait(_FRONTIER_INFLIGHT_WAIT_SECONDS):
+            cached = _get_cached_frontier(cache_key)
+            if cached is not None:
+                return _with_frontier_cache_metadata(cached, cache_source="memory")
+            persistent_cached = _get_persistent_cached_frontier(
+                payload,
+                price_signature=price_signature,
+            )
+            if persistent_cached is not None:
+                _store_cached_frontier(cache_key, persistent_cached)
+                return _with_frontier_cache_metadata(persistent_cached, cache_source="db")
+        raise HTTPException(
+            status_code=409,
+            detail="동일한 Frontier 계산이 이미 진행 중입니다. 잠시 후 다시 시도해주세요.",
+        )
+
+    started_at = time.monotonic()
+    try:
+        with _frontier_distributed_calculation_lock(cache_key) as lock_acquired:
+            if not lock_acquired:
+                persistent_cached = _get_persistent_cached_frontier(
+                    payload,
+                    price_signature=price_signature,
+                )
+                if persistent_cached is not None:
+                    _store_cached_frontier(cache_key, persistent_cached)
+                    return _with_frontier_cache_metadata(persistent_cached, cache_source="db")
+                raise HTTPException(
+                    status_code=409,
+                    detail="동일한 Frontier 계산이 이미 진행 중입니다. 잠시 후 다시 시도해주세요.",
+                )
+
+            response_payload = _calculate_frontier_response(payload)
+            _store_cached_frontier(cache_key, response_payload)
+            _store_persistent_cached_frontier(
+                payload,
+                response_payload,
+                price_signature=price_signature,
+            )
+            logger.info(
+                "admin_comparison.frontier calculated version_id=%s as_of_date=%s sample_points=%s duration=%.2fs",
+                payload.version_id,
+                payload.as_of_date,
+                payload.sample_points,
+                time.monotonic() - started_at,
+            )
+            return response_payload
+    finally:
+        _finish_frontier_calculation(cache_key, inflight_event)
 
 
 # ── Frontier selection (returns stock_weights for backtest) ──
@@ -545,6 +685,7 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
 
 @router.post("/selection")
 def get_selection(payload: SelectionRequest) -> dict[str, object]:
+    _raise_if_refresh_running(payload.version_id)
     try:
         context = portfolio_simulation_service.build_engine_context(
             risk_profile=RiskProfile.BALANCED,
@@ -609,6 +750,7 @@ def get_selection(payload: SelectionRequest) -> dict[str, object]:
 def get_backtest(payload: BacktestRequest) -> dict[str, object]:
     if not payload.stock_weights:
         raise HTTPException(status_code=422, detail="stock_weights가 비어 있습니다.")
+    _raise_if_refresh_running(payload.version_id)
     try:
         result = analytics_service.build_comparison_backtest(
             data_source=SimulationDataSource.MANAGED_UNIVERSE,
