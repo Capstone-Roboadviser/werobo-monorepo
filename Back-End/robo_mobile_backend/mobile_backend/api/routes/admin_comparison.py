@@ -157,6 +157,17 @@ def _store_cached_frontier(key: _FrontierCacheKey, payload: dict[str, object]) -
             _frontier_cache.popitem(last=False)
 
 
+def _with_frontier_cache_metadata(
+    payload: dict[str, object],
+    *,
+    cache_source: str,
+) -> dict[str, object]:
+    response = deepcopy(payload)
+    response["cache_status"] = "hit"
+    response["cache_source"] = cache_source
+    return response
+
+
 def _frontier_basis_date(payload: FrontierRequest) -> str | None:
     return None if payload.as_of_date is None else payload.as_of_date.isoformat()
 
@@ -420,7 +431,7 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
             payload.as_of_date,
             payload.sample_points,
         )
-        return cached
+        return _with_frontier_cache_metadata(cached, cache_source="memory")
 
     persistent_cached, price_signature = _get_persistent_cached_frontier(payload)
     if persistent_cached is not None:
@@ -431,7 +442,7 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
             payload.as_of_date,
             payload.sample_points,
         )
-        return persistent_cached
+        return _with_frontier_cache_metadata(persistent_cached, cache_source="db")
 
     started_at = time.monotonic()
     try:

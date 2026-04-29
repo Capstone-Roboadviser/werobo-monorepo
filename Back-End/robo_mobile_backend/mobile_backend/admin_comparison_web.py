@@ -2071,6 +2071,15 @@ def render_admin_comparison_page() -> HTMLResponse:
         ) {
           return;
         }
+        if (data?.cache_status === 'hit') {
+          console.info('[WeRobo.AdminComparison] frontier cache hit', {
+            source: data.cache_source || 'unknown',
+            versionId: data.version_id,
+            asOfDate: data.as_of_date,
+            samplePoints: 61,
+            totalPointCount: data.total_point_count,
+          });
+        }
         state.frontier = data;
         if (state.pointIndex === null || state.pointIndex >= data.total_point_count) {
           const points = data.points;
