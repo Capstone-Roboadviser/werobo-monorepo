@@ -1260,6 +1260,9 @@ def render_admin_comparison_page() -> HTMLResponse:
     const MARKET_KEY = 'market';
     const MAX_GRAPH_SETS = 3;
     const COMPARE_COLORS = ['#2563eb', '#f97316', '#10b981'];
+    const DEFAULT_API_TIMEOUT_MS = 60000;
+    const FRONTIER_API_TIMEOUT_MS = 90000;
+    let frontierRefreshQueue = Promise.resolve();
 
     function nextGraphSetId() {
       graphSetSeq += 1;
@@ -1318,11 +1321,11 @@ def render_admin_comparison_page() -> HTMLResponse:
       return { cagr, mdd: peak === -Infinity ? null : mdd };
     }
 
-    async function api(path, init) {
+    async function api(path, init, timeoutMs = DEFAULT_API_TIMEOUT_MS) {
       // Hard timeout so a hung upstream surfaces as an error instead of leaving
       // the UI stuck on "계산 중…" forever.
       const ctl = new AbortController();
-      const timer = setTimeout(() => ctl.abort(), 60000);
+      const timer = setTimeout(() => ctl.abort(), timeoutMs);
       let res;
       try {
         res = await fetch(path, {
@@ -1332,7 +1335,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         });
       } catch (e) {
         clearTimeout(timer);
-        if (e.name === 'AbortError') throw new Error('응답 시간 초과 (60s)');
+        if (e.name === 'AbortError') throw new Error(`응답 시간 초과 (${Math.round(timeoutMs / 1000)}s)`);
         throw e;
       }
       clearTimeout(timer);
@@ -1423,7 +1426,18 @@ def render_admin_comparison_page() -> HTMLResponse:
     }
 
     function refreshAllFrontiers() {
-      graphSets.forEach(state => refreshFrontier(state));
+      graphSets.forEach(state => queueFrontierRefresh(state));
+    }
+
+    function queueFrontierRefresh(state) {
+      const run = frontierRefreshQueue
+        .catch(() => {})
+        .then(() => {
+          if (!graphSets.has(state.id)) return null;
+          return refreshFrontier(state);
+        });
+      frontierRefreshQueue = run;
+      return run;
     }
 
     function buildPayload() {
@@ -1863,7 +1877,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         setDirty(true);
         updateBacktestControls();
         if (basisChanged) refreshAllFrontiers();
-        else refreshFrontier(state);
+        else queueFrontierRefresh(state);
       });
 
       $('.btn-remove', root).addEventListener('click', () => removeGraphSet(id));
@@ -1897,7 +1911,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           refreshBacktest(state);
         }
       } else {
-        refreshFrontier(state);
+        queueFrontierRefresh(state);
       }
     }
 
@@ -1931,6 +1945,10 @@ def render_admin_comparison_page() -> HTMLResponse:
         renderBoardBacktest();
         return;
       }
+      const requestToken = Symbol('frontier-request');
+      const requestedVersionId = state.versionId;
+      const requestedAsOfDate = state.asOfDate;
+      state.frontierRequestToken = requestToken;
       setFrontierStatus(state, '계산 중…');
       state.backtest = null;
       state.backtestLoading = false;
@@ -1944,7 +1962,15 @@ def render_admin_comparison_page() -> HTMLResponse:
             as_of_date: state.asOfDate,
             sample_points: 61,
           }),
-        });
+        }, FRONTIER_API_TIMEOUT_MS);
+        if (
+          state.frontierRequestToken !== requestToken
+          || state.versionId !== requestedVersionId
+          || state.asOfDate !== requestedAsOfDate
+          || !graphSets.has(state.id)
+        ) {
+          return;
+        }
         state.frontier = data;
         if (state.pointIndex === null || state.pointIndex >= data.total_point_count) {
           const points = data.points;
@@ -1956,6 +1982,7 @@ def render_admin_comparison_page() -> HTMLResponse:
         await refreshBacktest(state);
         renderBoardBacktest();
       } catch (e) {
+        if (state.frontierRequestToken !== requestToken || !graphSets.has(state.id)) return;
         state.frontier = null;
         state.backtest = null;
         showError(state, `Frontier 계산 실패: ${e.message}`);

@@ -435,6 +435,7 @@ class PortfolioSimulationService:
         data_source: SimulationDataSource,
         as_of_date: date | None = None,
         version_id: int | None = None,
+        include_random_portfolios: bool = True,
     ) -> EngineContext:
         return self._prepare_context(
             UserProfile(
@@ -444,6 +445,7 @@ class PortfolioSimulationService:
                 as_of_date=as_of_date,
             ),
             version_id=version_id,
+            include_random_portfolios=include_random_portfolios,
         )
 
     def get_all_profile_weights_for_price_window(
@@ -588,11 +590,13 @@ class PortfolioSimulationService:
         user_profile: UserProfile,
         *,
         version_id: int | None = None,
+        include_random_portfolios: bool = True,
     ) -> EngineContext:
         if user_profile.data_source == SimulationDataSource.MANAGED_UNIVERSE:
             return self._prepare_managed_universe_context(
                 as_of_date=user_profile.as_of_date,
                 version_id=version_id,
+                include_random_portfolios=include_random_portfolios,
             )
         if user_profile.data_source == SimulationDataSource.STOCK_COMBINATION_DEMO:
             return self._prepare_demo_stock_universe_context(as_of_date=user_profile.as_of_date)
@@ -654,6 +658,7 @@ class PortfolioSimulationService:
         *,
         as_of_date: date | None = None,
         version_id: int | None = None,
+        include_random_portfolios: bool = True,
     ) -> EngineContext:
         if version_id is None:
             version = self.managed_universe_service.get_active_version()
@@ -687,6 +692,7 @@ class PortfolioSimulationService:
             prices=prices,
             combination_prefix=version.version_name,
             use_asset_min_weights=True,
+            include_random_portfolios=include_random_portfolios,
         )
         return EngineContext(
             assets=assets,
@@ -823,6 +829,7 @@ class PortfolioSimulationService:
         prices: pd.DataFrame,
         combination_prefix: str,
         use_asset_min_weights: bool = False,
+        include_random_portfolios: bool = True,
     ) -> RepresentativeCombinationContext:
         stock_returns = StockDataRepository().build_stock_returns(prices)
         if stock_returns.empty:
@@ -932,6 +939,7 @@ class PortfolioSimulationService:
             stock_returns=selected_stock_returns,
             assets=assets,
             use_asset_min_weights=use_asset_min_weights,
+            include_random_portfolios=include_random_portfolios,
         )
         selection_view = CombinationSelectionView(
             combination_id=self._build_combination_id(combination_prefix, members_by_sector),
@@ -981,6 +989,7 @@ class PortfolioSimulationService:
         *,
         assets: list[AssetClass],
         use_asset_min_weights: bool = False,
+        include_random_portfolios: bool = True,
     ) -> tuple[pd.Series, pd.DataFrame, list[FrontierPoint], list[tuple[float, float, dict[str, float]]]]:
         asset_codes = list(stock_returns.columns)
         expected_returns = self._build_selected_stock_expected_returns(
@@ -1001,11 +1010,15 @@ class PortfolioSimulationService:
             constraints=constraints,
             point_count=FRONTIER_POINT_COUNT,
         )
-        random_portfolios = self.optimizer.sample_random_portfolios(
-            expected_returns=expected_returns.reindex(constraints.asset_codes),
-            covariance=covariance.reindex(index=constraints.asset_codes, columns=constraints.asset_codes),
-            constraints=constraints,
-            sample_count=RANDOM_PORTFOLIO_COUNT,
+        random_portfolios = (
+            self.optimizer.sample_random_portfolios(
+                expected_returns=expected_returns.reindex(constraints.asset_codes),
+                covariance=covariance.reindex(index=constraints.asset_codes, columns=constraints.asset_codes),
+                constraints=constraints,
+                sample_count=RANDOM_PORTFOLIO_COUNT,
+            )
+            if include_random_portfolios
+            else []
         )
         return (
             expected_returns.reindex(asset_codes).astype(float),

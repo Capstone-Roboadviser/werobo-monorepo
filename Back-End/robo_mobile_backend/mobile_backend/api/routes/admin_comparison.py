@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+from collections import OrderedDict
+from copy import deepcopy
 from datetime import date
+import logging
+from threading import Lock
+import time
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
@@ -20,6 +25,13 @@ managed_universe_service = portfolio_simulation_service.managed_universe_service
 analytics_service = PortfolioAnalyticsService(
     portfolio_service=portfolio_simulation_service,
 )
+logger = logging.getLogger(__name__)
+
+_FRONTIER_CACHE_TTL_SECONDS = 120
+_FRONTIER_CACHE_MAX_ITEMS = 24
+_FrontierCacheKey = tuple[int, str | None, str, int]
+_frontier_cache: OrderedDict[_FrontierCacheKey, tuple[float, dict[str, object]]] = OrderedDict()
+_frontier_cache_lock = Lock()
 
 
 # ── Request models ──
@@ -107,6 +119,37 @@ def _representative_indices(total_point_count: int) -> dict[str, int]:
         "balanced": (total_point_count - 1) // 2,
         "growth": total_point_count - 1,
     }
+
+
+def _frontier_cache_key(payload: FrontierRequest) -> _FrontierCacheKey:
+    return (
+        payload.version_id,
+        None if payload.as_of_date is None else payload.as_of_date.isoformat(),
+        payload.investment_horizon.value,
+        payload.sample_points,
+    )
+
+
+def _get_cached_frontier(key: _FrontierCacheKey) -> dict[str, object] | None:
+    now = time.monotonic()
+    with _frontier_cache_lock:
+        cached = _frontier_cache.get(key)
+        if cached is None:
+            return None
+        cached_at, payload = cached
+        if now - cached_at > _FRONTIER_CACHE_TTL_SECONDS:
+            del _frontier_cache[key]
+            return None
+        _frontier_cache.move_to_end(key)
+        return deepcopy(payload)
+
+
+def _store_cached_frontier(key: _FrontierCacheKey, payload: dict[str, object]) -> None:
+    with _frontier_cache_lock:
+        _frontier_cache[key] = (time.monotonic(), deepcopy(payload))
+        _frontier_cache.move_to_end(key)
+        while len(_frontier_cache) > _FRONTIER_CACHE_MAX_ITEMS:
+            _frontier_cache.popitem(last=False)
 
 
 def _basis_date_has_representative_history(
@@ -245,6 +288,18 @@ def get_comparison_catalog() -> dict[str, object]:
 
 @router.post("/frontier")
 def get_frontier(payload: FrontierRequest) -> dict[str, object]:
+    cache_key = _frontier_cache_key(payload)
+    cached = _get_cached_frontier(cache_key)
+    if cached is not None:
+        logger.info(
+            "admin_comparison.frontier cache hit version_id=%s as_of_date=%s sample_points=%s",
+            payload.version_id,
+            payload.as_of_date,
+            payload.sample_points,
+        )
+        return cached
+
+    started_at = time.monotonic()
     try:
         context = portfolio_simulation_service.build_engine_context(
             risk_profile=RiskProfile.BALANCED,
@@ -252,6 +307,7 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
             data_source=SimulationDataSource.MANAGED_UNIVERSE,
             as_of_date=payload.as_of_date,
             version_id=payload.version_id,
+            include_random_portfolios=False,
         )
     except RuntimeError as exc:
         raise _http_422(exc) from exc
@@ -314,7 +370,7 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
             }
         )
 
-    return {
+    response_payload = {
         "version_id": payload.version_id,
         "as_of_date": None if payload.as_of_date is None else payload.as_of_date.isoformat(),
         "investment_horizon": payload.investment_horizon.value,
@@ -323,6 +379,15 @@ def get_frontier(payload: FrontierRequest) -> dict[str, object]:
         "max_volatility": round(float(context.frontier_points[-1].volatility), 4),
         "points": points,
     }
+    _store_cached_frontier(cache_key, response_payload)
+    logger.info(
+        "admin_comparison.frontier calculated version_id=%s as_of_date=%s sample_points=%s duration=%.2fs",
+        payload.version_id,
+        payload.as_of_date,
+        payload.sample_points,
+        time.monotonic() - started_at,
+    )
+    return response_payload
 
 
 # ── Frontier selection (returns stock_weights for backtest) ──
