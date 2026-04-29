@@ -39,7 +39,12 @@ _frontier_inflight: dict[_FrontierCacheKey, tuple[float, Event]] = {}
 _frontier_inflight_lock = Lock()
 _BASIS_DATE_WINDOW_CACHE_TTL_SECONDS = 300
 _BASIS_DATE_WINDOW_CACHE_MAX_ITEMS = 64
-_basis_date_window_cache: OrderedDict[int, tuple[float, dict[str, object] | None]] = OrderedDict()
+_BASIS_DATE_WINDOW_DB_CACHE_VERSION = "admin-comparison-basis-date-window-v1"
+_BasisDateWindowCacheKey = tuple[int, str | None]
+_basis_date_window_cache: OrderedDict[
+    _BasisDateWindowCacheKey,
+    tuple[float, dict[str, object] | None],
+] = OrderedDict()
 _basis_date_window_cache_lock = Lock()
 
 
@@ -328,21 +333,116 @@ def _store_persistent_cached_frontier(
         )
 
 
+def _get_basis_date_window_price_signature(version_id: int) -> str | None:
+    repository = getattr(managed_universe_service, "repository", None)
+    if repository is None or not repository.is_configured():
+        return None
+    try:
+        return repository.get_admin_comparison_frontier_price_signature(
+            version_id=version_id,
+            basis_date=None,
+        )
+    except Exception:
+        logger.warning(
+            "admin_comparison.basis_date_window price signature lookup failed version_id=%s",
+            version_id,
+            exc_info=True,
+        )
+        return None
+
+
+def _get_persistent_cached_basis_date_window(
+    version_id: int,
+    *,
+    price_signature: str | None,
+) -> tuple[bool, dict[str, object] | None]:
+    repository = getattr(managed_universe_service, "repository", None)
+    if not price_signature or repository is None or not repository.is_configured():
+        return False, None
+    try:
+        cached = repository.get_admin_comparison_basis_date_window_cache(
+            version_id=version_id,
+            cache_version=_BASIS_DATE_WINDOW_DB_CACHE_VERSION,
+            price_signature=price_signature,
+        )
+    except Exception:
+        logger.warning(
+            "admin_comparison.basis_date_window persistent cache lookup failed version_id=%s",
+            version_id,
+            exc_info=True,
+        )
+        return False, None
+    if cached is None or "basis_date_window" not in cached:
+        return False, None
+    window = cached.get("basis_date_window")
+    return True, dict(window) if isinstance(window, dict) else None
+
+
+def _store_persistent_cached_basis_date_window(
+    version_id: int,
+    window: dict[str, object] | None,
+    *,
+    price_signature: str | None,
+) -> None:
+    repository = getattr(managed_universe_service, "repository", None)
+    if not price_signature or repository is None or not repository.is_configured():
+        return
+    try:
+        repository.upsert_admin_comparison_basis_date_window_cache(
+            version_id=version_id,
+            cache_version=_BASIS_DATE_WINDOW_DB_CACHE_VERSION,
+            price_signature=price_signature,
+            payload={"basis_date_window": window},
+        )
+    except Exception:
+        logger.warning(
+            "admin_comparison.basis_date_window persistent cache store failed version_id=%s",
+            version_id,
+            exc_info=True,
+        )
+
+
 def _cached_basis_date_window(version_id: int) -> dict[str, object] | None:
+    price_signature = _get_basis_date_window_price_signature(version_id)
+    cache_key = (version_id, price_signature)
     now = time.monotonic()
     with _basis_date_window_cache_lock:
-        cached = _basis_date_window_cache.get(version_id)
+        cached = _basis_date_window_cache.get(cache_key)
         if cached is not None:
             cached_at, payload = cached
             if now - cached_at <= _BASIS_DATE_WINDOW_CACHE_TTL_SECONDS:
-                _basis_date_window_cache.move_to_end(version_id)
+                _basis_date_window_cache.move_to_end(cache_key)
                 return deepcopy(payload)
-            del _basis_date_window_cache[version_id]
+            del _basis_date_window_cache[cache_key]
+
+    persistent_found, persistent_payload = _get_persistent_cached_basis_date_window(
+        version_id,
+        price_signature=price_signature,
+    )
+    if persistent_found:
+        with _basis_date_window_cache_lock:
+            _basis_date_window_cache[cache_key] = (
+                time.monotonic(),
+                deepcopy(persistent_payload),
+            )
+            _basis_date_window_cache.move_to_end(cache_key)
+            while len(_basis_date_window_cache) > _BASIS_DATE_WINDOW_CACHE_MAX_ITEMS:
+                _basis_date_window_cache.popitem(last=False)
+        logger.info(
+            "admin_comparison.basis_date_window db cache hit version_id=%s",
+            version_id,
+        )
+        return persistent_payload
 
     payload = _basis_date_window(version_id)
+    _store_persistent_cached_basis_date_window(
+        version_id,
+        payload,
+        price_signature=price_signature,
+    )
     with _basis_date_window_cache_lock:
-        _basis_date_window_cache[version_id] = (time.monotonic(), deepcopy(payload))
-        _basis_date_window_cache.move_to_end(version_id)
+        _basis_date_window_cache[cache_key] = (time.monotonic(), deepcopy(payload))
+        _basis_date_window_cache.move_to_end(cache_key)
         while len(_basis_date_window_cache) > _BASIS_DATE_WINDOW_CACHE_MAX_ITEMS:
             _basis_date_window_cache.popitem(last=False)
     return payload

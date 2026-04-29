@@ -224,11 +224,37 @@ class ManagedUniverseRepository:
                     """
                 )
                 cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS admin_comparison_basis_date_window_cache (
+                        id BIGSERIAL PRIMARY KEY,
+                        version_id BIGINT NOT NULL REFERENCES universe_versions(id) ON DELETE CASCADE,
+                        cache_version TEXT NOT NULL,
+                        price_signature TEXT NOT NULL,
+                        payload JSONB NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE (
+                            version_id,
+                            cache_version,
+                            price_signature
+                        )
+                    )
+                    """
+                )
+                cursor.execute(
                     "ALTER TABLE admin_comparison_snapshots ADD COLUMN IF NOT EXISTS folder TEXT"
                 )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_items_version_sector ON universe_items(version_id, sector_code)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_asset_roles_version ON universe_asset_roles(version_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_history_ticker_date ON price_history(ticker, date)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_price_history_upper_ticker_date "
+                    "ON price_history((UPPER(ticker)), date)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_universe_items_version_upper_ticker "
+                    "ON universe_items(version_id, (UPPER(ticker)))"
+                )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_refresh_jobs_version_created_at ON refresh_jobs(version_id, created_at DESC)")
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_frontier_snapshots_version_horizon ON frontier_snapshots(version_id, investment_horizon)"
@@ -239,6 +265,10 @@ class ManagedUniverseRepository:
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_admin_comparison_frontier_cache_lookup "
                     "ON admin_comparison_frontier_cache(version_id, basis_date_key, investment_horizon, sample_points, cache_version)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_admin_comparison_basis_window_cache_lookup "
+                    "ON admin_comparison_basis_date_window_cache(version_id, cache_version)"
                 )
             connection.commit()
 
@@ -433,6 +463,10 @@ class ManagedUniverseRepository:
                 cursor.execute("DELETE FROM universe_price_windows WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM frontier_snapshots WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM admin_comparison_frontier_cache WHERE version_id = %s", (version_id,))
+                cursor.execute(
+                    "DELETE FROM admin_comparison_basis_date_window_cache WHERE version_id = %s",
+                    (version_id,),
+                )
                 cursor.execute("DELETE FROM universe_items WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM universe_asset_roles WHERE version_id = %s", (version_id,))
                 cursor.executemany(
@@ -1444,6 +1478,87 @@ class ManagedUniverseRepository:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "DELETE FROM admin_comparison_frontier_cache WHERE version_id = %s",
+                    (version_id,),
+                )
+            connection.commit()
+
+    # ── Admin comparison basis-date window cache ──
+
+    def get_admin_comparison_basis_date_window_cache(
+        self,
+        *,
+        version_id: int,
+        cache_version: str,
+        price_signature: str,
+    ) -> dict[str, object] | None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT payload
+                    FROM admin_comparison_basis_date_window_cache
+                    WHERE version_id = %s
+                      AND cache_version = %s
+                      AND price_signature = %s
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    (version_id, cache_version, price_signature),
+                )
+                row = cursor.fetchone()
+        if row is None:
+            return None
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return dict(payload) if isinstance(payload, dict) else None
+
+    def upsert_admin_comparison_basis_date_window_cache(
+        self,
+        *,
+        version_id: int,
+        cache_version: str,
+        price_signature: str,
+        payload: dict[str, object],
+    ) -> None:
+        self._ensure_ready()
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO admin_comparison_basis_date_window_cache (
+                        version_id,
+                        cache_version,
+                        price_signature,
+                        payload,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (
+                        version_id,
+                        cache_version,
+                        price_signature
+                    ) DO UPDATE
+                    SET payload = EXCLUDED.payload,
+                        updated_at = NOW()
+                    """,
+                    (
+                        version_id,
+                        cache_version,
+                        price_signature,
+                        payload_json,
+                    ),
+                )
+            connection.commit()
+
+    def delete_admin_comparison_basis_date_window_cache(self, version_id: int) -> None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM admin_comparison_basis_date_window_cache WHERE version_id = %s",
                     (version_id,),
                 )
             connection.commit()

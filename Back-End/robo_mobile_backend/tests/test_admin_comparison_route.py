@@ -186,6 +186,44 @@ def test_comparison_basis_date_windows_advances_basis_until_representative_histo
     assert window["min_basis_date"] == first_buildable_date.strftime("%Y-%m-%d")
 
 
+def test_comparison_basis_date_windows_uses_persistent_cache(monkeypatch) -> None:
+    version = SimpleNamespace(
+        version_id=7,
+        version_name="test universe",
+        is_active=True,
+        notes=None,
+    )
+    cached_window = {
+        "first_price_date": "2020-01-02",
+        "last_price_date": "2020-12-30",
+        "min_basis_date": "2020-12-18",
+        "max_basis_date": "2020-12-29",
+        "train_return_rows": MINIMUM_HISTORY_ROWS,
+        "common_price_rows": 260,
+    }
+    fake_repository = SimpleNamespace(
+        is_configured=lambda: True,
+        get_admin_comparison_frontier_price_signature=lambda **kwargs: "price-signature",
+        get_admin_comparison_basis_date_window_cache=lambda **kwargs: {
+            "basis_date_window": cached_window,
+        },
+    )
+    fake_service = SimpleNamespace(
+        repository=fake_repository,
+        list_versions=lambda: [version],
+        list_assets=lambda: [],
+        get_instruments_for_version=lambda version_id: pytest.fail(
+            "persistent cache hit should skip expensive basis window calculation"
+        ),
+    )
+
+    monkeypatch.setattr(comparison_routes, "managed_universe_service", fake_service)
+
+    response = comparison_routes.get_basis_date_windows(version_ids="7")
+
+    assert response["windows"][0]["basis_date_window"] == cached_window
+
+
 def test_frontier_rejects_when_price_refresh_is_running(monkeypatch) -> None:
     fake_repository = SimpleNamespace(
         is_configured=lambda: True,
