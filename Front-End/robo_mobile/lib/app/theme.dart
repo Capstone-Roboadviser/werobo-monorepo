@@ -518,3 +518,15 @@ enum AssetClass {
   usGrowth,    // 미국성장주
   newGrowth,   // 신성장주
 }
+
+extension AssetClassLabel on AssetClass {
+  String get koLabel => switch (this) {
+        AssetClass.cash => '현금성자산',
+        AssetClass.shortBond => '단기채권',
+        AssetClass.infraBond => '인프라채권',
+        AssetClass.gold => '금',
+        AssetClass.usValue => '미국가치주',
+        AssetClass.usGrowth => '미국성장주',
+        AssetClass.newGrowth => '신성장주',
+      };
+}
