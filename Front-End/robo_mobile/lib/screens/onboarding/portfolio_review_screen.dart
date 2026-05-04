@@ -4,6 +4,7 @@ import 'frontier_selection_resolver.dart';
 import 'onboarding_screen.dart' show OnboardingFrontierSelection;
 import 'widgets/asset_weight.dart';
 import 'widgets/donut_chart.dart';
+import 'widgets/portfolio_charts.dart';
 
 /// Post-frontier confirmation screen. Layout per 2026-05-05 user notes:
 ///   - Donut stacked above the asset list (vertical, small-screen friendly)
@@ -137,7 +138,9 @@ class _DonutAndListColumn extends StatelessWidget {
   }
 }
 
-/// Placeholder for the tabs section. Tasks 3.3 / 3.4 fill this in.
+/// Tab control + bodies for the comparison vs volatility views.
+/// Task 3.3 fills the comparison body; Task 3.4 will replace the
+/// volatility stub.
 class _CompareVolatilityTabs extends StatelessWidget {
   final TabController controller;
   final OnboardingFrontierSelection selection;
@@ -148,6 +151,94 @@ class _CompareVolatilityTabs extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(height: 320, child: Placeholder());
+    final tc = WeRoboThemeColors.of(context);
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24),
+          decoration: BoxDecoration(
+            color: tc.card,
+            borderRadius: BorderRadius.circular(WeRoboColors.radiusFull),
+          ),
+          child: TabBar(
+            controller: controller,
+            indicator: BoxDecoration(
+              color: WeRoboColors.primary,
+              borderRadius: BorderRadius.circular(WeRoboColors.radiusFull),
+            ),
+            labelColor: WeRoboColors.white,
+            unselectedLabelColor: tc.textSecondary,
+            indicatorSize: TabBarIndicatorSize.tab,
+            dividerColor: Colors.transparent,
+            tabs: const [
+              Tab(text: '포트폴리오 비교'),
+              Tab(text: '변동성'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 320,
+          child: TabBarView(
+            controller: controller,
+            children: [
+              _CompareTabBody(selection: selection),
+              _VolatilityTabBody(selection: selection),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// First tab: multi-line time-series comparing the user's portfolio
+/// against the market and other benchmarks.
+///
+/// The frontier preview only carries scalar volatility/expected-return
+/// values — it has no time-series. Real series need a follow-up call to
+/// `fetchComparisonBacktest` (or equivalent) which Task 3.5 will wire.
+/// For now we render `PortfolioComparisonChart`'s empty state so the tab
+/// reads honestly instead of showing fabricated data.
+class _CompareTabBody extends StatelessWidget {
+  final OnboardingFrontierSelection selection;
+  const _CompareTabBody({required this.selection});
+
+  @override
+  Widget build(BuildContext context) {
+    final series = _seriesFromPreview(selection);
+    final timeAxis = _timeAxisFromPreview(selection);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: PortfolioComparisonChart(
+        seriesData: series,
+        timeAxis: timeAxis,
+        initialRange: TimeRange.threeYear,
+      ),
+    );
+  }
+
+  // TODO(backend): wire via fetchComparisonBacktest (or equivalent).
+  // The frontier preview itself has no time-series, so until the backtest
+  // API is reused on this screen the chart shows its empty state.
+  List<List<double>> _seriesFromPreview(
+    OnboardingFrontierSelection selection,
+  ) =>
+      const <List<double>>[];
+
+  List<DateTime> _timeAxisFromPreview(
+    OnboardingFrontierSelection selection,
+  ) =>
+      const <DateTime>[];
+}
+
+/// Second tab: stub. Task 3.4 replaces this with the volatility content.
+class _VolatilityTabBody extends StatelessWidget {
+  final OnboardingFrontierSelection selection;
+  const _VolatilityTabBody({required this.selection});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(child: Text('변동성 (3.4에서 구현)'));
   }
 }

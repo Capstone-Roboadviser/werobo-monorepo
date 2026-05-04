@@ -6,6 +6,256 @@ import '../../../models/chart_data.dart';
 import '../../../models/portfolio_data.dart';
 import '../../../services/mock_chart_data.dart';
 
+/// Time-window selector for time-series charts on the portfolio review
+/// screen. Drives the range chip row in `PortfolioComparisonChart`.
+enum TimeRange {
+  oneWeek('1주', 7),
+  threeMonth('3달', 90),
+  oneYear('1년', 365),
+  threeYear('3년', 1095),
+  fiveYear('5년', 1825),
+  all('전체', 99999);
+
+  final String label;
+  final int days;
+  const TimeRange(this.label, this.days);
+}
+
+/// Reusable multi-line comparison chart for the portfolio review screen.
+///
+/// Accepts data as parallel `seriesData` rows (each row is one series, e.g.
+/// portfolio cumulative return, market benchmark, expected return, bond
+/// benchmark) sharing a single `timeAxis`. Renders an empty state when the
+/// data is missing so the screen degrades gracefully before the backend
+/// wiring lands in a follow-up task.
+class PortfolioComparisonChart extends StatefulWidget {
+  /// Each inner list is one series sampled along [timeAxis]. All series
+  /// must have the same length as [timeAxis] (mismatched rows are
+  /// dropped). Series order follows the chart legend convention:
+  /// portfolio first, then benchmarks.
+  final List<List<double>> seriesData;
+  final List<DateTime> timeAxis;
+
+  /// Time-window the chart starts on. Default `threeYear` matches the
+  /// post-frontier review screen brief (2026-05-05 design notes).
+  final TimeRange initialRange;
+
+  /// Gesture flags wired in Task 3.5. Currently accepted but inert so the
+  /// review screen can pass them through without an API churn later.
+  final bool enablePinchZoom;
+  final bool enableHorizontalDrag;
+
+  const PortfolioComparisonChart({
+    super.key,
+    required this.seriesData,
+    required this.timeAxis,
+    this.initialRange = TimeRange.threeYear,
+    this.enablePinchZoom = false,
+    this.enableHorizontalDrag = false,
+  });
+
+  @override
+  State<PortfolioComparisonChart> createState() =>
+      _PortfolioComparisonChartState();
+}
+
+class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
+    with SingleTickerProviderStateMixin {
+  // Each label maps 1:1 with `_seriesPalette` so colors stay stable across
+  // tab switches when the parent re-renders.
+  static const _seriesLabels = ['포트폴리오', '시장', '연 기대수익률', '채권 수익률'];
+  static const _seriesPalette = [
+    WeRoboColors.primary,
+    Color(0xFF64748B),
+    WeRoboColors.assetTier4,
+    Color(0xFF999999),
+  ];
+  // Indexes into `_seriesPalette` that should render dashed (benchmarks
+  // that are projections rather than realized returns).
+  static const _dashedIndexes = {2, 3};
+
+  late TimeRange _range;
+  int? _touchIndex;
+  late AnimationController _drawCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _range = widget.initialRange;
+    _drawCtrl = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _drawCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Returns the chart lines after filtering by the current time range and
+  /// rebasing each series so the first visible point sits at zero return
+  /// (matches the existing `_ComparisonView` rebasing behavior).
+  List<ChartLine> _buildLines() {
+    final timeAxis = widget.timeAxis;
+    if (timeAxis.isEmpty) {
+      return const [];
+    }
+    final latest = timeAxis.last;
+    final cutoff = latest.subtract(Duration(days: _range.days));
+    final firstVisible = timeAxis.indexWhere((d) => !d.isBefore(cutoff));
+    final startIdx = firstVisible < 0 ? 0 : firstVisible;
+
+    final lines = <ChartLine>[];
+    for (var i = 0; i < widget.seriesData.length; i++) {
+      final raw = widget.seriesData[i];
+      if (raw.length != timeAxis.length) continue;
+      final rangedPoints = <ChartPoint>[
+        for (var j = startIdx; j < timeAxis.length; j++)
+          ChartPoint(date: timeAxis[j], value: raw[j]),
+      ];
+      if (rangedPoints.length < 2) continue;
+      final rebased = rebaseChartPointsToFirstValue(rangedPoints);
+      lines.add(ChartLine(
+        key: 'series_$i',
+        label:
+            i < _seriesLabels.length ? _seriesLabels[i] : 'series ${i + 1}',
+        color: i < _seriesPalette.length
+            ? _seriesPalette[i]
+            : Colors.grey,
+        dashed: _dashedIndexes.contains(i),
+        points: rebased,
+      ));
+    }
+    return lines;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // TODO(3.5): wire pinch-zoom + horizontal drag based on these flags.
+    final tc = WeRoboThemeColors.of(context);
+    final lines = _buildLines();
+    if (lines.isEmpty) {
+      return const _EmptyChartState(message: '비교 데이터가 없어요');
+    }
+
+    return Column(
+      children: [
+        // Time-range chip row
+        Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            for (final r in TimeRange.values)
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: GestureDetector(
+                  onTap: () {
+                    if (_range == r) return;
+                    setState(() => _range = r);
+                    _drawCtrl.forward(from: 0);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _range == r
+                          ? WeRoboColors.primary
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      r.label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _range == r
+                            ? WeRoboColors.white
+                            : tc.textTertiary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return GestureDetector(
+                onPanUpdate: (d) {
+                  final pts = lines.first.points;
+                  if (pts.isEmpty) return;
+                  final x = d.localPosition.dx - 28;
+                  final chartW = constraints.maxWidth - 28 - 12;
+                  final idx = ((x / chartW) * (pts.length - 1))
+                      .round()
+                      .clamp(0, pts.length - 1);
+                  setState(() => _touchIndex = idx);
+                },
+                onPanEnd: (_) => setState(() => _touchIndex = null),
+                onTapUp: (_) => setState(() => _touchIndex = null),
+                child: AnimatedBuilder(
+                  animation: _drawCtrl,
+                  builder: (context, _) {
+                    return CustomPaint(
+                      size: Size(
+                        constraints.maxWidth,
+                        constraints.maxHeight,
+                      ),
+                      painter: _MultiLineChartPainter(
+                        lines: lines,
+                        progress: _drawCtrl.value,
+                        touchIndex: _touchIndex,
+                        gridColor: tc.border,
+                        textTertiaryColor: tc.textTertiary,
+                        textPrimaryColor: tc.textPrimary,
+                        tooltipBackground: tc.surface,
+                        tooltipBorder: tc.border,
+                      ),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 4,
+          alignment: WrapAlignment.center,
+          children: [
+            for (final l in lines)
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 12,
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: l.color,
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    l.label,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: tc.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 // ── Main chart widget ──
 
 class PortfolioCharts extends StatefulWidget {
