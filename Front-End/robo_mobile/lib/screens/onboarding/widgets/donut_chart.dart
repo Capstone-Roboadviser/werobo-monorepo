@@ -50,7 +50,6 @@ class _DonutChartState extends State<DonutChart>
 
   @override
   Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
     final size = widget.compact ? 180.0 : 240.0;
     return AnimatedBuilder(
       animation: _animation,
@@ -61,7 +60,6 @@ class _DonutChartState extends State<DonutChart>
           painter: _DonutPainter(
             progress: _animation.value,
             segments: widget.segments,
-            borderColor: tc.surface,
           ),
           child: Center(
             child: Text(
@@ -78,12 +76,10 @@ class _DonutChartState extends State<DonutChart>
 class _DonutPainter extends CustomPainter {
   final double progress;
   final List<DonutSegment> segments;
-  final Color borderColor;
 
   _DonutPainter({
     required this.progress,
     required this.segments,
-    required this.borderColor,
   });
 
   @override
