@@ -38,6 +38,29 @@ class WeRoboColors {
   static const Color error = Color(0xFFEF4444);
 
   // Chart colors (7-color portfolio category palette)
+  // Asset tonal palette — 5-tier monochromatic orange (DESIGN.md §Color System).
+  // Conveys portfolio character (defensive ↔ aggressive) at a glance.
+  static const Color assetTier5 = Color(0xFFFFC091); // 현금성자산
+  static const Color assetTier4 = Color(0xFFFFB57D); // 단기채권
+  static const Color assetTier3 = Color(0xFFFFAA69); // 인프라채권, 금
+  static const Color assetTier2 = Color(0xFFFF9F52); // 미국가치주
+  static const Color assetTier1 = Color(0xFFFE9337); // 미국성장주, 신성장주
+
+  /// Ordered palette indexed by AssetClass. Use `assetColor(AssetClass)`
+  /// for ergonomic lookup.
+  static const List<Color> assetTonalPalette = [
+    assetTier5, // index 0 — 현금성자산
+    assetTier4, // index 1 — 단기채권
+    assetTier3, // index 2 — 인프라채권
+    assetTier3, // index 3 — 금 (tier-shared with 인프라채권)
+    assetTier2, // index 4 — 미국가치주
+    assetTier1, // index 5 — 미국성장주
+    assetTier1, // index 6 — 신성장주 (tier-shared with 미국성장주)
+  ];
+
+  static Color assetColor(AssetClass cls) =>
+      assetTonalPalette[cls.index];
+
   static const Color chartBlue = sky4;
   static const Color chartGreen = Color(0xFF059669);
   static const Color chartYellow = Color(0xFFFBBF24);
@@ -509,4 +532,16 @@ class WeRoboTheme {
       extensions: const [WeRoboThemeColors.dark],
     );
   }
+}
+
+/// Canonical order for portfolio asset classes. Order is defensive→aggressive
+/// to match the tonal palette (lightest tier = least risky).
+enum AssetClass {
+  cash,        // 현금성자산
+  shortBond,   // 단기채권
+  infraBond,   // 인프라채권
+  gold,        // 금
+  usValue,     // 미국가치주
+  usGrowth,    // 미국성장주
+  newGrowth,   // 신성장주
 }
