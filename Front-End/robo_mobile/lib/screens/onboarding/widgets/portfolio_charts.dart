@@ -116,11 +116,29 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
     _prevPanOffsetX = _panOffsetX;
   }
 
-  void _onScaleUpdate(ScaleUpdateDetails d) {
+  void _onScaleUpdate(ScaleUpdateDetails d, double chartWidth, int pointCount) {
+    // Single-pointer drag = crosshair tap (NOT pan). Two-or-more-pointer
+    // gestures route to the pinch-zoom + horizontal-pan transform so the
+    // tap-to-tooltip behavior survives the gesture-enabled branch.
+    if (d.pointerCount == 1) {
+      _setTouchIndexFromX(d.localFocalPoint.dx, chartWidth, pointCount);
+      return;
+    }
     setState(() {
       _scale = (_prevScale * d.scale).clamp(0.5, 5.0);
       _panOffsetX = _prevPanOffsetX + d.focalPointDelta.dx;
     });
+  }
+
+  void _setTouchIndexFromX(double tapX, double chartWidth, int pointCount) {
+    if (pointCount <= 1) return;
+    final innerX = tapX - 28; // padL
+    final innerW = chartWidth - 28 - 12; // padL + padR
+    if (innerW <= 0) return;
+    final idx = ((innerX / innerW) * (pointCount - 1))
+        .round()
+        .clamp(0, pointCount - 1);
+    setState(() => _touchIndex = idx);
   }
 
   void _resetTransform() {
@@ -269,16 +287,22 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
                 );
               }
 
-              // When gestures are on, scale gestures (pinch + drag) take
-              // over: a single-pointer drag pans, two-pointer pinches zoom.
-              // Double-tap resets the transform.
+              // When gestures are on, scale gestures route by pointer count:
+              // single-pointer = crosshair tap (sets _touchIndex), two+
+              // pointers = pinch-zoom + horizontal pan. onTapUp keeps a
+              // quick single tap surfacing the tooltip too. Double-tap
+              // resets the transform.
+              final pointCount = lines.first.points.length;
               return GestureDetector(
                 onScaleStart: _onScaleStart,
-                onScaleUpdate: _onScaleUpdate,
+                onScaleUpdate: (d) =>
+                    _onScaleUpdate(d, constraints.maxWidth, pointCount),
                 onScaleEnd: (_) {
                   _prevScale = _scale;
                   _prevPanOffsetX = _panOffsetX;
                 },
+                onTapUp: (d) => _setTouchIndexFromX(
+                    d.localPosition.dx, constraints.maxWidth, pointCount),
                 onDoubleTap: _resetTransform,
                 child: chartArea,
               );
