@@ -9,21 +9,21 @@ class WeRoboColors {
   static const Color primaryDark = Color(0xFFE07A1F);    // 8% darker, pressed
   static const Color primaryLight = Color(0xFFFFC091);   // = assetTier5
 
-  // 부 색상 (Cool-tinted Neutrals)
+  // 부 색상 — warm-tinted neutrals to harmonize with orange.
   static const Color white = Color(0xFFFFFFFF);
-  static const Color lightGray = Color(0xFFCDD1D6);
+  static const Color lightGray = Color(0xFFE5E1DD);   // warm border
   static const Color silver = Color(0xFF8E8E8E);
-  static const Color black = Color(0xFF000000);
+  static const Color black = Color(0xFF1A1919);       // warm black
 
-  // Surfaces (cool-tinted to harmonize with sky blue)
-  static const Color background = Color(0xFFF6F7F8);
+  // Surfaces (warm-tinted to harmonize with orange).
+  static const Color background = Color(0xFFF4F2F0);
   static const Color surface = white;
-  static const Color card = Color(0xFFEFF1F3);
+  static const Color card = Color(0xFFF4F2F0);
 
   // Text
   static const Color textPrimary = black;
   static const Color textSecondary = Color(0xFF6B6B6B);
-  static const Color textTertiary = Color(0xFF8E8E8E); // WCAG AA 4.6:1
+  static const Color textTertiary = Color(0xFF8E8E8E);
 
   // Status
   static const Color accent = Color(0xFF059669);
@@ -319,11 +319,11 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
   });
 
   static const light = WeRoboThemeColors(
-    background: Color(0xFFF6F7F8),
+    background: Color(0xFFF4F2F0),  // warm gray (was #F6F7F8)
     surface: Color(0xFFFFFFFF),
-    card: Color(0xFFEFF1F3),
-    border: Color(0xFFCDD1D6),
-    textPrimary: Color(0xFF000000),
+    card: Color(0xFFF4F2F0),         // warm gray (was #EFF1F3)
+    border: Color(0xFFE5E1DD),       // warm hairline (was #CDD1D6)
+    textPrimary: Color(0xFF1A1919),  // warm black (was #000000)
     textSecondary: Color(0xFF6B6B6B),
     textTertiary: Color(0xFF8E8E8E),
     accent: Color(0xFF059669),
