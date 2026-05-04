@@ -40,6 +40,12 @@ class PortfolioComparisonChart extends StatefulWidget {
   /// post-frontier review screen brief (2026-05-05 design notes).
   final TimeRange initialRange;
 
+  /// Optional override for the legend labels. When null the chart falls
+  /// back to the static defaults (포트폴리오 / 시장 / 연 기대수익률 / 채권 수익률).
+  /// Each label maps positionally to the corresponding row in
+  /// [seriesData]; callers are responsible for matching the order.
+  final List<String>? seriesLabels;
+
   /// Gesture flags wired in Task 3.5. Currently accepted but inert so the
   /// review screen can pass them through without an API churn later.
   final bool enablePinchZoom;
@@ -50,6 +56,7 @@ class PortfolioComparisonChart extends StatefulWidget {
     required this.seriesData,
     required this.timeAxis,
     this.initialRange = TimeRange.threeYear,
+    this.seriesLabels,
     this.enablePinchZoom = false,
     this.enableHorizontalDrag = false,
   });
@@ -107,6 +114,8 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
     final firstVisible = timeAxis.indexWhere((d) => !d.isBefore(cutoff));
     final startIdx = firstVisible < 0 ? 0 : firstVisible;
 
+    final labels = widget.seriesLabels ?? _seriesLabels;
+
     final lines = <ChartLine>[];
     for (var i = 0; i < widget.seriesData.length; i++) {
       final raw = widget.seriesData[i];
@@ -119,8 +128,7 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
       final rebased = rebaseChartPointsToFirstValue(rangedPoints);
       lines.add(ChartLine(
         key: 'series_$i',
-        label:
-            i < _seriesLabels.length ? _seriesLabels[i] : 'series ${i + 1}',
+        label: i < labels.length ? labels[i] : 'series ${i + 1}',
         color: i < _seriesPalette.length
             ? _seriesPalette[i]
             : Colors.grey,

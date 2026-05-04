@@ -232,13 +232,36 @@ class _CompareTabBody extends StatelessWidget {
       const <DateTime>[];
 }
 
-/// Second tab: stub. Task 3.4 replaces this with the volatility content.
+/// Second tab: portfolio rolling 60d σ overlaid against the market's
+/// rolling 60d σ. The frontier preview only carries scalar volatility
+/// per point, so until a dedicated volatility-time-series endpoint
+/// lands the chart degrades to its empty state.
 class _VolatilityTabBody extends StatelessWidget {
   final OnboardingFrontierSelection selection;
   const _VolatilityTabBody({required this.selection});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text('변동성 (3.4에서 구현)'));
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: PortfolioComparisonChart(
+        seriesData: _volatilitySeries(selection),
+        timeAxis: _volatilityTimeAxis(selection),
+        seriesLabels: const ['포트폴리오', '시장'],
+        initialRange: TimeRange.threeYear,
+      ),
+    );
+  }
+
+  List<List<double>> _volatilitySeries(OnboardingFrontierSelection selection) {
+    // TODO(backend): wire portfolio rolling 60d σ + market rolling 60d σ.
+    // Today the backend exposes only scalar volatility per frontier point;
+    // a separate endpoint will provide the time series.
+    return const [];
+  }
+
+  List<DateTime> _volatilityTimeAxis(OnboardingFrontierSelection selection) {
+    // TODO(backend): wire date axis aligned with the volatility series.
+    return const [];
   }
 }
