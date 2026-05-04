@@ -5,7 +5,7 @@ import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
 import 'frontier_selection_resolver.dart';
-import 'loading_screen.dart';
+import 'portfolio_review_screen.dart';
 import 'widgets/asset_weight.dart';
 import 'widgets/donut_chart.dart';
 import 'widgets/efficient_frontier_chart.dart';
@@ -134,14 +134,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      _goToLoading();
+      _goToReview();
     }
   }
 
-  void _goToLoading() {
+  void _goToReview() {
     final resolvedSelection =
         _frontierSelection ?? _selectionFromCachedPreview();
-    if (resolvedSelection != null && _frontierSelection == null) {
+    if (resolvedSelection == null) {
+      logAction('frontier selection unavailable on next', {
+        'dotT': _selectedDotT.toStringAsFixed(2),
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('포트폴리오 데이터를 불러오는 중이에요. 잠시 후 다시 시도해 주세요.'),
+        ),
+      );
+      return;
+    }
+    if (_frontierSelection == null) {
       logAction('hydrate initial frontier selection', {
         'selected_point_index': resolvedSelection.selectedPointIndex,
         'target_volatility':
@@ -149,19 +160,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'dataSource': resolvedSelection.dataSource,
       });
     }
-    Navigator.of(context).pushReplacement(
-      WeRoboMotion.fadeRoute(PortfolioLoadingScreen(
-        dotT: _selectedDotT,
-        selectedPointIndex: resolvedSelection?.isAuthoritative == true
-            ? resolvedSelection?.selectedPointIndex
-            : null,
-        targetVolatility: resolvedSelection?.targetVolatility,
-        previewDataSource: resolvedSelection?.isAuthoritative == true
-            ? resolvedSelection?.dataSource
-            : null,
-        asOfDate: resolvedSelection?.asOfDate ?? widget.asOfDate,
-        previewFuture: _frontierPreviewFuture,
-      )),
+    Navigator.of(context).push(
+      WeRoboMotion.fadeRoute(
+        PortfolioReviewScreen(selection: resolvedSelection),
+      ),
     );
   }
 
