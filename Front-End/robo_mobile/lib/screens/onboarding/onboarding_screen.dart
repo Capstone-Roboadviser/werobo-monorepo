@@ -244,19 +244,19 @@ class _ServiceDescriptionPage extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _LegendItem(
-                color: WeRoboColors.chartBlue,
+                color: WeRoboColors.assetTier1,
                 label: '미국 주식',
                 value: '45%',
               ),
               const SizedBox(width: 20),
               _LegendItem(
-                color: WeRoboColors.chartGreen,
+                color: WeRoboColors.assetTier4,
                 label: '미국 채권',
                 value: '40%',
               ),
               const SizedBox(width: 20),
               _LegendItem(
-                color: WeRoboColors.chartYellow,
+                color: WeRoboColors.assetTier3,
                 label: '금',
                 value: '15%',
               ),

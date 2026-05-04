@@ -9,18 +9,6 @@ class WeRoboColors {
   static const Color primaryDark = Color(0xFFE07A1F);    // 8% darker, pressed
   static const Color primaryLight = Color(0xFFFFC091);   // = assetTier5
 
-  // Legacy aliases retained for any stragglers; remove after Phase 1.
-  @Deprecated('Use primaryLight')
-  static const Color sky1 = primaryLight;
-  @Deprecated('Use primaryLight')
-  static const Color sky2 = primaryLight;
-  @Deprecated('Use primary')
-  static const Color sky3 = assetTier3;
-  @Deprecated('Use primary')
-  static const Color sky4 = primary;
-  @Deprecated('Use primaryDark')
-  static const Color sky5 = primaryDark;
-
   // 부 색상 (Cool-tinted Neutrals)
   static const Color white = Color(0xFFFFFFFF);
   static const Color lightGray = Color(0xFFCDD1D6);
@@ -42,7 +30,6 @@ class WeRoboColors {
   static const Color warning = Color(0xFFFBBF24);
   static const Color error = Color(0xFFEF4444);
 
-  // Chart colors (7-color portfolio category palette)
   // Asset tonal palette — 5-tier monochromatic orange (DESIGN.md §Color System).
   // Conveys portfolio character (defensive ↔ aggressive) at a glance.
   static const Color assetTier5 = Color(0xFFFFC091); // 현금성자산
@@ -65,25 +52,6 @@ class WeRoboColors {
 
   static Color assetColor(AssetClass cls) =>
       assetTonalPalette[cls.index];
-
-  static const Color chartBlue = sky4;
-  static const Color chartGreen = Color(0xFF059669);
-  static const Color chartYellow = Color(0xFFFBBF24);
-  static const Color chartPurple = Color(0xFF8B5CF6);
-  static const Color chartOrange = Color(0xFFF97316);
-  static const Color chartPink = Color(0xFFEC4899);
-  static const Color chartTeal = Color(0xFF14B8A6);
-
-  /// Ordered chart palette for portfolio categories.
-  static const List<Color> chartPalette = [
-    chartBlue,
-    chartGreen,
-    chartYellow,
-    chartPurple,
-    chartOrange,
-    chartPink,
-    chartTeal,
-  ];
 
   // Social auth brand colors
   static const Color kakaoYellow = Color(0xFFFEE500);

@@ -519,7 +519,7 @@ class _ComparisonViewState extends State<_ComparisonView>
     return ChartLine(
       key: 'expected_return',
       label: '연 기대수익률',
-      color: WeRoboColors.chartGreen.withValues(alpha: 0.85),
+      color: WeRoboColors.assetTier4.withValues(alpha: 0.85),
       dashed: true,
       points: [
         ChartPoint(date: first.date, value: 0.0),

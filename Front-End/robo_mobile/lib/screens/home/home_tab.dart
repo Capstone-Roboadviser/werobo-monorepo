@@ -488,7 +488,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                           glowPhase: _glowCtrl.value,
                           dateLabel: dateLabel,
                           primaryColor: WeRoboColors.primary,
-                          glowColor: WeRoboColors.sky3,
+                          glowColor: WeRoboColors.assetTier3,
                           costColor: tc.textPrimary,
                           gridColor: tc.border,
                         ),

@@ -45,16 +45,16 @@ class _DonutChartState extends State<DonutChart>
             painter: _DonutPainter(
               progress: _animation.value,
               segments: const [
-                _Segment(0.45, WeRoboColors.chartBlue),
-                _Segment(0.40, WeRoboColors.chartGreen),
-                _Segment(0.15, WeRoboColors.chartYellow),
+                _Segment(0.45, WeRoboColors.assetTier4),
+                _Segment(0.40, WeRoboColors.assetTier5),
+                _Segment(0.15, WeRoboColors.assetTier3),
               ],
             ),
             child: Center(
               child: Text(
                 '${(45 * _animation.value).toInt()}%',
                 style: WeRoboTypography.number.copyWith(
-                  color: WeRoboColors.chartBlue,
+                  color: WeRoboColors.assetTier4,
                 ),
               ),
             ),
