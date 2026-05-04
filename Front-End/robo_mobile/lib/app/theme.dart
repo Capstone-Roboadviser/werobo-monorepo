@@ -330,14 +330,14 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
   );
 
   static const dark = WeRoboThemeColors(
-    background: Color(0xFF141414),
-    surface: Color(0xFF1A1A1A),
-    card: Color(0xFF232528),
-    border: Color(0xFF363840),
-    textPrimary: Color(0xFFF0F0F0),
-    textSecondary: Color(0xFF999999),
-    textTertiary: Color(0xFF6B6B6B),
-    accent: Color(0xFF34D399),
+    background: Color(0xFF1A1919),   // warm black (was #141414)
+    surface: Color(0xFF232020),      // warm card surface
+    card: Color(0xFF2A2625),         // warm inset card
+    border: Color(0xFF3A3636),       // warm hairline
+    textPrimary: Color(0xFFF0EEEC),  // warm off-white
+    textSecondary: Color(0xFFA39E99),
+    textTertiary: Color(0xFF7A7470),
+    accent: Color(0xFF34D399),       // green stays unchanged
   );
 
   static WeRoboThemeColors of(BuildContext context) =>
