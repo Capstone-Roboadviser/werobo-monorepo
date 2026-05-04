@@ -14,14 +14,14 @@ void main() {
         RebalanceInsightAllocation(
           assetCode: 'infra_bond',
           assetName: '인프라 채권',
-          color: Color(0xFF98C1D9),
+          color: WeRoboColors.assetTier3,
           beforePct: 0.032,
           afterPct: 0.030,
         ),
         RebalanceInsightAllocation(
           assetCode: 'new_growth',
           assetName: '신성장주',
-          color: Color(0xFF9B7FCC),
+          color: WeRoboColors.assetTier1,
           beforePct: 0.052,
           afterPct: 0.051,
         ),

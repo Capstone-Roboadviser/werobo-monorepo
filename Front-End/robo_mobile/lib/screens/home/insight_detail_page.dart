@@ -67,7 +67,7 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
         assetName: firstTrade.assetName.isNotEmpty
             ? firstTrade.assetName
             : (allocation?.displayName ?? entry.key),
-        color: allocation?.color ?? const Color(0xFF888888),
+        color: allocation?.color ?? WeRoboColors.silver,
         trades: groupTrades,
       );
     }).toList();
@@ -378,7 +378,7 @@ class _AllocationChangeRow extends StatelessWidget {
     final deltaText = delta >= 0
         ? '(+${delta.toStringAsFixed(1)}%)'
         : '(${delta.toStringAsFixed(1)}%)';
-    final deltaColor = delta > 0 ? tc.accent : const Color(0xFFE57373);
+    final deltaColor = delta > 0 ? tc.accent : WeRoboColors.error;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -568,7 +568,7 @@ class _TradeDetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final sideColor = trade.isBuy ? tc.accent : const Color(0xFFE57373);
+    final sideColor = trade.isBuy ? tc.accent : WeRoboColors.error;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
