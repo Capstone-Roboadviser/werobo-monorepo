@@ -59,6 +59,11 @@ class PortfolioState extends ChangeNotifier {
   bool _welcomeBannerSeen = false;
   MobileDigestResponse? _weeklyDigest;
   AlertFrequency _alertFrequency = AlertFrequency.normal;
+  // Forward-compat for the deferred home dashboard rework: backend will flip
+  // this on when a 긴급-level alert lands so the 홈 nav tab can render an
+  // unread dot. No production consumer triggers this today (MVP scope), but
+  // the flag + setter are exposed so debug/test paths can simulate the badge.
+  bool _hasUnreadEmergencyAlert = false;
 
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
@@ -85,6 +90,7 @@ class PortfolioState extends ChangeNotifier {
   MobileDigestResponse? get weeklyDigest => _weeklyDigest;
   bool get isWeeklyDigestAvailable => _weeklyDigest?.available == true;
   AlertFrequency get alertFrequency => _alertFrequency;
+  bool get hasUnreadEmergencyAlert => _hasUnreadEmergencyAlert;
 
   bool get isLoggedIn => _authSession != null;
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
@@ -212,6 +218,23 @@ class PortfolioState extends ChangeNotifier {
     _alertFrequency = f;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_alertFrequencyKey, f.name);
+    notifyListeners();
+  }
+
+  /// Clears the unread 긴급-alert flag (e.g., once the user opens the home
+  /// tab and sees the alert).
+  void markEmergencyAlertSeen() {
+    if (!_hasUnreadEmergencyAlert) return;
+    _hasUnreadEmergencyAlert = false;
+    notifyListeners();
+  }
+
+  /// Backend will call this when a 긴급-level alert lands. Exposed publicly
+  /// so debug/test paths can simulate the badge ahead of the post-MVP
+  /// backend wiring.
+  void setHasUnreadEmergencyAlert(bool v) {
+    if (_hasUnreadEmergencyAlert == v) return;
+    _hasUnreadEmergencyAlert = v;
     notifyListeners();
   }
 

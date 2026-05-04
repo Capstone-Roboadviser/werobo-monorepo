@@ -131,6 +131,8 @@ class _HomeShellState extends State<HomeShell> {
                   icon: Icons.home_rounded,
                   label: '홈',
                   isActive: _currentTab == 0,
+                  showAlertDot: PortfolioStateProvider.of(context)
+                      .hasUnreadEmergencyAlert,
                   onTap: () {
                     logAction('tab selected', {'tab': 'home'});
                     setState(() => _currentTab = 0);
@@ -176,6 +178,7 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isActive;
+  final bool showAlertDot;
   final VoidCallback onTap;
 
   const _NavItem({
@@ -183,6 +186,7 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.isActive,
     required this.onTap,
+    this.showAlertDot = false,
   });
 
   @override
@@ -196,7 +200,35 @@ class _NavItem extends StatelessWidget {
       duration: const Duration(milliseconds: 100),
       child: SizedBox(
         width: 64,
-        child: Icon(icon, size: 28, color: color),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Icon(icon, size: 28, color: color),
+            if (showAlertDot)
+              const Positioned(
+                right: 14,
+                top: -2,
+                child: _AlertDot(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AlertDot extends StatelessWidget {
+  const _AlertDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: const BoxDecoration(
+        color: WeRoboColors.primary,
+        shape: BoxShape.circle,
       ),
     );
   }
