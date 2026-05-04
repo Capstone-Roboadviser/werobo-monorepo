@@ -95,7 +95,7 @@ WeRobo is a robo-advisor mobile app built with Flutter. It helps users find opti
 
 ### Components
 - Buttons: 52px height, 12px border radius, full-width
-- Cards: 16px border radius, `#F0F0F0` background
+- Cards: 12px border radius, `#FFFFFF` (surface) on `#F4F2F0` (background); inset cards `#F4F2F0` on white surface
 - Page indicators: pill-style active dot (24px wide), 8px inactive dots
 
 ## Figma Reference
