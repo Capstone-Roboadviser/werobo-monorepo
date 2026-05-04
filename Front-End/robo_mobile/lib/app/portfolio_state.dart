@@ -9,6 +9,8 @@ import '../models/chart_data.dart';
 import '../models/mobile_backend_models.dart';
 import '../models/portfolio_data.dart';
 import '../models/rebalance_insight.dart';
+import '../screens/onboarding/onboarding_screen.dart'
+    show OnboardingFrontierSelection;
 import '../services/mobile_backend_api.dart';
 
 /// App-level state holder for auth, onboarding bootstrap state, and portfolio data.
@@ -25,6 +27,10 @@ class PortfolioState extends ChangeNotifier {
   MobileComparisonBacktestResponse? _backtest;
   MobileFrontierPreviewResponse? _frontierPreview;
   MobileFrontierSelectionResponse? _frontierSelection;
+  // Captured at 투자 확정 from the post-frontier review screen so the home
+  // tab can read what the user picked even before the authoritative
+  // backend selection arrives.
+  OnboardingFrontierSelection? _onboardingFrontierSelection;
   MobileAuthSession? _authSession;
   MobileAccountDashboard? _accountDashboard;
   List<RebalanceInsight> _insights = [];
@@ -156,6 +162,19 @@ class PortfolioState extends ChangeNotifier {
     _persistPortfolioBootstrapState();
   }
 
+  /// Snapshot of the user's onboarding-side pick — what t/preview was
+  /// selected on the slider, regardless of whether the authoritative
+  /// backend selection has resolved yet.
+  OnboardingFrontierSelection? get onboardingFrontierSelection =>
+      _onboardingFrontierSelection;
+
+  /// Persist the onboarding-flow frontier pick so screens beyond
+  /// onboarding (home tab, etc.) can read it after 투자 확정.
+  void recordFrontierSelection(OnboardingFrontierSelection selection) {
+    _onboardingFrontierSelection = selection;
+    notifyListeners();
+  }
+
   Future<void> restorePersistedState() async {
     final prefs = await SharedPreferences.getInstance();
     await _restoreAuthSessionFromPrefs(prefs);
@@ -236,6 +255,7 @@ class PortfolioState extends ChangeNotifier {
     _type = InvestmentType.balanced;
     _recommendation = null;
     _frontierSelection = null;
+    _onboardingFrontierSelection = null;
     _frontierPreview = null;
     _backtest = null;
     _accountDashboard = null;
@@ -254,6 +274,7 @@ class PortfolioState extends ChangeNotifier {
     _backtest = null;
     _frontierPreview = null;
     _frontierSelection = null;
+    _onboardingFrontierSelection = null;
     _accountDashboard = null;
     _insights = [];
     if (notify) {

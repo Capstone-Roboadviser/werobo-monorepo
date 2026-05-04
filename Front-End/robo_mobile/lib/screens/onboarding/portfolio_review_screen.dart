@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import 'frontier_selection_resolver.dart';
 import 'onboarding_screen.dart' show OnboardingFrontierSelection;
@@ -102,9 +103,9 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
   }
 
   void _confirmInvestment(BuildContext context) {
-    // Task 3.6 will wire navigation to home + persist the selection.
-    // For now, pop back so the screen is at least navigable end-to-end.
-    Navigator.of(context).pop();
+    final state = PortfolioStateProvider.of(context);
+    state.recordFrontierSelection(widget.selection);
+    Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
   }
 }
 

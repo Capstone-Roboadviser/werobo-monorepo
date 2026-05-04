@@ -3,6 +3,7 @@ import 'app/debug_page_logger.dart';
 import 'app/portfolio_state.dart';
 import 'app/theme.dart';
 import 'app/theme_state.dart';
+import 'screens/home/home_shell.dart';
 import 'screens/onboarding/splash_screen.dart';
 
 Future<void> main() async {
@@ -49,7 +50,11 @@ class _WeRoboAppState extends State<WeRoboApp> {
             theme: WeRoboTheme.light,
             darkTheme: WeRoboTheme.dark,
             themeMode: _themeNotifier.mode,
-            home: const SplashScreen(),
+            initialRoute: '/',
+            routes: {
+              '/': (_) => const SplashScreen(),
+              '/home': (_) => const HomeShell(),
+            },
           ),
         ),
       ),
