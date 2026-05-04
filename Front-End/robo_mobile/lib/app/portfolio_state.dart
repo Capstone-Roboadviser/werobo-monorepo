@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'comparison_backtest_chart_mapper.dart';
 import 'debug_page_logger.dart';
+import 'theme.dart' show AssetClass;
 import '../models/chart_data.dart';
 import '../models/mobile_backend_models.dart';
 import '../models/portfolio_data.dart';
@@ -31,6 +32,51 @@ enum AlertFrequency {
         AlertFrequency.normal => '보통',
         AlertFrequency.important => '중요할 때만',
       };
+}
+
+/// Top-N contribution analysis for a moment in the portfolio simulation.
+/// Consumed by the deferred Phase 4 ContributionTooltip widget.
+class ContributionAnalysis {
+  /// Sorted by `|krwImpact|` descending; capped to the top 2 entries.
+  final List<ContributionEntry> topEntries;
+
+  /// True when any of the top entries is `AssetClass.newGrowth`. Drives the
+  /// "데이터 정합성 검토 중" caveat shown next to 신성장주 figures.
+  final bool containsNewGrowth;
+
+  const ContributionAnalysis({
+    required this.topEntries,
+    required this.containsNewGrowth,
+  });
+
+  factory ContributionAnalysis.fromEntries(List<ContributionEntry> entries) {
+    final top = [...entries]
+      ..sort((a, b) => b.krwImpact.abs().compareTo(a.krwImpact.abs()));
+    final top2 = top.take(2).toList();
+    return ContributionAnalysis(
+      topEntries: top2,
+      containsNewGrowth: top2.any((e) => e.cls == AssetClass.newGrowth),
+    );
+  }
+}
+
+/// One row of the contribution-analysis breakdown.
+class ContributionEntry {
+  final AssetClass cls;
+  final String label;
+  final double weight;
+  final double assetReturn;
+  final double krwImpact;
+  final bool isOutlier;
+
+  const ContributionEntry({
+    required this.cls,
+    required this.label,
+    required this.weight,
+    required this.assetReturn,
+    required this.krwImpact,
+    this.isOutlier = false,
+  });
 }
 
 /// App-level state holder for auth, onboarding bootstrap state, and portfolio data.
@@ -150,6 +196,16 @@ class PortfolioState extends ChangeNotifier {
       sectorAllocations: summary.sectorAllocations,
       stockAllocations: summary.stockAllocations,
     );
+  }
+
+  /// Returns the top-N contribution breakdown at `time`. Returns null in the
+  /// MVP — backend wiring lands with the deferred home dashboard rework.
+  ///
+  /// BACKEND TODO: when wiring to MobileBackendApi.fetchContributionAnalysis,
+  /// build via ContributionAnalysis.fromEntries(...) so containsNewGrowth
+  /// is set correctly for the "데이터 정합성 검토 중" caveat.
+  ContributionAnalysis? contributionAnalysisAt(DateTime time) {
+    return null;
   }
 
   void setType(InvestmentType newType) {
