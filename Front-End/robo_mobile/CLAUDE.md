@@ -45,22 +45,31 @@ WeRobo is a robo-advisor mobile app built with Flutter. It helps users find opti
 
 ## Design System
 
-### Colors (from Figma, defined in `lib/app/theme.dart`)
-**주 색상 (Primary sky blue palette):**
-- 하늘색1: `#CFECF7`
-- 하늘색2 / primaryLight: `#A0D9EF`
-- 하늘색3: `#62C1E5`
-- 하늘색4 / primary: `#20A7DB`
-- 하늘색5 / primaryDark: `#1C96C5`
+### Colors (defined in `lib/app/theme.dart`)
+**주 색상 (Primary — Neon Carrot orange):**
+- primary: `#FE9337`
+- primaryDark: `#E07A1F` (pressed)
+- primaryLight: `#FFC091` (= assetTier5)
 
-**부 색상 (Cool-tinted Neutrals):**
+**Asset tonal palette (5-tier monochromatic, defensive→aggressive):**
+- assetTier5 / `#FFC091`: 현금성자산
+- assetTier4 / `#FFB57D`: 단기채권
+- assetTier3 / `#FFAA69`: 인프라채권, 금
+- assetTier2 / `#FF9F52`: 미국가치주
+- assetTier1 / `#FE9337`: 미국성장주, 신성장주
+
+**부 색상 (Warm-tinted Neutrals):**
 - 화이트: `#FFFFFF` (surface)
-- 카드: `#EFF1F3` (cool-tinted)
-- 보더: `#CDD1D6` (cool-tinted)
-- 배경: `#F6F7F8`
+- 카드 / 배경: `#F4F2F0` (warm gray)
+- 보더: `#E5E1DD` (warm hairline)
+- 텍스트 1차: `#1A1919` (warm black)
 - 텍스트 보조: `#6B6B6B`
 - 텍스트 3차: `#8E8E8E` (WCAG AA 4.6:1)
-- 블랙: `#000000`
+
+**Status (retained):**
+- accent (gain): `#059669` green
+- warning: `#FBBF24` yellow
+- error: `#EF4444` red — error states only
 
 ### Fonts (from Figma)
 | Usage | Font | Flutter family key |
