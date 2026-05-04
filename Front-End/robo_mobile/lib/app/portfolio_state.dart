@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../models/portfolio_data.dart';
 import '../models/rebalance_insight.dart';
 import '../screens/onboarding/onboarding_screen.dart'
     show OnboardingFrontierSelection;
+import '../services/alert_analytics.dart';
 import '../services/mobile_backend_api.dart';
 
 /// User-facing alert frequency setting. Maps internally to a σ threshold.
@@ -274,6 +276,8 @@ class PortfolioState extends ChangeNotifier {
     _alertFrequency = f;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_alertFrequencyKey, f.name);
+    // Fire-and-forget so persistence/notify aren't blocked on telemetry.
+    unawaited(AlertAnalytics.instance.recordPreferenceChange(f));
     notifyListeners();
   }
 
