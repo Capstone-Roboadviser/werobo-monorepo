@@ -85,6 +85,16 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
   int? _touchIndex;
   late AnimationController _drawCtrl;
 
+  // Pinch-zoom + horizontal-drag state. `_scale` multiplies the chart's
+  // x-extent and `_panOffsetX` shifts it horizontally (in canvas pixels).
+  // `_prevScale`/`_prevPanOffsetX` snapshot the values at gesture start so
+  // each ScaleUpdate composes against the gesture origin, not against the
+  // continuously-mutating live values.
+  double _scale = 1.0;
+  double _prevScale = 1.0;
+  double _panOffsetX = 0.0;
+  double _prevPanOffsetX = 0.0;
+
   @override
   void initState() {
     super.initState();
@@ -99,6 +109,27 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
   void dispose() {
     _drawCtrl.dispose();
     super.dispose();
+  }
+
+  void _onScaleStart(ScaleStartDetails d) {
+    _prevScale = _scale;
+    _prevPanOffsetX = _panOffsetX;
+  }
+
+  void _onScaleUpdate(ScaleUpdateDetails d) {
+    setState(() {
+      _scale = (_prevScale * d.scale).clamp(0.5, 5.0);
+      _panOffsetX = _prevPanOffsetX + d.focalPointDelta.dx;
+    });
+  }
+
+  void _resetTransform() {
+    setState(() {
+      _scale = 1.0;
+      _panOffsetX = 0.0;
+      _prevScale = 1.0;
+      _prevPanOffsetX = 0.0;
+    });
   }
 
   /// Returns the chart lines after filtering by the current time range and
@@ -141,12 +172,14 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
 
   @override
   Widget build(BuildContext context) {
-    // TODO(3.5): wire pinch-zoom + horizontal drag based on these flags.
     final tc = WeRoboThemeColors.of(context);
     final lines = _buildLines();
     if (lines.isEmpty) {
       return const _EmptyChartState(message: '비교 데이터가 없어요');
     }
+
+    final gesturesEnabled =
+        widget.enablePinchZoom || widget.enableHorizontalDrag;
 
     return Column(
       children: [
@@ -162,6 +195,7 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
                     if (_range == r) return;
                     setState(() => _range = r);
                     _drawCtrl.forward(from: 0);
+                    _resetTransform();
                   },
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -191,40 +225,62 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
         Expanded(
           child: LayoutBuilder(
             builder: (context, constraints) {
-              return GestureDetector(
-                onPanUpdate: (d) {
-                  final pts = lines.first.points;
-                  if (pts.isEmpty) return;
-                  final x = d.localPosition.dx - 28;
-                  final chartW = constraints.maxWidth - 28 - 12;
-                  final idx = ((x / chartW) * (pts.length - 1))
-                      .round()
-                      .clamp(0, pts.length - 1);
-                  setState(() => _touchIndex = idx);
+              final chartArea = AnimatedBuilder(
+                animation: _drawCtrl,
+                builder: (context, _) {
+                  return CustomPaint(
+                    size: Size(
+                      constraints.maxWidth,
+                      constraints.maxHeight,
+                    ),
+                    painter: _MultiLineChartPainter(
+                      lines: lines,
+                      progress: _drawCtrl.value,
+                      touchIndex: _touchIndex,
+                      gridColor: tc.border,
+                      textTertiaryColor: tc.textTertiary,
+                      textPrimaryColor: tc.textPrimary,
+                      tooltipBackground: tc.surface,
+                      tooltipBorder: tc.border,
+                      scale: _scale,
+                      panOffsetX: _panOffsetX,
+                    ),
+                  );
                 },
-                onPanEnd: (_) => setState(() => _touchIndex = null),
-                onTapUp: (_) => setState(() => _touchIndex = null),
-                child: AnimatedBuilder(
-                  animation: _drawCtrl,
-                  builder: (context, _) {
-                    return CustomPaint(
-                      size: Size(
-                        constraints.maxWidth,
-                        constraints.maxHeight,
-                      ),
-                      painter: _MultiLineChartPainter(
-                        lines: lines,
-                        progress: _drawCtrl.value,
-                        touchIndex: _touchIndex,
-                        gridColor: tc.border,
-                        textTertiaryColor: tc.textTertiary,
-                        textPrimaryColor: tc.textPrimary,
-                        tooltipBackground: tc.surface,
-                        tooltipBorder: tc.border,
-                      ),
-                    );
+              );
+
+              // When gestures are off, render the chart with only the
+              // existing crosshair/touch tap handling — no scale/drag.
+              if (!gesturesEnabled) {
+                return GestureDetector(
+                  onPanUpdate: (d) {
+                    final pts = lines.first.points;
+                    if (pts.isEmpty) return;
+                    final x = d.localPosition.dx - 28;
+                    final chartW = constraints.maxWidth - 28 - 12;
+                    final idx = ((x / chartW) * (pts.length - 1))
+                        .round()
+                        .clamp(0, pts.length - 1);
+                    setState(() => _touchIndex = idx);
                   },
-                ),
+                  onPanEnd: (_) => setState(() => _touchIndex = null),
+                  onTapUp: (_) => setState(() => _touchIndex = null),
+                  child: chartArea,
+                );
+              }
+
+              // When gestures are on, scale gestures (pinch + drag) take
+              // over: a single-pointer drag pans, two-pointer pinches zoom.
+              // Double-tap resets the transform.
+              return GestureDetector(
+                onScaleStart: _onScaleStart,
+                onScaleUpdate: _onScaleUpdate,
+                onScaleEnd: (_) {
+                  _prevScale = _scale;
+                  _prevPanOffsetX = _panOffsetX;
+                },
+                onDoubleTap: _resetTransform,
+                child: chartArea,
               );
             },
           ),
@@ -1247,6 +1303,13 @@ class _MultiLineChartPainter extends CustomPainter {
   final Color tooltipBackground;
   final Color tooltipBorder;
 
+  /// Pinch-zoom multiplier and horizontal pan offset (in canvas pixels).
+  /// At identity (1.0 / 0.0) the painter behaves exactly as before; the
+  /// transform applies only to the line/crosshair x-coordinates so axis
+  /// labels and gridlines stay anchored to the static canvas frame.
+  final double scale;
+  final double panOffsetX;
+
   _MultiLineChartPainter({
     required this.lines,
     required this.progress,
@@ -1256,7 +1319,16 @@ class _MultiLineChartPainter extends CustomPainter {
     required this.textPrimaryColor,
     required this.tooltipBackground,
     required this.tooltipBorder,
+    this.scale = 1.0,
+    this.panOffsetX = 0.0,
   });
+
+  /// Apply [scale] and [panOffsetX] to a raw chart x. The left padding
+  /// (`padL`) is treated as the transform anchor so identity transforms
+  /// leave the chart visually unchanged.
+  double _xWithTransform(double rawX, double padL) {
+    return padL + (rawX - padL) * scale + panOffsetX;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -1306,14 +1378,22 @@ class _MultiLineChartPainter extends CustomPainter {
           labelStyle);
     }
 
-    // Draw lines
+    // Clip the line/crosshair drawing to the chart area so a zoomed or
+    // panned series doesn't bleed across the axis labels.
+    canvas.save();
+    canvas.clipRect(Rect.fromLTWH(padL, 0, w, h));
+
+    // Draw lines (with zoom/pan applied)
     for (final line in lines) {
       final pts = line.points;
       final count = pts.length;
       final pathPoints = _interpolatedPathPoints(
         n: count,
         progress: progress,
-        xAt: (i) => _xForDate(pts[i].date, minDate, maxDate, padL, w),
+        xAt: (i) => _xWithTransform(
+          _xForDate(pts[i].date, minDate, maxDate, padL, w),
+          padL,
+        ),
         yAt: (i) => h - ((pts[i].value - minY) / rangeY) * h,
       );
       if (pathPoints == null) continue;
@@ -1341,12 +1421,16 @@ class _MultiLineChartPainter extends CustomPainter {
       }
     }
 
-    // Crosshair
+    // Crosshair (also subject to the same transform so it tracks the
+    // visible series under zoom/pan).
     if (touchIndex != null && lines.isNotEmpty) {
       final pts = lines[0].points;
       if (touchIndex! < pts.length) {
         final touchDate = pts[touchIndex!].date;
-        final tx = _xForDate(touchDate, minDate, maxDate, padL, w);
+        final tx = _xWithTransform(
+          _xForDate(touchDate, minDate, maxDate, padL, w),
+          padL,
+        );
         canvas.drawLine(
             Offset(tx, 0),
             Offset(tx, h),
@@ -1365,8 +1449,20 @@ class _MultiLineChartPainter extends CustomPainter {
                 Offset(tx, ty), 2, Paint()..color = tooltipBackground);
           }
         }
+      }
+    }
 
-        // Tooltip
+    canvas.restore();
+
+    // Tooltip (drawn outside the clip so it can overflow the chart area).
+    if (touchIndex != null && lines.isNotEmpty) {
+      final pts = lines[0].points;
+      if (touchIndex! < pts.length) {
+        final touchDate = pts[touchIndex!].date;
+        final tx = _xWithTransform(
+          _xForDate(touchDate, minDate, maxDate, padL, w),
+          padL,
+        );
         final dateStr = _formatDate(touchDate);
         var tooltipLines = dateStr;
         for (final line in lines) {
@@ -1440,7 +1536,9 @@ class _MultiLineChartPainter extends CustomPainter {
   bool shouldRepaint(covariant _MultiLineChartPainter old) =>
       old.lines != lines ||
       old.progress != progress ||
-      old.touchIndex != touchIndex;
+      old.touchIndex != touchIndex ||
+      old.scale != scale ||
+      old.panOffsetX != panOffsetX;
 }
 
 double _xForDate(

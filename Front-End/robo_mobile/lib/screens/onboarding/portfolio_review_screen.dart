@@ -214,6 +214,8 @@ class _CompareTabBody extends StatelessWidget {
         seriesData: series,
         timeAxis: timeAxis,
         initialRange: TimeRange.threeYear,
+        enablePinchZoom: true,
+        enableHorizontalDrag: true,
       ),
     );
   }
@@ -249,6 +251,8 @@ class _VolatilityTabBody extends StatelessWidget {
         timeAxis: _volatilityTimeAxis(selection),
         seriesLabels: const ['포트폴리오', '시장'],
         initialRange: TimeRange.threeYear,
+        enablePinchZoom: true,
+        enableHorizontalDrag: true,
       ),
     );
   }
