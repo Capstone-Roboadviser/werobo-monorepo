@@ -236,8 +236,8 @@ Tap a sector to see constituent ETF tickers in the center. Builds trust through 
 ### Auto-rebalancing
 Settings tab toggle (cosmetic for demo). Paired with explanation card in 포트폴리오 tab explaining the 10% drift rule. Unchanged.
 
-### Preview mode
-"로그인 없이 둘러보기" link on login screen bypasses auth for demo purposes. Unchanged.
+### Preview-mode-by-default
+The dedicated login screen was removed during the 2026-05 overhaul (the prior implementation was incompatible with the new flow). The app now reaches frontier directly from splash for unauthed users — preview mode (formerly "로그인 없이 둘러보기") is the default unauth experience. Real auth is a follow-up build.
 
 ## Alert / Digest System
 

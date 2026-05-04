@@ -403,12 +403,21 @@ class PortfolioState extends ChangeNotifier {
     _onboardingFrontierSelection = null;
     _accountDashboard = null;
     _insights = [];
+    _digestSeenDate = null;
+    _welcomeBannerSeen = false;
+    _weeklyDigest = null;
+    _hasUnreadEmergencyAlert = false;
     if (notify) {
       notifyListeners();
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_authSessionStorageKey);
     await prefs.remove(_portfolioBootstrapStorageKey);
+    await prefs.remove(_digestSeenDateKey);
+    await prefs.remove(_welcomeBannerSeenKey);
+    // Note: _alertFrequency is intentionally NOT cleared here — it's a
+    // device-level preference that should survive logout/login on the same
+    // device.
   }
 
   void setTypeAndRecommendation(

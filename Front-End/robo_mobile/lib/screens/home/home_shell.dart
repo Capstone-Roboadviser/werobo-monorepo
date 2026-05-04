@@ -192,7 +192,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final color = isActive ? Colors.white : tc.textSecondary;
+    final color = isActive ? WeRoboColors.primary : tc.textSecondary;
 
     return Pressable(
       onTap: onTap,
