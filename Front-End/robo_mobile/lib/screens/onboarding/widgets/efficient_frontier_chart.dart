@@ -3,6 +3,17 @@ import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../../../models/mobile_backend_models.dart';
 
+/// Chart-internal short labels — full koLabel collides on iPhones <430pt.
+const Map<AssetClass, String> _kAssetShortLabels = {
+  AssetClass.cash: '현금성',
+  AssetClass.shortBond: '단기채',
+  AssetClass.infraBond: '인프라',
+  AssetClass.gold: '금',
+  AssetClass.usValue: '미국가',
+  AssetClass.usGrowth: '미국성',
+  AssetClass.newGrowth: '신성장',
+};
+
 class EfficientFrontierChart extends StatefulWidget {
   final ValueChanged<double>? onPositionChanged;
   final ValueChanged<bool>? onDragStateChanged;
@@ -240,23 +251,19 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                     widget.onDragStateChanged?.call(false);
                   }
                 },
-                child: SizedBox(
-                  width: double.infinity,
-                  height: h,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: CustomPaint(
-                      painter: _FrontierPainter(
-                        curveProgress: _curveAnimation.value,
-                        dotProgress: _dotAnimation.value,
-                        dotT: _dotT,
-                        isDragging: _isDragging,
-                        pulseValue: _pulseAnimation.value,
-                        previewPoints: widget.previewPoints,
-                        selectedPreviewPosition: widget.selectedPreviewPosition,
-                        gridColor: tc.border,
-                        textTertiaryColor: tc.textTertiary,
-                      ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: CustomPaint(
+                    painter: _FrontierPainter(
+                      curveProgress: _curveAnimation.value,
+                      dotProgress: _dotAnimation.value,
+                      dotT: _dotT,
+                      isDragging: _isDragging,
+                      pulseValue: _pulseAnimation.value,
+                      previewPoints: widget.previewPoints,
+                      selectedPreviewPosition: widget.selectedPreviewPosition,
+                      gridColor: tc.border,
+                      textTertiaryColor: tc.textTertiary,
                     ),
                   ),
                 ),
@@ -506,7 +513,7 @@ class _FrontierPainter extends CustomPainter {
       canvas.drawCircle(anchor, 7.0, ringPaint);
       // Asset name label only — no percentage. The bar widget below
       // the chart shows proportions.
-      _drawLabel(canvas, anchor, cls.koLabel, opacity);
+      _drawLabel(canvas, anchor, _kAssetShortLabels[cls]!, opacity);
     }
   }
 
