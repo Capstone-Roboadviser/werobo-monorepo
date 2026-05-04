@@ -5,11 +5,25 @@ import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
 import 'loading_screen.dart';
+import 'widgets/asset_weight.dart';
 import 'widgets/donut_chart.dart';
 import 'widgets/efficient_frontier_chart.dart';
 import 'widgets/page_indicator.dart';
 
 const _frontierPreviewSamplePoints = 301;
+
+/// Maps backend `asset_code` strings to the `AssetClass` enum.
+/// Returns `null` for unknown codes (caller skips those allocations).
+AssetClass? _assetClassForCode(String code) => switch (code) {
+      'cash_equivalents' => AssetClass.cash,
+      'short_term_bond' => AssetClass.shortBond,
+      'infra_bond' => AssetClass.infraBond,
+      'gold' => AssetClass.gold,
+      'us_value' => AssetClass.usValue,
+      'us_growth' => AssetClass.usGrowth,
+      'new_growth' => AssetClass.newGrowth,
+      _ => null,
+    };
 
 class OnboardingFrontierSelection {
   final double normalizedT;
@@ -18,6 +32,7 @@ class OnboardingFrontierSelection {
   final String dataSource;
   final DateTime? asOfDate;
   final bool isAuthoritative;
+  final MobileFrontierPreviewResponse? preview;
 
   const OnboardingFrontierSelection({
     required this.normalizedT,
@@ -26,7 +41,33 @@ class OnboardingFrontierSelection {
     required this.dataSource,
     required this.asOfDate,
     required this.isAuthoritative,
+    this.preview,
   });
+
+  /// Returns the asset-class weight vector at the given t ∈ [0, 1].
+  /// Output is indexed by `AssetClass.index` (cash → newGrowth, length 7).
+  /// Falls back to a zero vector when no preview/allocations are available.
+  List<double> weightsAt(double t) {
+    final result = List<double>.filled(AssetClass.values.length, 0);
+    final preview = this.preview;
+    if (preview == null || preview.points.isEmpty) {
+      return result;
+    }
+    final clamped = t.clamp(0.0, 1.0);
+    final position = preview.points.length <= 1
+        ? 0
+        : (clamped * (preview.points.length - 1))
+            .round()
+            .clamp(0, preview.points.length - 1);
+    for (final allocation in preview.points[position].sectorAllocations) {
+      final cls = _assetClassForCode(allocation.assetCode);
+      if (cls == null) {
+        continue;
+      }
+      result[cls.index] += allocation.weight;
+    }
+    return result;
+  }
 }
 
 class OnboardingScreen extends StatefulWidget {
@@ -143,6 +184,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       dataSource: preview.dataSource,
       asOfDate: preview.asOfDate ?? widget.asOfDate,
       isAuthoritative: true,
+      preview: preview,
     );
   }
 
@@ -730,6 +772,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       dataSource: _preview.dataSource,
       asOfDate: _preview.asOfDate ?? widget.asOfDate,
       isAuthoritative: _previewIsAuthoritative,
+      preview: _preview,
     );
   }
 
@@ -743,6 +786,59 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
             .round()
             .clamp(0, _preview.points.length - 1);
     return _selectionForPreviewPosition(previewPosition);
+  }
+
+  /// Builds the 7 `AssetWeight` rows the bar consumes, sourced from the
+  /// frontier sample point closest to [t]. Returns an empty list when no
+  /// preview data is loaded yet (the bar collapses to a zero-height stub).
+  List<AssetWeight> _assetsAtT(double t) {
+    final selection = _selectionForNormalizedT(t);
+    if (selection == null) return const [];
+    final weights = selection.weightsAt(t);
+    return [
+      AssetWeight(
+        cls: AssetClass.cash,
+        label: '현금성자산',
+        tickers: const ['BIL', 'VCSH', 'BSV'],
+        weight: weights[AssetClass.cash.index],
+      ),
+      AssetWeight(
+        cls: AssetClass.shortBond,
+        label: '단기채권',
+        tickers: const ['BND', 'AGG', 'LQD'],
+        weight: weights[AssetClass.shortBond.index],
+      ),
+      AssetWeight(
+        cls: AssetClass.infraBond,
+        label: '인프라채권',
+        tickers: const ['NFRA', 'GII', 'IGF'],
+        weight: weights[AssetClass.infraBond.index],
+      ),
+      AssetWeight(
+        cls: AssetClass.gold,
+        label: '금',
+        tickers: const ['DBC', 'SGOL', 'GLD'],
+        weight: weights[AssetClass.gold.index],
+      ),
+      AssetWeight(
+        cls: AssetClass.usValue,
+        label: '미국가치주',
+        tickers: const ['MGV', 'VBR', 'VTV'],
+        weight: weights[AssetClass.usValue.index],
+      ),
+      AssetWeight(
+        cls: AssetClass.usGrowth,
+        label: '미국성장주',
+        tickers: const ['VBK', 'MGK', 'VUG'],
+        weight: weights[AssetClass.usGrowth.index],
+      ),
+      AssetWeight(
+        cls: AssetClass.newGrowth,
+        label: '신성장주',
+        tickers: const [],
+        weight: weights[AssetClass.newGrowth.index],
+      ),
+    ];
   }
 
   @override
@@ -814,6 +910,9 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
             onDragStateChanged: widget.onDragStateChanged,
             onPreviewPointChanged: _handlePreviewPositionChanged,
             onPositionChanged: (t) {
+              // Drag updates _dotT → setState → AssetWeightBar re-renders.
+              // Each segment's flex ratio animates smoothly via
+              // AnimatedContainer.
               final selection = _selectionForNormalizedT(t);
               setState(() {
                 _dotT = selection?.normalizedT ?? t;
@@ -826,6 +925,8 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
               widget.onFrontierSelectionChanged?.call(selection);
             },
           ),
+          const SizedBox(height: 16),
+          AssetWeightBar(assets: _assetsAtT(_dotT)),
           if (_previewLoading || _previewUnavailable) ...[
             const SizedBox(height: 12),
             Text(
