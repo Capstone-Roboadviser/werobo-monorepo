@@ -404,81 +404,87 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
     return AnimatedBuilder(
       animation: Listenable.merge([_controller, _pulseController]),
       builder: (context, _) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            final w = constraints.maxWidth;
-            const h = 300.0;
+        // 1:3 height:width ratio per 2026-05-05 user notes — the horizontal
+        // layout makes the frontier curve slope readable on small screens.
+        return AspectRatio(
+          aspectRatio: 3.0,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              final h = constraints.maxHeight;
 
-            return GestureDetector(
-              onPanStart: (details) {
-                if (_controller.isCompleted) {
-                  late final Offset dotPos;
-                  if (_hasPreviewPoints) {
-                    final pp = widget.previewPoints!;
-                    dotPos = _previewPointToOffset(
-                      pp[widget.selectedPreviewPosition ?? pp.length ~/ 2],
-                      w,
-                      h,
-                      pp.map((p) => p.volatility).reduce(min),
-                      pp.map((p) => p.volatility).reduce(max),
-                      pp.map((p) => p.expectedReturn).reduce(min),
-                      pp.map((p) => p.expectedReturn).reduce(max),
-                    );
-                  } else {
-                    dotPos = _tToPoint(_dotT, w, h);
+              return GestureDetector(
+                onPanStart: (details) {
+                  if (_controller.isCompleted) {
+                    late final Offset dotPos;
+                    if (_hasPreviewPoints) {
+                      final pp = widget.previewPoints!;
+                      dotPos = _previewPointToOffset(
+                        pp[widget.selectedPreviewPosition ?? pp.length ~/ 2],
+                        w,
+                        h,
+                        pp.map((p) => p.volatility).reduce(min),
+                        pp.map((p) => p.volatility).reduce(max),
+                        pp.map((p) => p.expectedReturn).reduce(min),
+                        pp.map((p) => p.expectedReturn).reduce(max),
+                      );
+                    } else {
+                      dotPos = _tToPoint(_dotT, w, h);
+                    }
+                    if ((details.localPosition - dotPos).distance < 60) {
+                      setState(() => _isDragging = true);
+                      widget.onDragStateChanged?.call(true);
+                    }
                   }
-                  if ((details.localPosition - dotPos).distance < 60) {
-                    setState(() => _isDragging = true);
-                    widget.onDragStateChanged?.call(true);
+                },
+                onPanUpdate: (details) {
+                  if (_isDragging) {
+                    if (_hasPreviewPoints) {
+                      final previewPosition =
+                          _nearestPreviewPosition(details.localPosition, w, h);
+                      final nextDotT = widget.previewPoints!.length <= 1
+                          ? 0.45
+                          : previewPosition /
+                              (widget.previewPoints!.length - 1);
+                      setState(() => _dotT = nextDotT);
+                      widget.onPreviewPointChanged?.call(previewPosition);
+                    } else {
+                      setState(() {
+                        _dotT = _screenToT(details.localPosition, w, h);
+                      });
+                      widget.onPositionChanged?.call(_dotT);
+                    }
                   }
-                }
-              },
-              onPanUpdate: (details) {
-                if (_isDragging) {
-                  if (_hasPreviewPoints) {
-                    final previewPosition =
-                        _nearestPreviewPosition(details.localPosition, w, h);
-                    final nextDotT = widget.previewPoints!.length <= 1
-                        ? 0.45
-                        : previewPosition / (widget.previewPoints!.length - 1);
-                    setState(() => _dotT = nextDotT);
-                    widget.onPreviewPointChanged?.call(previewPosition);
-                  } else {
-                    setState(() {
-                      _dotT = _screenToT(details.localPosition, w, h);
-                    });
-                    widget.onPositionChanged?.call(_dotT);
+                },
+                onPanEnd: (_) {
+                  if (_isDragging) {
+                    setState(() => _isDragging = false);
+                    widget.onDragStateChanged?.call(false);
                   }
-                }
-              },
-              onPanEnd: (_) {
-                if (_isDragging) {
-                  setState(() => _isDragging = false);
-                  widget.onDragStateChanged?.call(false);
-                }
-              },
-              child: SizedBox(
-                width: double.infinity,
-                height: h,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: CustomPaint(
-                    painter: _FrontierPainter(
-                      curveProgress: _curveAnimation.value,
-                      dotProgress: _dotAnimation.value,
-                      dotT: _dotT,
-                      isDragging: _isDragging,
-                      pulseValue: _pulseAnimation.value,
-                      previewPoints: widget.previewPoints,
-                      selectedPreviewPosition: widget.selectedPreviewPosition,
-                      gridColor: tc.border,
-                      textTertiaryColor: tc.textTertiary,
+                },
+                child: SizedBox(
+                  width: double.infinity,
+                  height: h,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: CustomPaint(
+                      painter: _FrontierPainter(
+                        curveProgress: _curveAnimation.value,
+                        dotProgress: _dotAnimation.value,
+                        dotT: _dotT,
+                        isDragging: _isDragging,
+                        pulseValue: _pulseAnimation.value,
+                        previewPoints: widget.previewPoints,
+                        selectedPreviewPosition: widget.selectedPreviewPosition,
+                        gridColor: tc.border,
+                        textTertiaryColor: tc.textTertiary,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
