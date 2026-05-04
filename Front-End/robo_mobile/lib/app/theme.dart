@@ -4,17 +4,22 @@ import 'package:flutter/material.dart';
 class WeRoboColors {
   WeRoboColors._();
 
-  // 주 색상 (Primary sky blue palette)
-  static const Color sky1 = Color(0xFFCFECF7);
-  static const Color sky2 = Color(0xFFA0D9EF);
-  static const Color sky3 = Color(0xFF62C1E5);
-  static const Color sky4 = Color(0xFF20A7DB);
-  static const Color sky5 = Color(0xFF1C96C5);
+  // Primary — Neon Carrot (#FE9337), main brand color (capstone 2026-05-04).
+  static const Color primary = Color(0xFFFE9337);
+  static const Color primaryDark = Color(0xFFE07A1F);    // 8% darker, pressed
+  static const Color primaryLight = Color(0xFFFFC091);   // = assetTier5
 
-  // Semantic aliases
-  static const Color primary = sky4;
-  static const Color primaryLight = sky2;
-  static const Color primaryDark = sky5;
+  // Legacy aliases retained for any stragglers; remove after Phase 1.
+  @Deprecated('Use primaryLight')
+  static const Color sky1 = primaryLight;
+  @Deprecated('Use primaryLight')
+  static const Color sky2 = primaryLight;
+  @Deprecated('Use primary')
+  static const Color sky3 = assetTier3;
+  @Deprecated('Use primary')
+  static const Color sky4 = primary;
+  @Deprecated('Use primaryDark')
+  static const Color sky5 = primaryDark;
 
   // 부 색상 (Cool-tinted Neutrals)
   static const Color white = Color(0xFFFFFFFF);
@@ -93,12 +98,12 @@ class WeRoboColors {
   static const double radiusFull = 9999;
 
   // Dot indicator
-  static const Color dotActive = sky4;
+  static const Color dotActive = primary;
   static const Color dotInactive = lightGray;
 
   // Interactive states
   static const double disabledOpacity = 0.4;
-  static const Color focusRing = Color(0x4D20A7DB); // sky4 at 30%
+  static const Color focusRing = Color(0x4DFE9337); // primary @ 30%
 }
 
 /// Spacing scale — base unit 4px, all multiples of 4.
