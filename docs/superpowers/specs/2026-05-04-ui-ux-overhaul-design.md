@@ -72,22 +72,25 @@ Tier-shared assets disambiguate via 1px donut segment gap and the asset name lis
 
 **New flow:** splash → welcome → login → frontier (single page) → 포트폴리오 비중 확인 (new screen) → home
 
-### 3.4 Efficient Frontier rework (PDF Section I.2.a-b)
-**Aspect ratio:** 1:1 → 2:1 horizontal (slope legibility on mobile)
-**Curve treatment:** smooth Bezier — replaces raw scatter ("인위적인 곡선 처리")
-**Dual-channel data:** graph for "find optimal point" interaction only; **dynamic asset weight list below the graph** is canonical for exact percentages, with animated `AnimatedSwitcher` numeric updates as the user drags
-**Tonal coloring:** asset chips/dots use 5-tier palette by character
+### 3.4 Efficient Frontier rework (PDF Section I.2.a-b + 2026-05-05 user notes)
+**Aspect ratio:** 1:1 → **1:3 horizontal (3:1 width:height)**, with 1:2/1:4 as acceptable fallbacks if 3:1 looks cramped on iPhone Mini-class viewports
+**Curve treatment:** **smooth idealized Bezier curve** — not precise data, the curve communicates concept ("정확한 위치보다는 시각적으로 이해 가능한 수준의 배치를 목표로 함")
+**Asset positioning bug fix:** currently 인프라 채권 is incorrectly leftmost; **현금성자산 must be leftmost, 신성장주 rightmost**. All 7 asset class labels arranged in fixed defensive→aggressive order along the curve, ignoring raw (vol, return) coords
+**Bubble removal:** **drop the bubble size-growth animation and the percentage labels on bubbles**. Fixed-radius bubbles only.
+**Below the chart:** **stacked horizontal bar (`AssetWeightBar`)** replacing the percentage list. Bar segments resize live as the user drags. No labels, no % text — segments communicate proportion visually. Order matches `AssetClass` enum (defensive left → aggressive right) so the visual gradient maps to risk.
+**Tonal coloring:** asset bubbles + bar segments use 5-tier orange palette
 **Keep:** dot-drag, plain-language caption ("이 곡선은…"), page-swipe-disabled-during-drag
 
 **Affected:**
 - [`onboarding/widgets/efficient_frontier_chart.dart`](../../../Front-End/robo_mobile/lib/screens/onboarding/widgets/efficient_frontier_chart.dart) (1,108 lines — biggest refactor target)
-- New widget: `asset_weight_list.dart` (shared with portfolio detail)
+- New widget: `asset_weight.dart` containing shared `AssetWeight` model + `AssetWeightBar` (frontier) + `AssetWeightList` (portfolio review)
+- Add `AssetClass.koLabel` extension in `theme.dart`
 
-### 3.5 포트폴리오 비중 확인 — new merged screen (PDF Section I.2.포트폴리오 비중 확인)
+### 3.5 포트폴리오 비중 확인 — new merged screen (PDF Section I.2.포트폴리오 비중 확인 + 2026-05-05 user notes)
 Replaces the deleted `comparison_screen.dart` + `confirmation_screen.dart`.
 
-**Layout:**
-- Top section: donut (left, ~40% width, ~180px diameter) + asset weight list (right, ~60%, scrollable)
+**Layout (revised 2026-05-05 to vertical):**
+- Top section: **donut on top (~240px diameter, full-size), asset list below (vertical stack)**. Side-by-side donut+list breaks on iPhone Mini-class viewports (375pt wide), so vertical wins.
 - Tab section: 포트폴리오 비교 (default) / 변동성 (secondary)
 - Time-series chart with 1주 / 3달 / 1년 / 5년 / 전체 selector — **default 3년**
 - 변동성 tab: portfolio σ overlaid on market σ (dual-line)
@@ -97,29 +100,19 @@ Replaces the deleted `comparison_screen.dart` + `confirmation_screen.dart`.
 **New file:** `lib/screens/onboarding/portfolio_review_screen.dart` (~400 lines)
 
 **Reused widgets:**
-- `donut_chart.dart` — accepts new `compact: true` mode for left placement
-- `asset_weight_list.dart` — shared with frontier
+- `donut_chart.dart` — refactored for dynamic `segments` parameter; full-size on portfolio review (compact mode reserved for future home tab)
+- `asset_weight.dart::AssetWeightList` — shared model with frontier's bar; this screen uses the list variant
 - `portfolio_charts.dart` — extract the comparison-chart widget for reuse
 
-### 3.6 Home tab dashboard rework (PDF Section I.2.홈)
-**Remove from [`home_tab.dart`](../../../Front-End/robo_mobile/lib/screens/home/home_tab.dart) (1,818 lines):**
-- 현재 자산 amount header (₩-figure block)
-- 입금 현황 card (최근 입금 / 예정 입금)
-- +입금하기 button
-- 정기 입금 button
+### 3.6 Home tab dashboard rework — **DEFERRED (2026-05-05)**
 
-**Add:**
-- **Real-time portfolio simulation graph** at top — shows live 수익률 over time (not static asset balance). Reuse the time-series chart widget from portfolio detail.
-- **포트폴리오 주요 이슈 알림 timeline** below graph — vertical feed of news / market warnings / algo signals. Each item: tonal dot (orange = active, gray = info) + timestamp + headline + expandable detail.
-- **Contribution tooltip** on graph tap — elevated card showing TOP-2 contributing assets (asset + 비중 × 수익률 = ₩) plus 2σ-outlier badge if applicable.
-
-**Keep:** 포트폴리오 구성 list (with %/₩ toggle), pie sector tap → ETF tickers, plain-language commentary, auto-rebalancing toggle.
-
-**Affected:**
-- [`home_tab.dart`](../../../Front-End/robo_mobile/lib/screens/home/home_tab.dart) — major rework
-- New widget: `realtime_simulation_graph.dart`
-- New widget: `issue_timeline.dart`
-- New widget: `contribution_tooltip.dart`
+> **🛑 Deferred from this MVP per user direction.** All notes under the 홈 section in the PDF are out of scope for this overhaul. The home tab keeps its existing structure and inherits only the Phase 1 theme reskin (orange/light surfaces, asset tonal palette).
+>
+> **Specifically deferred:** 현재 자산 amount removal, 입금 현황 card removal, real-time portfolio simulation graph, 포트폴리오 주요 이슈 알림 timeline, contribution tooltip on tap.
+>
+> **What ships in this MVP:** existing home tab layout, recolored. The `ContributionAnalysis` data model is added to `PortfolioState` (with the 신성장주 caveat flag) so the deferred rework can pick it up cleanly. The `AlertAnalytics` service is created and emits on alert-frequency change so we collect telemetry from launch.
+>
+> Re-scope in a follow-up project after MVP launch.
 
 ### 3.7 Alert / Digest system (PDF Section II)
 
@@ -139,10 +132,11 @@ Replaces the deleted `comparison_screen.dart` + `confirmation_screen.dart`.
 
 Rolling 60-day σ window. Portfolio σ uses correlation matrix.
 
-**Root-cause display (in contribution tooltip on home graph):**
+**Root-cause display (deferred with the home dashboard rework — model defined in this MVP for forward compat):**
 - TOP-2 contribution: 비중 × 수익률 sorted descending
 - 2σ-outlier badge: if any asset moved >2× its 60-day rolling σ
 - 신성장주 path: if anomaly fires while data validation pending, show "데이터 정합성 검토 중" caveat
+- For this MVP, `ContributionAnalysis` model (with `containsNewGrowth` flag) is added to `PortfolioState` but the tooltip widget isn't wired (Phase 4 deferred)
 
 **Existing infrastructure to restyle (no behavior change):**
 - [`home/digest_screen.dart`](../../../Front-End/robo_mobile/lib/screens/home/digest_screen.dart)
@@ -155,7 +149,7 @@ Rolling 60-day σ window. Portfolio σ uses correlation matrix.
 
 **신성장주 inclusion (J in scope):** include in alert calculations from launch. Add a "데이터 정합성 검토 중" caveat in the contribution tooltip when the asset triggers an alert. Backend ticket separate.
 
-**Post-launch tuning analytics:** record alert event payloads (σ band, opened?, dismissed?, acted-on?) for later threshold tuning. Add an `analytics_event` emit point in the alert handler.
+**Post-launch tuning analytics:** create `AlertAnalytics` service (in `lib/services/alert_analytics.dart`) emitting σ-band / interaction telemetry. In this MVP, wired to `setAlertFrequency` (preference change). Additional emission points (alert shown, opened, dismissed) will be wired when the deferred home dashboard rework lands.
 
 ## 4. Migration approach — Option 1 (theme-first sweep)
 
@@ -164,14 +158,14 @@ Proven by the existing token centralization in `theme.dart`. Phases are independ
 | Phase | Scope | Est. effort |
 |-------|-------|-------------|
 | 1 | Theme tokens + asset palette refactor (atomic flip — entire app recolors) | 1-2 days |
-| 2 | Efficient frontier rework (2:1 ratio + smooth curve + asset list) | 3-4 days |
-| 3 | New 포트폴리오 비중 확인 screen + delete old onboarding screens | 4-5 days |
-| 4 | Home tab dashboard rework (remove banking widgets, add simulation + timeline + tooltip) | 4-5 days |
-| 5 | Alert UI (settings selector + tooltip + nav badge + restyle digest pages) | 3-4 days |
+| 2 | Efficient frontier rework (1:3 ratio + smooth idealized curve + asset position fix + bar replaces list + bubble effects removed) | 4-5 days |
+| 3 | New 포트폴리오 비중 확인 screen (vertical donut+list) + delete old onboarding screens | 4-5 days |
+| 4 | ~~Home tab dashboard rework~~ — **deferred (2026-05-05)** | — |
+| 5 | Alert UI (settings selector + nav badge + analytics service + ContributionAnalysis model + restyle digest pages) | 2-3 days |
 | 6 | Polish + integration testing + dark-mode verification | 2-3 days |
-| | **Total** | **~17-23 days** (fits 24-day MVP window with thin buffer) |
+| | **Total** | **~13-18 days** (fits the 23-day MVP window with healthy buffer) |
 
-Each phase ends with: `flutter analyze` clean, `flutter test` passing, manual verification on iPhone 17 Pro simulator.
+Each phase ends with: `flutter analyze` clean, `flutter test` passing, manual verification on iPhone 17 Pro simulator. Phase 4 numbering is preserved in the plan for cross-reference clarity but is fully deferred — execution skips from end-of-Phase-3 to Phase 5.
 
 ## 5. Risks & mitigations
 
@@ -179,11 +173,11 @@ Each phase ends with: `flutter analyze` clean, `flutter test` passing, manual ve
 |------|------------|
 | Asset palette change breaks existing chart consumers | Phase 1 ships with `assetTonalPalette` alongside old `chartPalette` initially; second sub-PR removes the alias |
 | Onboarding cut breaks frontier-selection state propagation | Verify `OnboardingFrontierSelection` flow into the new `portfolio_review_screen` before deleting old screens |
-| Real-time simulation graph performance at 60fps | Pre-compute the simulation series; animate value display only (numbers ticking up, not full chart redraw) |
-| 신성장주 alerts firing on bad data | Caveat copy + backend feature flag to suppress 신성장주 triggers if data validation incomplete |
+| Frontier asset position fix breaks existing layout | Replace position computation entirely (defensive→aggressive enum order); raw (vol, return) coords ignored per user note "정확한 위치보다는 시각적으로 이해 가능한 수준" |
+| 1:3 aspect cramped on iPhone Mini-class viewports | Spec allows 1:2 / 1:3 / 1:4 range; engineer picks the best fit during Phase 2 Step 3 verification |
 | Tier-shared asset colors confuse users | 1px donut gap + asset name in legend; user-test in Phase 6 |
 | Light-mode default contradicts the original guideline doc | Documented decision in DESIGN.md decisions log; revisit if user testing surfaces issues |
-| 24-day window too tight if Phase 4 over-scopes | Phase 4 is the most variable — issue timeline can ship as a static skeleton in MVP, with backend feed wired post-launch |
+| Home dashboard deferral leaves alert tooltip incomplete | `ContributionAnalysis` model + `AlertAnalytics` service ship now so the deferred rework can pick up cleanly without rebuilding the data layer |
 
 ## 6. Acceptance criteria
 
@@ -191,12 +185,13 @@ Each phase ends with: `flutter analyze` clean, `flutter test` passing, manual ve
 - [ ] `flutter analyze` clean
 - [ ] All existing widget tests still pass
 - [ ] New flow: splash → welcome → login → frontier → 포트폴리오 비중 확인 → home (no detours through deleted screens)
-- [ ] Frontier: 2:1 aspect, smooth curve, asset list updates in real-time as dot drags, tonal coloring applied
-- [ ] 포트폴리오 비중 확인: donut left + list right, 비교 tab default, 변동성 tab dual-line, 3년 default range, pinch-zoom works
-- [ ] Home: no 총 자산 / 입금 현황 / +입금하기 / 정기 입금. Simulation graph at top. Issue timeline below. Tooltip on graph tap shows TOP-2 contribution + outlier badge.
-- [ ] Settings: 알림 빈도 selector with 자주/보통/중요할 때만 visible and persistent across app restarts
+- [ ] Frontier: **1:3 aspect**, smooth idealized curve, **7 asset bubbles in defensive→aggressive order** (현금성자산 leftmost, 신성장주 rightmost — bug fix verified), **no bubble grow animation, no % labels**, `AssetWeightBar` segments below resize live as dot drags
+- [ ] 포트폴리오 비중 확인: **donut on top, asset list below (vertical)**, 비교 tab default, 변동성 tab dual-line, 3년 default range, pinch-zoom works
+- [ ] Home tab: theme-reskinned only (full dashboard rework deferred to follow-up project)
+- [ ] Settings: 알림 빈도 selector with 자주 / 보통 / 중요할 때만 visible and persistent across app restarts
 - [ ] Bottom-nav 홈 tab shows unread-긴급-alert dot when unread 긴급 exists
-- [ ] 신성장주 caveat copy renders correctly in tooltip
+- [ ] `ContributionAnalysis` model defined in `PortfolioState` with 신성장주 caveat flag (tooltip widget itself deferred)
+- [ ] `AlertAnalytics` service present and emits on alert-frequency change
 - [ ] No screen exposes raw σ to the user
 
 ## 7. References

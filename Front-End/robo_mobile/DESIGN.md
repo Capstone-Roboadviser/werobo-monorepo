@@ -148,9 +148,11 @@ Focus ring is now orange-tinted (was sky-blue-tinted) at 30% alpha. Required for
 ## Component Vocabulary
 - **Cards:** 12px radius, `#FFFFFF` surface or `#F4F2F0` for inset. Subtle elevation. No border by default — content-first.
 - **Primary button:** 52px height, 12px radius, full-width. `#FE9337` fill, white text. Outline variant (`#FE9337` border) for secondary actions.
-- **Charts:** `CustomPaint` only (no charting libraries). Touch crosshairs for exploration. Smooth Bezier curves on the efficient frontier (no scatter). Real-time portfolio simulation line on home with tap-for-tooltip.
-- **Donut:** small-mode (left ~40% of width on portfolio detail) and full-mode (centered, used in legacy screens only). 1px gap between segments. Center label = portfolio name in small-mode, sector label in full-mode-on-tap.
-- **Asset weight list:** parallel-to-donut layout. Each row = tonal swatch + 자산군 name + ETF tickers (Gothic A1, secondary) + % (Google Sans Flex, primary). Sortable by weight.
+- **Charts:** `CustomPaint` only (no charting libraries). Touch crosshairs for exploration. Smooth idealized Bezier curves on the efficient frontier (no scatter, no raw-data plotting). Real-time portfolio simulation line on home (deferred from MVP) will support tap-for-tooltip.
+- **Donut:** full-mode (centered, used on the post-frontier portfolio review screen) and a future `compact: true` mode reserved for the deferred home dashboard. 1px gap between segments. Center label = portfolio name.
+- **Asset weight bar (frontier):** stacked horizontal bar with one colored segment per asset class, ordered defensive → aggressive (cash leftmost, 신성장주 rightmost). Segments use 5-tier orange palette. Resize live as the user drags the frontier dot. No labels, no % text.
+- **Asset weight list (portfolio review):** vertical layout below the donut. Each row = tonal swatch + 자산군 name + ETF tickers (Gothic A1, secondary) + % (Google Sans Flex, primary). Sortable by weight.
+- **Asset bubbles on frontier:** fixed-radius circles labeled with 자산군 name. **No size-growth animation, no % labels.** Position by `AssetClass` enum order along the curve, not raw (vol, return) coords.
 - **Stats card:** 3-column with hairline dividers. Optional subtitle for plain-language risk label.
 - **Issue timeline (new):** vertical feed on home tab. Each item: 8px tonal dot (orange = active alert, gray = info), timestamp (Gothic A1 caption), headline (Noto Sans KR body), expandable detail. Sorted newest first.
 - **Contribution tooltip (new):** elevated card on graph tap. Shows TOP-2 contributing assets (asset name + 비중 × 수익률 = ₩ figure) + optional 2σ-outlier badge. Dismiss on outside tap.
@@ -201,15 +203,17 @@ The questionnaire-based onboarding is **eliminated**. Risk preference is capture
 ## Interaction Patterns
 
 ### Efficient Frontier (signature interaction)
-- **Aspect ratio: 2:1 horizontal** (was 1:1). Wider chart shows the slope of the curve more legibly on mobile.
-- **Smooth Bezier curve** — replaces the raw scatter plot. The curve is an idealized representation of the optimal frontier; exact asset positions live in the asset list below.
-- **Dual-channel data presentation** ("데이터 표시 방식의 이원화"): the graph is an interaction surface for finding the optimal point; the **dynamic asset weight list below the graph** is the source of truth for exact percentages, with real-time numerical animation as the user drags.
-- **Tonal asset coloring** — each asset class gets its tier color from the 5-step palette, so portfolio character (defensive ↔ aggressive) is visible at a glance.
+- **Aspect ratio: 1:3 horizontal (3:1 width:height)** — was 1:1. Acceptable range 1:2 to 1:4 depending on viewport; 1:3 is the default. Wide aspect makes the curve slope legible on mobile.
+- **Smooth idealized curve** — replaces the raw scatter plot. Visual approximation, not data-precise. Goal is conceptual understanding, not coordinate accuracy ("정확한 위치보다는 시각적으로 이해 가능한 수준의 배치를 목표로 함").
+- **Asset positioning by enum order, not raw coords:** asset bubbles arranged left → right in `AssetClass` enum order (defensive → aggressive). 현금성자산 leftmost, 신성장주 rightmost. Fixed-radius bubbles only — **no size-growth animation, no % labels** on bubbles.
+- **Stacked bar below the graph** (not a list with %): `AssetWeightBar` widget shows asset proportions as colored segments. Segments resize live as the user drags the dot. Order also matches the AssetClass enum so the visual gradient reads as risk increasing left-to-right. No labels, no % text — segments communicate proportion visually.
+- **Tonal asset coloring** — each asset class gets its tier color from the 5-step orange palette, so portfolio character (defensive ↔ aggressive) is visible at a glance.
 - Page swipe disabled during drag to prevent gesture conflict.
 - Plain-language caption: "이 곡선은 같은 위험도에서 가장 높은 수익을 내는 조합을 보여줍니다".
 
 ### 포트폴리오 비중 확인 (post-frontier confirmation)
-- **Donut left + asset list right** parallel layout (donut ~40%, list ~60%, 16px gap). Donut shrinks to ~180px diameter so both columns fit comfortably.
+- **Donut on top + asset list below (vertical stack)** — decided 2026-05-05 over a side-by-side layout because horizontal arrangement breaks on iPhone Mini-class viewports (375pt wide).
+- Donut is full-size (~240px diameter), centered, anchors visual hierarchy. Asset list scrolls below within the same `SingleChildScrollView`.
 - **Tab order: 포트폴리오 비교 first (default)**, 변동성 second. Information priority follows the user's natural exploration flow (compare against market first, then drill into volatility).
 - **변동성 tab dual-line:** portfolio σ overlaid against market σ. Was single-line; now compares against the market.
 - **Default time range: 3년** (was 전체). Shorter recent window is more meaningful for most users.
@@ -309,6 +313,11 @@ Mobile-only Flutter app. "Responsive" = phone size variation.
 | **2026-05-04** | **Frontier 1:1 → 2:1 horizontal + smooth curve** | PDF — slope legibility on mobile + visual idealization vs raw scatter |
 | **2026-05-04** | **Alert system: σ-based, 3 levels, plain-language settings** | PDF Section II — rolling 60d σ, plain-language UX (자주/보통/중요할 때만) |
 | **2026-05-04** | **신성장주 included in alerts (J in scope)** | User decision — data integrity flagged as known risk with caveat copy |
+| **2026-05-05** | **Frontier aspect ratio refined: 1:3 horizontal default (range 1:2 to 1:4)** | User notes — 1:1 wastes vertical space; wide aspect makes slope legible on small screens |
+| **2026-05-05** | **Asset bubbles on frontier: fixed positions by enum order, no size-growth animation, no % labels** | User notes — "정확한 위치보다는 시각적으로 이해 가능한 수준" + bubble grow + % was visual noise. Fixes the bug where 인프라 채권 was incorrectly leftmost; cash now leftmost, 신성장주 rightmost. |
+| **2026-05-05** | **Frontier asset list → stacked bar (`AssetWeightBar`)** | User notes — "그래프 아래 percentage 방식에서 막대 그래프 방식으로 전환". Bar segments resize live; communicates proportion visually without labels. |
+| **2026-05-05** | **Portfolio review layout: side-by-side → vertical stack** | User notes — "왼쪽-오른쪽 배치는 아이폰 미니 같은 작은 화면에서 UI 문제 발생 가능성으로 인해 상하 배치로 결정". Donut on top, asset list below. |
+| **2026-05-05** | **Home dashboard rework deferred from MVP** | User direction — "defer all notes under 홈 section in the pdf". Home tab inherits Phase 1 reskin only; full rework moves to a follow-up project. `ContributionAnalysis` model and `AlertAnalytics` service ship now for forward-compat. |
 
 ## Competitive Positioning
 Researched 2026-04-09; refreshed 2026-05-04 with the orange direction.

@@ -526,22 +526,26 @@ git tag phase-1-theme
 
 ## Phase 2: Efficient Frontier Rework
 
-**Goal:** Convert the frontier chart to 2:1 horizontal aspect, replace scatter with a smooth Bezier curve, and add a dynamic asset weight list below that updates in real-time as the user drags the dot. Apply the tonal palette to asset chips.
+**Goal:** Convert the frontier chart from 1:1 to 1:3 horizontal aspect (height:width), replace scatter with a smooth idealized curve, **fix the asset positioning bug** (cash should be leftmost, growth rightmost — currently 인프라채권 is incorrectly leftmost), **remove the asset bubble size-growth animation and percentage labels**, and replace the asset weight list under the graph with a **stacked horizontal bar chart** whose segments resize live as the user drags the dot.
 
-### Task 2.1: Create `AssetWeightList` shared widget
+**Updated 2026-05-05 per user notes — supersedes original Phase 2 design.**
+
+### Task 2.1: Create shared `AssetWeight` model + `AssetWeightBar` widget
+
+The frontier uses a stacked bar (not a list); the portfolio review screen still uses a list (Phase 3 Task 3.2). Both consume the shared `AssetWeight` model defined here.
 
 **Files:**
-- Create: `lib/screens/onboarding/widgets/asset_weight_list.dart`
-- Create: `test/screens/onboarding/widgets/asset_weight_list_test.dart`
+- Create: `lib/screens/onboarding/widgets/asset_weight.dart` (model + AssetWeightBar)
+- Create: `test/screens/onboarding/widgets/asset_weight_bar_test.dart`
 
-- [ ] **Step 1: Write the widget skeleton**
+- [ ] **Step 1: Write the model and bar widget**
 
 ```dart
-// lib/screens/onboarding/widgets/asset_weight_list.dart
+// lib/screens/onboarding/widgets/asset_weight.dart
 import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 
-/// One row in the asset weight list.
+/// One asset class with its current weight in a portfolio.
 class AssetWeight {
   final AssetClass cls;
   final String label;       // e.g. "단기채권"
@@ -556,9 +560,59 @@ class AssetWeight {
   });
 }
 
-/// Shows asset name + tickers + animated % per row, sorted by weight desc.
-/// Used by the efficient frontier (real-time updates as user drags) and
-/// the portfolio review screen (right-column list).
+/// Stacked horizontal bar showing asset proportions.
+/// Used by the efficient frontier (segments resize live as user drags).
+/// No percentage labels — bar segments communicate proportion visually.
+/// Asset order follows AssetClass enum (defensive → aggressive: cash on
+/// the left, 신성장주 on the right) so the visual gradient maps to risk.
+class AssetWeightBar extends StatelessWidget {
+  final List<AssetWeight> assets;
+  final double height;
+
+  const AssetWeightBar({
+    super.key,
+    required this.assets,
+    this.height = 28,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Sort by AssetClass enum order, NOT by weight, so the leftmost
+    // segment is always the most defensive class (cash).
+    final ordered = [...assets]
+      ..sort((a, b) => a.cls.index.compareTo(b.cls.index));
+    final total = ordered.fold<double>(0, (s, a) => s + a.weight);
+    if (total <= 0) {
+      return SizedBox(height: height);
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(WeRoboColors.radiusS),
+      child: AnimatedSize(
+        duration: WeRoboMotion.short,
+        curve: WeRoboMotion.move,
+        child: SizedBox(
+          height: height,
+          child: Row(
+            children: [
+              for (final a in ordered)
+                Expanded(
+                  flex: ((a.weight / total) * 1000).round().clamp(1, 1000000),
+                  child: AnimatedContainer(
+                    duration: WeRoboMotion.short,
+                    color: WeRoboColors.assetColor(a.cls),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Vertical list view (name + tickers + animated %) — used by the
+/// portfolio review screen, not the frontier. Defined here to share the
+/// AssetWeight model and asset color lookup.
 class AssetWeightList extends StatelessWidget {
   final List<AssetWeight> assets;
   final bool compact;
@@ -643,39 +697,51 @@ class _AssetRow extends StatelessWidget {
 - [ ] **Step 2: Write widget tests**
 
 ```dart
-// test/screens/onboarding/widgets/asset_weight_list_test.dart
+// test/screens/onboarding/widgets/asset_weight_bar_test.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robo_mobile/app/theme.dart';
-import 'package:robo_mobile/screens/onboarding/widgets/asset_weight_list.dart';
+import 'package:robo_mobile/screens/onboarding/widgets/asset_weight.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
       theme: WeRoboTheme.light,
-      home: Scaffold(body: child),
+      home: Scaffold(body: SizedBox(width: 360, child: child)),
     );
 
 void main() {
-  testWidgets('renders one row per asset', (tester) async {
-    await tester.pumpWidget(_wrap(AssetWeightList(assets: const [
-      AssetWeight(cls: AssetClass.cash, label: '현금성자산', tickers: ['BIL'], weight: 0.30),
-      AssetWeight(cls: AssetClass.shortBond, label: '단기채권', tickers: ['BND'], weight: 0.30),
+  testWidgets('AssetWeightBar — segments ordered by AssetClass enum (defensive→aggressive)', (tester) async {
+    // Provide assets in random order; the bar must reorder cash → ... → growth.
+    await tester.pumpWidget(_wrap(const AssetWeightBar(assets: [
+      AssetWeight(cls: AssetClass.usGrowth, label: '미국성장주', tickers: [], weight: 0.10),
+      AssetWeight(cls: AssetClass.cash, label: '현금성자산', tickers: [], weight: 0.50),
+      AssetWeight(cls: AssetClass.shortBond, label: '단기채권', tickers: [], weight: 0.40),
     ])));
-    expect(find.text('현금성자산'), findsOneWidget);
-    expect(find.text('단기채권'), findsOneWidget);
+    final containers = tester.widgetList<AnimatedContainer>(find.byType(AnimatedContainer));
+    final colors = containers.map((c) => (c.decoration as BoxDecoration?)?.color ?? c.color).toList();
+    // Leftmost segment must be cash tier (#FFC091).
+    expect(colors.first, WeRoboColors.assetTier5);
+    // Rightmost segment must be growth tier (#FE9337).
+    expect(colors.last, WeRoboColors.assetTier1);
   });
 
-  testWidgets('sorts by weight descending', (tester) async {
-    await tester.pumpWidget(_wrap(AssetWeightList(assets: const [
+  testWidgets('AssetWeightBar — empty/zero weights renders an empty fixed-height SizedBox', (tester) async {
+    await tester.pumpWidget(_wrap(const AssetWeightBar(assets: [])));
+    expect(find.byType(SizedBox), findsWidgets);
+  });
+
+  testWidgets('AssetWeightList — sorts by weight desc and formats %', (tester) async {
+    await tester.pumpWidget(_wrap(const AssetWeightList(assets: [
       AssetWeight(cls: AssetClass.cash, label: 'A', tickers: [], weight: 0.10),
       AssetWeight(cls: AssetClass.usGrowth, label: 'B', tickers: [], weight: 0.50),
     ])));
     final aPos = tester.getTopLeft(find.text('A')).dy;
     final bPos = tester.getTopLeft(find.text('B')).dy;
     expect(bPos, lessThan(aPos)); // B (higher weight) appears first
+    expect(find.text('50.00%'), findsOneWidget);
   });
 
-  testWidgets('formats weight as XX.XX%', (tester) async {
-    await tester.pumpWidget(_wrap(AssetWeightList(assets: const [
+  testWidgets('AssetWeightList — formats weight as XX.XX%', (tester) async {
+    await tester.pumpWidget(_wrap(const AssetWeightList(assets: [
       AssetWeight(cls: AssetClass.cash, label: '현금', tickers: [], weight: 0.2998),
     ])));
     expect(find.text('29.98%'), findsOneWidget);
@@ -683,25 +749,27 @@ void main() {
 }
 ```
 
-- [ ] **Step 3: Run tests, expect FAIL on import**
+- [ ] **Step 3: Run tests**
 
 ```bash
-flutter test test/screens/onboarding/widgets/asset_weight_list_test.dart
+flutter test test/screens/onboarding/widgets/asset_weight_bar_test.dart
 ```
 
-Expected: PASS once the widget file is in place. If FAIL, address compilation errors before continuing.
+Expected: PASS.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add lib/screens/onboarding/widgets/asset_weight_list.dart \
-        test/screens/onboarding/widgets/asset_weight_list_test.dart
-git commit -m "Add AssetWeightList shared widget"
+git add lib/screens/onboarding/widgets/asset_weight.dart \
+        test/screens/onboarding/widgets/asset_weight_bar_test.dart
+git commit -m "Add AssetWeight model + AssetWeightBar/List widgets"
 ```
 
 ---
 
-### Task 2.2: Refactor frontier chart to 2:1 horizontal aspect
+### Task 2.2: Refactor frontier chart to 1:3 horizontal aspect (3:1 width:height)
+
+Per the 2026-05-05 user notes, target ratio is **1:3 (height:width)** — i.e. the chart is 3× wider than tall. This is more horizontal than the original 2:1 plan; it's needed for the curve slope to read clearly on small screens.
 
 **Files:**
 - Modify: `lib/screens/onboarding/widgets/efficient_frontier_chart.dart`
@@ -714,13 +782,13 @@ grep -n "AspectRatio\|height:\|width:" lib/screens/onboarding/widgets/efficient_
 
 Find the wrapper that determines the chart's aspect ratio (likely an `AspectRatio(aspectRatio: 1.0, ...)` or fixed height).
 
-- [ ] **Step 2: Wrap the chart body in `AspectRatio(aspectRatio: 2.0, ...)`**
+- [ ] **Step 2: Wrap the chart body in `AspectRatio(aspectRatio: 3.0, ...)`**
 
 Locate the outer `LayoutBuilder` or `SizedBox` and wrap the chart contents:
 
 ```dart
 return AspectRatio(
-  aspectRatio: 2.0, // 2:1 horizontal per PDF Section I.2.a
+  aspectRatio: 3.0, // 1:3 height:width per 2026-05-05 user notes
   child: LayoutBuilder(
     builder: (context, constraints) {
       // ... existing CustomPaint chart body ...
@@ -729,7 +797,9 @@ return AspectRatio(
 );
 ```
 
-- [ ] **Step 3: Run the app, verify the chart is wider than tall**
+If 3.0 looks cramped on the iPhone Mini-class viewport during Step 3 verification, fall back to 2.5 or 2.0; if it looks too thin, push to 4.0. The user gave 1:2 / 1:3 / 1:4 as the acceptable range.
+
+- [ ] **Step 3: Run the app, verify the chart is much wider than tall**
 
 ```bash
 rsync -av --delete --exclude='build/' --exclude='.dart_tool/' \
@@ -738,44 +808,50 @@ rsync -av --delete --exclude='build/' --exclude='.dart_tool/' \
 cd /Users/eugenehong/Developer/robo_mobile && flutter run -d 6BFFDF4C-A1E8-4031-8883-6C660465972B
 ```
 
-Navigate to the frontier screen. Confirm chart is ~2× wider than tall and the curve slope is more legible.
+Navigate to the frontier screen. Confirm chart is ~3× wider than tall and the curve slope is clearly visible.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git commit -am "Frontier chart aspect ratio 1:1 → 2:1 horizontal"
+git commit -am "Frontier chart aspect ratio 1:1 → 1:3 horizontal"
 ```
 
 ---
 
-### Task 2.3: Replace scatter plot with smooth Bezier curve
+### Task 2.3: Smooth idealized curve, fix asset positioning, remove bubble effects
+
+This task bundles four sub-changes that all touch the same painter:
+1. Replace the scatter plot with a single smooth idealized curve (not raw data — a visual approximation)
+2. Fix the asset position bug — currently 인프라 채권 is incorrectly leftmost; cash should be leftmost, 신성장주 rightmost
+3. Remove the asset bubble size-growth animation
+4. Remove percentage labels from the asset bubbles
 
 **Files:**
 - Modify: `lib/screens/onboarding/widgets/efficient_frontier_chart.dart`
 
-- [ ] **Step 1: Locate the existing scatter draw**
+- [ ] **Step 1: Locate the existing scatter draw and bubble code**
 
 ```bash
-grep -n "drawCircle\|drawPoints\|scatter" lib/screens/onboarding/widgets/efficient_frontier_chart.dart | head
+grep -nE "drawCircle|drawPoints|scatter|TextPainter|bubble" lib/screens/onboarding/widgets/efficient_frontier_chart.dart | head -30
 ```
 
-The current implementation likely renders many `drawCircle` calls per data point.
+Note line ranges for: per-point scatter dots, per-asset bubble draws, bubble size animation, percentage TextPainter calls.
 
-- [ ] **Step 2: Add a Bezier path builder**
+- [ ] **Step 2: Add a Bezier path builder for the idealized curve**
 
-Inside the painter class, add a helper that converts the frontier sample points into a smooth `Path`:
+Inside the painter class, add a helper. The key change from raw data: we **don't** plot exact computed (vol, return) coordinates — we sample, smooth, and let the curve communicate the concept rather than the precise geometry.
 
 ```dart
-/// Smooths a set of (vol, ret) points into a monotone-X cubic Bezier
-/// approximating the efficient frontier curve.
+/// Smooths a sparse set of (vol, ret) anchor points into a monotone-X
+/// cubic Bezier approximating the efficient frontier curve. The result
+/// is intentionally idealized (not raw scatter) — the curve communicates
+/// "lower vol = lower return, higher vol = higher return" visually.
 Path _buildFrontierPath(List<Offset> points, Size size) {
   if (points.isEmpty) return Path();
   final path = Path()..moveTo(points.first.dx, points.first.dy);
   for (var i = 0; i < points.length - 1; i++) {
     final p0 = points[i];
     final p1 = points[i + 1];
-    // Control points at 1/3 and 2/3 between consecutive points,
-    // pulled along the local slope for monotone-X smoothing.
     final c1 = Offset(p0.dx + (p1.dx - p0.dx) / 3, p0.dy);
     final c2 = Offset(p0.dx + 2 * (p1.dx - p0.dx) / 3, p1.dy);
     path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, p1.dx, p1.dy);
@@ -784,9 +860,11 @@ Path _buildFrontierPath(List<Offset> points, Size size) {
 }
 ```
 
+If the existing data has too many points or is jittery, sub-sample down to ~8-12 anchor points before passing in. The user explicitly said "정확한 위치보다는 시각적으로 이해 가능한 수준의 배치를 목표로 함" — target visual understanding, not precision.
+
 - [ ] **Step 3: Replace the scatter loop with a single curve stroke**
 
-Replace the per-point `drawCircle` loop in `paint()` with:
+Replace the per-point `drawCircle` loop in `paint()`:
 
 ```dart
 final curvePath = _buildFrontierPath(screenPoints, size);
@@ -799,9 +877,68 @@ final curvePaint = Paint()
 canvas.drawPath(curvePath, curvePaint);
 ```
 
-Keep the asset bubble overlays — they convey weight visually. Do not draw individual frontier dots anymore.
+- [ ] **Step 4: Fix the asset bubble positions — defensive (cash) at left, aggressive (신성장주) at right**
 
-- [ ] **Step 4: Run the app, verify smooth curve**
+The current bug is that asset bubbles use raw (vol, return) coords, but those coords are wrong / inconsistent and put 인프라 채권 leftmost. Replace the per-asset position computation with **fixed normalized positions in `AssetClass` enum order** along the curve:
+
+```dart
+/// Returns the (x, y) in chart coords for an asset class label, mapped
+/// monotonically along the curve from defensive (left) to aggressive (right).
+/// The exact (vol, return) is intentionally ignored — labels are placed for
+/// visual order, not data precision (per 2026-05-05 user notes).
+Offset _assetAnchor(AssetClass cls, List<Offset> curvePoints) {
+  // 7 classes → 7 evenly-spaced anchors along the curve.
+  // index 0 (cash) → curvePoints[0] (leftmost)
+  // index 6 (newGrowth) → curvePoints.last (rightmost)
+  final i = cls.index;
+  final n = AssetClass.values.length - 1;
+  final t = i / n; // 0.0 to 1.0
+  final pos = (t * (curvePoints.length - 1)).round();
+  return curvePoints[pos];
+}
+```
+
+Then in the bubble draw loop, iterate `AssetClass.values` in order and draw a small fixed-radius circle (no growth animation, no % label) at `_assetAnchor(cls, screenPoints)`:
+
+```dart
+for (final cls in AssetClass.values) {
+  final anchor = _assetAnchor(cls, screenPoints);
+  final color = WeRoboColors.assetColor(cls);
+  // Fixed radius — NO size-growth animation per 2026-05-05 user notes.
+  canvas.drawCircle(anchor, 7.0, Paint()..color = color);
+  // Asset name label only (NO percentage — % is removed per user notes).
+  // The bar widget below the chart shows proportions.
+  _drawLabel(canvas, anchor, cls.koLabel);
+}
+```
+
+Add `koLabel` getter on `AssetClass` (in `lib/app/theme.dart`):
+
+```dart
+extension AssetClassLabel on AssetClass {
+  String get koLabel => switch (this) {
+        AssetClass.cash => '현금성자산',
+        AssetClass.shortBond => '단기채권',
+        AssetClass.infraBond => '인프라채권',
+        AssetClass.gold => '금',
+        AssetClass.usValue => '미국가치주',
+        AssetClass.usGrowth => '미국성장주',
+        AssetClass.newGrowth => '신성장주',
+      };
+}
+```
+
+If a `_drawLabel` helper doesn't exist, write it as a thin TextPainter wrapper that renders Noto Sans KR caption text near the anchor without overlap (you may need to offset by `(0, -16)` so the label sits above the bubble).
+
+- [ ] **Step 5: Remove all references to bubble size-growth animation and % labels**
+
+```bash
+grep -nE "bubble.*Animation|sizeGrowth|TextPainter.*%" lib/screens/onboarding/widgets/efficient_frontier_chart.dart
+```
+
+Remove any `AnimationController` driving bubble radius, any `lerp` between small/large radii, and any TextPainter call that renders a `%` string.
+
+- [ ] **Step 6: Hot-restart, verify**
 
 ```bash
 rsync -av --delete --exclude='build/' --exclude='.dart_tool/' \
@@ -810,22 +947,27 @@ rsync -av --delete --exclude='build/' --exclude='.dart_tool/' \
 cd /Users/eugenehong/Developer/robo_mobile && flutter hot-restart
 ```
 
-Navigate to frontier. Confirm: smooth orange curve, asset bubbles overlaid, no scatter dots.
+Navigate to frontier. Verify:
+- Smooth orange curve, no scatter dots
+- 7 asset bubbles in defensive→aggressive order: 현금성자산 leftmost, 신성장주 rightmost
+- No bubble size animation when transitioning
+- No % text on bubbles
+- Bubbles use orange tonal palette (cash = lightest, growth = darkest)
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git commit -am "Replace frontier scatter with smooth Bezier curve"
+git commit -am "Idealize frontier curve, fix asset order, remove bubble grow + %"
 ```
 
 ---
 
-### Task 2.4: Wire `AssetWeightList` to dot drag state
+### Task 2.4: Wire `AssetWeightBar` to dot drag state
 
 **Files:**
 - Modify: `lib/screens/onboarding/onboarding_screen.dart`
 
-- [ ] **Step 1: Add `_currentAssets` state derived from `_selectedDotT`**
+- [ ] **Step 1: Add `_assetsAtT` derived from `_selectedDotT`**
 
 In `_OnboardingScreenState`, add a method that converts the current frontier selection to a list of `AssetWeight`:
 
@@ -833,10 +975,7 @@ In `_OnboardingScreenState`, add a method that converts the current frontier sel
 List<AssetWeight> _assetsAtT(double t) {
   final selection = _frontierSelection;
   if (selection == null) return const [];
-  // Adjust this mapping to match your actual data shape — it likely comes
-  // from the MobileFrontierPreviewResponse fetched during initState.
-  // The expected shape is `weights: List<double>` indexed by AssetClass order.
-  final weights = selection.weightsAt(t); // method to add or wire up
+  final weights = selection.weightsAt(t);
   return [
     AssetWeight(cls: AssetClass.cash,      label: '현금성자산', tickers: const ['BIL', 'VCSH', 'BSV'], weight: weights[AssetClass.cash.index]),
     AssetWeight(cls: AssetClass.shortBond, label: '단기채권',   tickers: const ['BND', 'AGG', 'LQD'], weight: weights[AssetClass.shortBond.index]),
@@ -855,35 +994,37 @@ List<AssetWeight> _assetsAtT(double t) {
 
 Either way, the signature stays `List<double> weightsAt(double t)` returning a 7-element list indexed by `AssetClass.values.indexOf(cls)`. The implementation looks up the closest sample index given `t ∈ [0, 1]`.
 
-- [ ] **Step 2: Render `AssetWeightList` below the chart**
+- [ ] **Step 2: Render `AssetWeightBar` below the chart**
 
 In the `build()` method of the frontier page, after the `EfficientFrontierChart`, add:
 
 ```dart
-const SizedBox(height: 24),
+const SizedBox(height: 16),
 Padding(
   padding: const EdgeInsets.symmetric(horizontal: 24),
-  child: AssetWeightList(assets: _assetsAtT(_selectedDotT)),
+  child: AssetWeightBar(assets: _assetsAtT(_selectedDotT)),
 ),
 ```
 
+The bar lives directly under the chart with 16px gap. No labels, no percentages — segments communicate proportion visually. The user said "그래프 아래 percentage 방식에서 막대 그래프 방식으로 전환".
+
 - [ ] **Step 3: Trigger rebuild on drag**
 
-Wherever `_selectedDotT` is updated (likely a `setState((){ _selectedDotT = newT; })` in the drag callback), confirm `setState` is called — otherwise the list won't update. Add a comment:
+Wherever `_selectedDotT` is updated (likely `setState((){ _selectedDotT = newT; })` in the drag callback), confirm `setState` is called. Add a comment:
 
 ```dart
-// Drag updates _selectedDotT → setState → AssetWeightList re-renders with
-// AnimatedSwitcher for smooth % numeric transitions.
+// Drag updates _selectedDotT → setState → AssetWeightBar re-renders.
+// Each segment's flex ratio animates smoothly via AnimatedContainer.
 ```
 
 - [ ] **Step 4: Hot-restart and drag the dot**
 
-Run the app, navigate to frontier, drag the dot. Confirm: percentages animate, sort order updates as weights change.
+Run the app, navigate to frontier, drag the dot. Confirm: bar segments resize smoothly as weights shift. Cash segment shrinks as you drag right (toward aggressive); growth segment grows.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git commit -am "Wire AssetWeightList to frontier dot drag"
+git commit -am "Wire AssetWeightBar to frontier dot drag"
 ```
 
 ---
@@ -898,9 +1039,16 @@ cd /Users/eugenehong/Developer/robo_mobile && flutter analyze && flutter test
 
 Expected: pass.
 
-- [ ] **Step 2: Capture frontier screenshots**
+- [ ] **Step 2: Capture frontier screenshots at three drag positions**
 
-Manually navigate to the frontier screen at three drag positions (left, middle, right) and screenshot. Compare against the PDF page-2 mockup — should match the new 2:1 horizontal layout with smooth curve and live asset list.
+Manually navigate to the frontier screen, drag the dot to three positions (left = defensive, middle = balanced, right = aggressive), and screenshot each. Verify against the 2026-05-05 user notes:
+
+- [ ] Chart aspect ~3× wider than tall (1:3 height:width)
+- [ ] Smooth orange curve, no scatter dots
+- [ ] 현금성자산 leftmost, 신성장주 rightmost (bug fix verified)
+- [ ] Asset bubbles fixed-radius, no growth animation, no % labels
+- [ ] Bar below chart resizes live as user drags
+- [ ] All asset colors are orange tones (no rainbow, no blue residue)
 
 - [ ] **Step 3: Tag Phase 2 complete**
 
@@ -912,7 +1060,7 @@ git tag phase-2-frontier
 
 ## Phase 3: Portfolio Review Screen + Onboarding Cut
 
-**Goal:** Replace the obsolete onboarding tail (`result_screen.dart`, `comparison_screen.dart`, `confirmation_screen.dart`) with a single new `portfolio_review_screen.dart` that follows the PDF page-5 layout: donut on left, asset list on right, comparison tab default, volatility-vs-market tab secondary, 3-year default time range with pinch-zoom.
+**Goal:** Replace the obsolete onboarding tail (`result_screen.dart`, `comparison_screen.dart`, `confirmation_screen.dart`) with a single new `portfolio_review_screen.dart`. Layout updated 2026-05-05: **donut stacked above the asset list (vertical)** instead of side-by-side — left/right layout breaks on iPhone Mini-class viewports per user direction. Comparison tab is default, volatility-vs-market tab is secondary, 3-year default time range with pinch-zoom.
 
 ### Task 3.1: Refactor `DonutChart` to accept dynamic segments and compact mode
 
@@ -1106,12 +1254,12 @@ git commit -m "Refactor DonutChart for dynamic segments + compact mode"
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../app/portfolio_state.dart';
-import 'widgets/asset_weight_list.dart';
+import 'widgets/asset_weight.dart'; // shared model + AssetWeightList
 import 'widgets/donut_chart.dart';
 import 'frontier_selection_resolver.dart';
 
-/// Post-frontier confirmation screen. Layout per PDF Section I.2.포트폴리오 비중 확인:
-///   - Donut left ~40%, asset list right ~60%
+/// Post-frontier confirmation screen. Layout per 2026-05-05 user notes:
+///   - Donut stacked above the asset list (vertical, small-screen friendly)
 ///   - Tabs: 포트폴리오 비교 (default) / 변동성 (secondary)
 ///   - 3-year default time range with pinch-zoom
 ///   - Bottom CTA: 투자 확정
@@ -1174,7 +1322,7 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 16),
-              _DonutAndListRow(segments: _segments, assets: _assets),
+              _DonutAndListColumn(segments: _segments, assets: _assets),
               const SizedBox(height: 24),
               _CompareVolatilityTabs(controller: _tabController, selection: widget.selection),
               const SizedBox(height: 100), // bottom CTA clearance
@@ -1200,31 +1348,30 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
   }
 }
 
-class _DonutAndListRow extends StatelessWidget {
+/// Vertical layout: donut on top (~240px), asset list below.
+/// Decided 2026-05-05 over a side-by-side layout because horizontal
+/// arrangement breaks on iPhone Mini-class viewports (375pt wide).
+class _DonutAndListColumn extends StatelessWidget {
   final List<DonutSegment> segments;
   final List<AssetWeight> assets;
-  const _DonutAndListRow({required this.segments, required this.assets});
+  const _DonutAndListColumn({required this.segments, required this.assets});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(
-            flex: 4,
+          Center(
             child: DonutChart(
               segments: segments,
               centerLabel: '포트폴리오\n비중',
-              compact: true,
+              compact: false, // full size — top of screen, anchors hierarchy
             ),
           ),
-          const SizedBox(width: 16),
-          Expanded(
-            flex: 6,
-            child: AssetWeightList(assets: assets, compact: true),
-          ),
+          const SizedBox(height: 20),
+          AssetWeightList(assets: assets),
         ],
       ),
     );
@@ -1752,9 +1899,21 @@ git tag phase-3-portfolio-review
 
 ---
 
-## Phase 4: Home Dashboard Rework
+## Phase 4: Home Dashboard Rework — **DEFERRED (2026-05-05)**
 
-**Goal:** Strip generic-banking widgets (총 자산 amount, 입금 현황 card) from the home tab and replace with a real-time portfolio simulation graph + 포트폴리오 주요 이슈 알림 timeline + contribution tooltip on graph tap. Keep the 포트폴리오 구성 list.
+> **🛑 DEFERRED.** All notes under the 홈 section in the PDF are out of scope for this MVP per user direction (2026-05-05). The home tab keeps its current structure and simply inherits the Phase 1 theme reskin (orange/light surfaces, asset tonal palette).
+>
+> Tasks 4.1–4.6 below are preserved as a reference for the next iteration. **Do not execute them in this plan.** Skip directly to Phase 5 after Phase 3 ships.
+>
+> Specifically deferred:
+> - Removing 현재 자산 / 입금 현황 / +입금하기 / 정기 입금 widgets
+> - Adding the realtime portfolio simulation graph at top
+> - Adding the 포트폴리오 주요 이슈 알림 timeline
+> - Adding the contribution tooltip on graph tap
+>
+> What ships in this MVP for the home tab: theme-reskinned existing layout. Dashboard rework is a follow-up project.
+
+**Original goal (deferred):** Strip generic-banking widgets (총 자산 amount, 입금 현황 card) from the home tab and replace with a real-time portfolio simulation graph + 포트폴리오 주요 이슈 알림 timeline + contribution tooltip on graph tap. Keep the 포트폴리오 구성 list.
 
 ### Task 4.1: Strip banking widgets from `home_tab.dart`
 
@@ -2904,98 +3063,161 @@ git commit -am "Add unread 긴급-alert dot badge on 홈 tab"
 
 ---
 
-### Task 5.5: Wire 신성장주 caveat path
+### Task 5.5: 신성장주 caveat — partially deferred
 
-The caveat is already implemented in `ContributionTooltip` (Task 4.3). The remaining work is ensuring `contributionAnalysisAt` returns `containsNewGrowth: true` when the analysis includes the 신성장주 asset class.
+The contribution tooltip lives in deferred Phase 4. This task scopes down to a small preparation pass: define the `ContributionAnalysis` model in `PortfolioState` so the data shape is locked in, with the caveat handling documented for whoever lands Phase 4 later.
 
 **Files:**
 - Modify: `lib/app/portfolio_state.dart`
 
-- [ ] **Step 1: Update `ContributionAnalysis` factory**
+- [ ] **Step 1: Define the model + stub method**
 
-When `contributionAnalysisAt` is wired to a real backend response, the resolution logic should set `containsNewGrowth = topEntries.any((e) => e.cls == AssetClass.newGrowth)`. Document this in a comment so the backend implementer doesn't miss it:
+Add to `lib/app/portfolio_state.dart`:
 
 ```dart
-ContributionAnalysis? contributionAnalysisAt(DateTime time) {
-  // BACKEND TODO: when wiring to MobileBackendApi.fetchContributionAnalysis,
-  // set containsNewGrowth = topEntries.any((e) => e.cls == AssetClass.newGrowth)
-  // so the ContributionTooltip surfaces the "데이터 정합성 검토 중" caveat.
-  return null;
+/// Top-N contribution analysis for a moment in the portfolio simulation.
+/// Consumed by Phase 4 (deferred) ContributionTooltip widget.
+class ContributionAnalysis {
+  final List<ContributionEntry> topEntries; // sorted by |krwImpact| desc
+  final bool containsNewGrowth;             // drives "데이터 정합성 검토 중" caveat
+
+  const ContributionAnalysis({
+    required this.topEntries,
+    required this.containsNewGrowth,
+  });
+
+  factory ContributionAnalysis.fromEntries(List<ContributionEntry> entries) {
+    final top = [...entries]
+      ..sort((a, b) => b.krwImpact.abs().compareTo(a.krwImpact.abs()));
+    final top2 = top.take(2).toList();
+    return ContributionAnalysis(
+      topEntries: top2,
+      containsNewGrowth: top2.any((e) => e.cls == AssetClass.newGrowth),
+    );
+  }
+}
+
+class ContributionEntry {
+  final AssetClass cls;
+  final String label;
+  final double weight;
+  final double assetReturn;
+  final double krwImpact;
+  final bool isOutlier;
+
+  const ContributionEntry({
+    required this.cls,
+    required this.label,
+    required this.weight,
+    required this.assetReturn,
+    required this.krwImpact,
+    this.isOutlier = false,
+  });
 }
 ```
 
-- [ ] **Step 2: Commit**
+The model lives in `portfolio_state.dart` (not a Phase-4 widget file) so it's available for the eventual home tab rework without that being a blocker.
+
+- [ ] **Step 2: Run analyzer**
 
 ```bash
-git commit -am "Document 신성장주 caveat wiring in contributionAnalysisAt"
+flutter analyze
+```
+
+Expected: no errors.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git commit -am "Define ContributionAnalysis model with 신성장주 caveat flag"
 ```
 
 ---
 
-### Task 5.6: Add post-launch tuning analytics emit hook
+### Task 5.6: Add post-launch tuning analytics service (no wiring)
+
+The wiring point (graph tap) lives in deferred Phase 4. This task creates the standalone `AlertAnalytics` service so backend integration can land independently.
 
 **Files:**
-- Modify: `lib/app/portfolio_state.dart`
 - Create: `lib/services/alert_analytics.dart`
 
-- [ ] **Step 1: Define the analytics interface**
+- [ ] **Step 1: Create the service**
 
 ```dart
 // lib/services/alert_analytics.dart
+import 'dart:developer' as dev;
 import '../app/portfolio_state.dart';
 
 /// Records alert-event payloads so σ thresholds can be tuned post-launch
 /// (DESIGN.md §Alert / Digest System → Post-launch tuning analytics).
+///
+/// Wiring into the home tab graph tap is part of the deferred Phase 4
+/// home dashboard rework. Until then, this service is callable from
+/// settings (e.g., when user changes 알림 빈도) for early telemetry.
 class AlertAnalytics {
   AlertAnalytics._();
   static final instance = AlertAnalytics._();
 
-  /// Called when an alert is shown. Sigma is the σ band that triggered it.
+  /// Called when an alert is shown to the user.
   Future<void> recordShown({
     required double sigma,
     required AlertFrequency userPreference,
   }) async {
     // Backend TODO: POST /api/v1/analytics/alert-shown
-    // For now, emit a debug log to dart:developer.
-    // ignore: avoid_print
-    print('[alert] shown sigma=$sigma pref=${userPreference.name}');
+    dev.log('[alert] shown sigma=$sigma pref=${userPreference.name}',
+        name: 'AlertAnalytics');
   }
 
-  /// Called when the user opens or dismisses an alert.
+  /// Called when the user opens, dismisses, or acts on an alert.
   Future<void> recordInteraction({
     required double sigma,
     required AlertInteraction kind,
   }) async {
-    // ignore: avoid_print
-    print('[alert] $kind sigma=$sigma');
+    dev.log('[alert] ${kind.name} sigma=$sigma', name: 'AlertAnalytics');
+  }
+
+  /// Called when the user changes alert frequency in settings.
+  /// Useful telemetry independent of Phase 4 wiring.
+  Future<void> recordPreferenceChange(AlertFrequency f) async {
+    dev.log('[alert] preference=${f.name}', name: 'AlertAnalytics');
   }
 }
 
 enum AlertInteraction { opened, dismissed, actedOn }
 ```
 
-- [ ] **Step 2: Wire shown event in `home_tab.dart`**
+- [ ] **Step 2: Wire `recordPreferenceChange` from the settings selector**
 
-When `_HomeTopSectionState._handlePointTap` shows the tooltip:
+In `lib/app/portfolio_state.dart`, update `setAlertFrequency` to emit:
 
 ```dart
-if (_tooltipTop1 != null) {
-  AlertAnalytics.instance.recordShown(
-    sigma: point.sigma ?? 0.0,
-    userPreference: state.alertFrequency,
-  );
+import '../services/alert_analytics.dart';
+// ...
+Future<void> setAlertFrequency(AlertFrequency f) async {
+  if (_alertFrequency == f) return;
+  _alertFrequency = f;
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setString('alertFrequency', f.name);
+  await AlertAnalytics.instance.recordPreferenceChange(f);
+  notifyListeners();
 }
 ```
 
-This requires `SimulationPoint.sigma` — add a nullable `sigma` field in `realtime_simulation_graph.dart` (`final double? sigma;` in `SimulationPoint`).
+Phase 4 (deferred) will additionally wire `recordShown` and `recordInteraction` from the contribution tooltip when it's built.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Run tests**
 
 ```bash
-git add lib/services/alert_analytics.dart \
-        lib/screens/home/widgets/realtime_simulation_graph.dart \
-        lib/screens/home/home_tab.dart
-git commit -m "Add post-launch alert-tuning analytics emit hook"
+flutter test
+```
+
+Expected: pass (the existing `setAlertFrequency` test should still pass — the analytics call is fire-and-forget).
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add lib/services/alert_analytics.dart lib/app/portfolio_state.dart
+git commit -m "Add AlertAnalytics service + emit on preference change"
 ```
 
 ---
@@ -3123,10 +3345,10 @@ cd /Users/eugenehong/Developer/robo_mobile && flutter run -d 6BFFDF4C-A1E8-4031-
 | 1 | Splash | Orange logo, warm background |
 | 2 | Welcome | Light background, orange CTA |
 | 3 | Login | Form readable, orange CTA, preview-mode link visible |
-| 4 | Frontier (single page) | 2:1 horizontal chart, smooth orange curve, asset list updates as dot drags |
-| 5 | Portfolio review | Donut left + asset list right, 비교 tab default, 변동성 tab dual-line, 3년 default range, pinch-zoom works |
-| 6 | Home | Real-time simulation graph at top, issue timeline below, no 총 자산 / 입금 widgets |
-| 7 | 포트폴리오 tab | Restyled portfolio composition, donut + list parallel layout |
+| 4 | Frontier (single page) | 1:3 horizontal chart, smooth orange curve, 7 asset bubbles in defensive→aggressive order, no bubble grow / no % labels, bar segments resize as dot drags |
+| 5 | Portfolio review | **Donut on top, asset list below (vertical)**, 비교 tab default, 변동성 tab dual-line, 3년 default range, pinch-zoom works |
+| 6 | Home (theme-reskinned only — full rework deferred) | Existing layout intact (총 자산, 입금 현황 still present) but in orange/light theme, no sky-blue residue |
+| 7 | 포트폴리오 tab | Restyled portfolio composition |
 | 8 | 커뮤니티 tab | Restyled, no critical regressions |
 | 9 | 설정 tab | 알림 빈도 segmented control visible, persists across restart |
 | 10 | Digest screen | Orange theme, no blue residue |
@@ -3169,12 +3391,13 @@ From the spec ([§6](../specs/2026-05-04-ui-ux-overhaul-design.md#6-acceptance-c
 - [ ] `flutter analyze` clean
 - [ ] All existing widget tests still pass
 - [ ] New flow: splash → welcome → login → frontier → 포트폴리오 비중 확인 → home (no detours through deleted screens)
-- [ ] Frontier: 2:1 aspect, smooth curve, asset list updates in real-time as dot drags, tonal coloring applied
-- [ ] 포트폴리오 비중 확인: donut left + list right, 비교 tab default, 변동성 tab dual-line, 3년 default range, pinch-zoom works
-- [ ] Home: no 총 자산 / 입금 현황 / +입금하기 / 정기 입금. Simulation graph at top. Issue timeline below. Tooltip on graph tap shows TOP-2 contribution + outlier badge.
+- [ ] Frontier: **1:3 aspect**, smooth curve, **7 asset bubbles in defensive→aggressive order** (cash leftmost, 신성장주 rightmost — bug fix verified), **no bubble grow animation, no % labels**, bar segments below resize as dot drags
+- [ ] 포트폴리오 비중 확인: **donut on top + list below (vertical)**, 비교 tab default, 변동성 tab dual-line, 3년 default range, pinch-zoom works
+- [ ] Home: theme-reskinned only — full dashboard rework deferred per 2026-05-05 user direction
 - [ ] Settings: 알림 빈도 selector with 자주 / 보통 / 중요할 때만 visible and persistent across app restarts
 - [ ] Bottom-nav 홈 tab shows unread-긴급-alert dot when unread 긴급 exists
-- [ ] 신성장주 caveat copy renders correctly in tooltip
+- [ ] `ContributionAnalysis` model present in PortfolioState with 신성장주 caveat flag (tooltip itself deferred)
+- [ ] `AlertAnalytics` service present and wired to alert-frequency change
 - [ ] No screen exposes raw σ to the user
 
 - [ ] **Final commit + tag**
