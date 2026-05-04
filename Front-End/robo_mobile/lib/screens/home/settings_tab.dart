@@ -5,6 +5,7 @@ import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../app/theme_state.dart';
 import '../onboarding/splash_screen.dart';
+import 'widgets/alert_frequency_selector.dart';
 
 class SettingsTab extends StatelessWidget {
   const SettingsTab({super.key});
@@ -41,6 +42,34 @@ class SettingsTab extends StatelessWidget {
           children: [
             const SizedBox(height: 20),
             Text('설정', style: WeRoboTypography.heading2.themed(context)),
+            const SizedBox(height: 24),
+
+            // 알림 빈도 — segmented selector binds to PortfolioState.alertFrequency
+            ListenableBuilder(
+              listenable: portfolioState,
+              builder: (context, _) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      '알림 빈도',
+                      style:
+                          WeRoboTypography.heading3.themed(context),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '시장이 흔들릴 때 얼마나 자주 알려드릴지 골라주세요',
+                      style: WeRoboTypography.caption.themed(context),
+                    ),
+                    const SizedBox(height: 12),
+                    AlertFrequencySelector(
+                      value: portfolioState.alertFrequency,
+                      onChanged: (f) => portfolioState.setAlertFrequency(f),
+                    ),
+                  ],
+                );
+              },
+            ),
             const SizedBox(height: 24),
 
             // Dark mode toggle
