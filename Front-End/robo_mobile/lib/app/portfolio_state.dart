@@ -13,6 +13,26 @@ import '../screens/onboarding/onboarding_screen.dart'
     show OnboardingFrontierSelection;
 import '../services/mobile_backend_api.dart';
 
+/// User-facing alert frequency setting. Maps internally to a σ threshold.
+/// Plain-language labels never expose σ to the user.
+enum AlertFrequency {
+  often, // 자주 받기 → 1.5σ → ~월 2-3회
+  normal, // 보통 → 2.0σ → ~월 1-2회 (default)
+  important; // 중요할 때만 → 3.0σ → ~분기 1회
+
+  double get sigmaThreshold => switch (this) {
+        AlertFrequency.often => 1.5,
+        AlertFrequency.normal => 2.0,
+        AlertFrequency.important => 3.0,
+      };
+
+  String get koLabel => switch (this) {
+        AlertFrequency.often => '자주 받기',
+        AlertFrequency.normal => '보통',
+        AlertFrequency.important => '중요할 때만',
+      };
+}
+
 /// App-level state holder for auth, onboarding bootstrap state, and portfolio data.
 class PortfolioState extends ChangeNotifier {
   static const String _authSessionStorageKey = 'werobo.auth_session';
@@ -21,6 +41,7 @@ class PortfolioState extends ChangeNotifier {
   static const int _frontierPreviewStorageVersion = 3;
   static const String _digestSeenDateKey = 'werobo.digest_seen_date';
   static const String _welcomeBannerSeenKey = 'werobo.welcome_banner_seen';
+  static const String _alertFrequencyKey = 'alertFrequency';
 
   InvestmentType _type = InvestmentType.balanced;
   MobileRecommendationResponse? _recommendation;
@@ -37,6 +58,7 @@ class PortfolioState extends ChangeNotifier {
   String? _digestSeenDate;
   bool _welcomeBannerSeen = false;
   MobileDigestResponse? _weeklyDigest;
+  AlertFrequency _alertFrequency = AlertFrequency.normal;
 
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
@@ -62,6 +84,7 @@ class PortfolioState extends ChangeNotifier {
   bool get welcomeBannerSeen => _welcomeBannerSeen;
   MobileDigestResponse? get weeklyDigest => _weeklyDigest;
   bool get isWeeklyDigestAvailable => _weeklyDigest?.available == true;
+  AlertFrequency get alertFrequency => _alertFrequency;
 
   bool get isLoggedIn => _authSession != null;
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
@@ -181,6 +204,26 @@ class PortfolioState extends ChangeNotifier {
     await _restorePortfolioBootstrapFromPrefs(prefs);
     _digestSeenDate = prefs.getString(_digestSeenDateKey);
     _welcomeBannerSeen = prefs.getBool(_welcomeBannerSeenKey) ?? false;
+    await _restoreAlertFrequency();
+  }
+
+  Future<void> setAlertFrequency(AlertFrequency f) async {
+    if (_alertFrequency == f) return;
+    _alertFrequency = f;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_alertFrequencyKey, f.name);
+    notifyListeners();
+  }
+
+  Future<void> _restoreAlertFrequency() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_alertFrequencyKey);
+    if (raw != null) {
+      _alertFrequency = AlertFrequency.values.firstWhere(
+        (f) => f.name == raw,
+        orElse: () => AlertFrequency.normal,
+      );
+    }
   }
 
   Future<bool> validateAuthSession() async {
