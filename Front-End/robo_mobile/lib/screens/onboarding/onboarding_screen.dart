@@ -7,9 +7,7 @@ import '../../services/mobile_backend_api.dart';
 import 'frontier_selection_resolver.dart';
 import 'portfolio_review_screen.dart';
 import 'widgets/asset_weight.dart';
-import 'widgets/donut_chart.dart';
 import 'widgets/efficient_frontier_chart.dart';
-import 'widgets/page_indicator.dart';
 
 const _frontierPreviewSamplePoints = 301;
 
@@ -84,25 +82,19 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
-  bool _chartDragging = false;
   double _selectedDotT = 0.45;
   OnboardingFrontierSelection? _frontierSelection;
   late final Future<MobileFrontierPreviewResponse?> _frontierPreviewFuture;
-
-  static const int _pageCount = 2;
 
   @override
   void initState() {
     super.initState();
     logPageEnter('OnboardingScreen');
-    logPageEnter('onboarding step 1/2');
     _frontierPreviewFuture = _fetchFrontierPreview();
   }
 
-  /// Start fetching the frontier preview while the user is still on page 1
-  /// so it's cached by the time they swipe to the frontier page.
+  /// Kick off the frontier preview fetch immediately so the chart can swap
+  /// from the embedded sample data to the live curve as soon as it lands.
   Future<MobileFrontierPreviewResponse?> _fetchFrontierPreview() async {
     try {
       final preview = await MobileBackendApi.instance.fetchFrontierPreview(
@@ -123,19 +115,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     logPageExit('OnboardingScreen');
-    _pageController.dispose();
     super.dispose();
-  }
-
-  void _nextPage() {
-    if (_currentPage < _pageCount - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _goToReview();
-    }
   }
 
   void _goToReview() {
@@ -199,55 +179,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Page content
             Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: _chartDragging
-                    ? const NeverScrollableScrollPhysics()
-                    : null,
-                onPageChanged: (index) {
-                  setState(() => _currentPage = index);
-                  logPageEnter('onboarding step ${index + 1}/2');
+              child: _FrontierBody(
+                asOfDate: widget.asOfDate,
+                frontierPreviewFuture: _frontierPreviewFuture,
+                onPositionChanged: (t) {
+                  _selectedDotT = t;
                 },
-                children: [
-                  const _ServiceDescriptionPage(),
-                  _EfficientFrontierPage(
-                    asOfDate: widget.asOfDate,
-                    frontierPreviewFuture: _frontierPreviewFuture,
-                    onDragStateChanged: (dragging) {
-                      setState(() => _chartDragging = dragging);
-                    },
-                    onPositionChanged: (t) {
-                      _selectedDotT = t;
-                    },
-                    onFrontierSelectionChanged: (selection) {
-                      _frontierSelection = selection;
-                    },
-                  ),
-                ],
+                onFrontierSelectionChanged: (selection) {
+                  _frontierSelection = selection;
+                },
               ),
             ),
-
-            // Page indicator
-            Padding(
-              padding: const EdgeInsets.only(bottom: 28),
-              child: PageIndicator(
-                count: _pageCount,
-                current: _currentPage,
-              ),
-            ),
-
-            // Bottom button
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _nextPage,
-                  child: Text(
-                    _currentPage == 0 ? '시작하기' : '다음',
-                  ),
+                  onPressed: _goToReview,
+                  child: const Text('다음'),
                 ),
               ),
             ),
@@ -258,128 +208,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-/// Page 1: Service description with donut chart
-class _ServiceDescriptionPage extends StatelessWidget {
-  const _ServiceDescriptionPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(flex: 1),
-          Text(
-            '데이터가 찾아주는\n최적의 포트폴리오',
-            style: WeRoboTypography.heading2.themed(context),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '글로벌 자산에 분산 투자하여\n안정적인 수익을 추구합니다',
-            style: WeRoboTypography.bodySmall.themed(context),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
-          const DonutChart(
-            segments: [
-              DonutSegment(weight: 0.45, color: WeRoboColors.assetTier4),
-              DonutSegment(weight: 0.40, color: WeRoboColors.assetTier5),
-              DonutSegment(weight: 0.15, color: WeRoboColors.assetTier3),
-            ],
-            centerLabel: '45%',
-          ),
-          const SizedBox(height: 32),
-          // Legend
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _LegendItem(
-                color: WeRoboColors.assetTier4,
-                label: '미국 주식',
-                value: '45%',
-              ),
-              const SizedBox(width: 20),
-              _LegendItem(
-                color: WeRoboColors.assetTier5,
-                label: '미국 채권',
-                value: '40%',
-              ),
-              const SizedBox(width: 20),
-              _LegendItem(
-                color: WeRoboColors.assetTier3,
-                label: '금',
-                value: '15%',
-              ),
-            ],
-          ),
-          const Spacer(flex: 2),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-  final String value;
-
-  const _LegendItem({
-    required this.color,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Column(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: WeRoboTypography.caption.themed(context)),
-        Text(
-          value,
-          style: WeRoboTypography.bodySmall.copyWith(
-            fontWeight: FontWeight.w600,
-            color: tc.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Page 2: Efficient Frontier explanation
-class _EfficientFrontierPage extends StatefulWidget {
+/// Frontier interaction body. Renders an embedded preview synchronously,
+/// then hot-swaps to the live API response and any cached preview that
+/// arrives via `PortfolioStateProvider`.
+class _FrontierBody extends StatefulWidget {
   final DateTime? asOfDate;
   final Future<MobileFrontierPreviewResponse?> frontierPreviewFuture;
-  final ValueChanged<bool>? onDragStateChanged;
   final ValueChanged<double>? onPositionChanged;
   final ValueChanged<OnboardingFrontierSelection?>? onFrontierSelectionChanged;
 
-  const _EfficientFrontierPage({
+  const _FrontierBody({
     this.asOfDate,
     required this.frontierPreviewFuture,
-    this.onDragStateChanged,
     this.onPositionChanged,
     this.onFrontierSelectionChanged,
   });
 
   @override
-  State<_EfficientFrontierPage> createState() => _EfficientFrontierPageState();
+  State<_FrontierBody> createState() => _FrontierBodyState();
 }
 
-class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
+class _FrontierBodyState extends State<_FrontierBody> {
   static const double _initialDotT = 0.45;
 
   /// Embedded frontier preview so the real curve renders instantly.
@@ -873,7 +722,6 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
           EfficientFrontierChart(
             previewPoints: _preview.points,
             selectedPreviewPosition: _selectedPreviewPosition,
-            onDragStateChanged: widget.onDragStateChanged,
             onPreviewPointChanged: _handlePreviewPositionChanged,
             onPositionChanged: (t) {
               // Drag updates _dotT → setState → AssetWeightBar re-renders.
