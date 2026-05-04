@@ -1,4 +1,58 @@
+import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
+import 'onboarding_screen.dart' show OnboardingFrontierSelection;
+import 'widgets/asset_weight.dart';
+
+/// Converts a frontier selection to the list of asset weights at the
+/// selection's currently chosen point. Shared between the frontier screen
+/// (live drag updates) and the portfolio review screen (snapshot at confirm).
+List<AssetWeight> resolveAssetWeights(OnboardingFrontierSelection selection) {
+  final weights = selection.weightsAt(selection.normalizedT);
+  return [
+    AssetWeight(
+      cls: AssetClass.cash,
+      label: '현금성자산',
+      tickers: const ['BIL', 'VCSH', 'BSV'],
+      weight: weights[AssetClass.cash.index],
+    ),
+    AssetWeight(
+      cls: AssetClass.shortBond,
+      label: '단기채권',
+      tickers: const ['BND', 'AGG', 'LQD'],
+      weight: weights[AssetClass.shortBond.index],
+    ),
+    AssetWeight(
+      cls: AssetClass.infraBond,
+      label: '인프라채권',
+      tickers: const ['NFRA', 'GII', 'IGF'],
+      weight: weights[AssetClass.infraBond.index],
+    ),
+    AssetWeight(
+      cls: AssetClass.gold,
+      label: '금',
+      tickers: const ['DBC', 'SGOL', 'GLD'],
+      weight: weights[AssetClass.gold.index],
+    ),
+    AssetWeight(
+      cls: AssetClass.usValue,
+      label: '미국가치주',
+      tickers: const ['MGV', 'VBR', 'VTV'],
+      weight: weights[AssetClass.usValue.index],
+    ),
+    AssetWeight(
+      cls: AssetClass.usGrowth,
+      label: '미국성장주',
+      tickers: const ['VBK', 'MGK', 'VUG'],
+      weight: weights[AssetClass.usGrowth.index],
+    ),
+    AssetWeight(
+      cls: AssetClass.newGrowth,
+      label: '신성장주',
+      tickers: const [],
+      weight: weights[AssetClass.newGrowth.index],
+    ),
+  ];
+}
 
 class OnboardingSelectionRequest {
   final int? pointIndex;

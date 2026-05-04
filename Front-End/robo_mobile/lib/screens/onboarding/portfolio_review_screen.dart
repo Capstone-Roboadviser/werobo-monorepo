@@ -1,0 +1,153 @@
+import 'package:flutter/material.dart';
+import '../../app/theme.dart';
+import 'frontier_selection_resolver.dart';
+import 'onboarding_screen.dart' show OnboardingFrontierSelection;
+import 'widgets/asset_weight.dart';
+import 'widgets/donut_chart.dart';
+
+/// Post-frontier confirmation screen. Layout per 2026-05-05 user notes:
+///   - Donut stacked above the asset list (vertical, small-screen friendly)
+///   - Tabs: 포트폴리오 비교 (default) / 변동성 (secondary) [filled in 3.3/3.4]
+///   - 3-year default time range with pinch-zoom [filled in 3.5]
+///   - Bottom CTA: 투자 확정 [wired in 3.6]
+class PortfolioReviewScreen extends StatefulWidget {
+  final OnboardingFrontierSelection selection;
+
+  const PortfolioReviewScreen({super.key, required this.selection});
+
+  @override
+  State<PortfolioReviewScreen> createState() => _PortfolioReviewScreenState();
+}
+
+class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  late final List<AssetWeight> _assets;
+  late final List<DonutSegment> _segments;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _assets = resolveAssetWeights(widget.selection);
+    _segments = _assets
+        .map((a) => DonutSegment(
+              weight: a.weight,
+              color: WeRoboColors.assetColor(a.cls),
+            ))
+        .toList();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: tc.background,
+        elevation: 0,
+        leading: const BackButton(),
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: WeRoboColors.primaryLight,
+              borderRadius: BorderRadius.circular(WeRoboColors.radiusS),
+            ),
+            child: Text(
+              '선택 포트폴리오',
+              style: WeRoboTypography.caption
+                  .copyWith(color: WeRoboColors.primaryDark),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text('포트폴리오 상세',
+              style: WeRoboTypography.heading3.themed(context)),
+        ]),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 16),
+              _DonutAndListColumn(segments: _segments, assets: _assets),
+              const SizedBox(height: 24),
+              _CompareVolatilityTabs(
+                controller: _tabController,
+                selection: widget.selection,
+              ),
+              const SizedBox(height: 100), // bottom CTA clearance
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: WeRoboSpacing.bottomButton,
+          child: ElevatedButton(
+            onPressed: () => _confirmInvestment(context),
+            child: const Text('투자 확정'),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _confirmInvestment(BuildContext context) {
+    // Task 3.6 will wire navigation to home + persist the selection.
+    // For now, pop back so the screen is at least navigable end-to-end.
+    Navigator.of(context).pop();
+  }
+}
+
+/// Vertical layout: donut on top (~240px), asset list below.
+/// Decided 2026-05-05 over a side-by-side layout because horizontal
+/// arrangement breaks on iPhone Mini-class viewports (375pt wide).
+class _DonutAndListColumn extends StatelessWidget {
+  final List<DonutSegment> segments;
+  final List<AssetWeight> assets;
+  const _DonutAndListColumn({required this.segments, required this.assets});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: DonutChart(
+              segments: segments,
+              centerLabel: '포트폴리오\n비중',
+              compact: false, // full size — top of screen, anchors hierarchy
+            ),
+          ),
+          const SizedBox(height: 20),
+          AssetWeightList(assets: assets),
+        ],
+      ),
+    );
+  }
+}
+
+/// Placeholder for the tabs section. Tasks 3.3 / 3.4 fill this in.
+class _CompareVolatilityTabs extends StatelessWidget {
+  final TabController controller;
+  final OnboardingFrontierSelection selection;
+  const _CompareVolatilityTabs({
+    required this.controller,
+    required this.selection,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(height: 320, child: Placeholder());
+  }
+}
