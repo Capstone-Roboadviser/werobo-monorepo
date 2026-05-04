@@ -279,7 +279,14 @@ class _ServiceDescriptionPage extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 32),
-          const DonutChart(),
+          const DonutChart(
+            segments: [
+              DonutSegment(weight: 0.45, color: WeRoboColors.assetTier4),
+              DonutSegment(weight: 0.40, color: WeRoboColors.assetTier5),
+              DonutSegment(weight: 0.15, color: WeRoboColors.assetTier3),
+            ],
+            centerLabel: '45%',
+          ),
           const SizedBox(height: 32),
           // Legend
           Row(

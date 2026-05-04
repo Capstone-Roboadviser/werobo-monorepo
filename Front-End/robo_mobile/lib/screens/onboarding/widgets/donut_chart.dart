@@ -2,8 +2,23 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 
+class DonutSegment {
+  final double weight; // 0.0–1.0
+  final Color color;
+  const DonutSegment({required this.weight, required this.color});
+}
+
 class DonutChart extends StatefulWidget {
-  const DonutChart({super.key});
+  final List<DonutSegment> segments;
+  final String centerLabel;
+  final bool compact;
+
+  const DonutChart({
+    super.key,
+    required this.segments,
+    required this.centerLabel,
+    this.compact = false,
+  });
 
   @override
   State<DonutChart> createState() => _DonutChartState();
@@ -35,72 +50,57 @@ class _DonutChartState extends State<DonutChart>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final size = widget.compact ? 180.0 : 240.0;
     return AnimatedBuilder(
       animation: _animation,
-      builder: (context, _) {
-        return SizedBox(
-          width: 200,
-          height: 200,
-          child: CustomPaint(
-            painter: _DonutPainter(
-              progress: _animation.value,
-              segments: const [
-                _Segment(0.45, WeRoboColors.assetTier4),
-                _Segment(0.40, WeRoboColors.assetTier5),
-                _Segment(0.15, WeRoboColors.assetTier3),
-              ],
-            ),
-            child: Center(
-              child: Text(
-                '${(45 * _animation.value).toInt()}%',
-                style: WeRoboTypography.number.copyWith(
-                  color: WeRoboColors.assetTier4,
-                ),
-              ),
+      builder: (context, _) => SizedBox(
+        width: size,
+        height: size,
+        child: CustomPaint(
+          painter: _DonutPainter(
+            progress: _animation.value,
+            segments: widget.segments,
+            borderColor: tc.surface,
+          ),
+          child: Center(
+            child: Text(
+              widget.centerLabel,
+              style: WeRoboTypography.heading3.themed(context),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }
 
-class _Segment {
-  final double value;
-  final Color color;
-  const _Segment(this.value, this.color);
-}
-
 class _DonutPainter extends CustomPainter {
   final double progress;
-  final List<_Segment> segments;
+  final List<DonutSegment> segments;
+  final Color borderColor;
 
-  _DonutPainter({required this.progress, required this.segments});
+  _DonutPainter({
+    required this.progress,
+    required this.segments,
+    required this.borderColor,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 16;
     const strokeWidth = 28.0;
+    const gapAngle = 0.012; // ~1px gap at typical radius
 
-    // Background ring
-    final bgPaint = Paint()
-      ..color = WeRoboColors.dotInactive.withValues(alpha: 0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-    canvas.drawCircle(center, radius, bgPaint);
-
-    // Segments
     double startAngle = -pi / 2;
     for (final segment in segments) {
-      final sweepAngle = 2 * pi * segment.value * progress;
+      final sweepAngle = 2 * pi * segment.weight * progress - gapAngle;
       final paint = Paint()
         ..color = segment.color
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round;
-
+        ..strokeCap = StrokeCap.butt; // butt + gap = clean separator
       canvas.drawArc(
         Rect.fromCircle(center: center, radius: radius),
         startAngle,
@@ -108,12 +108,12 @@ class _DonutPainter extends CustomPainter {
         false,
         paint,
       );
-      startAngle += 2 * pi * segment.value * progress;
+      startAngle += 2 * pi * segment.weight * progress;
     }
   }
 
   @override
-  bool shouldRepaint(covariant _DonutPainter oldDelegate) {
-    return oldDelegate.progress != progress;
-  }
+  bool shouldRepaint(covariant _DonutPainter oldDelegate) =>
+      oldDelegate.progress != progress ||
+      oldDelegate.segments != segments;
 }
