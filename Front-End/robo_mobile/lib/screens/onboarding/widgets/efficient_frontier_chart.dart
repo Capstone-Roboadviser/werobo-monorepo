@@ -128,63 +128,17 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
     return t.clamp(0.0, 1.0);
   }
 
+  /// Map a touch x position to the nearest preview index. Since both
+  /// the curve and the dot live in t-space (`_tToPoint`), we just go
+  /// touch_x → t (`_screenToT`) → nearest index. No need to compute
+  /// per-point offsets in real (vol, return) space anymore.
   int _nearestPreviewPosition(Offset localPos, double w, double h) {
     final previewPoints = widget.previewPoints!;
-    final minVolatility = previewPoints.map((p) => p.volatility).reduce(min);
-    final maxVolatility = previewPoints.map((p) => p.volatility).reduce(max);
-    final minExpectedReturn =
-        previewPoints.map((p) => p.expectedReturn).reduce(min);
-    final maxExpectedReturn =
-        previewPoints.map((p) => p.expectedReturn).reduce(max);
-
-    var nearestIndex = 0;
-    var nearestDistance = double.infinity;
-    for (int i = 0; i < previewPoints.length; i++) {
-      final point = _previewPointToOffset(
-        previewPoints[i],
-        w,
-        h,
-        minVolatility,
-        maxVolatility,
-        minExpectedReturn,
-        maxExpectedReturn,
-      );
-      final distance = (localPos - point).distanceSquared;
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        nearestIndex = i;
-      }
-    }
-    return nearestIndex;
-  }
-
-  Offset _previewPointToOffset(
-    MobileFrontierPreviewPoint point,
-    double w,
-    double h,
-    double minVolatility,
-    double maxVolatility,
-    double minExpectedReturn,
-    double maxExpectedReturn,
-  ) {
-    const leftPaddingRatio = 0.15;
-    const rightPaddingRatio = 0.85;
-    const topPaddingRatio = 0.12;
-    const bottomPaddingRatio = 0.86;
-
-    final normalizedVolatility = maxVolatility == minVolatility
-        ? 0.5
-        : (point.volatility - minVolatility) / (maxVolatility - minVolatility);
-    final normalizedExpectedReturn = maxExpectedReturn == minExpectedReturn
-        ? 0.5
-        : (point.expectedReturn - minExpectedReturn) /
-            (maxExpectedReturn - minExpectedReturn);
-
-    final x = w * leftPaddingRatio +
-        (w * (rightPaddingRatio - leftPaddingRatio)) * normalizedVolatility;
-    final y = h * bottomPaddingRatio -
-        (h * (bottomPaddingRatio - topPaddingRatio)) * normalizedExpectedReturn;
-    return Offset(x, y);
+    if (previewPoints.length <= 1) return 0;
+    final t = _screenToT(localPos, w, h);
+    return (t * (previewPoints.length - 1))
+        .round()
+        .clamp(0, previewPoints.length - 1);
   }
 
   @override
@@ -203,21 +157,20 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
             return GestureDetector(
               onPanStart: (details) {
                 if (_controller.isCompleted) {
-                  late final Offset dotPos;
+                  // Selected dot lives on the curve at t_selected.
+                  // Same math as the painter's `_selectedDotT()`.
+                  late final double tSelected;
                   if (_hasPreviewPoints) {
                     final pp = widget.previewPoints!;
-                    dotPos = _previewPointToOffset(
-                      pp[widget.selectedPreviewPosition ?? pp.length ~/ 2],
-                      w,
-                      h,
-                      pp.map((p) => p.volatility).reduce(min),
-                      pp.map((p) => p.volatility).reduce(max),
-                      pp.map((p) => p.expectedReturn).reduce(min),
-                      pp.map((p) => p.expectedReturn).reduce(max),
-                    );
+                    final pos =
+                        widget.selectedPreviewPosition ?? pp.length ~/ 2;
+                    tSelected = pp.length <= 1
+                        ? 0.5
+                        : pos.clamp(0, pp.length - 1) / (pp.length - 1);
                   } else {
-                    dotPos = _tToPoint(_dotT, w, h);
+                    tSelected = _dotT;
                   }
+                  final dotPos = _tToPoint(tSelected, w, h);
                   if ((details.localPosition - dotPos).distance < 60) {
                     setState(() => _isDragging = true);
                     widget.onDragStateChanged?.call(true);
@@ -302,140 +255,30 @@ class _FrontierPainter extends CustomPainter {
     return Offset(x, y);
   }
 
-  /// Smooths a sparse set of (vol, ret) anchor points into a monotone-X
-  /// cubic Bezier approximating the efficient frontier curve. The result
-  /// is intentionally idealized (not raw scatter) — the curve communicates
-  /// "lower vol = lower return, higher vol = higher return" visually.
-  Path _buildFrontierPath(List<Offset> points, Size size) {
-    if (points.isEmpty) return Path();
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 0; i < points.length - 1; i++) {
-      final p0 = points[i];
-      final p1 = points[i + 1];
-      final c1 = Offset(p0.dx + (p1.dx - p0.dx) / 3, p0.dy);
-      final c2 = Offset(p0.dx + 2 * (p1.dx - p0.dx) / 3, p1.dy);
-      path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, p1.dx, p1.dy);
-    }
-    return path;
-  }
-
-  /// Approximate per-asset (vol, return) coordinates used when no
-  /// real per-asset stats are available from the backend. Numbers come
-  /// from typical risk/return profiles for each asset class. TODO:
-  /// replace with backend-provided per-asset stats once
-  /// `MobileFrontierPreviewResponse` exposes them — currently only
-  /// per-point sector weights are returned. Documented as approximate.
-  static const Map<AssetClass, Offset> _assetApproxCoords = {
-    AssetClass.cash: Offset(0.02, 0.04),
-    AssetClass.shortBond: Offset(0.05, 0.05),
-    AssetClass.infraBond: Offset(0.10, 0.08),
-    AssetClass.gold: Offset(0.18, 0.07),
-    AssetClass.usValue: Offset(0.18, 0.10),
-    AssetClass.usGrowth: Offset(0.25, 0.13),
-    // newGrowth is intentionally placed off the typical visible
-    // range — its real volatility is far higher than the rest of
-    // the universe, so we anchor it visually at the right edge.
-    AssetClass.newGrowth: Offset(0.40, 0.18),
+  /// Fixed t position along the idealized frontier for each asset
+  /// class, ordered defensive → aggressive. Each asset gets a unique
+  /// slot so bubbles don't overlap each other, and the values are
+  /// spaced wider than label width to keep the labels readable.
+  ///
+  /// We don't have backend per-asset stats, and the user has accepted
+  /// approximate placement — this trades scientific accuracy for
+  /// visual cleanliness, matching the textbook efficient-frontier
+  /// presentation the user referenced (smooth curve + clean labels).
+  static const Map<AssetClass, double> _assetT = {
+    AssetClass.cash: 0.00,
+    AssetClass.shortBond: 0.18,
+    AssetClass.infraBond: 0.35,
+    AssetClass.gold: 0.50,
+    AssetClass.usValue: 0.65,
+    AssetClass.usGrowth: 0.85,
+    AssetClass.newGrowth: 1.00,
   };
 
-  /// Returns the screen-space anchor for an asset bubble. Uses the real
-  /// (vol, return) → screen mapping helper so bubbles sit at the
-  /// asset's actual risk/return position relative to the frontier.
-  /// Falls back gracefully when no preview data is available.
-  Offset _assetAnchor(
-    AssetClass cls,
-    Size size,
-    double minVolatility,
-    double maxVolatility,
-    double minExpectedReturn,
-    double maxExpectedReturn,
-  ) {
-    final coord = _assetApproxCoords[cls]!;
-    return _coordToScreen(
-      coord.dx,
-      coord.dy,
-      size.width,
-      size.height,
-      minVolatility,
-      maxVolatility,
-      minExpectedReturn,
-      maxExpectedReturn,
-    );
-  }
-
-  /// Maps an arbitrary (volatility, expectedReturn) pair to screen
-  /// coords using the same padding ratios as `_previewPointToOffset`,
-  /// then clamps to the visible canvas so off-range bubbles (notably
-  /// 신성장주) stay near the chart edge instead of disappearing.
-  Offset _coordToScreen(
-    double volatility,
-    double expectedReturn,
-    double w,
-    double h,
-    double minVolatility,
-    double maxVolatility,
-    double minExpectedReturn,
-    double maxExpectedReturn,
-  ) {
-    const leftPaddingRatio = 0.15;
-    const rightPaddingRatio = 0.85;
-    const topPaddingRatio = 0.12;
-    const bottomPaddingRatio = 0.86;
-
-    final normalizedVolatility = maxVolatility == minVolatility
-        ? 0.5
-        : ((volatility - minVolatility) / (maxVolatility - minVolatility))
-            .clamp(0.0, 1.0);
-    final normalizedExpectedReturn = maxExpectedReturn == minExpectedReturn
-        ? 0.5
-        : ((expectedReturn - minExpectedReturn) /
-                (maxExpectedReturn - minExpectedReturn))
-            .clamp(0.0, 1.0);
-
-    final x = w * leftPaddingRatio +
-        (w * (rightPaddingRatio - leftPaddingRatio)) * normalizedVolatility;
-    final y = h * bottomPaddingRatio -
-        (h * (bottomPaddingRatio - topPaddingRatio)) * normalizedExpectedReturn;
-    return Offset(x, y);
-  }
-
-  /// Hand-curated 5-anchor textbook efficient frontier shape, mapped
-  /// into the bounding box of [rawPoints] (real data extent). The curve
-  /// is intentionally idealized (smooth, monotonically increasing,
-  /// concave going right). Real data still drives the dot position and
-  /// `weightsAt(t)` lookups; only the visual stroke uses these anchors.
-  ///
-  /// Normalized anchor positions (xN ∈ [0,1] vol, yN ∈ [0,1] return):
-  ///   (0.00, 0.00) — defensive endpoint
-  ///   (0.12, 0.45) — early-rise inflection
-  ///   (0.32, 0.74) — mid concave bend
-  ///   (0.62, 0.92) — diminishing returns shoulder
-  ///   (1.00, 1.00) — aggressive endpoint
-  /// These anchors trace a recognizably "efficient frontier" textbook
-  /// arc regardless of bumpiness in the underlying scatter.
-  List<Offset> _idealizedAnchors(List<Offset> rawPoints) {
-    if (rawPoints.length < 2) return rawPoints;
-    final minX = rawPoints.map((p) => p.dx).reduce(min);
-    final maxX = rawPoints.map((p) => p.dx).reduce(max);
-    // Y-axis on screen is inverted (top = high return), so the
-    // "minimum return" anchor is the largest dy and vice versa.
-    final maxY = rawPoints.map((p) => p.dy).reduce(max);
-    final minY = rawPoints.map((p) => p.dy).reduce(min);
-    const normalized = <Offset>[
-      Offset(0.00, 0.00),
-      Offset(0.12, 0.45),
-      Offset(0.32, 0.74),
-      Offset(0.62, 0.92),
-      Offset(1.00, 1.00),
-    ];
-    return [
-      for (final n in normalized)
-        Offset(
-          minX + (maxX - minX) * n.dx,
-          maxY - (maxY - minY) * n.dy,
-        ),
-    ];
-  }
+  /// Vertical offset (px, screen down) of an asset bubble below the
+  /// curve at its t. Keeps the bubble visually distinct from the
+  /// frontier line without losing the "this asset sits at this risk
+  /// tier" association.
+  static const double _assetBubbleOffsetY = 18.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -465,134 +308,90 @@ class _FrontierPainter extends CustomPainter {
 
     _drawText(canvas, '연 기대수익률', const Offset(4, 4), labelStyle);
 
-    final hasPreviewPoints = previewPoints != null && previewPoints!.isNotEmpty;
-    if (hasPreviewPoints) {
-      _paintPreviewFrontier(canvas, size, labelStyle);
-      return;
-    }
-
-    // Build the smoothed idealized curve from a sparse set of anchor
-    // points sampled from `_tToPoint`. The user explicitly wants visual
-    // understanding, not data precision (2026-05-05 notes).
+    // Single drawing path for both with-preview and no-preview cases.
+    // The curve, dot, and bubbles are all parameterized by t ∈ [0, 1]
+    // along the idealized sqrt-shaped frontier (`_tToPoint`). Using one
+    // smooth function (sampled densely) avoids the kinks the previous
+    // anchor-based cubic-Bezier produced (horizontal tangents at every
+    // anchor → discontinuous slope at junctions). It also means asset
+    // bubbles get unique t slots and never pile up at corners the way
+    // the previous data-bounding-box mapping did.
     if (curveProgress > 0) {
-      const anchorCount = 9;
-      final anchors = <Offset>[];
-      for (int i = 0; i < anchorCount; i++) {
-        final t = i / (anchorCount - 1);
-        if (t > curveProgress) break;
-        anchors.add(_tToPoint(t, w, h));
-      }
-      if (anchors.length >= 2) {
-        _drawFrontierStroke(canvas, size, anchors);
-        // No real preview yet — derive the min/max envelope directly
-        // from the approximate per-asset coords so bubbles still span
-        // the canvas naturally.
-        final approxVols = _assetApproxCoords.values.map((o) => o.dx).toList();
-        final approxReturns =
-            _assetApproxCoords.values.map((o) => o.dy).toList();
-        _drawAssetBubbles(
-          canvas,
-          size,
-          dotProgress,
-          minVolatility: approxVols.reduce(min),
-          maxVolatility: approxVols.reduce(max),
-          minExpectedReturn: approxReturns.reduce(min),
-          maxExpectedReturn: approxReturns.reduce(max),
-        );
-      }
+      _drawSmoothFrontier(canvas, size, curveProgress);
     }
-
-    // Selected (draggable) dot on the curve — pulse glow preserved.
     if (dotProgress > 0) {
-      final dotPos = _tToPoint(dotT, w, h);
+      _drawAssetBubbles(canvas, size, dotProgress);
+    }
+    if (dotProgress > 0) {
+      final tSelected = _selectedDotT();
+      final dotPos = _tToPoint(tSelected, w, h);
       _drawSelectedDot(canvas, dotPos);
+
+      // Representative label (e.g. 안정형 / 균형형 / 성장형) for the
+      // currently-selected preview point — only present at the marker
+      // indices the backend tags.
+      final pp = previewPoints;
+      final pos = selectedPreviewPosition;
+      if (pp != null && pos != null && pos >= 0 && pos < pp.length) {
+        final label = pp[pos].representativeLabel;
+        if (label != null) {
+          _drawText(
+            canvas,
+            label,
+            Offset(dotPos.dx + 10, max(8, dotPos.dy - 22)),
+            labelStyle.copyWith(
+              color: WeRoboColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          );
+        }
+      }
     }
   }
 
-  void _paintPreviewFrontier(Canvas canvas, Size size, TextStyle labelStyle) {
+  /// Resolve the t value for the currently-selected dot. Preview drives
+  /// it when present (t = index / (length - 1)); otherwise we fall back
+  /// to the no-preview `dotT`.
+  double _selectedDotT() {
+    final pp = previewPoints;
+    final pos = selectedPreviewPosition;
+    if (pp != null && pp.isNotEmpty && pos != null) {
+      if (pp.length <= 1) return 0.5;
+      final clamped = pos.clamp(0, pp.length - 1);
+      return clamped / (pp.length - 1);
+    }
+    return dotT;
+  }
+
+  /// Stroke the idealized frontier as a dense polyline sampled directly
+  /// from the sqrt formula in `_tToPoint`. ~80 segments at this canvas
+  /// size reads as a single smooth curve. Honors `curveProgress` so the
+  /// initial reveal animation still works.
+  void _drawSmoothFrontier(Canvas canvas, Size size, double progress) {
+    const sampleCount = 80;
     final w = size.width;
     final h = size.height;
-    final points = previewPoints!;
-
-    // Use frontier-only range so the curve fills the canvas.
-    final minVolatility = points.map((point) => point.volatility).reduce(min);
-    final maxVolatility = points.map((point) => point.volatility).reduce(max);
-    final minExpectedReturn =
-        points.map((point) => point.expectedReturn).reduce(min);
-    final maxExpectedReturn =
-        points.map((point) => point.expectedReturn).reduce(max);
-    final pointOffsets = [
-      for (final point in points)
-        _previewPointToOffset(
-          point,
-          w,
-          h,
-          minVolatility,
-          maxVolatility,
-          minExpectedReturn,
-          maxExpectedReturn,
-        ),
-    ];
-    final visibleCount = max(
-      1,
-      (pointOffsets.length * curveProgress).ceil(),
-    );
-    final visiblePoints = pointOffsets.take(visibleCount).toList();
-
-    // Curve is idealized; data is real. The visual stroke is built from
-    // a hand-curated 5-anchor textbook efficient frontier shape mapped
-    // onto the data's bounding box. Dragging still snaps to real
-    // preview points via `_nearestPreviewPosition`, and
-    // `weightsAt(t)` keeps consuming the real `sectorAllocations`.
-    if (visiblePoints.length >= 2) {
-      final anchors = _idealizedAnchors(visiblePoints);
-      _drawFrontierStroke(canvas, size, anchors);
-      _drawAssetBubbles(
-        canvas,
-        size,
-        dotProgress,
-        minVolatility: minVolatility,
-        maxVolatility: maxVolatility,
-        minExpectedReturn: minExpectedReturn,
-        maxExpectedReturn: maxExpectedReturn,
-      );
-    }
-
-    final selectedPosition = (() {
-      if (selectedPreviewPosition != null &&
-          selectedPreviewPosition! >= 0 &&
-          selectedPreviewPosition! < points.length) {
-        return selectedPreviewPosition!;
+    final start = _tToPoint(0, w, h);
+    final path = Path()..moveTo(start.dx, start.dy);
+    for (var i = 1; i <= sampleCount; i++) {
+      final t = i / sampleCount;
+      if (t >= progress) {
+        final end = _tToPoint(progress, w, h);
+        path.lineTo(end.dx, end.dy);
+        break;
       }
-      return points.length ~/ 2;
-    })();
-    final selectedPoint = pointOffsets[selectedPosition];
-    _drawSelectedDot(canvas, selectedPoint);
-
-    final labelPoint = points[selectedPosition];
-    if (labelPoint.representativeLabel != null) {
-      _drawText(
-        canvas,
-        labelPoint.representativeLabel!,
-        Offset(selectedPoint.dx + 10, max(8, selectedPoint.dy - 22)),
-        labelStyle.copyWith(
-          color: WeRoboColors.primary,
-          fontWeight: FontWeight.w600,
-        ),
-      );
+      final p = _tToPoint(t, w, h);
+      path.lineTo(p.dx, p.dy);
     }
-  }
-
-  /// Stroke the smoothed idealized curve in primary brand color.
-  void _drawFrontierStroke(Canvas canvas, Size size, List<Offset> anchors) {
-    final curvePath = _buildFrontierPath(anchors, size);
-    final curvePaint = Paint()
-      ..color = WeRoboColors.primary
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    canvas.drawPath(curvePath, curvePaint);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = WeRoboColors.primary
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3.0
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
   }
 
   /// Draws the seven asset-class bubbles at their REAL (vol, return)
@@ -601,47 +400,57 @@ class _FrontierPainter extends CustomPainter {
   /// [_assetApproxCoords] — a hardcoded approximate table — until the
   /// backend exposes per-asset stats in
   /// `MobileFrontierPreviewResponse`. 신성장주 is intentionally
-  /// anchored near the right edge (vol≈0.40) since its real volatility
-  /// is typically off-chart. Fixed radius, no percentage labels.
-  void _drawAssetBubbles(
-    Canvas canvas,
-    Size size,
-    double opacity, {
-    required double minVolatility,
-    required double maxVolatility,
-    required double minExpectedReturn,
-    required double maxExpectedReturn,
-  }) {
+  /// Draws the seven asset-class bubbles slightly below the curve at
+  /// each asset's fixed t (`_assetT`). Each asset has a unique slot so
+  /// bubbles don't pile up or overlap each other. The vertical offset
+  /// keeps the bubbles visually distinct from the frontier line itself
+  /// while preserving the "this asset sits at this risk tier" reading.
+  /// Reveal-aware: only assets whose t has been reached by the curve
+  /// animation are drawn.
+  void _drawAssetBubbles(Canvas canvas, Size size, double opacity) {
     if (opacity <= 0) return;
+    final w = size.width;
+    final h = size.height;
     for (final cls in AssetClass.values) {
-      final anchor = _assetAnchor(
-        cls,
-        size,
-        minVolatility,
-        maxVolatility,
-        minExpectedReturn,
-        maxExpectedReturn,
-      );
+      final t = _assetT[cls]!;
+      if (t > curveProgress) continue;
+      final base = _tToPoint(t, w, h);
+      final anchor = Offset(base.dx, base.dy + _assetBubbleOffsetY);
       final color = WeRoboColors.assetColor(cls);
       // Fixed radius — NO size-growth animation.
       final fillPaint = Paint()
         ..style = PaintingStyle.fill
         ..color = color.withValues(alpha: opacity);
       canvas.drawCircle(anchor, 7.0, fillPaint);
-      // White ring for contrast against the curve stroke.
+      // White ring for contrast against the warm-gray background.
       final ringPaint = Paint()
         ..style = PaintingStyle.stroke
         ..color = WeRoboColors.white.withValues(alpha: opacity)
         ..strokeWidth = 1.5;
       canvas.drawCircle(anchor, 7.0, ringPaint);
-      // Asset name label only — no percentage. The bar widget below
-      // the chart shows proportions.
-      _drawLabel(canvas, anchor, _kAssetShortLabels[cls]!, opacity);
+      // Label below the bubble (away from the curve), so it never
+      // collides with the curve stroke.
+      _drawLabel(
+        canvas,
+        anchor,
+        _kAssetShortLabels[cls]!,
+        opacity,
+        below: true,
+      );
     }
   }
 
-  /// Renders a Noto Sans KR caption above [anchor] at fixed offset.
-  void _drawLabel(Canvas canvas, Offset anchor, String text, double opacity) {
+  /// Renders a Noto Sans KR caption near [anchor]. By default the
+  /// caption sits above the anchor; set [below] to drop it underneath
+  /// (used by asset bubbles, which sit below the curve and would
+  /// otherwise get a label that crosses the frontier stroke).
+  void _drawLabel(
+    Canvas canvas,
+    Offset anchor,
+    String text,
+    double opacity, {
+    bool below = false,
+  }) {
     final tp = TextPainter(
       text: TextSpan(
         text: text,
@@ -655,7 +464,9 @@ class _FrontierPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
     )..layout();
-    final pos = Offset(anchor.dx - tp.width / 2, anchor.dy - 16 - tp.height);
+    final pos = below
+        ? Offset(anchor.dx - tp.width / 2, anchor.dy + 12)
+        : Offset(anchor.dx - tp.width / 2, anchor.dy - 16 - tp.height);
     tp.paint(canvas, pos);
   }
 
@@ -685,35 +496,6 @@ class _FrontierPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5;
     canvas.drawCircle(position, dotRadius * dotProgress, ringPaint);
-  }
-
-  Offset _previewPointToOffset(
-    MobileFrontierPreviewPoint point,
-    double w,
-    double h,
-    double minVolatility,
-    double maxVolatility,
-    double minExpectedReturn,
-    double maxExpectedReturn,
-  ) {
-    const leftPaddingRatio = 0.15;
-    const rightPaddingRatio = 0.85;
-    const topPaddingRatio = 0.12;
-    const bottomPaddingRatio = 0.86;
-
-    final normalizedVolatility = maxVolatility == minVolatility
-        ? 0.5
-        : (point.volatility - minVolatility) / (maxVolatility - minVolatility);
-    final normalizedExpectedReturn = maxExpectedReturn == minExpectedReturn
-        ? 0.5
-        : (point.expectedReturn - minExpectedReturn) /
-            (maxExpectedReturn - minExpectedReturn);
-
-    final x = w * leftPaddingRatio +
-        (w * (rightPaddingRatio - leftPaddingRatio)) * normalizedVolatility;
-    final y = h * bottomPaddingRatio -
-        (h * (bottomPaddingRatio - topPaddingRatio)) * normalizedExpectedReturn;
-    return Offset(x, y);
   }
 
   void _drawText(Canvas canvas, String text, Offset offset, TextStyle style) {
