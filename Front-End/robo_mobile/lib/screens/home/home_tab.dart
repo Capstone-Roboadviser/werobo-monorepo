@@ -423,10 +423,22 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     if (filtered.length < 2) return const [];
 
     final base = filtered.first.value;
-    return [
+    final result = <ChartPoint>[
       for (final p in filtered)
         ChartPoint(date: p.date, value: p.value - base),
     ];
+    // Carry the last known value forward to the chart's right edge when
+    // the backtest data lags the portfolio's account history (a common
+    // gap on the 1주 view). Standard finance-app convention: "no new
+    // trading day yet → hold yesterday's close." Without this, the
+    // 시장 line would visibly stop short of the chart's right edge.
+    final portfolioLastDate = portfolioRangePts.last.date;
+    if (result.last.date.isBefore(portfolioLastDate)) {
+      result.add(
+        ChartPoint(date: portfolioLastDate, value: result.last.value),
+      );
+    }
+    return result;
   }
 
   /// 채권 수익률 — drawn as a 2-point dashed line from the start of the
@@ -452,12 +464,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     if (filtered.length < 2) return const [];
 
     final base = filtered.first.value;
+    // End the dashed line at the chart's right edge (portfolio's last
+    // date), not where the treasury data happens to stop. Same "carry
+    // last value forward" convention as `_marketSeries`.
+    final endDate = portfolioRangePts.last.date.isAfter(filtered.last.date)
+        ? portfolioRangePts.last.date
+        : filtered.last.date;
     return [
       ChartPoint(date: filtered.first.date, value: 0.0),
-      ChartPoint(
-        date: filtered.last.date,
-        value: filtered.last.value - base,
-      ),
+      ChartPoint(date: endDate, value: filtered.last.value - base),
     ];
   }
 
