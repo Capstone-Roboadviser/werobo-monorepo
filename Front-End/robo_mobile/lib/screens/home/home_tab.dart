@@ -535,6 +535,31 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
             );
           }),
         ),
+        const SizedBox(height: 12),
+        _ChartLegend(
+          entries: [
+            (
+              label: '포트폴리오',
+              color: WeRoboColors.primary,
+              dashed: false,
+            ),
+            (
+              label: '시장',
+              color: tc.textSecondary,
+              dashed: false,
+            ),
+            (
+              label: '연 기대수익률',
+              color: WeRoboColors.primary.withValues(alpha: 0.5),
+              dashed: true,
+            ),
+            (
+              label: '채권',
+              color: tc.textTertiary.withValues(alpha: 0.7),
+              dashed: true,
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -956,6 +981,89 @@ class _HomePerformancePainter extends CustomPainter {
   // instances) so reference equality is always false — we'd always
   // repaint. Range/data changes already trigger a setState that
   // unconditionally rebuilds, so omitting `lines` here is safe.
+}
+
+// ─── Chart legend ─────────────────────────────────────────────
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final bool dashed;
+  const _LegendDot({required this.color, required this.dashed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 12,
+      height: 2,
+      child: CustomPaint(
+        painter: _LegendDotPainter(color: color, dashed: dashed),
+      ),
+    );
+  }
+}
+
+class _LegendDotPainter extends CustomPainter {
+  final Color color;
+  final bool dashed;
+  _LegendDotPainter({required this.color, required this.dashed});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final y = size.height / 2;
+    if (dashed) {
+      // 6/3 dash pattern within the 12px sample width
+      const dashLen = 3.0;
+      const gapLen = 2.0;
+      double x = 0;
+      while (x < size.width) {
+        final end = math.min(x + dashLen, size.width);
+        canvas.drawLine(Offset(x, y), Offset(end, y), paint);
+        x = end + gapLen;
+      }
+    } else {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LegendDotPainter old) =>
+      old.color != color || old.dashed != dashed;
+}
+
+class _ChartLegend extends StatelessWidget {
+  final List<({String label, Color color, bool dashed})> entries;
+  const _ChartLegend({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Wrap(
+      spacing: 12,
+      runSpacing: 4,
+      alignment: WrapAlignment.center,
+      children: [
+        for (final e in entries)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _LegendDot(color: e.color, dashed: e.dashed),
+              const SizedBox(width: 4),
+              Text(
+                e.label,
+                style: WeRoboTypography.caption.copyWith(
+                  color: tc.textSecondary,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
 }
 
 // ─── Shared helpers ───────────────────────────────────────────
