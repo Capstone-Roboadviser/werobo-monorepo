@@ -1245,6 +1245,103 @@ class _ChartLegend extends StatelessWidget {
   }
 }
 
+// ─── Drag context card ────────────────────────────────────────
+
+class _DragContextCard extends StatelessWidget {
+  final String dateLabel;
+  final double portfolioPct;
+  final double? marketPct;
+  final List<({String name, double pct})> assetRows;
+
+  const _DragContextCard({
+    required this.dateLabel,
+    required this.portfolioPct,
+    required this.marketPct,
+    required this.assetRows,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: tc.surface.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: tc.border.withValues(alpha: 0.6),
+          width: 0.5,
+        ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            dateLabel,
+            style: WeRoboTypography.caption.copyWith(
+              color: tc.textTertiary,
+              fontSize: 10,
+            ),
+          ),
+          const SizedBox(height: 4),
+          _DragContextRow(label: '포트폴리오', pct: portfolioPct, tc: tc),
+          if (marketPct != null)
+            _DragContextRow(label: '시장', pct: marketPct!, tc: tc),
+          if (assetRows.isNotEmpty) const SizedBox(height: 6),
+          for (final row in assetRows)
+            _DragContextRow(label: row.name, pct: row.pct, tc: tc),
+        ],
+      ),
+    );
+  }
+}
+
+class _DragContextRow extends StatelessWidget {
+  final String label;
+  final double pct;
+  final WeRoboThemeColors tc;
+  const _DragContextRow({
+    required this.label,
+    required this.pct,
+    required this.tc,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = pct >= 0 ? tc.accent : WeRoboColors.error;
+    final sign = pct >= 0 ? '+' : '−';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontFamily: WeRoboFonts.body,
+              fontSize: 11,
+              fontWeight: FontWeight.w400,
+              color: tc.textSecondary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Spacer(),
+          Text(
+            '$sign${(pct * 100).abs().toStringAsFixed(2)}%',
+            style: TextStyle(
+              fontFamily: WeRoboFonts.english,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: color,
+              fontFeatures: const [ui.FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ─── Shared helpers ───────────────────────────────────────────
 
 String _formatCurrency(int amount) {
