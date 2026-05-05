@@ -1441,11 +1441,13 @@ class _DragContextCard extends StatelessWidget {
     required this.assetRows,
   });
 
-  /// Fixed dimensions match the constants used by `_buildCardData` for
-  /// clamp math and gap-from-line placement. Width also bounds the
-  /// row's Expanded label inside Positioned (loose constraints).
+  /// Fixed width bounds the row's Expanded label inside a Positioned
+  /// (which provides loose constraints). Height is a max-case upper
+  /// bound used by `_buildCardData` for the gap-from-line placement —
+  /// the actual card sizes to its content via `mainAxisSize.min`, so
+  /// rows with no asset breakdown make it shorter.
   static const double width = 150.0;
-  static const double height = 92.0;
+  static const double height = 110.0;
 
   @override
   Widget build(BuildContext context) {
@@ -1461,7 +1463,6 @@ class _DragContextCard extends StatelessWidget {
         filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
         child: Container(
           width: width,
-          height: height,
           color: tc.surface.withValues(alpha: 0.62),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Column(
