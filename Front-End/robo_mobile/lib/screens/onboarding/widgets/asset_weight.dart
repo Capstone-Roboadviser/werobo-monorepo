@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 
@@ -18,10 +20,12 @@ class AssetWeight {
 
 /// Stacked horizontal bar showing asset proportions.
 /// Used by the efficient frontier (segments resize live as user drags).
-/// No percentage labels — bar segments communicate proportion visually.
-/// Asset order follows AssetClass enum (defensive → aggressive: cash on
-/// the left, 신성장주 on the right) so the visual gradient maps to risk.
-class AssetWeightBar extends StatelessWidget {
+/// Tapping or long-pressing a segment shows a small tooltip just above
+/// the bar with the asset label + percentage; the tooltip auto-dismisses
+/// after ~1.5s. Asset order follows AssetClass enum (defensive →
+/// aggressive: cash on the left, 신성장주 on the right) so the visual
+/// gradient maps to risk.
+class AssetWeightBar extends StatefulWidget {
   final List<AssetWeight> assets;
   final double height;
 
@@ -32,38 +36,146 @@ class AssetWeightBar extends StatelessWidget {
   });
 
   @override
+  State<AssetWeightBar> createState() => _AssetWeightBarState();
+}
+
+class _AssetWeightBarState extends State<AssetWeightBar> {
+  /// Index into the *ordered* segment list (cash → newGrowth).
+  /// `null` hides the tooltip.
+  int? _activeSegmentIndex;
+  Timer? _dismissTimer;
+
+  @override
+  void dispose() {
+    _dismissTimer?.cancel();
+    super.dispose();
+  }
+
+  void _activate(int index) {
+    _dismissTimer?.cancel();
+    setState(() => _activeSegmentIndex = index);
+    _dismissTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (!mounted) return;
+      setState(() => _activeSegmentIndex = null);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Sort by AssetClass enum order, NOT by weight, so the leftmost
     // segment is always the most defensive class (cash).
-    final ordered = [...assets]
+    final ordered = [...widget.assets]
       ..sort((a, b) => a.cls.index.compareTo(b.cls.index));
     final total = ordered.fold<double>(0, (s, a) => s + a.weight);
     if (total <= 0) {
-      return SizedBox(height: height);
+      return SizedBox(height: widget.height);
     }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(WeRoboColors.radiusS),
-      child: AnimatedSize(
+
+    final tc = WeRoboThemeColors.of(context);
+    final activeIndex = _activeSegmentIndex;
+    final activeAsset = (activeIndex != null &&
+            activeIndex >= 0 &&
+            activeIndex < ordered.length)
+        ? ordered[activeIndex]
+        : null;
+
+    // Tooltip rendered above the bar in the same widget so it
+    // participates in layout cleanly (no Overlay needed).
+    final tooltipRow = SizedBox(
+      height: 22,
+      child: AnimatedSwitcher(
         duration: WeRoboMotion.short,
-        curve: WeRoboMotion.move,
-        child: SizedBox(
-          height: height,
-          child: Row(
-            children: [
-              for (final a in ordered)
-                Expanded(
-                  flex: ((a.weight / total) * 1000).round().clamp(1, 1000000),
-                  child: AnimatedContainer(
-                    duration: WeRoboMotion.short,
-                    decoration: BoxDecoration(
-                      color: WeRoboColors.assetColor(a.cls),
+        switchInCurve: WeRoboMotion.move,
+        switchOutCurve: WeRoboMotion.move,
+        transitionBuilder: (child, anim) =>
+            FadeTransition(opacity: anim, child: child),
+        child: activeAsset == null
+            ? const SizedBox.shrink()
+            : LayoutBuilder(
+                key: ValueKey(activeAsset.cls),
+                builder: (context, constraints) {
+                  final width = constraints.maxWidth;
+                  final pct =
+                      (activeAsset.weight * 100).toStringAsFixed(2);
+                  // Center tooltip over the active segment.
+                  double leftEdge = 0;
+                  for (var i = 0; i < activeIndex!; i++) {
+                    leftEdge += (ordered[i].weight / total) * width;
+                  }
+                  final segmentWidth =
+                      (activeAsset.weight / total) * width;
+                  final tooltipCenter = leftEdge + segmentWidth / 2;
+                  return Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        left: tooltipCenter,
+                        top: 0,
+                        child: FractionalTranslation(
+                          translation: const Offset(-0.5, 0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: WeRoboColors.primaryLight,
+                              borderRadius: BorderRadius.circular(
+                                  WeRoboColors.radiusS),
+                            ),
+                            child: Text(
+                              '${activeAsset.label} $pct%',
+                              style: WeRoboTypography.caption.copyWith(
+                                color: tc.textPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+      ),
+    );
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        tooltipRow,
+        ClipRRect(
+          borderRadius: BorderRadius.circular(WeRoboColors.radiusS),
+          child: AnimatedSize(
+            duration: WeRoboMotion.short,
+            curve: WeRoboMotion.move,
+            child: SizedBox(
+              height: widget.height,
+              child: Row(
+                children: [
+                  for (var i = 0; i < ordered.length; i++)
+                    Expanded(
+                      flex: ((ordered[i].weight / total) * 1000)
+                          .round()
+                          .clamp(1, 1000000),
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTapDown: (_) => _activate(i),
+                        onLongPressStart: (_) => _activate(i),
+                        child: AnimatedContainer(
+                          duration: WeRoboMotion.short,
+                          decoration: BoxDecoration(
+                            color: WeRoboColors.assetColor(ordered[i].cls),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
         ),
-      ),
+      ],
     );
   }
 }
