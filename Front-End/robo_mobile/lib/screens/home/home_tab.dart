@@ -203,7 +203,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 }
 
-// ─── Hero chart: value + dual-line chart + time range ─────────
+// ─── Hero chart: value + chart + time range ─────────
 
 class _PortfolioHeroChart extends StatefulWidget {
   final InvestmentType type;
