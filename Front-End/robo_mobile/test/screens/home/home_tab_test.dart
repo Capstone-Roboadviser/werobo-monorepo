@@ -253,4 +253,37 @@ void main() {
     expect(find.text('연 기대수익률'), findsOneWidget);
     expect(find.text('채권'), findsOneWidget);
   });
+
+  testWidgets('falls back to mock earnings history when API fails',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    // Use the standard dashboard fixture (startedAt non-empty, portfolio
+    // non-null) so the code takes the try/catch path and hits the real
+    // network. In the widget-test environment the calls return 400 almost
+    // immediately, and the catch block populates state with mock data.
+    state.setAccountDashboard(accountDashboard());
+    await state.markWelcomeBannerSeen();
+    await state.markDigestSeen('2026-04-16');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    // Flush the first frame (didChangeDependencies fires, fetch kicks off).
+    await tester.pump(const Duration(milliseconds: 800));
+    // The API calls fail quickly (400 from Railway in test env); one more
+    // pump lets the catch block run and notifyListeners propagate.
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(state.earningsHistory, isNotNull);
+    expect(state.earningsHistory!.points, isNotEmpty);
+  });
 }

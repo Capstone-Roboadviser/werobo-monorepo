@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
+import '../../services/mobile_backend_api.dart';
 import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
@@ -28,6 +30,8 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
   bool _showAllocationAmounts = false;
+  bool _earningsHistoryFetchStarted = false;
+  String? _loadedEarningsRiskCode;
 
   @override
   void initState() {
@@ -44,6 +48,61 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     logPageExit('HomeTab');
     _staggerCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = PortfolioStateProvider.of(context);
+    final riskCode = state.type.riskCode;
+    if (_loadedEarningsRiskCode != riskCode) {
+      _loadedEarningsRiskCode = riskCode;
+      _earningsHistoryFetchStarted = false;
+    }
+    if (!_earningsHistoryFetchStarted && state.earningsHistory == null) {
+      _earningsHistoryFetchStarted = true;
+      _loadEarningsHistory(state, riskCode);
+    }
+  }
+
+  Future<void> _loadEarningsHistory(
+    PortfolioState state,
+    String riskCode,
+  ) async {
+    final selected = state.selectedPortfolio;
+    final startedAt = state.accountSummary?.startedAt;
+    if (selected == null || startedAt == null || startedAt.isEmpty) {
+      // Cold-start path: fall back to mock immediately so the card has data
+      // when the user starts dragging. Defer past the current build frame so
+      // notifyListeners() doesn't fire during didChangeDependencies.
+      Future.microtask(() {
+        if (!mounted) return;
+        state.setEarningsHistory(
+          MockEarningsData.mockEarningsHistoryResponse(riskCode: riskCode),
+        );
+      });
+      return;
+    }
+    try {
+      final api = MobileBackendApi.instance;
+      final response = await api.fetchEarningsHistory(
+        weights: {
+          for (final s in selected.sectorAllocations) s.assetCode: s.weight,
+        },
+        startDate: startedAt,
+      );
+      if (!mounted) return;
+      state.setEarningsHistory(response);
+    } catch (e) {
+      if (!mounted) return;
+      developer.log(
+        'fetchEarningsHistory failed; using mock fallback: $e',
+        name: 'HomeTab',
+      );
+      state.setEarningsHistory(
+        MockEarningsData.mockEarningsHistoryResponse(riskCode: riskCode),
+      );
+    }
   }
 
   Animation<double> _fadeAt(int index) {
