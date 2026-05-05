@@ -41,6 +41,13 @@ void main() {
     );
   }
 
+  test('frontier asset bubble labels use full asset-class names', () {
+    expect(frontierAssetBubbleLabel(AssetClass.cash), '현금성자산');
+    expect(frontierAssetBubbleLabel(AssetClass.usValue), '미국가치주');
+    expect(frontierAssetBubbleLabel(AssetClass.usGrowth), '미국성장주');
+    expect(frontierAssetBubbleLabel(AssetClass.newGrowth), '신성장주');
+  });
+
   test('frontier asset bubble specs scale radius from selected weights', () {
     const size = Size(320, 400);
 

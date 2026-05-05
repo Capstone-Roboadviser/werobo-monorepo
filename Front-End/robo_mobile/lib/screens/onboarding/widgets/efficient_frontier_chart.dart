@@ -3,16 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../../../models/mobile_backend_models.dart';
 
-/// Chart-internal short labels — full koLabel collides on iPhones <430pt.
-const Map<AssetClass, String> _kAssetShortLabels = {
-  AssetClass.cash: '현금성',
-  AssetClass.shortBond: '단기채',
-  AssetClass.infraBond: '인프라',
-  AssetClass.gold: '금',
-  AssetClass.usValue: '미국가',
-  AssetClass.usGrowth: '미국성',
-  AssetClass.newGrowth: '신성장',
-};
+String frontierAssetBubbleLabel(AssetClass cls) => cls.koLabel;
 
 const Map<String, AssetClass> _kAssetClassByCode = {
   'cash_equivalents': AssetClass.cash,
@@ -595,7 +586,7 @@ class _FrontierPainter extends CustomPainter {
     FrontierAssetBubbleSpec spec,
     double opacity,
   ) {
-    final text = _kAssetShortLabels[spec.cls]!;
+    final text = frontierAssetBubbleLabel(spec.cls);
     final tp = TextPainter(
       text: TextSpan(
         text: text,
