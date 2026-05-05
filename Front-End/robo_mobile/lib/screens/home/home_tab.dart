@@ -309,6 +309,35 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     ];
   }
 
+  /// Market benchmark line (`benchmark_avg`), filtered to the visible
+  /// range, rebased to 0% at the first visible point. Returns an empty
+  /// list when the comparison backtest hasn't loaded yet.
+  List<ChartPoint> _marketSeries(List<ChartPoint> portfolioRangePts) {
+    if (portfolioRangePts.isEmpty) return const [];
+    final all = PortfolioStateProvider.of(context).comparisonLines;
+    final market = all.firstWhere(
+      (l) => l.key == 'benchmark_avg',
+      orElse: () => const ChartLine(
+        key: '',
+        label: '',
+        color: Colors.transparent,
+        points: [],
+      ),
+    );
+    if (market.points.length < 2) return const [];
+
+    final cutoff = portfolioRangePts.first.date;
+    final filtered =
+        market.points.where((p) => !p.date.isBefore(cutoff)).toList();
+    if (filtered.length < 2) return const [];
+
+    final base = filtered.first.value;
+    return [
+      for (final p in filtered)
+        ChartPoint(date: p.date, value: p.value - base),
+    ];
+  }
+
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -462,6 +491,13 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                 color: WeRoboColors.primary,
                                 points: _pctSeries(valuePts),
                               ),
+                              if (_marketSeries(valuePts).isNotEmpty)
+                                ChartLine(
+                                  key: 'market',
+                                  label: '시장',
+                                  color: tc.textSecondary,
+                                  points: _marketSeries(valuePts),
+                                ),
                             ],
                             progress: _drawCurve.value,
                             touchIndex: _touchIndex,
