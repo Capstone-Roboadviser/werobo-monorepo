@@ -323,14 +323,28 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Drag onto the chart at a non-zero index.
+    // Hold the gesture so the card stays mounted while we assert.
+    // dragFrom() releases on completion which clears _touchIndex and
+    // unmounts the card before assertions run.
     final chart = find.byType(CustomPaint).first;
     final center = tester.getCenter(chart);
-    await tester.dragFrom(center, const Offset(20, 0));
+    final gesture = await tester.startGesture(center);
+    await gesture.moveBy(const Offset(20, 0));
     await tester.pump();
 
-    // Card should show a date label like "X월 Y일" and the 포트폴리오 row.
-    expect(find.textContaining('월'), findsWidgets);
-    expect(find.text('포트폴리오'), findsAtLeastNWidgets(1));
+    // The legend always shows '포트폴리오'. While the gesture is held,
+    // a SECOND copy lives inside the drag context card.
+    expect(find.text('포트폴리오'), findsNWidgets(2));
+    // The card's signed-percent value text uses tabular figures and a
+    // U+2212 minus or '+' sign — neither legend nor any other widget on
+    // this screen produces a string ending in "%" inside the chart area.
+    expect(find.textContaining('%'), findsAtLeastNWidgets(1));
+
+    await gesture.up();
+    await tester.pump();
+
+    // After release, _touchIndex resets to null and the card disappears,
+    // so only the legend's '포트폴리오' remains.
+    expect(find.text('포트폴리오'), findsOneWidget);
   });
 }

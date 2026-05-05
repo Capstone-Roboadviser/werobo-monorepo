@@ -456,7 +456,11 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     double portfolioPct,
     double? marketPct,
     List<({String name, double pct})> assetRows,
-  })? _buildCardData(List<ChartPoint> valuePts) {
+  })? _buildCardData(
+    List<ChartPoint> valuePts, {
+    required double fullWidth,
+    required double stackWidth,
+  }) {
     final ti = _touchIndex;
     if (ti == null || ti < 1 || ti >= valuePts.length) return null;
 
@@ -512,12 +516,16 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final assetRows = entries.take(2).toList();
 
     // Position: anchor x at touch index, y above the dot if room else below.
+    // touchX is in Stack-relative coords: the chart canvas is laid out at
+    // `fullWidth` via OverflowBox, then shifted left by 24px (the parent
+    // SingleChildScrollView's horizontal padding). Clamp the card against
+    // the Stack's actual width, not the chart canvas width, so it doesn't
+    // overflow into the parent's right padding.
     const padX = 8.0;
-    const cardWidth = 160.0;
-    final chartWidth = MediaQuery.of(context).size.width;
-    final touchX = (ti / (valuePts.length - 1)) * chartWidth - 24;
+    const cardWidth = _DragContextCard.width;
+    final touchX = (ti / (valuePts.length - 1)) * fullWidth - 24;
     final x = (touchX - cardWidth / 2)
-        .clamp(padX, chartWidth - cardWidth - padX)
+        .clamp(padX, stackWidth - cardWidth - padX)
         .toDouble();
 
     // Approximate y of the orange dot using % of chart height.
@@ -652,7 +660,11 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                 : '';
             // Compute card data when dragging at a non-zero index
             final cardData = _touchIndex != null && _touchIndex! >= 1
-                ? _buildCardData(valuePts)
+                ? _buildCardData(
+                    valuePts,
+                    fullWidth: fullWidth,
+                    stackWidth: constraints.maxWidth,
+                  )
                 : null;
             return SizedBox(
               height: 320,
@@ -766,15 +778,11 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     Positioned(
                       left: cardData.x,
                       top: cardData.y,
-                      child: AnimatedOpacity(
-                        opacity: 1,
-                        duration: const Duration(milliseconds: 100),
-                        child: _DragContextCard(
-                          dateLabel: cardData.dateLabel,
-                          portfolioPct: cardData.portfolioPct,
-                          marketPct: cardData.marketPct,
-                          assetRows: cardData.assetRows,
-                        ),
+                      child: _DragContextCard(
+                        dateLabel: cardData.dateLabel,
+                        portfolioPct: cardData.portfolioPct,
+                        marketPct: cardData.marketPct,
+                        assetRows: cardData.assetRows,
                       ),
                     ),
                 ],
@@ -1383,10 +1391,16 @@ class _DragContextCard extends StatelessWidget {
     required this.assetRows,
   });
 
+  /// Fixed width keeps the card's `Spacer` rows bounded inside Positioned
+  /// (which provides loose constraints) and matches the `cardWidth`
+  /// constant used by `_buildCardData` for clamp math.
+  static const double width = 160.0;
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Container(
+      width: width,
       decoration: BoxDecoration(
         color: tc.surface.withValues(alpha: 0.96),
         borderRadius: BorderRadius.circular(8),
@@ -1408,12 +1422,12 @@ class _DragContextCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          _DragContextRow(label: '포트폴리오', pct: portfolioPct, tc: tc),
+          _DragContextRow(label: '포트폴리오', pct: portfolioPct),
           if (marketPct != null)
-            _DragContextRow(label: '시장', pct: marketPct!, tc: tc),
+            _DragContextRow(label: '시장', pct: marketPct!),
           if (assetRows.isNotEmpty) const SizedBox(height: 6),
           for (final row in assetRows)
-            _DragContextRow(label: row.name, pct: row.pct, tc: tc),
+            _DragContextRow(label: row.name, pct: row.pct),
         ],
       ),
     );
@@ -1423,32 +1437,34 @@ class _DragContextCard extends StatelessWidget {
 class _DragContextRow extends StatelessWidget {
   final String label;
   final double pct;
-  final WeRoboThemeColors tc;
   const _DragContextRow({
     required this.label,
     required this.pct,
-    required this.tc,
   });
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final color = pct >= 0 ? tc.accent : WeRoboColors.error;
     final sign = pct >= 0 ? '+' : '−';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
         children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: WeRoboFonts.body,
-              fontSize: 11,
-              fontWeight: FontWeight.w400,
-              color: tc.textSecondary,
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: WeRoboFonts.body,
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+                color: tc.textSecondary,
+              ),
             ),
           ),
-          const SizedBox(width: 12),
-          const Spacer(),
+          const SizedBox(width: 8),
           Text(
             '$sign${(pct * 100).abs().toStringAsFixed(2)}%',
             style: TextStyle(
