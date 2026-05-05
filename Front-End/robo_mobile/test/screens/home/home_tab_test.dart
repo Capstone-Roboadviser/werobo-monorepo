@@ -225,4 +225,30 @@ void main() {
     // The cost-basis "deposit" line and its label are removed in this change.
     expect(find.textContaining('총 입금'), findsNothing);
   });
+
+  testWidgets('chart legend shows 시장 entry when comparison data is wired',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(accountDashboard());
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    // Even with no backtest wired, the legend shows the four labels
+    // (lines themselves render only when data exists).
+    expect(find.text('포트폴리오'), findsOneWidget);
+    expect(find.text('시장'), findsOneWidget);
+  });
 }
