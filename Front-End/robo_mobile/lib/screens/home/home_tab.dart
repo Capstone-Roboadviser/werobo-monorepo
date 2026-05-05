@@ -800,12 +800,43 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           },
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
-        // Time range chips. Rev K (2026-05-04): the previous styling used
-        // white-with-45%-alpha on the warm-gray app background, making
-        // inactive chips invisible. Switched to theme-aware
-        // tc.textSecondary so every chip reads against the background.
+        // Legend sits ABOVE the range chips, full-width-centered so the
+        // four entries balance across the screen rather than hugging the
+        // column's start edge.
+        SizedBox(
+          width: double.infinity,
+          child: _ChartLegend(
+            entries: [
+              (
+                label: '포트폴리오',
+                color: WeRoboColors.primary,
+                dashed: false,
+              ),
+              (
+                label: '시장',
+                color: tc.textSecondary,
+                dashed: false,
+              ),
+              (
+                label: '연 기대수익률',
+                color: WeRoboColors.primary.withValues(alpha: 0.5),
+                dashed: true,
+              ),
+              (
+                label: '채권',
+                color: tc.textTertiary.withValues(alpha: 0.7),
+                dashed: true,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Time range chips. Inactive chips use tc.textSecondary so they
+        // read against the warm-gray app background.
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(_rangeLabels.length, (i) {
@@ -853,31 +884,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
               child: child,
             );
           }),
-        ),
-        const SizedBox(height: 12),
-        _ChartLegend(
-          entries: [
-            (
-              label: '포트폴리오',
-              color: WeRoboColors.primary,
-              dashed: false,
-            ),
-            (
-              label: '시장',
-              color: tc.textSecondary,
-              dashed: false,
-            ),
-            (
-              label: '연 기대수익률',
-              color: WeRoboColors.primary.withValues(alpha: 0.5),
-              dashed: true,
-            ),
-            (
-              label: '채권',
-              color: tc.textTertiary.withValues(alpha: 0.7),
-              dashed: true,
-            ),
-          ],
         ),
       ],
     );
@@ -993,15 +999,25 @@ class _HomePerformancePainter extends CustomPainter {
         ? touchIndex!.clamp(0, basePts.length - 1)
         : drawCount - 1;
 
-    // Draw benchmarks first (behind portfolio).
+    // Draw benchmarks first (behind portfolio). Map by DATE — benchmark
+    // series may have a different point count than the portfolio (e.g.,
+    // 2-point projection lines, or shorter market data). Index-based
+    // mapping squashes 2-point lines to a stub at x=0 and ends shorter
+    // series early.
+    final minDate = basePts.first.date;
+    final maxDate = basePts.last.date;
+    final drawnUpToDate = ti < basePts.length
+        ? basePts[ti].date
+        : maxDate;
     for (var lineIdx = lines.length - 1; lineIdx >= 1; lineIdx--) {
       _drawBenchmarkLine(
         canvas,
         lines[lineIdx],
-        basePts.length,
-        toX,
+        minDate,
+        maxDate,
+        drawnUpToDate,
+        w,
         toY,
-        drawCount,
       );
     }
 
@@ -1039,24 +1055,59 @@ class _HomePerformancePainter extends CustomPainter {
   void _drawBenchmarkLine(
     Canvas canvas,
     ChartLine line,
-    int totalPts,
-    double Function(int, int) toX,
+    DateTime minDate,
+    DateTime maxDate,
+    DateTime drawnUpToDate,
+    double w,
     double Function(double) toY,
-    int drawCount,
   ) {
     final pts = line.points;
     if (pts.length < 2) return;
-    final count = math.min(drawCount, pts.length);
+    final totalMs = maxDate.difference(minDate).inMilliseconds;
+    if (totalMs <= 0) return;
+
+    double xForDate(DateTime d) {
+      final elapsedMs = d.difference(minDate).inMilliseconds;
+      return w * (elapsedMs / totalMs).clamp(0.0, 1.0);
+    }
+
     final path = Path();
-    for (var i = 0; i < count; i++) {
-      final x = toX(i, totalPts);
-      final y = toY(pts[i].value);
-      if (i == 0) {
-        path.moveTo(x, y);
+    var moved = false;
+    for (var i = 0; i < pts.length; i++) {
+      final p = pts[i];
+      if (!p.date.isAfter(drawnUpToDate)) {
+        // Point fully revealed by the animation cursor.
+        final x = xForDate(p.date);
+        final y = toY(p.value);
+        if (!moved) {
+          path.moveTo(x, y);
+          moved = true;
+        } else {
+          path.lineTo(x, y);
+        }
+      } else if (moved) {
+        // Animation cursor falls inside this segment — interpolate
+        // proportionally so the line grows in lock-step with the
+        // portfolio's draw-in animation.
+        final p0 = pts[i - 1];
+        final segMs = p.date.difference(p0.date).inMilliseconds;
+        if (segMs > 0) {
+          final fracMs = drawnUpToDate.difference(p0.date).inMilliseconds;
+          final frac = (fracMs / segMs).clamp(0.0, 1.0);
+          final x0 = xForDate(p0.date);
+          final x1 = xForDate(p.date);
+          final y0 = toY(p0.value);
+          final y1 = toY(p.value);
+          path.lineTo(x0 + frac * (x1 - x0), y0 + frac * (y1 - y0));
+        }
+        break;
       } else {
-        path.lineTo(x, y);
+        // First point already past the cursor — nothing to draw yet.
+        return;
       }
     }
+    if (!moved) return;
+
     final paint = Paint()
       ..color = line.color
       ..style = PaintingStyle.stroke
