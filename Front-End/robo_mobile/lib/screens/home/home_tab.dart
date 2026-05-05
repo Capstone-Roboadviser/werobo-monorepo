@@ -61,19 +61,18 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     return Tween<Offset>(
       begin: const Offset(0, 0.06),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _staggerCtrl,
-      curve: Interval(start, end, curve: WeRoboMotion.enter),
-    ));
+    ).animate(
+      CurvedAnimation(
+        parent: _staggerCtrl,
+        curve: Interval(start, end, curve: WeRoboMotion.enter),
+      ),
+    );
   }
 
   Widget _stagger(int index, Widget child) {
     return SlideTransition(
       position: _slideAt(index),
-      child: FadeTransition(
-        opacity: _fadeAt(index),
-        child: child,
-      ),
+      child: FadeTransition(opacity: _fadeAt(index), child: child),
     );
   }
 
@@ -113,11 +112,12 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             // Welcome banner (first visit only)
             if (!state.welcomeBannerSeen)
               _stagger(
-                  staggerIdx,
-                  _WelcomeBanner(
-                    type: type,
-                    onDismiss: () => state.markWelcomeBannerSeen(),
-                  ))
+                staggerIdx,
+                _WelcomeBanner(
+                  type: type,
+                  onDismiss: () => state.markWelcomeBannerSeen(),
+                ),
+              )
             else
               const SizedBox.shrink(),
             if (!state.welcomeBannerSeen)
@@ -134,10 +134,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
             // Insight banner (after rebalancing) — below chart
             if (hasInsightBanner)
-              Divider(
-                color: tc.border.withValues(alpha: 0.3),
-                height: 1,
-              ),
+              Divider(color: tc.border.withValues(alpha: 0.3), height: 1),
             if (hasInsightBanner) const SizedBox(height: 16),
             if (hasInsightBanner)
               _stagger(
@@ -171,8 +168,9 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             ),
             const SizedBox(height: 20),
             Divider(
-              color:
-                  WeRoboThemeColors.of(context).border.withValues(alpha: 0.15),
+              color: WeRoboThemeColors.of(
+                context,
+              ).border.withValues(alpha: 0.15),
               height: 1,
               thickness: 0.5,
             ),
@@ -235,8 +233,9 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           ChartPoint(date: point.date, value: point.portfolioValue),
       ]);
     }
-    final backtest = PortfolioStateProvider.of(context)
-        .portfolioValuePoints(baseInvestment: _baseInvestment);
+    final backtest = PortfolioStateProvider.of(
+      context,
+    ).portfolioValuePoints(baseInvestment: _baseInvestment);
     if (backtest.isNotEmpty) return backtest;
     final riskCode = PortfolioStateProvider.of(context).type.riskCode;
     return MockEarningsData.dailyCumulativePoints(
@@ -268,10 +267,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
       duration: const Duration(milliseconds: 700),
       vsync: this,
     )..forward();
-    _drawCurve = CurvedAnimation(
-      parent: _drawCtrl,
-      curve: Curves.linear,
-    );
+    _drawCurve = CurvedAnimation(parent: _drawCtrl, curve: Curves.linear);
     _glowCtrl = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
@@ -321,9 +317,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     if (idx == _rangeLabels.length - 1) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => const ProjectionScreen(),
-        ),
+        MaterialPageRoute(builder: (_) => const ProjectionScreen()),
       );
       return;
     }
@@ -346,7 +340,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final costPts = _filterByRange(allCost);
 
     // Compute hero stats from filtered data
-    final currentValue = accountSummary?.currentValue ??
+    final currentValue =
+        accountSummary?.currentValue ??
         (valuePts.isNotEmpty ? valuePts.last.value : 0.0);
     final startValue = valuePts.isNotEmpty ? valuePts.first.value : 0.0;
     final change = accountSummary?.profitLoss ?? (currentValue - startValue);
@@ -368,8 +363,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         : change;
     final displayChangePct =
         crosshairValue != null && crosshairCost != null && crosshairCost > 0
-            ? ((crosshairValue - crosshairCost) / crosshairCost) * 100
-            : changePct;
+        ? ((crosshairValue - crosshairCost) / crosshairCost) * 100
+        : changePct;
     final displayIsPositive = displayChange >= 0;
     final displayInvested =
         crosshairCost ?? accountSummary?.investedAmount ?? _baseInvestment;
@@ -432,74 +427,77 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         const SizedBox(height: 20),
 
         // Chart (edge-to-edge)
-        LayoutBuilder(builder: (context, constraints) {
-          final fullWidth = constraints.maxWidth + 48;
-          // Date label for drag position
-          final dateLabel =
-              _touchIndex != null && _touchIndex! < valuePts.length
-                  ? () {
-                      final d = valuePts[_touchIndex!].date;
-                      return '${d.year}년 ${d.month}월 ${d.day}일';
-                    }()
-                  : '';
-          return SizedBox(
-            height: 320,
-            child: OverflowBox(
-              maxWidth: fullWidth,
-              alignment: Alignment.centerLeft,
-              child: Transform.translate(
-                offset: const Offset(-24, 0),
-                child: GestureDetector(
-                  onPanDown: (d) {
-                    final x = d.localPosition.dx;
-                    final idx = ((x / fullWidth) * (valuePts.length - 1))
-                        .round()
-                        .clamp(0, valuePts.length - 1);
-                    _glowCtrl.repeat(reverse: true);
-                    setState(() => _touchIndex = idx);
-                  },
-                  onPanUpdate: (d) {
-                    final x = d.localPosition.dx;
-                    final idx = ((x / fullWidth) * (valuePts.length - 1))
-                        .round()
-                        .clamp(0, valuePts.length - 1);
-                    setState(() => _touchIndex = idx);
-                  },
-                  onPanEnd: (_) {
-                    _glowCtrl.stop();
-                    _glowCtrl.value = 0;
-                    setState(() => _touchIndex = null);
-                  },
-                  onPanCancel: () {
-                    _glowCtrl.stop();
-                    _glowCtrl.value = 0;
-                    setState(() => _touchIndex = null);
-                  },
-                  child: AnimatedBuilder(
-                    animation: Listenable.merge([_drawCurve, _glowCtrl]),
-                    builder: (context, _) {
-                      return CustomPaint(
-                        size: Size(fullWidth, 320),
-                        painter: _PortfolioValuePainter(
-                          valuePts: valuePts,
-                          costPts: costPts,
-                          progress: _drawCurve.value,
-                          touchIndex: _touchIndex,
-                          glowPhase: _glowCtrl.value,
-                          dateLabel: dateLabel,
-                          primaryColor: WeRoboColors.primary,
-                          glowColor: WeRoboColors.assetTier3,
-                          costColor: tc.textPrimary,
-                          gridColor: tc.border,
-                        ),
-                      );
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final fullWidth = constraints.maxWidth + 48;
+            // Date label for drag position
+            final dateLabel =
+                _touchIndex != null && _touchIndex! < valuePts.length
+                ? () {
+                    final d = valuePts[_touchIndex!].date;
+                    return '${d.year}년 ${d.month}월 ${d.day}일';
+                  }()
+                : '';
+            return SizedBox(
+              height: 320,
+              child: OverflowBox(
+                maxWidth: fullWidth,
+                alignment: Alignment.centerLeft,
+                child: Transform.translate(
+                  offset: const Offset(-24, 0),
+                  child: GestureDetector(
+                    onPanDown: (d) {
+                      final x = d.localPosition.dx;
+                      final idx = ((x / fullWidth) * (valuePts.length - 1))
+                          .round()
+                          .clamp(0, valuePts.length - 1);
+                      _glowCtrl.repeat(reverse: true);
+                      setState(() => _touchIndex = idx);
                     },
+                    onPanUpdate: (d) {
+                      final x = d.localPosition.dx;
+                      final idx = ((x / fullWidth) * (valuePts.length - 1))
+                          .round()
+                          .clamp(0, valuePts.length - 1);
+                      setState(() => _touchIndex = idx);
+                    },
+                    onPanEnd: (_) {
+                      _glowCtrl.stop();
+                      _glowCtrl.value = 0;
+                      setState(() => _touchIndex = null);
+                    },
+                    onPanCancel: () {
+                      _glowCtrl.stop();
+                      _glowCtrl.value = 0;
+                      setState(() => _touchIndex = null);
+                    },
+                    child: AnimatedBuilder(
+                      animation: Listenable.merge([_drawCurve, _glowCtrl]),
+                      builder: (context, _) {
+                        return CustomPaint(
+                          size: Size(fullWidth, 320),
+                          painter: _PortfolioValuePainter(
+                            valuePts: valuePts,
+                            costPts: costPts,
+                            progress: _drawCurve.value,
+                            touchIndex: _touchIndex,
+                            glowPhase: _glowCtrl.value,
+                            dateLabel: dateLabel,
+                            primaryColor: WeRoboColors.primary,
+                            glowColor: WeRoboColors.assetTier3,
+                            costColor: tc.textPrimary,
+                            gridColor: tc.border,
+                            crosshairColor: tc.textSecondary,
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
-            ),
-          );
-        }),
+            );
+          },
+        ),
 
         const SizedBox(height: 16),
 
@@ -517,8 +515,10 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
               onTap: () => _selectRange(i),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: active && !isFuture
                       ? WeRoboColors.primary
@@ -536,8 +536,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     color: isFuture
                         ? WeRoboColors.primary
                         : active
-                            ? WeRoboColors.white
-                            : tc.textSecondary,
+                        ? WeRoboColors.white
+                        : tc.textSecondary,
                   ),
                 ),
               ),
@@ -604,6 +604,9 @@ class _PortfolioValuePainter extends CustomPainter {
   final Color glowColor;
   final Color costColor;
   final Color gridColor;
+  // Color for the drag crosshair line + date label. Was hardcoded to
+  // Colors.white; that vanished against the warm-gray light theme.
+  final Color crosshairColor;
 
   _PortfolioValuePainter({
     required this.valuePts,
@@ -616,6 +619,7 @@ class _PortfolioValuePainter extends CustomPainter {
     required this.glowColor,
     required this.costColor,
     required this.gridColor,
+    required this.crosshairColor,
   });
 
   @override
@@ -665,8 +669,9 @@ class _PortfolioValuePainter extends CustomPainter {
     final complete = fIdx.floor();
     final frac = fIdx - complete;
     final drawCount = (complete + 1).clamp(2, valuePts.length);
-    final ti =
-        isDragging ? touchIndex!.clamp(0, valuePts.length - 1) : drawCount - 1;
+    final ti = isDragging
+        ? touchIndex!.clamp(0, valuePts.length - 1)
+        : drawCount - 1;
 
     // ── Cost basis line ──
     if (costPts.length >= 2) {
@@ -685,13 +690,14 @@ class _PortfolioValuePainter extends CustomPainter {
           }
         }
         canvas.drawPath(
-            leftPath,
-            Paint()
-              ..color = costColor.withValues(alpha: 0.6)
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 1.5
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round);
+          leftPath,
+          Paint()
+            ..color = costColor.withValues(alpha: 0.6)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round,
+        );
         // Right of drag: fade out
         if (ti < costCount - 1) {
           _drawFadingSegment(
@@ -718,13 +724,14 @@ class _PortfolioValuePainter extends CustomPainter {
           }
         }
         canvas.drawPath(
-            costPath,
-            Paint()
-              ..color = costColor.withValues(alpha: 0.6)
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 1.5
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round);
+          costPath,
+          Paint()
+            ..color = costColor.withValues(alpha: 0.6)
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 1.5
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round,
+        );
       }
     }
 
@@ -747,13 +754,14 @@ class _PortfolioValuePainter extends CustomPainter {
         }
       }
       canvas.drawPath(
-          mainPath,
-          Paint()
-            ..color = primaryColor
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round);
+        mainPath,
+        Paint()
+          ..color = primaryColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
 
       // Transition segment (gradient to glow)
       if (transStart < ti) {
@@ -763,10 +771,7 @@ class _PortfolioValuePainter extends CustomPainter {
           toY(valuePts[transStart].value),
         );
         for (int i = transStart + 1; i <= ti && i < drawCount; i++) {
-          transPath.lineTo(
-            toX(i, valuePts.length),
-            toY(valuePts[i].value),
-          );
+          transPath.lineTo(toX(i, valuePts.length), toY(valuePts[i].value));
         }
         final shader = ui.Gradient.linear(
           Offset(toX(transStart, valuePts.length), 0),
@@ -774,13 +779,14 @@ class _PortfolioValuePainter extends CustomPainter {
           [primaryColor, glowColor],
         );
         canvas.drawPath(
-            transPath,
-            Paint()
-              ..shader = shader
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 2
-              ..strokeCap = StrokeCap.round
-              ..strokeJoin = StrokeJoin.round);
+          transPath,
+          Paint()
+            ..shader = shader
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round,
+        );
       }
 
       // Right of drag: fade out
@@ -815,19 +821,17 @@ class _PortfolioValuePainter extends CustomPainter {
         final y0 = toY(valuePts[complete].value);
         final x1 = toX(complete + 1, valuePts.length);
         final y1 = toY(valuePts[complete + 1].value);
-        fullPath.lineTo(
-          x0 + frac * (x1 - x0),
-          y0 + frac * (y1 - y0),
-        );
+        fullPath.lineTo(x0 + frac * (x1 - x0), y0 + frac * (y1 - y0));
       }
       canvas.drawPath(
-          fullPath,
-          Paint()
-            ..color = primaryColor
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round);
+        fullPath,
+        Paint()
+          ..color = primaryColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round,
+      );
     }
 
     // ── Draggable line, date label, glow (only when dragging) ──
@@ -836,14 +840,14 @@ class _PortfolioValuePainter extends CustomPainter {
       final lineTop = lineTopPad;
       final lineBot = h - lineTopPad;
 
-      // Vertical line: white center, gray at ends
+      // Vertical line: crosshair color in middle, fading to grid at ends.
       final lineShader = ui.Gradient.linear(
         Offset(tx, lineTop),
         Offset(tx, lineBot),
         [
           gridColor.withValues(alpha: 0.12),
-          Colors.white.withValues(alpha: 0.7),
-          Colors.white.withValues(alpha: 0.7),
+          crosshairColor.withValues(alpha: 0.55),
+          crosshairColor.withValues(alpha: 0.55),
           gridColor.withValues(alpha: 0.12),
         ],
         [0.0, 0.12, 0.88, 1.0],
@@ -863,7 +867,7 @@ class _PortfolioValuePainter extends CustomPainter {
             text: dateLabel,
             style: TextStyle(
               fontSize: 10,
-              color: Colors.white.withValues(alpha: 0.7),
+              color: crosshairColor.withValues(alpha: 0.85),
               fontFamily: 'NotoSansKR',
               fontWeight: FontWeight.w400,
             ),
@@ -871,10 +875,7 @@ class _PortfolioValuePainter extends CustomPainter {
           textDirection: TextDirection.ltr,
         )..layout();
         final dateX = (tx - dateTp.width / 2).clamp(4.0, w - dateTp.width - 4);
-        dateTp.paint(
-          canvas,
-          Offset(dateX, lineTop - dateTp.height - 2),
-        );
+        dateTp.paint(canvas, Offset(dateX, lineTop - dateTp.height - 2));
       }
 
       // Glow dot at intersection
@@ -898,11 +899,7 @@ class _PortfolioValuePainter extends CustomPainter {
             ..color = Colors.white
             ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
         );
-        canvas.drawCircle(
-          Offset(tx, vy),
-          3,
-          Paint()..color = Colors.white,
-        );
+        canvas.drawCircle(Offset(tx, vy), 3, Paint()..color = Colors.white);
       }
     }
   }
@@ -927,26 +924,19 @@ class _PortfolioValuePainter extends CustomPainter {
     final fadeEnd = min(startIdx + fadeCount, endIdx);
 
     final fadePath = Path();
-    fadePath.moveTo(
-      toX(startIdx, totalPts),
-      toY(pts[startIdx].value),
-    );
+    fadePath.moveTo(toX(startIdx, totalPts), toY(pts[startIdx].value));
     for (int i = startIdx + 1; i < fadeEnd; i++) {
-      fadePath.lineTo(
-        toX(i, totalPts),
-        toY(pts[i].value),
-      );
+      fadePath.lineTo(toX(i, totalPts), toY(pts[i].value));
     }
 
     final x0 = toX(startIdx, totalPts);
     final x1 = toX(fadeEnd - 1, totalPts);
     if ((x1 - x0).abs() < 1) return;
 
-    final shader = ui.Gradient.linear(
-      Offset(x0, 0),
-      Offset(x1, 0),
-      [color, color.withValues(alpha: 0)],
-    );
+    final shader = ui.Gradient.linear(Offset(x0, 0), Offset(x1, 0), [
+      color,
+      color.withValues(alpha: 0),
+    ]);
     canvas.drawPath(
       fadePath,
       Paint()
@@ -1082,7 +1072,8 @@ class _InsightBanner extends StatelessWidget {
         Navigator.push(
           context,
           WeRoboMotion.fadeRoute<void>(
-              InsightDetailPage(insight: latestInsight)),
+            InsightDetailPage(insight: latestInsight),
+          ),
         );
       },
       child: Padding(
@@ -1137,11 +1128,7 @@ class _InsightBanner extends StatelessWidget {
             ),
 
             // Chevron
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: tc.textTertiary,
-            ),
+            Icon(Icons.chevron_right_rounded, size: 18, color: tc.textTertiary),
           ],
         ),
       ),
@@ -1221,7 +1208,8 @@ class _DepositsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final latestDeposit = _findLatestDeposit(activities);
-    final latestAmount = latestDeposit?.amount ??
+    final latestAmount =
+        latestDeposit?.amount ??
         ((accountSummary?.investedAmount ?? 0) > 0
             ? accountSummary?.investedAmount
             : null);
@@ -1244,11 +1232,7 @@ class _DepositsPanel extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: tc.textTertiary,
-            ),
+            Icon(Icons.chevron_right_rounded, size: 20, color: tc.textTertiary),
           ],
         ),
         const SizedBox(height: 16),
@@ -1257,7 +1241,7 @@ class _DepositsPanel extends StatelessWidget {
           valueText: latestAmount == null
               ? '아직 입금 내역이 없어요'
               : '₩${_formatCurrency(latestAmount.round())}'
-                  ' · ${_formatKoreanMonthDay(latestDate!)}',
+                    ' · ${_formatKoreanMonthDay(latestDate!)}',
         ),
         Divider(
           color: tc.border.withValues(alpha: 0.4),
@@ -1269,7 +1253,7 @@ class _DepositsPanel extends StatelessWidget {
           valueText: upcomingDate == null
               ? '예정된 입금이 없어요'
               : '₩${_formatCurrency(upcomingAmount.round())}'
-                  ' · ${_formatKoreanMonthDay(upcomingDate)}',
+                    ' · ${_formatKoreanMonthDay(upcomingDate)}',
         ),
         const SizedBox(height: 16),
         Row(
@@ -1293,20 +1277,20 @@ class _DepositsPanel extends StatelessWidget {
     );
   }
 
-  MobileAccountActivity? _findLatestDeposit(
-    List<MobileAccountActivity> items,
-  ) {
-    final deposits = items
-        .where(
-          (activity) =>
-              activity.type == 'cash_in' || activity.type == 'initial_deposit',
-        )
-        .toList()
-      ..sort((a, b) {
-        final aDate = _parseIsoDate(a.date) ?? DateTime(1970);
-        final bDate = _parseIsoDate(b.date) ?? DateTime(1970);
-        return bDate.compareTo(aDate);
-      });
+  MobileAccountActivity? _findLatestDeposit(List<MobileAccountActivity> items) {
+    final deposits =
+        items
+            .where(
+              (activity) =>
+                  activity.type == 'cash_in' ||
+                  activity.type == 'initial_deposit',
+            )
+            .toList()
+          ..sort((a, b) {
+            final aDate = _parseIsoDate(a.date) ?? DateTime(1970);
+            final bDate = _parseIsoDate(b.date) ?? DateTime(1970);
+            return bDate.compareTo(aDate);
+          });
 
     if (deposits.isEmpty) {
       return null;
@@ -1319,10 +1303,7 @@ class _DepositInfoRow extends StatelessWidget {
   final String label;
   final String valueText;
 
-  const _DepositInfoRow({
-    required this.label,
-    required this.valueText,
-  });
+  const _DepositInfoRow({required this.label, required this.valueText});
 
   @override
   Widget build(BuildContext context) {
@@ -1357,10 +1338,7 @@ class _DepositActionButton extends StatelessWidget {
   final IconData icon;
   final String label;
 
-  const _DepositActionButton({
-    required this.icon,
-    required this.label,
-  });
+  const _DepositActionButton({required this.icon, required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -1372,18 +1350,12 @@ class _DepositActionButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: tc.border.withValues(alpha: 0.3),
-          ),
+          border: Border.all(color: tc.border.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              icon,
-              size: 16,
-              color: tc.textPrimary,
-            ),
+            Icon(icon, size: 16, color: tc.textPrimary),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
@@ -1493,11 +1465,13 @@ class _PortfolioAllocationPanel extends StatelessWidget {
   ) {
     Navigator.push(
       context,
-      WeRoboMotion.fadeRoute<void>(PortfolioAllocationDetailPage(
-        detail: detail,
-        baseValue: baseValue,
-        initialShowAmounts: showAmounts,
-      )),
+      WeRoboMotion.fadeRoute<void>(
+        PortfolioAllocationDetailPage(
+          detail: detail,
+          baseValue: baseValue,
+          initialShowAmounts: showAmounts,
+        ),
+      ),
     );
   }
 }
@@ -1505,9 +1479,7 @@ class _PortfolioAllocationPanel extends StatelessWidget {
 class _ReserveCashPanel extends StatelessWidget {
   final double reserveCashAmount;
 
-  const _ReserveCashPanel({
-    required this.reserveCashAmount,
-  });
+  const _ReserveCashPanel({required this.reserveCashAmount});
 
   @override
   Widget build(BuildContext context) {
@@ -1525,16 +1497,12 @@ class _ReserveCashPanel extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           '포트폴리오 구성 비중에는 포함되지 않아요.',
-          style: WeRoboTypography.bodySmall.copyWith(
-            color: tc.textSecondary,
-          ),
+          style: WeRoboTypography.bodySmall.copyWith(color: tc.textSecondary),
         ),
         const SizedBox(height: 4),
         Text(
           '리밸런싱 시 별도로 보관됐다가 자동 사용돼요.',
-          style: WeRoboTypography.caption.copyWith(
-            color: tc.textTertiary,
-          ),
+          style: WeRoboTypography.caption.copyWith(color: tc.textTertiary),
         ),
         const SizedBox(height: 16),
         Row(
@@ -1592,8 +1560,9 @@ class _PortfolioValueToggle extends StatelessWidget {
             AnimatedAlign(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              alignment:
-                  showAmounts ? Alignment.centerRight : Alignment.centerLeft,
+              alignment: showAmounts
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
               child: Container(
                 width: _chipSize,
                 height: _chipSize,
@@ -1697,11 +1666,7 @@ class _PortfolioAllocationRow extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 4),
-            Icon(
-              Icons.chevron_right_rounded,
-              color: tc.textTertiary,
-              size: 16,
-            ),
+            Icon(Icons.chevron_right_rounded, color: tc.textTertiary, size: 16),
           ],
         ),
       ),
@@ -1712,8 +1677,10 @@ class _PortfolioAllocationRow extends StatelessWidget {
     if (detail.tickers.isEmpty) {
       return '세부 종목 정보 없음';
     }
-    final symbols =
-        detail.tickers.take(3).map((ticker) => ticker.symbol).join(', ');
+    final symbols = detail.tickers
+        .take(3)
+        .map((ticker) => ticker.symbol)
+        .join(', ');
     if (detail.tickers.length <= 3) {
       return symbols;
     }
@@ -1773,11 +1740,7 @@ class _DigestBanner extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(
-                Icons.chevron_right,
-                color: tc.textTertiary,
-                size: 20,
-              ),
+              Icon(Icons.chevron_right, color: tc.textTertiary, size: 20),
             ],
           ),
         ),
