@@ -322,20 +322,84 @@ class _FrontierPainter extends CustomPainter {
     return path;
   }
 
-  /// Returns the (x, y) in chart coords for an asset class label, mapped
-  /// monotonically along the curve from defensive (left) to aggressive
-  /// (right). Exact (vol, return) intentionally ignored — labels are
-  /// placed for visual order, not data precision (per 2026-05-05 user
-  /// notes).
-  Offset _assetAnchor(AssetClass cls, List<Offset> curvePoints) {
-    // 7 classes → 7 evenly-spaced anchors along the curve.
-    // index 0 (cash) → curvePoints.first (leftmost)
-    // index 6 (newGrowth) → curvePoints.last (rightmost)
-    final i = cls.index;
-    final n = AssetClass.values.length - 1;
-    final t = i / n;
-    final pos = (t * (curvePoints.length - 1)).round();
-    return curvePoints[pos];
+  /// Approximate per-asset (vol, return) coordinates used when no
+  /// real per-asset stats are available from the backend. Numbers come
+  /// from typical risk/return profiles for each asset class. TODO:
+  /// replace with backend-provided per-asset stats once
+  /// `MobileFrontierPreviewResponse` exposes them — currently only
+  /// per-point sector weights are returned. Documented as approximate.
+  static const Map<AssetClass, Offset> _assetApproxCoords = {
+    AssetClass.cash: Offset(0.02, 0.04),
+    AssetClass.shortBond: Offset(0.05, 0.05),
+    AssetClass.infraBond: Offset(0.10, 0.08),
+    AssetClass.gold: Offset(0.18, 0.07),
+    AssetClass.usValue: Offset(0.18, 0.10),
+    AssetClass.usGrowth: Offset(0.25, 0.13),
+    // newGrowth is intentionally placed off the typical visible
+    // range — its real volatility is far higher than the rest of
+    // the universe, so we anchor it visually at the right edge.
+    AssetClass.newGrowth: Offset(0.40, 0.18),
+  };
+
+  /// Returns the screen-space anchor for an asset bubble. Uses the real
+  /// (vol, return) → screen mapping helper so bubbles sit at the
+  /// asset's actual risk/return position relative to the frontier.
+  /// Falls back gracefully when no preview data is available.
+  Offset _assetAnchor(
+    AssetClass cls,
+    Size size,
+    double minVolatility,
+    double maxVolatility,
+    double minExpectedReturn,
+    double maxExpectedReturn,
+  ) {
+    final coord = _assetApproxCoords[cls]!;
+    return _coordToScreen(
+      coord.dx,
+      coord.dy,
+      size.width,
+      size.height,
+      minVolatility,
+      maxVolatility,
+      minExpectedReturn,
+      maxExpectedReturn,
+    );
+  }
+
+  /// Maps an arbitrary (volatility, expectedReturn) pair to screen
+  /// coords using the same padding ratios as `_previewPointToOffset`,
+  /// then clamps to the visible canvas so off-range bubbles (notably
+  /// 신성장주) stay near the chart edge instead of disappearing.
+  Offset _coordToScreen(
+    double volatility,
+    double expectedReturn,
+    double w,
+    double h,
+    double minVolatility,
+    double maxVolatility,
+    double minExpectedReturn,
+    double maxExpectedReturn,
+  ) {
+    const leftPaddingRatio = 0.15;
+    const rightPaddingRatio = 0.85;
+    const topPaddingRatio = 0.12;
+    const bottomPaddingRatio = 0.86;
+
+    final normalizedVolatility = maxVolatility == minVolatility
+        ? 0.5
+        : ((volatility - minVolatility) / (maxVolatility - minVolatility))
+            .clamp(0.0, 1.0);
+    final normalizedExpectedReturn = maxExpectedReturn == minExpectedReturn
+        ? 0.5
+        : ((expectedReturn - minExpectedReturn) /
+                (maxExpectedReturn - minExpectedReturn))
+            .clamp(0.0, 1.0);
+
+    final x = w * leftPaddingRatio +
+        (w * (rightPaddingRatio - leftPaddingRatio)) * normalizedVolatility;
+    final y = h * bottomPaddingRatio -
+        (h * (bottomPaddingRatio - topPaddingRatio)) * normalizedExpectedReturn;
+    return Offset(x, y);
   }
 
   /// Hand-curated 5-anchor textbook efficient frontier shape, mapped
@@ -423,7 +487,22 @@ class _FrontierPainter extends CustomPainter {
       }
       if (anchors.length >= 2) {
         _drawFrontierStroke(canvas, size, anchors);
-        _drawAssetBubbles(canvas, anchors, dotProgress);
+        // No real preview yet — derive the min/max envelope directly
+        // from the approximate per-asset coords so bubbles still span
+        // the canvas naturally.
+        final approxVols =
+            _assetApproxCoords.values.map((o) => o.dx).toList();
+        final approxReturns =
+            _assetApproxCoords.values.map((o) => o.dy).toList();
+        _drawAssetBubbles(
+          canvas,
+          size,
+          dotProgress,
+          minVolatility: approxVols.reduce(min),
+          maxVolatility: approxVols.reduce(max),
+          minExpectedReturn: approxReturns.reduce(min),
+          maxExpectedReturn: approxReturns.reduce(max),
+        );
       }
     }
 
@@ -472,7 +551,15 @@ class _FrontierPainter extends CustomPainter {
     if (visiblePoints.length >= 2) {
       final anchors = _idealizedAnchors(visiblePoints);
       _drawFrontierStroke(canvas, size, anchors);
-      _drawAssetBubbles(canvas, anchors, dotProgress);
+      _drawAssetBubbles(
+        canvas,
+        size,
+        dotProgress,
+        minVolatility: minVolatility,
+        maxVolatility: maxVolatility,
+        minExpectedReturn: minExpectedReturn,
+        maxExpectedReturn: maxExpectedReturn,
+      );
     }
 
     final selectedPosition = (() {
@@ -512,19 +599,33 @@ class _FrontierPainter extends CustomPainter {
     canvas.drawPath(curvePath, curvePaint);
   }
 
-  /// Draws the seven asset-class bubbles at fixed normalized positions
-  /// along the curve in `AssetClass` enum order — defensive (cash) on
-  /// the left, aggressive (newGrowth) on the right. Fixed radius (no
-  /// size growth animation) and no percentage labels per 2026-05-05
-  /// user notes.
+  /// Draws the seven asset-class bubbles at their REAL (vol, return)
+  /// coordinates relative to the frontier (mapped onto the same screen
+  /// padding ratios used for the curve). Numbers come from
+  /// [_assetApproxCoords] — a hardcoded approximate table — until the
+  /// backend exposes per-asset stats in
+  /// `MobileFrontierPreviewResponse`. 신성장주 is intentionally
+  /// anchored near the right edge (vol≈0.40) since its real volatility
+  /// is typically off-chart. Fixed radius, no percentage labels.
   void _drawAssetBubbles(
     Canvas canvas,
-    List<Offset> curvePoints,
-    double opacity,
-  ) {
-    if (opacity <= 0 || curvePoints.isEmpty) return;
+    Size size,
+    double opacity, {
+    required double minVolatility,
+    required double maxVolatility,
+    required double minExpectedReturn,
+    required double maxExpectedReturn,
+  }) {
+    if (opacity <= 0) return;
     for (final cls in AssetClass.values) {
-      final anchor = _assetAnchor(cls, curvePoints);
+      final anchor = _assetAnchor(
+        cls,
+        size,
+        minVolatility,
+        maxVolatility,
+        minExpectedReturn,
+        maxExpectedReturn,
+      );
       final color = WeRoboColors.assetColor(cls);
       // Fixed radius — NO size-growth animation.
       final fillPaint = Paint()
