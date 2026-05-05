@@ -476,11 +476,15 @@ class _FrontierBodyState extends State<_FrontierBody> {
     return 24.7 + (_dotT * (31.6 - 24.7));
   }
 
-  ({String text, Color color}) get _riskComparison {
+  /// Returns the risk-comparison card payload. The card shares the
+  /// `_StatCard` shape with 연 기대수익률, so the data is split into
+  /// a static `value` (e.g. "약 30% 더 안전한") and `color` so the
+  /// label "시장대비" can sit muted above it just like 연 기대수익률.
+  ({String value, Color color}) get _riskComparison {
     final points = _preview.points;
     if (points.isEmpty) {
       return (
-        text: '시장 평균 수준',
+        value: '시장 평균 수준',
         color: WeRoboColors.accent,
       );
     }
@@ -489,7 +493,7 @@ class _FrontierBodyState extends State<_FrontierBody> {
     final selected = _selectedPreviewPoint;
     if (selected == null || averageVol == 0) {
       return (
-        text: '시장 평균 수준',
+        value: '시장 평균 수준',
         color: WeRoboColors.accent,
       );
     }
@@ -498,20 +502,19 @@ class _FrontierBodyState extends State<_FrontierBody> {
     final isRiskier = diff > 0;
     if (percentDiff == 0) {
       return (
-        text: '시장 평균 수준',
+        value: '시장 평균 수준',
         color: WeRoboColors.accent,
       );
     }
-    // Smooth green→orange transition based on risk factor
+    // Smooth green→orange transition based on risk factor.
     final lerpT = isRiskier ? (diff.abs() * 2).clamp(0.0, 1.0) : 0.0;
     final color = Color.lerp(
       const Color(0xFF059669),
       const Color(0xFFF97316),
       lerpT,
     )!;
-    final text = '시장대비 약 $percentDiff%\n'
-        '${isRiskier ? '더 위험한' : '더 안전한'} 포트폴리오';
-    return (text: text, color: color);
+    final value = '약 $percentDiff% ${isRiskier ? '더 위험한' : '더 안전한'}';
+    return (value: value, color: color);
   }
 
   @override
@@ -679,43 +682,32 @@ class _FrontierBodyState extends State<_FrontierBody> {
           ),
           const SizedBox(height: 24),
 
-          // Return + risk display
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: '연 기대수익률',
-                  value: '${_returnRate.toStringAsFixed(1)}%',
-                  color: WeRoboColors.primary,
+          // Return + risk display — both cards share `_StatCard` so the
+          // shape, padding, border, and label/value hierarchy match.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _StatCard(
+                    label: '연 기대수익률',
+                    value: '${_returnRate.toStringAsFixed(1)}%',
+                    color: WeRoboColors.primary,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _riskComparison.color.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 300),
-                    style: WeRoboTypography.caption.copyWith(
-                      color: _riskComparison.color,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatCard(
+                    label: '시장대비',
+                    value: _riskComparison.value,
+                    color: _riskComparison.color,
+                    valueStyle: WeRoboTypography.bodySmall.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
-                    textAlign: TextAlign.center,
-                    child: Text(
-                      _riskComparison.text,
-                      textAlign: TextAlign.center,
-                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 24),
 
@@ -792,15 +784,24 @@ class _StatCard extends StatelessWidget {
   final String value;
   final Color color;
 
+  /// Optional override for the value's text style. Defaults to the
+  /// large Numbers style used by 연 기대수익률; the 시장대비 card
+  /// passes a bodySmall style because its value is multi-word Korean
+  /// rather than a single number.
+  final TextStyle? valueStyle;
+
   const _StatCard({
     required this.label,
     required this.value,
     required this.color,
+    this.valueStyle,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final resolvedValueStyle =
+        (valueStyle ?? WeRoboTypography.number).copyWith(color: color);
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
@@ -808,12 +809,18 @@ class _StatCard extends StatelessWidget {
         border: Border.all(color: tc.border, width: 1),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(label,
               style:
                   WeRoboTypography.caption.copyWith(color: tc.textSecondary)),
           const SizedBox(height: 4),
-          Text(value, style: WeRoboTypography.number.copyWith(color: color)),
+          AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 300),
+            style: resolvedValueStyle,
+            textAlign: TextAlign.center,
+            child: Text(value, textAlign: TextAlign.center),
+          ),
         ],
       ),
     );
