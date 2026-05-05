@@ -286,4 +286,51 @@ void main() {
     expect(state.earningsHistory, isNotNull);
     expect(state.earningsHistory!.points, isNotEmpty);
   });
+
+  testWidgets('drag at index >= 1 reveals context card', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(
+      MobileAccountDashboard(
+        hasAccount: true,
+        summary: accountDashboard().summary,
+        history: List.generate(
+          60,
+          (i) => MobileAccountHistoryPoint(
+            date: DateTime.now().subtract(Duration(days: 60 - i)),
+            portfolioValue: 10000000 + (i * 5000),
+            investedAmount: 10000000,
+            profitLoss: i * 5000,
+            profitLossPct: (i * 5000) / 10000000,
+          ),
+        ),
+        recentActivity: const [],
+      ),
+    );
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Drag onto the chart at a non-zero index.
+    final chart = find.byType(CustomPaint).first;
+    final center = tester.getCenter(chart);
+    await tester.dragFrom(center, const Offset(20, 0));
+    await tester.pump();
+
+    // Card should show a date label like "X월 Y일" and the 포트폴리오 row.
+    expect(find.textContaining('월'), findsWidgets);
+    expect(find.text('포트폴리오'), findsAtLeastNWidgets(1));
+  });
 }

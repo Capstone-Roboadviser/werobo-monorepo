@@ -449,6 +449,100 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     ];
   }
 
+  ({
+    double x,
+    double y,
+    String dateLabel,
+    double portfolioPct,
+    double? marketPct,
+    List<({String name, double pct})> assetRows,
+  })? _buildCardData(List<ChartPoint> valuePts) {
+    final ti = _touchIndex;
+    if (ti == null || ti < 1 || ti >= valuePts.length) return null;
+
+    // Day-over-day portfolio %.
+    final curr = valuePts[ti].value;
+    final prev = valuePts[ti - 1].value;
+    if (prev == 0) return null;
+    final portfolioPct = (curr - prev) / prev;
+
+    // Day-over-day market %, if benchmark data exists.
+    double? marketPct;
+    final state = PortfolioStateProvider.of(context);
+    final marketLine = state.comparisonLines.firstWhere(
+      (l) => l.key == 'benchmark_avg',
+      orElse: () => const ChartLine(
+        key: '',
+        label: '',
+        color: Colors.transparent,
+        points: [],
+      ),
+    );
+    if (marketLine.points.length >= 2) {
+      final touchDate = valuePts[ti].date;
+      final mIdx = marketLine.points.indexWhere(
+        (p) =>
+            p.date.year == touchDate.year &&
+            p.date.month == touchDate.month &&
+            p.date.day == touchDate.day,
+      );
+      if (mIdx >= 1) {
+        final mCurr = marketLine.points[mIdx].value;
+        final mPrev = marketLine.points[mIdx - 1].value;
+        marketPct = mCurr - mPrev;
+      }
+    }
+
+    // Top 2 asset gainers/losers based on portfolio direction.
+    final assetReturns = state.dayOverDayAssetReturns(valuePts[ti].date);
+    final names = <String, String>{
+      for (final s in (state.selectedPortfolio?.sectorAllocations ??
+          const <MobileSectorAllocation>[]))
+        s.assetCode: s.assetName,
+    };
+    final entries = assetReturns.entries
+        .where((e) => names.containsKey(e.key))
+        .map((e) => (name: names[e.key]!, pct: e.value))
+        .toList();
+    if (portfolioPct >= 0) {
+      entries.sort((a, b) => b.pct.compareTo(a.pct));
+    } else {
+      entries.sort((a, b) => a.pct.compareTo(b.pct));
+    }
+    final assetRows = entries.take(2).toList();
+
+    // Position: anchor x at touch index, y above the dot if room else below.
+    const padX = 8.0;
+    const cardWidth = 160.0;
+    final chartWidth = MediaQuery.of(context).size.width;
+    final touchX = (ti / (valuePts.length - 1)) * chartWidth - 24;
+    final x = (touchX - cardWidth / 2)
+        .clamp(padX, chartWidth - cardWidth - padX)
+        .toDouble();
+
+    // Approximate y of the orange dot using % of chart height.
+    // Without exposing painter internals, place card at top by default and
+    // flip to bottom if the touch is in the upper third of the chart.
+    final firstVal = valuePts.first.value;
+    final lastVal = valuePts.last.value;
+    final spread = (lastVal - firstVal).abs();
+    final touchPct = spread > 0 ? (curr - firstVal) / spread : 0.0;
+    final dotInUpperThird = touchPct < 0.33;
+    final y = dotInUpperThird ? 220.0 : 50.0;
+
+    final date = valuePts[ti].date;
+    final dateLabel = '${date.month}월 ${date.day}일';
+
+    return (
+      x: x,
+      y: y,
+      dateLabel: dateLabel,
+      portfolioPct: portfolioPct,
+      marketPct: marketPct,
+      assetRows: assetRows,
+    );
+  }
+
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -556,105 +650,134 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     return '${d.year}년 ${d.month}월 ${d.day}일';
                   }()
                 : '';
+            // Compute card data when dragging at a non-zero index
+            final cardData = _touchIndex != null && _touchIndex! >= 1
+                ? _buildCardData(valuePts)
+                : null;
             return SizedBox(
               height: 320,
-              child: OverflowBox(
-                maxWidth: fullWidth,
-                alignment: Alignment.centerLeft,
-                child: Transform.translate(
-                  offset: const Offset(-24, 0),
-                  child: GestureDetector(
-                    onPanDown: (d) {
-                      final x = d.localPosition.dx;
-                      final idx = ((x / fullWidth) * (valuePts.length - 1))
-                          .round()
-                          .clamp(0, valuePts.length - 1);
-                      _glowCtrl.repeat(reverse: true);
-                      setState(() => _touchIndex = idx);
-                    },
-                    onPanUpdate: (d) {
-                      final x = d.localPosition.dx;
-                      final idx = ((x / fullWidth) * (valuePts.length - 1))
-                          .round()
-                          .clamp(0, valuePts.length - 1);
-                      setState(() => _touchIndex = idx);
-                    },
-                    onPanEnd: (_) {
-                      _glowCtrl.stop();
-                      _glowCtrl.value = 0;
-                      setState(() => _touchIndex = null);
-                    },
-                    onPanCancel: () {
-                      _glowCtrl.stop();
-                      _glowCtrl.value = 0;
-                      setState(() => _touchIndex = null);
-                    },
-                    child: AnimatedBuilder(
-                      animation: Listenable.merge([_drawCurve, _glowCtrl]),
-                      builder: (context, _) {
-                        // lines[0] is drawn last (on top); benchmarks are
-                        // drawn back-to-front by the painter. Cache helper
-                        // outputs so the animation builder doesn't re-walk
-                        // comparisonLines + reallocate every frame.
-                        final portfolioPts = _pctSeries(valuePts);
-                        final marketPts = _marketSeries(valuePts);
-                        final expectedPts =
-                            _expectedReturnEndpoints(valuePts);
-                        final bondPts = _bondEndpoints(valuePts);
-                        return CustomPaint(
-                          size: Size(fullWidth, 320),
-                          painter: _HomePerformancePainter(
-                            lines: [
-                              ChartLine(
-                                key: 'portfolio',
-                                label: '포트폴리오',
-                                color: WeRoboColors.primary,
-                                points: portfolioPts,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  OverflowBox(
+                    maxWidth: fullWidth,
+                    alignment: Alignment.centerLeft,
+                    child: Transform.translate(
+                      offset: const Offset(-24, 0),
+                      child: GestureDetector(
+                        onPanDown: (d) {
+                          final x = d.localPosition.dx;
+                          final idx =
+                              ((x / fullWidth) * (valuePts.length - 1))
+                                  .round()
+                                  .clamp(0, valuePts.length - 1);
+                          _glowCtrl.repeat(reverse: true);
+                          setState(() => _touchIndex = idx);
+                        },
+                        onPanUpdate: (d) {
+                          final x = d.localPosition.dx;
+                          final idx =
+                              ((x / fullWidth) * (valuePts.length - 1))
+                                  .round()
+                                  .clamp(0, valuePts.length - 1);
+                          setState(() => _touchIndex = idx);
+                        },
+                        onPanEnd: (_) {
+                          _glowCtrl.stop();
+                          _glowCtrl.value = 0;
+                          setState(() => _touchIndex = null);
+                        },
+                        onPanCancel: () {
+                          _glowCtrl.stop();
+                          _glowCtrl.value = 0;
+                          setState(() => _touchIndex = null);
+                        },
+                        child: AnimatedBuilder(
+                          animation:
+                              Listenable.merge([_drawCurve, _glowCtrl]),
+                          builder: (context, _) {
+                            // lines[0] is drawn last (on top); benchmarks
+                            // are drawn back-to-front by the painter. Cache
+                            // helper outputs so the animation builder
+                            // doesn't re-walk comparisonLines + reallocate
+                            // every frame.
+                            final portfolioPts = _pctSeries(valuePts);
+                            final marketPts = _marketSeries(valuePts);
+                            final expectedPts =
+                                _expectedReturnEndpoints(valuePts);
+                            final bondPts = _bondEndpoints(valuePts);
+                            return CustomPaint(
+                              size: Size(fullWidth, 320),
+                              painter: _HomePerformancePainter(
+                                lines: [
+                                  ChartLine(
+                                    key: 'portfolio',
+                                    label: '포트폴리오',
+                                    color: WeRoboColors.primary,
+                                    points: portfolioPts,
+                                  ),
+                                  if (marketPts.isNotEmpty)
+                                    ChartLine(
+                                      key: 'market',
+                                      label: '시장',
+                                      color: tc.textSecondary,
+                                      points: marketPts,
+                                    ),
+                                  if (expectedPts.isNotEmpty)
+                                    ChartLine(
+                                      key: 'expected',
+                                      label: '연 기대수익률',
+                                      color: WeRoboColors.primary.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      dashed: true,
+                                      points: expectedPts,
+                                    ),
+                                  if (bondPts.isNotEmpty)
+                                    ChartLine(
+                                      // Short form. The comparison chart
+                                      // uses '채권 수익률' — the home legend
+                                      // keeps the shorter '채권' to fit 4
+                                      // entries on a phone.
+                                      key: 'bond',
+                                      label: '채권',
+                                      color: tc.textTertiary.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                      dashed: true,
+                                      points: bondPts,
+                                    ),
+                                ],
+                                progress: _drawCurve.value,
+                                touchIndex: _touchIndex,
+                                glowPhase: _glowCtrl.value,
+                                dateLabel: dateLabel,
+                                glowColor: WeRoboColors.assetTier3,
+                                gridColor: tc.border,
+                                crosshairColor: tc.textSecondary,
                               ),
-                              if (marketPts.isNotEmpty)
-                                ChartLine(
-                                  key: 'market',
-                                  label: '시장',
-                                  color: tc.textSecondary,
-                                  points: marketPts,
-                                ),
-                              if (expectedPts.isNotEmpty)
-                                ChartLine(
-                                  key: 'expected',
-                                  label: '연 기대수익률',
-                                  color: WeRoboColors.primary.withValues(
-                                    alpha: 0.5,
-                                  ),
-                                  dashed: true,
-                                  points: expectedPts,
-                                ),
-                              if (bondPts.isNotEmpty)
-                                ChartLine(
-                                  // Short form. The comparison chart uses
-                                  // '채권 수익률' — the home legend keeps the
-                                  // shorter '채권' to fit 4 entries on a phone.
-                                  key: 'bond',
-                                  label: '채권',
-                                  color: tc.textTertiary.withValues(
-                                    alpha: 0.7,
-                                  ),
-                                  dashed: true,
-                                  points: bondPts,
-                                ),
-                            ],
-                            progress: _drawCurve.value,
-                            touchIndex: _touchIndex,
-                            glowPhase: _glowCtrl.value,
-                            dateLabel: dateLabel,
-                            glowColor: WeRoboColors.assetTier3,
-                            gridColor: tc.border,
-                            crosshairColor: tc.textSecondary,
-                          ),
-                        );
-                      },
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  if (cardData != null)
+                    Positioned(
+                      left: cardData.x,
+                      top: cardData.y,
+                      child: AnimatedOpacity(
+                        opacity: 1,
+                        duration: const Duration(milliseconds: 100),
+                        child: _DragContextCard(
+                          dateLabel: cardData.dateLabel,
+                          portfolioPct: cardData.portfolioPct,
+                          marketPct: cardData.marketPct,
+                          assetRows: cardData.assetRows,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             );
           },
