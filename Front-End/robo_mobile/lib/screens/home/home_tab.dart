@@ -1015,7 +1015,7 @@ class _LegendDotPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
     final y = size.height / 2;
     if (dashed) {
-      // 6/3 dash pattern within the 12px sample width
+      // 3-on/2-off dash pattern within the 12 px sample
       const dashLen = 3.0;
       const gapLen = 2.0;
       double x = 0;

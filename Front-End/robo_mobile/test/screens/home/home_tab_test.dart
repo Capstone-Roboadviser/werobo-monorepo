@@ -226,7 +226,7 @@ void main() {
     expect(find.textContaining('총 입금'), findsNothing);
   });
 
-  testWidgets('chart legend shows 시장 entry when comparison data is wired',
+  testWidgets('chart legend renders all four static labels unconditionally',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = PortfolioState();
@@ -250,5 +250,7 @@ void main() {
     // (lines themselves render only when data exists).
     expect(find.text('포트폴리오'), findsOneWidget);
     expect(find.text('시장'), findsOneWidget);
+    expect(find.text('연 기대수익률'), findsOneWidget);
+    expect(find.text('채권'), findsOneWidget);
   });
 }
