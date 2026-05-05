@@ -193,10 +193,9 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
     return AnimatedBuilder(
       animation: Listenable.merge([_controller, _pulseController]),
       builder: (context, _) {
-        // 1:3 height:width ratio per 2026-05-05 user notes — the horizontal
-        // layout makes the frontier curve slope readable on small screens.
+        // 1:2 width:height per user feedback — taller portrait orientation
         return AspectRatio(
-          aspectRatio: 3.0,
+          aspectRatio: 0.5,
           child: LayoutBuilder(
             builder: (context, constraints) {
               final w = constraints.maxWidth;
@@ -339,17 +338,42 @@ class _FrontierPainter extends CustomPainter {
     return curvePoints[pos];
   }
 
-  /// Sub-samples [points] down to roughly [target] anchors, preserving
-  /// the first and last points so the curve still hits the endpoints.
-  List<Offset> _subSample(List<Offset> points, int target) {
-    if (points.length <= target) return points;
-    final n = points.length;
-    final result = <Offset>[];
-    for (var i = 0; i < target; i++) {
-      final idx = (i * (n - 1) / (target - 1)).round();
-      result.add(points[idx]);
-    }
-    return result;
+  /// Hand-curated 5-anchor textbook efficient frontier shape, mapped
+  /// into the bounding box of [rawPoints] (real data extent). The curve
+  /// is intentionally idealized (smooth, monotonically increasing,
+  /// concave going right). Real data still drives the dot position and
+  /// `weightsAt(t)` lookups; only the visual stroke uses these anchors.
+  ///
+  /// Normalized anchor positions (xN ∈ [0,1] vol, yN ∈ [0,1] return):
+  ///   (0.00, 0.00) — defensive endpoint
+  ///   (0.12, 0.45) — early-rise inflection
+  ///   (0.32, 0.74) — mid concave bend
+  ///   (0.62, 0.92) — diminishing returns shoulder
+  ///   (1.00, 1.00) — aggressive endpoint
+  /// These anchors trace a recognizably "efficient frontier" textbook
+  /// arc regardless of bumpiness in the underlying scatter.
+  List<Offset> _idealizedAnchors(List<Offset> rawPoints) {
+    if (rawPoints.length < 2) return rawPoints;
+    final minX = rawPoints.map((p) => p.dx).reduce(min);
+    final maxX = rawPoints.map((p) => p.dx).reduce(max);
+    // Y-axis on screen is inverted (top = high return), so the
+    // "minimum return" anchor is the largest dy and vice versa.
+    final maxY = rawPoints.map((p) => p.dy).reduce(max);
+    final minY = rawPoints.map((p) => p.dy).reduce(min);
+    const normalized = <Offset>[
+      Offset(0.00, 0.00),
+      Offset(0.12, 0.45),
+      Offset(0.32, 0.74),
+      Offset(0.62, 0.92),
+      Offset(1.00, 1.00),
+    ];
+    return [
+      for (final n in normalized)
+        Offset(
+          minX + (maxX - minX) * n.dx,
+          maxY - (maxY - minY) * n.dy,
+        ),
+    ];
   }
 
   @override
@@ -440,11 +464,13 @@ class _FrontierPainter extends CustomPainter {
     );
     final visiblePoints = pointOffsets.take(visibleCount).toList();
 
-    // Idealized curve — sub-sample down to ~9 anchors before smoothing.
-    // The user explicitly chose visual understanding over precision
-    // (2026-05-05 notes).
+    // Curve is idealized; data is real. The visual stroke is built from
+    // a hand-curated 5-anchor textbook efficient frontier shape mapped
+    // onto the data's bounding box. Dragging still snaps to real
+    // preview points via `_nearestPreviewPosition`, and
+    // `weightsAt(t)` keeps consuming the real `sectorAllocations`.
     if (visiblePoints.length >= 2) {
-      final anchors = _subSample(visiblePoints, 9);
+      final anchors = _idealizedAnchors(visiblePoints);
       _drawFrontierStroke(canvas, size, anchors);
       _drawAssetBubbles(canvas, anchors, dotProgress);
     }
