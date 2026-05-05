@@ -229,7 +229,7 @@ void main() {
         ChartLine(
           key: 'balanced_expected',
           label: '균형형 기대수익',
-          color: WeRoboColors.chartGreen,
+          color: WeRoboColors.assetTier4,
           dashed: true,
           points: [
             ChartPoint(date: DateTime(2026, 1, 1), value: 0.00),
@@ -249,7 +249,7 @@ void main() {
         ChartLine(
           key: 'benchmark_avg',
           label: '6자산 단순평균',
-          color: WeRoboColors.chartGreen,
+          color: WeRoboColors.assetTier4,
           dashed: true,
           points: [
             ChartPoint(date: DateTime(2026, 1, 1), value: 0.00),
@@ -302,7 +302,7 @@ void main() {
       expect(marketLine.color, const Color(0xFF64748B));
       expect(marketLine.dashed, isFalse);
       expect(expectedReturnLine.color,
-          WeRoboColors.chartGreen.withValues(alpha: 0.85));
+          WeRoboColors.assetTier4.withValues(alpha: 0.85));
       expect(expectedReturnLine.dashed, isTrue);
     },
   );

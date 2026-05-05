@@ -1,5 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robo_mobile/app/portfolio_state.dart';
+import 'package:robo_mobile/app/theme.dart';
 import 'package:robo_mobile/models/mobile_backend_models.dart';
 import 'package:robo_mobile/screens/home/portfolio_tab.dart';
 
@@ -97,7 +99,7 @@ void main() {
         MobileComparisonLine(
           key: 'balanced',
           label: '균형형',
-          color: '#20A7DB',
+          color: _hexFromColor(WeRoboColors.assetColor(AssetClass.usValue)),
           style: 'solid',
           points: [
             MobileComparisonLinePoint(
@@ -149,4 +151,10 @@ void main() {
       expect(rebalanceDates.last, DateTime(2026, 3, 2));
     });
   });
+}
+
+String _hexFromColor(Color color) {
+  // ignore: deprecated_member_use
+  final argb = color.value & 0xFFFFFF;
+  return '#${argb.toRadixString(16).padLeft(6, '0').toUpperCase()}';
 }

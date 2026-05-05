@@ -488,7 +488,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                           glowPhase: _glowCtrl.value,
                           dateLabel: dateLabel,
                           primaryColor: WeRoboColors.primary,
-                          glowColor: WeRoboColors.sky3,
+                          glowColor: WeRoboColors.assetTier3,
                           costColor: tc.textPrimary,
                           gridColor: tc.border,
                         ),
@@ -503,7 +503,10 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
         const SizedBox(height: 16),
 
-        // Time range chips
+        // Time range chips. Rev K (2026-05-04): the previous styling used
+        // white-with-45%-alpha on the warm-gray app background, making
+        // inactive chips invisible. Switched to theme-aware
+        // tc.textSecondary so every chip reads against the background.
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(_rangeLabels.length, (i) {
@@ -518,32 +521,23 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
                   color: active && !isFuture
-                      ? WeRoboColors.white
-                      : active
-                          ? WeRoboColors.primary
-                          : Colors.transparent,
+                      ? WeRoboColors.primary
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
-                  boxShadow: isFuture
-                      ? [
-                          BoxShadow(
-                            color: WeRoboColors.primary.withValues(alpha: 0.35),
-                            blurRadius: 8,
-                            spreadRadius: 1,
-                          ),
-                        ]
-                      : null,
                 ),
                 child: Text(
                   _rangeLabels[i],
                   style: TextStyle(
                     fontFamily: WeRoboFonts.body,
                     fontSize: 12,
-                    fontWeight: isFuture ? FontWeight.w600 : FontWeight.w500,
+                    fontWeight: (isFuture || active)
+                        ? FontWeight.w600
+                        : FontWeight.w500,
                     color: isFuture
                         ? WeRoboColors.primary
                         : active
-                            ? WeRoboColors.black
-                            : Colors.white.withValues(alpha: 0.45),
+                            ? WeRoboColors.white
+                            : tc.textSecondary,
                   ),
                 ),
               ),

@@ -2,228 +2,17 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../../../models/mobile_backend_models.dart';
-import '../../../models/portfolio_data.dart';
 
-/// Individual asset position on the risk-return plane.
-class _AssetDot {
-  final String code;
-  final String name;
-  final Color color;
-
-  const _AssetDot({
-    required this.code,
-    required this.name,
-    required this.color,
-  });
-}
-
-class _WeightedAsset {
-  final _AssetDot asset;
-  final double weight;
-
-  const _WeightedAsset({
-    required this.asset,
-    required this.weight,
-  });
-}
-
-/// Asset metadata used to color and label the surrounding allocation dots.
-const _kAssetDots = <_AssetDot>[
-  _AssetDot(
-    code: 'cash_equivalents',
-    name: '현금성',
-    color: CategoryColors.cash,
-  ),
-  _AssetDot(
-    code: 'short_term_bond',
-    name: '단기채권',
-    color: CategoryColors.bond,
-  ),
-  _AssetDot(
-    code: 'infra_bond',
-    name: '인프라채권',
-    color: CategoryColors.infra,
-  ),
-  _AssetDot(
-    code: 'gold',
-    name: '금',
-    color: CategoryColors.gold,
-  ),
-  _AssetDot(
-    code: 'new_growth',
-    name: '신성장주',
-    color: CategoryColors.newGrowth,
-  ),
-  _AssetDot(
-    code: 'us_value',
-    name: '미국가치주',
-    color: CategoryColors.valueStock,
-  ),
-  _AssetDot(
-    code: 'us_growth',
-    name: '미국성장주',
-    color: CategoryColors.growthStock,
-  ),
-];
-
-const _kAssetSlotsByCode = <String, Offset>{
-  'short_term_bond': Offset(0.47, 0.74), // below curve, center
-  'cash_equivalents': Offset(0.67, 0.76), // below curve, right
-  'infra_bond': Offset(0.08, 0.17), // top-left corner
-  'gold': Offset(0.31, 0.11), // top, left-center
-  'us_value': Offset(0.56, 0.08), // top, right-center
-  'new_growth': Offset(0.78, 0.36), // right, mid
-  'us_growth': Offset(0.78, 0.55), // right, lower
+/// Chart-internal short labels — full koLabel collides on iPhones <430pt.
+const Map<AssetClass, String> _kAssetShortLabels = {
+  AssetClass.cash: '현금성',
+  AssetClass.shortBond: '단기채',
+  AssetClass.infraBond: '인프라',
+  AssetClass.gold: '금',
+  AssetClass.usValue: '미국가',
+  AssetClass.usGrowth: '미국성',
+  AssetClass.newGrowth: '신성장',
 };
-
-const _kUnknownAssetColor = Color(0xFF94A3B8);
-
-final _kAssetDotByCode = {
-  for (final asset in _kAssetDots) asset.code: asset,
-};
-
-/// Fallback weights used only for embedded/stale preview payloads that
-/// do not yet carry per-point sector allocations.
-const _kFallbackWeightsAtPosition = <int, Map<String, double>>{
-  // conservative end (vol ≈ 0.057)
-  0: {
-    'short_term_bond': 0.30,
-    'cash_equivalents': 0.30,
-    'gold': 0.22,
-    'us_value': 0.07,
-    'new_growth': 0.05,
-    'infra_bond': 0.03,
-    'us_growth': 0.03,
-  },
-  // vol ≈ 0.08
-  20: {
-    'short_term_bond': 0.30,
-    'cash_equivalents': 0.29,
-    'infra_bond': 0.26,
-    'new_growth': 0.05,
-    'us_value': 0.04,
-    'us_growth': 0.03,
-    'gold': 0.03,
-  },
-  // vol ≈ 0.10
-  35: {
-    'short_term_bond': 0.30,
-    'us_value': 0.23,
-    'cash_equivalents': 0.19,
-    'infra_bond': 0.17,
-    'new_growth': 0.05,
-    'gold': 0.03,
-    'us_growth': 0.03,
-  },
-  // vol ≈ 0.12
-  45: {
-    'us_value': 0.30,
-    'short_term_bond': 0.30,
-    'infra_bond': 0.16,
-    'cash_equivalents': 0.13,
-    'new_growth': 0.05,
-    'us_growth': 0.03,
-    'gold': 0.03,
-  },
-  // vol ≈ 0.15
-  55: {
-    'short_term_bond': 0.30,
-    'us_value': 0.30,
-    'infra_bond': 0.24,
-    'cash_equivalents': 0.05,
-    'new_growth': 0.05,
-    'gold': 0.03,
-    'us_growth': 0.03,
-  },
-  // growth end (vol ≈ 0.19)
-  60: {
-    'us_value': 0.30,
-    'infra_bond': 0.30,
-    'short_term_bond': 0.21,
-    'us_growth': 0.08,
-    'new_growth': 0.05,
-    'cash_equivalents': 0.03,
-    'gold': 0.03,
-  },
-};
-
-Map<String, double> _interpolateFallbackWeights(double scaledPosition) {
-  final keys = _kFallbackWeightsAtPosition.keys.toList()..sort();
-  if (keys.isEmpty) return {};
-  if (scaledPosition <= keys.first) {
-    return _kFallbackWeightsAtPosition[keys.first]!;
-  }
-  if (scaledPosition >= keys.last) {
-    return _kFallbackWeightsAtPosition[keys.last]!;
-  }
-
-  int lower = keys.first;
-  int upper = keys.last;
-  for (final k in keys) {
-    if (k <= scaledPosition) lower = k;
-    if (k >= scaledPosition) {
-      upper = k;
-      break;
-    }
-  }
-  if (lower == upper) return _kFallbackWeightsAtPosition[lower]!;
-
-  final t = (scaledPosition - lower) / (upper - lower);
-  final lowerW = _kFallbackWeightsAtPosition[lower]!;
-  final upperW = _kFallbackWeightsAtPosition[upper]!;
-  final allCodes = {...lowerW.keys, ...upperW.keys};
-  return {
-    for (final code in allCodes)
-      code: (lowerW[code] ?? 0.0) * (1 - t) + (upperW[code] ?? 0.0) * t,
-  };
-}
-
-_AssetDot _assetDotForAllocation(MobileSectorAllocation allocation) {
-  final known = _kAssetDotByCode[allocation.assetCode];
-  if (known != null) {
-    return _AssetDot(
-      code: known.code,
-      name: allocation.assetName.isEmpty ? known.name : allocation.assetName,
-      color: known.color,
-    );
-  }
-  return _AssetDot(
-    code: allocation.assetCode,
-    name: allocation.assetName.isEmpty
-        ? allocation.assetCode
-        : allocation.assetName,
-    color: _kUnknownAssetColor,
-  );
-}
-
-List<_WeightedAsset> _weightedAssetsForPreviewPoint({
-  required MobileFrontierPreviewPoint point,
-  required int selectedPosition,
-  required int previewPointCount,
-}) {
-  if (point.sectorAllocations.isNotEmpty) {
-    return [
-      for (final allocation in point.sectorAllocations)
-        if (allocation.weight > 0)
-          _WeightedAsset(
-            asset: _assetDotForAllocation(allocation),
-            weight: allocation.weight,
-          ),
-    ];
-  }
-
-  final normalizedPosition =
-      previewPointCount <= 1 ? 0.0 : selectedPosition / (previewPointCount - 1);
-  final fallbackWeights = _interpolateFallbackWeights(normalizedPosition * 60);
-  return [
-    for (final asset in _kAssetDots)
-      if ((fallbackWeights[asset.code] ?? 0) > 0)
-        _WeightedAsset(
-          asset: asset,
-          weight: fallbackWeights[asset.code] ?? 0.0,
-        ),
-  ];
-}
 
 class EfficientFrontierChart extends StatefulWidget {
   final ValueChanged<double>? onPositionChanged;
@@ -404,10 +193,12 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
     return AnimatedBuilder(
       animation: Listenable.merge([_controller, _pulseController]),
       builder: (context, _) {
+        // Chart fills whatever its parent provides — wrap in Expanded
+        // (or a SizedBox) at the call site to control its bounds.
         return LayoutBuilder(
           builder: (context, constraints) {
             final w = constraints.maxWidth;
-            const h = 300.0;
+            final h = constraints.maxHeight;
 
             return GestureDetector(
               onPanStart: (details) {
@@ -457,23 +248,19 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                   widget.onDragStateChanged?.call(false);
                 }
               },
-              child: SizedBox(
-                width: double.infinity,
-                height: h,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: CustomPaint(
-                    painter: _FrontierPainter(
-                      curveProgress: _curveAnimation.value,
-                      dotProgress: _dotAnimation.value,
-                      dotT: _dotT,
-                      isDragging: _isDragging,
-                      pulseValue: _pulseAnimation.value,
-                      previewPoints: widget.previewPoints,
-                      selectedPreviewPosition: widget.selectedPreviewPosition,
-                      gridColor: tc.border,
-                      textTertiaryColor: tc.textTertiary,
-                    ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: CustomPaint(
+                  painter: _FrontierPainter(
+                    curveProgress: _curveAnimation.value,
+                    dotProgress: _dotAnimation.value,
+                    dotT: _dotT,
+                    isDragging: _isDragging,
+                    pulseValue: _pulseAnimation.value,
+                    previewPoints: widget.previewPoints,
+                    selectedPreviewPosition: widget.selectedPreviewPosition,
+                    gridColor: tc.border,
+                    textTertiaryColor: tc.textTertiary,
                   ),
                 ),
               ),
@@ -496,12 +283,6 @@ class _FrontierPainter extends CustomPainter {
   final Color gridColor;
   final Color textTertiaryColor;
 
-  static const _zoneColors = [
-    Color(0xFF059669), // safe (green)
-    Color(0xFFFBBF24), // moderate (yellow)
-    Color(0xFFF97316), // growth (orange)
-  ];
-
   _FrontierPainter({
     required this.curveProgress,
     required this.dotProgress,
@@ -514,17 +295,146 @@ class _FrontierPainter extends CustomPainter {
     required this.textTertiaryColor,
   });
 
-  int _activeZone(double t) {
-    if (t < 1 / 3) return 0;
-    if (t < 2 / 3) return 1;
-    return 2;
-  }
-
   Offset _tToPoint(double t, double w, double h) {
     final x = w * 0.15 + (w * 0.7) * t;
     final normalizedY = 0.85 - 0.7 * sqrt(t) + 0.15 * t;
     final y = h * normalizedY;
     return Offset(x, y);
+  }
+
+  /// Smooths a sparse set of (vol, ret) anchor points into a monotone-X
+  /// cubic Bezier approximating the efficient frontier curve. The result
+  /// is intentionally idealized (not raw scatter) — the curve communicates
+  /// "lower vol = lower return, higher vol = higher return" visually.
+  Path _buildFrontierPath(List<Offset> points, Size size) {
+    if (points.isEmpty) return Path();
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final c1 = Offset(p0.dx + (p1.dx - p0.dx) / 3, p0.dy);
+      final c2 = Offset(p0.dx + 2 * (p1.dx - p0.dx) / 3, p1.dy);
+      path.cubicTo(c1.dx, c1.dy, c2.dx, c2.dy, p1.dx, p1.dy);
+    }
+    return path;
+  }
+
+  /// Approximate per-asset (vol, return) coordinates used when no
+  /// real per-asset stats are available from the backend. Numbers come
+  /// from typical risk/return profiles for each asset class. TODO:
+  /// replace with backend-provided per-asset stats once
+  /// `MobileFrontierPreviewResponse` exposes them — currently only
+  /// per-point sector weights are returned. Documented as approximate.
+  static const Map<AssetClass, Offset> _assetApproxCoords = {
+    AssetClass.cash: Offset(0.02, 0.04),
+    AssetClass.shortBond: Offset(0.05, 0.05),
+    AssetClass.infraBond: Offset(0.10, 0.08),
+    AssetClass.gold: Offset(0.18, 0.07),
+    AssetClass.usValue: Offset(0.18, 0.10),
+    AssetClass.usGrowth: Offset(0.25, 0.13),
+    // newGrowth is intentionally placed off the typical visible
+    // range — its real volatility is far higher than the rest of
+    // the universe, so we anchor it visually at the right edge.
+    AssetClass.newGrowth: Offset(0.40, 0.18),
+  };
+
+  /// Returns the screen-space anchor for an asset bubble. Uses the real
+  /// (vol, return) → screen mapping helper so bubbles sit at the
+  /// asset's actual risk/return position relative to the frontier.
+  /// Falls back gracefully when no preview data is available.
+  Offset _assetAnchor(
+    AssetClass cls,
+    Size size,
+    double minVolatility,
+    double maxVolatility,
+    double minExpectedReturn,
+    double maxExpectedReturn,
+  ) {
+    final coord = _assetApproxCoords[cls]!;
+    return _coordToScreen(
+      coord.dx,
+      coord.dy,
+      size.width,
+      size.height,
+      minVolatility,
+      maxVolatility,
+      minExpectedReturn,
+      maxExpectedReturn,
+    );
+  }
+
+  /// Maps an arbitrary (volatility, expectedReturn) pair to screen
+  /// coords using the same padding ratios as `_previewPointToOffset`,
+  /// then clamps to the visible canvas so off-range bubbles (notably
+  /// 신성장주) stay near the chart edge instead of disappearing.
+  Offset _coordToScreen(
+    double volatility,
+    double expectedReturn,
+    double w,
+    double h,
+    double minVolatility,
+    double maxVolatility,
+    double minExpectedReturn,
+    double maxExpectedReturn,
+  ) {
+    const leftPaddingRatio = 0.15;
+    const rightPaddingRatio = 0.85;
+    const topPaddingRatio = 0.12;
+    const bottomPaddingRatio = 0.86;
+
+    final normalizedVolatility = maxVolatility == minVolatility
+        ? 0.5
+        : ((volatility - minVolatility) / (maxVolatility - minVolatility))
+            .clamp(0.0, 1.0);
+    final normalizedExpectedReturn = maxExpectedReturn == minExpectedReturn
+        ? 0.5
+        : ((expectedReturn - minExpectedReturn) /
+                (maxExpectedReturn - minExpectedReturn))
+            .clamp(0.0, 1.0);
+
+    final x = w * leftPaddingRatio +
+        (w * (rightPaddingRatio - leftPaddingRatio)) * normalizedVolatility;
+    final y = h * bottomPaddingRatio -
+        (h * (bottomPaddingRatio - topPaddingRatio)) * normalizedExpectedReturn;
+    return Offset(x, y);
+  }
+
+  /// Hand-curated 5-anchor textbook efficient frontier shape, mapped
+  /// into the bounding box of [rawPoints] (real data extent). The curve
+  /// is intentionally idealized (smooth, monotonically increasing,
+  /// concave going right). Real data still drives the dot position and
+  /// `weightsAt(t)` lookups; only the visual stroke uses these anchors.
+  ///
+  /// Normalized anchor positions (xN ∈ [0,1] vol, yN ∈ [0,1] return):
+  ///   (0.00, 0.00) — defensive endpoint
+  ///   (0.12, 0.45) — early-rise inflection
+  ///   (0.32, 0.74) — mid concave bend
+  ///   (0.62, 0.92) — diminishing returns shoulder
+  ///   (1.00, 1.00) — aggressive endpoint
+  /// These anchors trace a recognizably "efficient frontier" textbook
+  /// arc regardless of bumpiness in the underlying scatter.
+  List<Offset> _idealizedAnchors(List<Offset> rawPoints) {
+    if (rawPoints.length < 2) return rawPoints;
+    final minX = rawPoints.map((p) => p.dx).reduce(min);
+    final maxX = rawPoints.map((p) => p.dx).reduce(max);
+    // Y-axis on screen is inverted (top = high return), so the
+    // "minimum return" anchor is the largest dy and vice versa.
+    final maxY = rawPoints.map((p) => p.dy).reduce(max);
+    final minY = rawPoints.map((p) => p.dy).reduce(min);
+    const normalized = <Offset>[
+      Offset(0.00, 0.00),
+      Offset(0.12, 0.45),
+      Offset(0.32, 0.74),
+      Offset(0.62, 0.92),
+      Offset(1.00, 1.00),
+    ];
+    return [
+      for (final n in normalized)
+        Offset(
+          minX + (maxX - minX) * n.dx,
+          maxY - (maxY - minY) * n.dy,
+        ),
+    ];
   }
 
   @override
@@ -561,61 +471,41 @@ class _FrontierPainter extends CustomPainter {
       return;
     }
 
-    // Efficient frontier curve with zone coloring
+    // Build the smoothed idealized curve from a sparse set of anchor
+    // points sampled from `_tToPoint`. The user explicitly wants visual
+    // understanding, not data precision (2026-05-05 notes).
     if (curveProgress > 0) {
-      final allPoints = <Offset>[];
-      for (int i = 0; i <= 50; i++) {
-        final t = i / 50.0;
+      const anchorCount = 9;
+      final anchors = <Offset>[];
+      for (int i = 0; i < anchorCount; i++) {
+        final t = i / (anchorCount - 1);
         if (t > curveProgress) break;
-        allPoints.add(_tToPoint(t, w, h));
+        anchors.add(_tToPoint(t, w, h));
       }
-
-      if (allPoints.isNotEmpty) {
-        final activeZone = _activeZone(dotT);
-        _drawZonedCurve(canvas, allPoints, 50, activeZone);
+      if (anchors.length >= 2) {
+        _drawFrontierStroke(canvas, size, anchors);
+        // No real preview yet — derive the min/max envelope directly
+        // from the approximate per-asset coords so bubbles still span
+        // the canvas naturally.
+        final approxVols = _assetApproxCoords.values.map((o) => o.dx).toList();
+        final approxReturns =
+            _assetApproxCoords.values.map((o) => o.dy).toList();
+        _drawAssetBubbles(
+          canvas,
+          size,
+          dotProgress,
+          minVolatility: approxVols.reduce(min),
+          maxVolatility: approxVols.reduce(max),
+          minExpectedReturn: approxReturns.reduce(min),
+          maxExpectedReturn: approxReturns.reduce(max),
+        );
       }
     }
 
-    // Scatter dots (other portfolios)
+    // Selected (draggable) dot on the curve — pulse glow preserved.
     if (dotProgress > 0) {
-      final rng = Random(42);
-      final scatterPaint = Paint()..style = PaintingStyle.fill;
-
-      for (int i = 0; i < 15; i++) {
-        final x = w * 0.2 + rng.nextDouble() * w * 0.6;
-        final y = h * 0.2 + rng.nextDouble() * h * 0.6;
-        scatterPaint.color =
-            textTertiaryColor.withValues(alpha: 0.3 * dotProgress);
-        canvas.drawCircle(Offset(x, y), 3 * dotProgress, scatterPaint);
-      }
-
-      // Draggable dot on the curve
       final dotPos = _tToPoint(dotT, w, h);
-      final dotRadius = isDragging ? 12.0 : 8.0;
-      final pulseGlow = sin(pulseValue * 2 * pi) * 3.0;
-      final glowRadius = (isDragging ? 28.0 : 18.0) + pulseGlow;
-      final glowAlpha =
-          ((isDragging ? 0.3 : 0.2) + sin(pulseValue * 2 * pi) * 0.05) *
-              dotProgress;
-
-      // Glow
-      final glowPaint = Paint()
-        ..color = WeRoboColors.primary.withValues(alpha: glowAlpha)
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(dotPos, glowRadius * dotProgress, glowPaint);
-
-      // Dot fill
-      final dotPaint = Paint()
-        ..color = WeRoboColors.primary
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(dotPos, dotRadius * dotProgress, dotPaint);
-
-      // White ring
-      final ringPaint = Paint()
-        ..color = WeRoboColors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.5;
-      canvas.drawCircle(dotPos, dotRadius * dotProgress, ringPaint);
+      _drawSelectedDot(canvas, dotPos);
     }
   }
 
@@ -649,34 +539,22 @@ class _FrontierPainter extends CustomPainter {
     );
     final visiblePoints = pointOffsets.take(visibleCount).toList();
 
+    // Curve is idealized; data is real. The visual stroke is built from
+    // a hand-curated 5-anchor textbook efficient frontier shape mapped
+    // onto the data's bounding box. Dragging still snaps to real
+    // preview points via `_nearestPreviewPosition`, and
+    // `weightsAt(t)` keeps consuming the real `sectorAllocations`.
     if (visiblePoints.length >= 2) {
-      final activeZone = _activeZone(dotT);
-      _drawZonedCurve(
+      final anchors = _idealizedAnchors(visiblePoints);
+      _drawFrontierStroke(canvas, size, anchors);
+      _drawAssetBubbles(
         canvas,
-        visiblePoints,
-        points.length - 1,
-        activeZone,
-      );
-    }
-
-    final pointPaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = textTertiaryColor.withValues(alpha: 0.24 * dotProgress);
-    final representativePaint = Paint()
-      ..style = PaintingStyle.fill
-      ..color = WeRoboColors.primary.withValues(alpha: 0.55 * dotProgress);
-
-    for (int i = 0; i < visiblePoints.length; i++) {
-      final previewPoint = points[i];
-      final radius = previewPoint.representativeCode == null
-          ? 2.5 * dotProgress
-          : 4 * dotProgress;
-      canvas.drawCircle(
-        visiblePoints[i],
-        radius,
-        previewPoint.representativeCode == null
-            ? pointPaint
-            : representativePaint,
+        size,
+        dotProgress,
+        minVolatility: minVolatility,
+        maxVolatility: maxVolatility,
+        minExpectedReturn: minExpectedReturn,
+        maxExpectedReturn: maxExpectedReturn,
       );
     }
 
@@ -689,28 +567,7 @@ class _FrontierPainter extends CustomPainter {
       return points.length ~/ 2;
     })();
     final selectedPoint = pointOffsets[selectedPosition];
-    final dotRadius = isDragging ? 12.0 : 8.0;
-    final pulseGlow = sin(pulseValue * 2 * pi) * 3.0;
-    final glowRadius = (isDragging ? 28.0 : 18.0) + pulseGlow;
-    final glowAlpha =
-        ((isDragging ? 0.3 : 0.2) + sin(pulseValue * 2 * pi) * 0.05) *
-            dotProgress;
-
-    final glowPaint = Paint()
-      ..color = WeRoboColors.primary.withValues(alpha: glowAlpha)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(selectedPoint, glowRadius * dotProgress, glowPaint);
-
-    final dotPaint = Paint()
-      ..color = WeRoboColors.primary
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(selectedPoint, dotRadius * dotProgress, dotPaint);
-
-    final ringPaint = Paint()
-      ..color = WeRoboColors.white
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5;
-    canvas.drawCircle(selectedPoint, dotRadius * dotProgress, ringPaint);
+    _drawSelectedDot(canvas, selectedPoint);
 
     final labelPoint = points[selectedPosition];
     if (labelPoint.representativeLabel != null) {
@@ -724,320 +581,110 @@ class _FrontierPainter extends CustomPainter {
         ),
       );
     }
-
-    // Asset dots — positioned at fixed layout slots around the frontier.
-    // Keep low-weight assets visible so the frontier does not look incomplete.
-    if (dotProgress > 0) {
-      final visibleAssets = _weightedAssetsForPreviewPoint(
-        point: labelPoint,
-        selectedPosition: selectedPosition,
-        previewPointCount: points.length,
-      )
-        ..removeWhere((asset) => asset.weight <= 0.005)
-        ..sort((a, b) => a.weight.compareTo(b.weight));
-
-      for (final weightedAsset in visibleAssets) {
-        final asset = weightedAsset.asset;
-        final weight = weightedAsset.weight;
-        final slot = _kAssetSlotsByCode[asset.code];
-        if (slot == null) continue;
-
-        final pos = Offset(w * slot.dx, h * slot.dy);
-        // Scale: small but visible at 3% → prominent at 30%+.
-        final baseRadius = 4 + weight.clamp(0.0, 0.30) * 18;
-        final radius =
-            (baseRadius + sin(pulseValue * 2 * pi) * 0.5) * dotProgress;
-        final alpha =
-            (0.62 + weight.clamp(0.0, 0.30) * 1.1).clamp(0.62, 0.95).toDouble();
-        final assetPaint = Paint()
-          ..style = PaintingStyle.fill
-          ..color = asset.color.withValues(alpha: alpha * dotProgress);
-        canvas.drawCircle(pos, radius, assetPaint);
-        // Border ring
-        final assetRingPaint = Paint()
-          ..style = PaintingStyle.stroke
-          ..color = asset.color.withValues(alpha: 1.0 * dotProgress)
-          ..strokeWidth = 1.5;
-        canvas.drawCircle(pos, radius, assetRingPaint);
-
-        // Asset name
-        _drawBoundedText(
-          canvas,
-          size,
-          asset.name,
-          Offset(pos.dx + radius + 4, pos.dy - 6),
-          labelStyle.copyWith(
-            color: asset.color.withValues(alpha: dotProgress),
-            fontWeight: FontWeight.w600,
-            fontSize: 9,
-          ),
-        );
-        // Weight percentage
-        final pctText = '${(weight * 100).toStringAsFixed(0)}%';
-        _drawBoundedText(
-          canvas,
-          size,
-          pctText,
-          Offset(pos.dx + radius + 4, pos.dy + 5),
-          labelStyle.copyWith(
-            color: asset.color.withValues(alpha: 0.75 * dotProgress),
-            fontWeight: FontWeight.w400,
-            fontSize: 9,
-          ),
-        );
-      }
-      _drawAllocationLegend(
-        canvas,
-        size,
-        visibleAssets,
-        labelStyle,
-        dotProgress,
-      );
-    }
   }
 
-  void _drawAllocationLegend(
+  /// Stroke the smoothed idealized curve in primary brand color.
+  void _drawFrontierStroke(Canvas canvas, Size size, List<Offset> anchors) {
+    final curvePath = _buildFrontierPath(anchors, size);
+    final curvePaint = Paint()
+      ..color = WeRoboColors.primary
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    canvas.drawPath(curvePath, curvePaint);
+  }
+
+  /// Draws the seven asset-class bubbles at their REAL (vol, return)
+  /// coordinates relative to the frontier (mapped onto the same screen
+  /// padding ratios used for the curve). Numbers come from
+  /// [_assetApproxCoords] — a hardcoded approximate table — until the
+  /// backend exposes per-asset stats in
+  /// `MobileFrontierPreviewResponse`. 신성장주 is intentionally
+  /// anchored near the right edge (vol≈0.40) since its real volatility
+  /// is typically off-chart. Fixed radius, no percentage labels.
+  void _drawAssetBubbles(
     Canvas canvas,
     Size size,
-    List<_WeightedAsset> assets,
-    TextStyle labelStyle,
-    double opacity,
-  ) {
-    if (assets.isEmpty || opacity <= 0) return;
-    final sorted = [...assets]..sort((a, b) => b.weight.compareTo(a.weight));
-
-    const margin = 8.0;
-    const gap = 4.0;
-    const rowHeight = 17.0;
-    const rows = 2;
-    final chipWidth = (size.width - margin * 2 - gap * 3) / 4;
-    final legendHeight = rowHeight * rows + gap;
-    final startY = size.height - legendHeight - margin;
-
-    for (var i = 0; i < sorted.length; i++) {
-      final row = i ~/ 4;
-      if (row >= rows) break;
-      final itemsInRow = row == 0 ? min(4, sorted.length) : sorted.length - 4;
-      final rowCount = min(4, max(0, itemsInRow));
-      if (rowCount == 0) continue;
-      final rowWidth = chipWidth * rowCount + gap * (rowCount - 1);
-      final startX = (size.width - rowWidth) / 2;
-      final col = i % 4;
-      final asset = sorted[i];
-      final rect = Rect.fromLTWH(
-        startX + col * (chipWidth + gap),
-        startY + row * (rowHeight + gap),
-        chipWidth,
-        rowHeight,
+    double opacity, {
+    required double minVolatility,
+    required double maxVolatility,
+    required double minExpectedReturn,
+    required double maxExpectedReturn,
+  }) {
+    if (opacity <= 0) return;
+    for (final cls in AssetClass.values) {
+      final anchor = _assetAnchor(
+        cls,
+        size,
+        minVolatility,
+        maxVolatility,
+        minExpectedReturn,
+        maxExpectedReturn,
       );
-
-      final bgPaint = Paint()
+      final color = WeRoboColors.assetColor(cls);
+      // Fixed radius — NO size-growth animation.
+      final fillPaint = Paint()
         ..style = PaintingStyle.fill
-        ..color = WeRoboColors.black.withValues(alpha: 0.45 * opacity);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(8)),
-        bgPaint,
-      );
-
-      final dotPaint = Paint()
-        ..style = PaintingStyle.fill
-        ..color = asset.asset.color.withValues(alpha: 0.95 * opacity);
-      canvas.drawCircle(
-        Offset(rect.left + 8, rect.center.dy),
-        3.2,
-        dotPaint,
-      );
-
-      final text = '${asset.asset.name} ${(asset.weight * 100).round()}%';
-      final tp = TextPainter(
-        text: TextSpan(
-          text: text,
-          style: labelStyle.copyWith(
-            color: asset.asset.color.withValues(alpha: opacity),
-            fontSize: 8,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        maxLines: 1,
-        ellipsis: '…',
-        textDirection: TextDirection.ltr,
-      );
-      tp.layout(maxWidth: chipWidth - 16);
-      tp.paint(
-        canvas,
-        Offset(rect.left + 14, rect.top + (rowHeight - tp.height) / 2),
-      );
-    }
-  }
-
-  /// Draw the frontier curve split into 3 zones with coloring.
-  void _drawZonedCurve(
-    Canvas canvas,
-    List<Offset> pts,
-    int totalCount,
-    int activeZone,
-  ) {
-    if (pts.length < 2) return;
-    final n = pts.length;
-
-    for (int zone = 0; zone < 3; zone++) {
-      final zoneStart = zone / 3.0;
-      final zoneEnd = (zone + 1) / 3.0;
-
-      // Collect points in this zone (with overlap for
-      // continuity at boundaries).
-      final segPts = <Offset>[];
-      for (int i = 0; i < n; i++) {
-        final t = totalCount <= 0 ? 0.5 : i / totalCount.toDouble();
-        if (t >= zoneStart - 0.02 && t <= zoneEnd + 0.02) {
-          segPts.add(pts[i]);
-        }
-      }
-      if (segPts.length < 2) continue;
-
-      // Smooth the rendered curve while preserving the underlying preview
-      // points for hit-testing and selection.
-      final segPath = _buildSmoothPath(segPts);
-
-      final isActive = zone == activeZone;
-      final segColor = isActive ? _zoneColors[zone] : WeRoboColors.primary;
-
-      if (isActive) {
-        // Faint glow under active zone
-        final glowPaint = Paint()
-          ..color = segColor.withValues(alpha: 0.2)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 9
-          ..strokeCap = StrokeCap.round;
-        canvas.drawPath(segPath, glowPaint);
-      }
-
-      final segPaint = Paint()
-        ..color = segColor
+        ..color = color.withValues(alpha: opacity);
+      canvas.drawCircle(anchor, 7.0, fillPaint);
+      // White ring for contrast against the curve stroke.
+      final ringPaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round;
-
-      // Gradient blend at zone boundaries
-      if (isActive && segPts.length >= 2) {
-        // Blend start boundary
-        if (zone > 0) {
-          final gradStart = segPts.first;
-          final gradEnd = segPts.length > 2 ? segPts[1] : segPts.last;
-          segPaint.shader = _blendShader(
-            WeRoboColors.primary,
-            segColor,
-            gradStart,
-            gradEnd,
-            segPts.first,
-            segPts.last,
-          );
-        }
-        // For single-segment approach, apply full gradient
-        // across the path from blue edges to colored center.
-        if (segPts.length >= 4) {
-          segPaint.shader = _zoneGradientShader(
-            segColor,
-            segPts.first,
-            segPts.last,
-            zone > 0,
-            zone < 2,
-          );
-        }
-      }
-
-      canvas.drawPath(segPath, segPaint);
+        ..color = WeRoboColors.white.withValues(alpha: opacity)
+        ..strokeWidth = 1.5;
+      canvas.drawCircle(anchor, 7.0, ringPaint);
+      // Asset name label only — no percentage. The bar widget below
+      // the chart shows proportions.
+      _drawLabel(canvas, anchor, _kAssetShortLabels[cls]!, opacity);
     }
   }
 
-  Path _buildSmoothPath(List<Offset> points) {
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    if (points.length == 2) {
-      path.lineTo(points.last.dx, points.last.dy);
-      return path;
-    }
-
-    for (int i = 0; i < points.length - 1; i++) {
-      final p0 = i > 0 ? points[i - 1] : points[i];
-      final p1 = points[i];
-      final p2 = points[i + 1];
-      final p3 = i + 2 < points.length ? points[i + 2] : p2;
-
-      final rawControl1 = Offset(
-        p1.dx + (p2.dx - p0.dx) / 6,
-        p1.dy + (p2.dy - p0.dy) / 6,
-      );
-      final rawControl2 = Offset(
-        p2.dx - (p3.dx - p1.dx) / 6,
-        p2.dy - (p3.dy - p1.dy) / 6,
-      );
-
-      final control1 = _clampOffsetToSegment(rawControl1, p1, p2);
-      final control2 = _clampOffsetToSegment(rawControl2, p1, p2);
-
-      path.cubicTo(
-        control1.dx,
-        control1.dy,
-        control2.dx,
-        control2.dy,
-        p2.dx,
-        p2.dy,
-      );
-    }
-
-    return path;
+  /// Renders a Noto Sans KR caption above [anchor] at fixed offset.
+  void _drawLabel(Canvas canvas, Offset anchor, String text, double opacity) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: text,
+        style: TextStyle(
+          fontFamily: WeRoboFonts.body,
+          fontSize: 11,
+          fontWeight: FontWeight.w500,
+          color: WeRoboColors.textPrimary.withValues(alpha: opacity),
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      textAlign: TextAlign.center,
+    )..layout();
+    final pos = Offset(anchor.dx - tp.width / 2, anchor.dy - 16 - tp.height);
+    tp.paint(canvas, pos);
   }
 
-  Offset _clampOffsetToSegment(Offset value, Offset start, Offset end) {
-    final minX = min(start.dx, end.dx);
-    final maxX = max(start.dx, end.dx);
-    final minY = min(start.dy, end.dy);
-    final maxY = max(start.dy, end.dy);
-    return Offset(
-      value.dx.clamp(minX, maxX).toDouble(),
-      value.dy.clamp(minY, maxY).toDouble(),
-    );
-  }
+  /// Selected (draggable) dot with pulse glow — preserved from previous
+  /// behaviour. Asset bubbles are static; only this dot pulses.
+  void _drawSelectedDot(Canvas canvas, Offset position) {
+    if (dotProgress <= 0) return;
+    final dotRadius = isDragging ? 12.0 : 8.0;
+    final pulseGlow = sin(pulseValue * 2 * pi) * 3.0;
+    final glowRadius = (isDragging ? 28.0 : 18.0) + pulseGlow;
+    final glowAlpha =
+        ((isDragging ? 0.3 : 0.2) + sin(pulseValue * 2 * pi) * 0.05) *
+            dotProgress;
 
-  /// Create a gradient shader that blends from blue
-  /// at the edges to the zone color in the center.
-  Shader _zoneGradientShader(
-    Color zoneColor,
-    Offset start,
-    Offset end,
-    bool blendStart,
-    bool blendEnd,
-  ) {
-    final colors = <Color>[
-      if (blendStart) WeRoboColors.primary,
-      zoneColor,
-      zoneColor,
-      if (blendEnd) WeRoboColors.primary,
-    ];
-    final stops = <double>[
-      if (blendStart) 0.0,
-      blendStart ? 0.15 : 0.0,
-      blendEnd ? 0.85 : 1.0,
-      if (blendEnd) 1.0,
-    ];
-    return LinearGradient(
-      colors: colors,
-      stops: stops,
-    ).createShader(Rect.fromPoints(start, end));
-  }
+    final glowPaint = Paint()
+      ..color = WeRoboColors.primary.withValues(alpha: glowAlpha)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(position, glowRadius * dotProgress, glowPaint);
 
-  Shader _blendShader(
-    Color from,
-    Color to,
-    Offset gradStart,
-    Offset gradEnd,
-    Offset pathStart,
-    Offset pathEnd,
-  ) {
-    return LinearGradient(
-      colors: [from, to, to, from],
-      stops: const [0.0, 0.15, 0.85, 1.0],
-    ).createShader(Rect.fromPoints(pathStart, pathEnd));
+    final dotPaint = Paint()
+      ..color = WeRoboColors.primary
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(position, dotRadius * dotProgress, dotPaint);
+
+    final ringPaint = Paint()
+      ..color = WeRoboColors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+    canvas.drawCircle(position, dotRadius * dotProgress, ringPaint);
   }
 
   Offset _previewPointToOffset(
@@ -1076,23 +723,6 @@ class _FrontierPainter extends CustomPainter {
     );
     tp.layout();
     tp.paint(canvas, offset);
-  }
-
-  void _drawBoundedText(
-    Canvas canvas,
-    Size size,
-    String text,
-    Offset offset,
-    TextStyle style,
-  ) {
-    final tp = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-    );
-    tp.layout();
-    final dx = offset.dx.clamp(4.0, max(4.0, size.width - tp.width - 4.0));
-    final dy = offset.dy.clamp(4.0, max(4.0, size.height - tp.height - 4.0));
-    tp.paint(canvas, Offset(dx.toDouble(), dy.toDouble()));
   }
 
   @override

@@ -42,22 +42,28 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_backtestFetched) {
-      _backtestFetched = true;
-      _fetchBacktest();
-    }
-    if (!_accountFetched) {
-      _accountFetched = true;
-      _fetchAccountDashboard();
-    }
-    if (!_insightsFetched) {
-      _insightsFetched = true;
-      _fetchInsights();
-    }
-    if (!_digestFetched) {
-      _digestFetched = true;
-      _fetchWeeklyDigest();
-    }
+    // Defer fetches to a post-frame callback so the synchronous fallback
+    // paths in PortfolioState.refresh* (which call notifyListeners without
+    // awaiting an API) don't trigger setState-during-build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_backtestFetched) {
+        _backtestFetched = true;
+        _fetchBacktest();
+      }
+      if (!_accountFetched) {
+        _accountFetched = true;
+        _fetchAccountDashboard();
+      }
+      if (!_insightsFetched) {
+        _insightsFetched = true;
+        _fetchInsights();
+      }
+      if (!_digestFetched) {
+        _digestFetched = true;
+        _fetchWeeklyDigest();
+      }
+    });
   }
 
   Future<void> _fetchBacktest() async {
@@ -65,15 +71,33 @@ class _HomeShellState extends State<HomeShell> {
       final state = PortfolioStateProvider.of(context);
       final portfolio = state.selectedPortfolio;
       final selection = state.frontierSelection;
+      // Fall back to the onboarding pick when the backend frontier
+      // selection response hasn't landed yet (PortfolioReviewScreen
+      // currently stubs that call) — otherwise the backtest hits the
+      // backend with no targeting and 422s.
+      final onboardingPick = state.onboardingFrontierSelection;
+      final selectedPointIndex =
+          selection?.selectedPointIndex ?? onboardingPick?.selectedPointIndex;
+      final targetVolatility = selection?.selectedTargetVolatility ??
+          onboardingPick?.targetVolatility;
+      final stockWeights = portfolio?.stockWeights;
+      // Backend requires one of selected_point_index / target_volatility /
+      // stock_weights. Skip silently if we have no targeting yet.
+      if (selectedPointIndex == null &&
+          targetVolatility == null &&
+          (stockWeights == null || stockWeights.isEmpty)) {
+        return;
+      }
       final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
-        preferredDataSource: state.frontierSelection?.dataSource ??
+        preferredDataSource: selection?.dataSource ??
+            onboardingPick?.dataSource ??
             state.accountSummary?.dataSource,
         investmentHorizon: selection?.resolvedProfile.investmentHorizon ??
             state.accountSummary?.investmentHorizon ??
             'medium',
-        selectedPointIndex: selection?.selectedPointIndex,
-        targetVolatility: selection?.selectedTargetVolatility,
-        stockWeights: portfolio?.stockWeights,
+        selectedPointIndex: selectedPointIndex,
+        targetVolatility: targetVolatility,
+        stockWeights: stockWeights,
         portfolioCode: portfolio?.code,
         startDate: DateTime.tryParse(state.accountSummary?.startedAt ?? ''),
       );
@@ -137,6 +161,8 @@ class _HomeShellState extends State<HomeShell> {
                   icon: Icons.home_rounded,
                   label: '홈',
                   isActive: _currentTab == 0,
+                  showAlertDot: PortfolioStateProvider.of(context)
+                      .hasUnreadEmergencyAlert,
                   onTap: () {
                     logAction('tab selected', {'tab': 'home'});
                     setState(() => _currentTab = 0);
@@ -182,6 +208,7 @@ class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isActive;
+  final bool showAlertDot;
   final VoidCallback onTap;
 
   const _NavItem({
@@ -189,12 +216,13 @@ class _NavItem extends StatelessWidget {
     required this.label,
     required this.isActive,
     required this.onTap,
+    this.showAlertDot = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final color = isActive ? Colors.white : tc.textSecondary;
+    final color = isActive ? WeRoboColors.primary : tc.textSecondary;
 
     return Pressable(
       onTap: onTap,
@@ -202,7 +230,35 @@ class _NavItem extends StatelessWidget {
       duration: const Duration(milliseconds: 100),
       child: SizedBox(
         width: 64,
-        child: Icon(icon, size: 28, color: color),
+        child: Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            Icon(icon, size: 28, color: color),
+            if (showAlertDot)
+              const Positioned(
+                right: 14,
+                top: -2,
+                child: _AlertDot(),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AlertDot extends StatelessWidget {
+  const _AlertDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 8,
+      height: 8,
+      decoration: const BoxDecoration(
+        color: WeRoboColors.primary,
+        shape: BoxShape.circle,
       ),
     );
   }

@@ -4,12 +4,25 @@ import '../../app/debug_page_logger.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
-import 'loading_screen.dart';
-import 'widgets/donut_chart.dart';
+import 'frontier_selection_resolver.dart';
+import 'portfolio_review_screen.dart';
+import 'widgets/asset_weight.dart';
 import 'widgets/efficient_frontier_chart.dart';
-import 'widgets/page_indicator.dart';
 
 const _frontierPreviewSamplePoints = 301;
+
+/// Maps backend `asset_code` strings to the `AssetClass` enum.
+/// Returns `null` for unknown codes (caller skips those allocations).
+AssetClass? _assetClassForCode(String code) => switch (code) {
+      'cash_equivalents' => AssetClass.cash,
+      'short_term_bond' => AssetClass.shortBond,
+      'infra_bond' => AssetClass.infraBond,
+      'gold' => AssetClass.gold,
+      'us_value' => AssetClass.usValue,
+      'us_growth' => AssetClass.usGrowth,
+      'new_growth' => AssetClass.newGrowth,
+      _ => null,
+    };
 
 class OnboardingFrontierSelection {
   final double normalizedT;
@@ -18,6 +31,7 @@ class OnboardingFrontierSelection {
   final String dataSource;
   final DateTime? asOfDate;
   final bool isAuthoritative;
+  final MobileFrontierPreviewResponse? preview;
 
   const OnboardingFrontierSelection({
     required this.normalizedT,
@@ -26,7 +40,33 @@ class OnboardingFrontierSelection {
     required this.dataSource,
     required this.asOfDate,
     required this.isAuthoritative,
+    this.preview,
   });
+
+  /// Returns the asset-class weight vector at the given t ∈ [0, 1].
+  /// Output is indexed by `AssetClass.index` (cash → newGrowth, length 7).
+  /// Falls back to a zero vector when no preview/allocations are available.
+  List<double> weightsAt(double t) {
+    final result = List<double>.filled(AssetClass.values.length, 0);
+    final preview = this.preview;
+    if (preview == null || preview.points.isEmpty) {
+      return result;
+    }
+    final clamped = t.clamp(0.0, 1.0);
+    final position = preview.points.length <= 1
+        ? 0
+        : (clamped * (preview.points.length - 1))
+            .round()
+            .clamp(0, preview.points.length - 1);
+    for (final allocation in preview.points[position].sectorAllocations) {
+      final cls = _assetClassForCode(allocation.assetCode);
+      if (cls == null) {
+        continue;
+      }
+      result[cls.index] += allocation.weight;
+    }
+    return result;
+  }
 }
 
 class OnboardingScreen extends StatefulWidget {
@@ -42,25 +82,19 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
-  bool _chartDragging = false;
   double _selectedDotT = 0.45;
   OnboardingFrontierSelection? _frontierSelection;
   late final Future<MobileFrontierPreviewResponse?> _frontierPreviewFuture;
-
-  static const int _pageCount = 2;
 
   @override
   void initState() {
     super.initState();
     logPageEnter('OnboardingScreen');
-    logPageEnter('onboarding step 1/2');
     _frontierPreviewFuture = _fetchFrontierPreview();
   }
 
-  /// Start fetching the frontier preview while the user is still on page 1
-  /// so it's cached by the time they swipe to the frontier page.
+  /// Kick off the frontier preview fetch immediately so the chart can swap
+  /// from the embedded sample data to the live curve as soon as it lands.
   Future<MobileFrontierPreviewResponse?> _fetchFrontierPreview() async {
     try {
       final preview = await MobileBackendApi.instance.fetchFrontierPreview(
@@ -81,25 +115,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   void dispose() {
     logPageExit('OnboardingScreen');
-    _pageController.dispose();
     super.dispose();
   }
 
-  void _nextPage() {
-    if (_currentPage < _pageCount - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _goToLoading();
-    }
-  }
-
-  void _goToLoading() {
+  void _goToReview() {
     final resolvedSelection =
         _frontierSelection ?? _selectionFromCachedPreview();
-    if (resolvedSelection != null && _frontierSelection == null) {
+    if (resolvedSelection == null) {
+      logAction('frontier selection unavailable on next', {
+        'dotT': _selectedDotT.toStringAsFixed(2),
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('포트폴리오 데이터를 불러오는 중이에요. 잠시 후 다시 시도해 주세요.'),
+        ),
+      );
+      return;
+    }
+    if (_frontierSelection == null) {
       logAction('hydrate initial frontier selection', {
         'selected_point_index': resolvedSelection.selectedPointIndex,
         'target_volatility':
@@ -107,19 +140,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'dataSource': resolvedSelection.dataSource,
       });
     }
-    Navigator.of(context).pushReplacement(
-      WeRoboMotion.fadeRoute(PortfolioLoadingScreen(
-        dotT: _selectedDotT,
-        selectedPointIndex: resolvedSelection?.isAuthoritative == true
-            ? resolvedSelection?.selectedPointIndex
-            : null,
-        targetVolatility: resolvedSelection?.targetVolatility,
-        previewDataSource: resolvedSelection?.isAuthoritative == true
-            ? resolvedSelection?.dataSource
-            : null,
-        asOfDate: resolvedSelection?.asOfDate ?? widget.asOfDate,
-        previewFuture: _frontierPreviewFuture,
-      )),
+    Navigator.of(context).push(
+      WeRoboMotion.fadeRoute(
+        PortfolioReviewScreen(selection: resolvedSelection),
+      ),
     );
   }
 
@@ -143,6 +167,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       dataSource: preview.dataSource,
       asOfDate: preview.asOfDate ?? widget.asOfDate,
       isAuthoritative: true,
+      preview: preview,
     );
   }
 
@@ -154,55 +179,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Page content
             Expanded(
-              child: PageView(
-                controller: _pageController,
-                physics: _chartDragging
-                    ? const NeverScrollableScrollPhysics()
-                    : null,
-                onPageChanged: (index) {
-                  setState(() => _currentPage = index);
-                  logPageEnter('onboarding step ${index + 1}/2');
+              child: _FrontierBody(
+                asOfDate: widget.asOfDate,
+                frontierPreviewFuture: _frontierPreviewFuture,
+                onPositionChanged: (t) {
+                  _selectedDotT = t;
                 },
-                children: [
-                  const _ServiceDescriptionPage(),
-                  _EfficientFrontierPage(
-                    asOfDate: widget.asOfDate,
-                    frontierPreviewFuture: _frontierPreviewFuture,
-                    onDragStateChanged: (dragging) {
-                      setState(() => _chartDragging = dragging);
-                    },
-                    onPositionChanged: (t) {
-                      _selectedDotT = t;
-                    },
-                    onFrontierSelectionChanged: (selection) {
-                      _frontierSelection = selection;
-                    },
-                  ),
-                ],
+                onFrontierSelectionChanged: (selection) {
+                  _frontierSelection = selection;
+                },
               ),
             ),
-
-            // Page indicator
-            Padding(
-              padding: const EdgeInsets.only(bottom: 28),
-              child: PageIndicator(
-                count: _pageCount,
-                current: _currentPage,
-              ),
-            ),
-
-            // Bottom button
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 32),
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _nextPage,
-                  child: Text(
-                    _currentPage == 0 ? '시작하기' : '다음',
-                  ),
+                  onPressed: _goToReview,
+                  child: const Text('다음'),
                 ),
               ),
             ),
@@ -213,121 +208,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
-/// Page 1: Service description with donut chart
-class _ServiceDescriptionPage extends StatelessWidget {
-  const _ServiceDescriptionPage();
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Spacer(flex: 1),
-          Text(
-            '데이터가 찾아주는\n최적의 포트폴리오',
-            style: WeRoboTypography.heading2.themed(context),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '글로벌 자산에 분산 투자하여\n안정적인 수익을 추구합니다',
-            style: WeRoboTypography.bodySmall.themed(context),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 32),
-          const DonutChart(),
-          const SizedBox(height: 32),
-          // Legend
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              _LegendItem(
-                color: WeRoboColors.chartBlue,
-                label: '미국 주식',
-                value: '45%',
-              ),
-              const SizedBox(width: 20),
-              _LegendItem(
-                color: WeRoboColors.chartGreen,
-                label: '미국 채권',
-                value: '40%',
-              ),
-              const SizedBox(width: 20),
-              _LegendItem(
-                color: WeRoboColors.chartYellow,
-                label: '금',
-                value: '15%',
-              ),
-            ],
-          ),
-          const Spacer(flex: 2),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegendItem extends StatelessWidget {
-  final Color color;
-  final String label;
-  final String value;
-
-  const _LegendItem({
-    required this.color,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Column(
-      children: [
-        Container(
-          width: 10,
-          height: 10,
-          decoration: BoxDecoration(
-            color: color,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(label, style: WeRoboTypography.caption.themed(context)),
-        Text(
-          value,
-          style: WeRoboTypography.bodySmall.copyWith(
-            fontWeight: FontWeight.w600,
-            color: tc.textPrimary,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// Page 2: Efficient Frontier explanation
-class _EfficientFrontierPage extends StatefulWidget {
+/// Frontier interaction body. Renders an embedded preview synchronously,
+/// then hot-swaps to the live API response and any cached preview that
+/// arrives via `PortfolioStateProvider`.
+class _FrontierBody extends StatefulWidget {
   final DateTime? asOfDate;
   final Future<MobileFrontierPreviewResponse?> frontierPreviewFuture;
-  final ValueChanged<bool>? onDragStateChanged;
   final ValueChanged<double>? onPositionChanged;
   final ValueChanged<OnboardingFrontierSelection?>? onFrontierSelectionChanged;
 
-  const _EfficientFrontierPage({
+  const _FrontierBody({
     this.asOfDate,
     required this.frontierPreviewFuture,
-    this.onDragStateChanged,
     this.onPositionChanged,
     this.onFrontierSelectionChanged,
   });
 
   @override
-  State<_EfficientFrontierPage> createState() => _EfficientFrontierPageState();
+  State<_FrontierBody> createState() => _FrontierBodyState();
 }
 
-class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
+class _FrontierBodyState extends State<_FrontierBody> {
   static const double _initialDotT = 0.45;
 
   /// Embedded frontier preview so the real curve renders instantly.
@@ -575,11 +476,15 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     return 24.7 + (_dotT * (31.6 - 24.7));
   }
 
-  ({String text, Color color}) get _riskComparison {
+  /// Returns the risk-comparison card payload. The card shares the
+  /// `_StatCard` shape with 연 기대수익률, so the data is split into
+  /// a static `value` (e.g. "약 30% 더 안전한") and `color` so the
+  /// label "시장대비" can sit muted above it just like 연 기대수익률.
+  ({String value, Color color}) get _riskComparison {
     final points = _preview.points;
     if (points.isEmpty) {
       return (
-        text: '시장 평균 수준',
+        value: '시장 평균 수준',
         color: WeRoboColors.accent,
       );
     }
@@ -588,7 +493,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     final selected = _selectedPreviewPoint;
     if (selected == null || averageVol == 0) {
       return (
-        text: '시장 평균 수준',
+        value: '시장 평균 수준',
         color: WeRoboColors.accent,
       );
     }
@@ -597,20 +502,19 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     final isRiskier = diff > 0;
     if (percentDiff == 0) {
       return (
-        text: '시장 평균 수준',
+        value: '시장 평균 수준',
         color: WeRoboColors.accent,
       );
     }
-    // Smooth green→orange transition based on risk factor
+    // Smooth green→orange transition based on risk factor.
     final lerpT = isRiskier ? (diff.abs() * 2).clamp(0.0, 1.0) : 0.0;
     final color = Color.lerp(
       const Color(0xFF059669),
       const Color(0xFFF97316),
       lerpT,
     )!;
-    final text = '시장대비 약 $percentDiff%\n'
-        '${isRiskier ? '더 위험한' : '더 안전한'} 포트폴리오';
-    return (text: text, color: color);
+    final value = '약 $percentDiff% ${isRiskier ? '더 위험한' : '더 안전한'}';
+    return (value: value, color: color);
   }
 
   @override
@@ -730,6 +634,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       dataSource: _preview.dataSource,
       asOfDate: _preview.asOfDate ?? widget.asOfDate,
       isAuthoritative: _previewIsAuthoritative,
+      preview: _preview,
     );
   }
 
@@ -745,89 +650,104 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     return _selectionForPreviewPosition(previewPosition);
   }
 
+  /// Builds the 7 `AssetWeight` rows the bar consumes, sourced from the
+  /// frontier sample point closest to [t]. Returns an empty list when no
+  /// preview data is loaded yet (the bar collapses to a zero-height stub).
+  List<AssetWeight> _assetsAtT(double t) {
+    final selection = _selectionForNormalizedT(t);
+    if (selection == null) return const [];
+    return buildAssetWeightRows(selection.weightsAt(t));
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Spacer(flex: 1),
+          const SizedBox(height: 8),
           Text(
             '나에게 맞는 투자 찾기',
             style: WeRoboTypography.heading2.themed(context),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             '이 곡선은 같은 위험도에서 가장 높은\n'
             '수익을 내는 조합을 보여줍니다',
             style: WeRoboTypography.bodySmall.themed(context),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
-          // Return + risk display
-          Row(
-            children: [
-              Expanded(
-                child: _StatCard(
-                  label: '연 기대수익률',
-                  value: '${_returnRate.toStringAsFixed(1)}%',
-                  color: WeRoboColors.primary,
+          // Return + risk display — both cards share `_StatCard` so the
+          // shape, padding, border, and label/value hierarchy match.
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: _StatCard(
+                    label: '연 기대수익률',
+                    value: '${_returnRate.toStringAsFixed(1)}%',
+                    color: WeRoboColors.primary,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 300),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _riskComparison.color.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: AnimatedDefaultTextStyle(
-                    duration: const Duration(milliseconds: 300),
-                    style: WeRoboTypography.caption.copyWith(
-                      color: _riskComparison.color,
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _StatCard(
+                    label: '시장대비',
+                    value: _riskComparison.value,
+                    color: _riskComparison.color,
+                    valueStyle: WeRoboTypography.bodySmall.copyWith(
                       fontWeight: FontWeight.w600,
                     ),
-                    textAlign: TextAlign.center,
-                    child: Text(
-                      _riskComparison.text,
-                      textAlign: TextAlign.center,
-                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
 
-          EfficientFrontierChart(
-            previewPoints: _preview.points,
-            selectedPreviewPosition: _selectedPreviewPosition,
-            onDragStateChanged: widget.onDragStateChanged,
-            onPreviewPointChanged: _handlePreviewPositionChanged,
-            onPositionChanged: (t) {
-              final selection = _selectionForNormalizedT(t);
-              setState(() {
-                _dotT = selection?.normalizedT ?? t;
-                _selectedPreviewPosition = selection == null
-                    ? null
-                    : _preview
-                        .positionForPointIndex(selection.selectedPointIndex);
-              });
-              widget.onPositionChanged?.call(selection?.normalizedT ?? t);
-              widget.onFrontierSelectionChanged?.call(selection);
-            },
+          // Chart fills the leftover vertical space, but capped by
+          // a 4:5 (w:h) aspect ratio so the idealized concave curve
+          // still reads as curved. Without the cap the chart goes so
+          // portrait that the curve looks like a vertical line — same
+          // bounding-box math, but Δy ≫ Δx flattens the perceived
+          // curvature. Center vertically so any leftover headroom
+          // becomes balanced whitespace, not a top-anchored block.
+          Expanded(
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 0.8,
+                child: EfficientFrontierChart(
+                  previewPoints: _preview.points,
+                  selectedPreviewPosition: _selectedPreviewPosition,
+                  onPreviewPointChanged: _handlePreviewPositionChanged,
+                  onPositionChanged: (t) {
+                    // Drag updates _dotT → setState → AssetWeightBar re-renders.
+                    // Each segment's flex ratio animates smoothly via
+                    // AnimatedContainer.
+                    final selection = _selectionForNormalizedT(t);
+                    setState(() {
+                      _dotT = selection?.normalizedT ?? t;
+                      _selectedPreviewPosition = selection == null
+                          ? null
+                          : _preview.positionForPointIndex(
+                              selection.selectedPointIndex);
+                    });
+                    widget.onPositionChanged?.call(selection?.normalizedT ?? t);
+                    widget.onFrontierSelectionChanged?.call(selection);
+                  },
+                ),
+              ),
+            ),
           ),
+          const SizedBox(height: 12),
+          AssetWeightBar(assets: _assetsAtT(_dotT)),
           if (_previewLoading || _previewUnavailable) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               _previewLoading
                   ? '실제 frontier preview를 불러오는 중이에요.'
@@ -838,9 +758,9 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
               textAlign: TextAlign.center,
             ),
           ],
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
               color: WeRoboColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
@@ -865,7 +785,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
               ],
             ),
           ),
-          const Spacer(flex: 2),
+          const SizedBox(height: 8),
         ],
       ),
     );
@@ -877,15 +797,24 @@ class _StatCard extends StatelessWidget {
   final String value;
   final Color color;
 
+  /// Optional override for the value's text style. Defaults to the
+  /// large Numbers style used by 연 기대수익률; the 시장대비 card
+  /// passes a bodySmall style because its value is multi-word Korean
+  /// rather than a single number.
+  final TextStyle? valueStyle;
+
   const _StatCard({
     required this.label,
     required this.value,
     required this.color,
+    this.valueStyle,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final resolvedValueStyle =
+        (valueStyle ?? WeRoboTypography.number).copyWith(color: color);
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
@@ -893,12 +822,18 @@ class _StatCard extends StatelessWidget {
         border: Border.all(color: tc.border, width: 1),
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Text(label,
               style:
                   WeRoboTypography.caption.copyWith(color: tc.textSecondary)),
           const SizedBox(height: 4),
-          Text(value, style: WeRoboTypography.number.copyWith(color: color)),
+          AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 300),
+            style: resolvedValueStyle,
+            textAlign: TextAlign.center,
+            child: Text(value, textAlign: TextAlign.center),
+          ),
         ],
       ),
     );
