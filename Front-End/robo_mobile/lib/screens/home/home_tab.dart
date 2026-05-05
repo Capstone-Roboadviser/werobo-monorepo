@@ -244,22 +244,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     );
   }
 
-  List<ChartPoint> get _allCostBasis {
-    final accountHistory = PortfolioStateProvider.of(context).accountHistory;
-    if (accountHistory.isNotEmpty) {
-      return _ensureRenderable([
-        for (final point in accountHistory)
-          ChartPoint(date: point.date, value: point.investedAmount),
-      ]);
-    }
-    final valuePts = _allValue;
-    if (valuePts.isEmpty) return const [];
-    return [
-      ChartPoint(date: valuePts.first.date, value: _baseInvestment),
-      ChartPoint(date: valuePts.last.date, value: _baseInvestment),
-    ];
-  }
-
   @override
   void initState() {
     super.initState();
@@ -335,9 +319,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final portfolioState = PortfolioStateProvider.of(context);
     final accountSummary = portfolioState.accountSummary;
     final allValue = _allValue;
-    final allCost = _allCostBasis;
     final valuePts = _filterByRange(allValue);
-    final costPts = _filterByRange(allCost);
 
     // Compute hero stats from filtered data
     final currentValue =
@@ -350,24 +332,19 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         : (startValue > 0 ? (change / startValue) * 100 : 0.0);
     // Compute drag-aware values from touch position
     double? crosshairValue;
-    double? crosshairCost;
     if (_touchIndex != null && _touchIndex! < valuePts.length) {
       crosshairValue = valuePts[_touchIndex!].value;
-      if (_touchIndex! < costPts.length) {
-        crosshairCost = costPts[_touchIndex!].value;
-      }
     }
 
-    final displayChange = crosshairValue != null && crosshairCost != null
-        ? crosshairValue - crosshairCost
+    // Without a cost-basis line, drag-time deltas are computed against the
+    // chart's first visible point (start of the selected range).
+    final displayChange = crosshairValue != null
+        ? crosshairValue - startValue
         : change;
-    final displayChangePct =
-        crosshairValue != null && crosshairCost != null && crosshairCost > 0
-        ? ((crosshairValue - crosshairCost) / crosshairCost) * 100
+    final displayChangePct = crosshairValue != null && startValue > 0
+        ? ((crosshairValue - startValue) / startValue) * 100
         : changePct;
     final displayIsPositive = displayChange >= 0;
-    final displayInvested =
-        crosshairCost ?? accountSummary?.investedAmount ?? _baseInvestment;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -410,18 +387,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           changeAmount: displayChange,
           isPositive: displayIsPositive,
           rangeLabel: _rangeLabels[_range],
-        ),
-
-        // Net funding line (always visible, updates on drag)
-        const SizedBox(height: 4),
-        Text(
-          '— ₩${_formatCurrency(displayInvested.toInt())} 총 입금',
-          style: TextStyle(
-            fontFamily: WeRoboFonts.english,
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            color: tc.textPrimary,
-          ),
         ),
 
         const SizedBox(height: 20),
@@ -478,7 +443,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                           size: Size(fullWidth, 320),
                           painter: _PortfolioValuePainter(
                             valuePts: valuePts,
-                            costPts: costPts,
+                            costPts: const [],
                             progress: _drawCurve.value,
                             touchIndex: _touchIndex,
                             glowPhase: _glowCtrl.value,
