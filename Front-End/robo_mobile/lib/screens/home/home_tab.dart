@@ -370,6 +370,26 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     ];
   }
 
+  /// 연 기대수익률 — 2-point dashed line from the start of the visible
+  /// range (0%) to `expectedReturn × elapsedYears`. Returns empty when
+  /// `expectedReturn` is null or the visible range is empty.
+  List<ChartPoint> _expectedReturnEndpoints(
+    List<ChartPoint> portfolioRangePts,
+  ) {
+    if (portfolioRangePts.length < 2) return const [];
+    final expected =
+        PortfolioStateProvider.of(context).expectedReturn;
+    if (expected == null) return const [];
+    final first = portfolioRangePts.first.date;
+    final last = portfolioRangePts.last.date;
+    final elapsedDays = math.max(0, last.difference(first).inDays);
+    final terminalReturn = expected * (elapsedDays / 365.25);
+    return [
+      ChartPoint(date: first, value: 0.0),
+      ChartPoint(date: last, value: terminalReturn),
+    ];
+  }
+
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -529,6 +549,20 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                   label: '시장',
                                   color: tc.textSecondary,
                                   points: _marketSeries(valuePts),
+                                ),
+                              if (_expectedReturnEndpoints(
+                                    valuePts,
+                                  ).isNotEmpty)
+                                ChartLine(
+                                  key: 'expected',
+                                  label: '연 기대수익률',
+                                  color: WeRoboColors.primary.withValues(
+                                    alpha: 0.5,
+                                  ),
+                                  dashed: true,
+                                  points: _expectedReturnEndpoints(
+                                    valuePts,
+                                  ),
                                 ),
                               if (_bondEndpoints(valuePts).isNotEmpty)
                                 ChartLine(
