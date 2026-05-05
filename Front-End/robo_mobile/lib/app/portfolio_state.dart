@@ -94,6 +94,7 @@ class PortfolioState extends ChangeNotifier {
   InvestmentType _type = InvestmentType.balanced;
   MobileRecommendationResponse? _recommendation;
   MobileComparisonBacktestResponse? _backtest;
+  MobileEarningsHistoryResponse? _earningsHistory;
   MobileFrontierPreviewResponse? _frontierPreview;
   MobileFrontierSelectionResponse? _frontierSelection;
   // Captured at 투자 확정 from the post-frontier review screen so the home
@@ -116,6 +117,7 @@ class PortfolioState extends ChangeNotifier {
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
   MobileComparisonBacktestResponse? get backtest => _backtest;
+  MobileEarningsHistoryResponse? get earningsHistory => _earningsHistory;
   MobileFrontierPreviewResponse? get frontierPreview => _frontierPreview;
   MobileFrontierSelectionResponse? get frontierSelection => _frontierSelection;
   MobileAuthSession? get authSession => _authSession;
@@ -235,6 +237,42 @@ class PortfolioState extends ChangeNotifier {
       },
     );
     notifyListeners();
+  }
+
+  void setEarningsHistory(MobileEarningsHistoryResponse? value) {
+    _earningsHistory = value;
+    notifyListeners();
+  }
+
+  /// Per-asset percent change from the prior data point to [date]'s point.
+  /// Returns an empty map if [date] is the first point, has no matching
+  /// point, or earnings history hasn't been set yet. Skips assets whose
+  /// prior value is zero (division by zero).
+  Map<String, double> dayOverDayAssetReturns(DateTime date) {
+    final history = _earningsHistory;
+    if (history == null || history.points.length < 2) {
+      return const {};
+    }
+    final targetIdx = history.points.indexWhere(
+      (p) =>
+          p.date.year == date.year &&
+          p.date.month == date.month &&
+          p.date.day == date.day,
+    );
+    if (targetIdx < 1) {
+      return const {};
+    }
+    final prior = history.points[targetIdx - 1];
+    final current = history.points[targetIdx];
+    final result = <String, double>{};
+    current.assetEarnings.forEach((code, value) {
+      final priorValue = prior.assetEarnings[code];
+      if (priorValue == null || priorValue == 0) {
+        return;
+      }
+      result[code] = (value - priorValue) / priorValue;
+    });
+    return result;
   }
 
   void setFrontierPreview(MobileFrontierPreviewResponse preview) {
@@ -385,6 +423,7 @@ class PortfolioState extends ChangeNotifier {
     _frontierPreview = null;
     _backtest = null;
     _accountDashboard = null;
+    _earningsHistory = null;
     _insights = [];
     if (notify) {
       notifyListeners();
@@ -402,6 +441,7 @@ class PortfolioState extends ChangeNotifier {
     _frontierSelection = null;
     _onboardingFrontierSelection = null;
     _accountDashboard = null;
+    _earningsHistory = null;
     _insights = [];
     _digestSeenDate = null;
     _welcomeBannerSeen = false;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
@@ -81,6 +82,10 @@ class _LoginScreenState extends State<LoginScreen>
       logAction('skip onboarding after login', {
         'reason': 'existing_account',
       });
+      // Kick off the comparison-backtest fetch in parallel with the
+      // navigation animation so the home chart can animate all four
+      // lines together as soon as it mounts.
+      unawaited(HomeShell.prefetchBacktest(state));
       _navigateToHome();
       return;
     }

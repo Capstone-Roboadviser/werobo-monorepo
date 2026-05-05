@@ -201,4 +201,150 @@ void main() {
 
     expect(find.text('주간 다이제스트'), findsOneWidget);
   });
+
+  testWidgets('hero chart no longer shows the deposit total text',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(accountDashboard());
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    // The cost-basis "deposit" line and its label are removed in this change.
+    expect(find.textContaining('총 입금'), findsNothing);
+  });
+
+  testWidgets('chart legend renders all four static labels unconditionally',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(accountDashboard());
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    // Even with no backtest wired, the legend shows the four labels
+    // (lines themselves render only when data exists).
+    expect(find.text('포트폴리오'), findsOneWidget);
+    expect(find.text('시장'), findsOneWidget);
+    expect(find.text('연 기대수익률'), findsOneWidget);
+    expect(find.text('채권'), findsOneWidget);
+  });
+
+  testWidgets('falls back to mock earnings history when API fails',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    // Use the standard dashboard fixture (startedAt non-empty, portfolio
+    // non-null) so the code takes the try/catch path and hits the real
+    // network. In the widget-test environment the calls return 400 almost
+    // immediately, and the catch block populates state with mock data.
+    state.setAccountDashboard(accountDashboard());
+    await state.markWelcomeBannerSeen();
+    await state.markDigestSeen('2026-04-16');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    // Flush the first frame (didChangeDependencies fires, fetch kicks off).
+    await tester.pump(const Duration(milliseconds: 800));
+    // The API calls fail quickly (400 from Railway in test env); one more
+    // pump lets the catch block run and notifyListeners propagate.
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(state.earningsHistory, isNotNull);
+    expect(state.earningsHistory!.points, isNotEmpty);
+  });
+
+  testWidgets('drag at index >= 1 reveals context card', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(
+      MobileAccountDashboard(
+        hasAccount: true,
+        summary: accountDashboard().summary,
+        history: List.generate(
+          60,
+          (i) => MobileAccountHistoryPoint(
+            date: DateTime.now().subtract(Duration(days: 60 - i)),
+            portfolioValue: 10000000 + (i * 5000),
+            investedAmount: 10000000,
+            profitLoss: i * 5000,
+            profitLossPct: (i * 5000) / 10000000,
+          ),
+        ),
+        recentActivity: const [],
+      ),
+    );
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Hold the gesture so the card stays mounted while we assert.
+    // dragFrom() releases on completion which clears _touchIndex and
+    // unmounts the card before assertions run.
+    final chart = find.byType(CustomPaint).first;
+    final center = tester.getCenter(chart);
+    final gesture = await tester.startGesture(center);
+    await gesture.moveBy(const Offset(20, 0));
+    await tester.pump();
+
+    // The legend always shows '포트폴리오'. While the gesture is held,
+    // a SECOND copy lives inside the drag context card.
+    expect(find.text('포트폴리오'), findsNWidgets(2));
+    // The card's signed-percent value text uses tabular figures and a
+    // U+2212 minus or '+' sign — neither legend nor any other widget on
+    // this screen produces a string ending in "%" inside the chart area.
+    expect(find.textContaining('%'), findsAtLeastNWidgets(1));
+
+    await gesture.up();
+    await tester.pump();
+
+    // After release, _touchIndex resets to null and the card disappears,
+    // so only the legend's '포트폴리오' remains.
+    expect(find.text('포트폴리오'), findsOneWidget);
+  });
 }

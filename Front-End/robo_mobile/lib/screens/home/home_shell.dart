@@ -12,6 +12,43 @@ import 'settings_tab.dart';
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key});
 
+  /// Kick off the comparison-backtest fetch ahead of mounting the home
+  /// shell. Idempotent and fire-and-forget — call from login/splash
+  /// flows so the data lands before the chart paints, letting all four
+  /// chart lines animate in together.
+  static Future<void> prefetchBacktest(PortfolioState state) async {
+    if (state.backtest != null) return;
+    final portfolio = state.selectedPortfolio;
+    final selection = state.frontierSelection;
+    final onboardingPick = state.onboardingFrontierSelection;
+    final selectedPointIndex =
+        selection?.selectedPointIndex ?? onboardingPick?.selectedPointIndex;
+    final targetVolatility = selection?.selectedTargetVolatility ??
+        onboardingPick?.targetVolatility;
+    final stockWeights = portfolio?.stockWeights;
+    if (selectedPointIndex == null &&
+        targetVolatility == null &&
+        (stockWeights == null || stockWeights.isEmpty)) {
+      return;
+    }
+    try {
+      final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
+        preferredDataSource: selection?.dataSource ??
+            onboardingPick?.dataSource ??
+            state.accountSummary?.dataSource,
+        investmentHorizon: selection?.resolvedProfile.investmentHorizon ??
+            state.accountSummary?.investmentHorizon ??
+            'medium',
+        selectedPointIndex: selectedPointIndex,
+        targetVolatility: targetVolatility,
+        stockWeights: stockWeights,
+        portfolioCode: portfolio?.code,
+        startDate: DateTime.tryParse(state.accountSummary?.startedAt ?? ''),
+      );
+      state.setBacktest(bt);
+    } catch (_) {}
+  }
+
   @override
   State<HomeShell> createState() => _HomeShellState();
 }
@@ -67,43 +104,10 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _fetchBacktest() async {
-    try {
-      final state = PortfolioStateProvider.of(context);
-      final portfolio = state.selectedPortfolio;
-      final selection = state.frontierSelection;
-      // Fall back to the onboarding pick when the backend frontier
-      // selection response hasn't landed yet (PortfolioReviewScreen
-      // currently stubs that call) — otherwise the backtest hits the
-      // backend with no targeting and 422s.
-      final onboardingPick = state.onboardingFrontierSelection;
-      final selectedPointIndex =
-          selection?.selectedPointIndex ?? onboardingPick?.selectedPointIndex;
-      final targetVolatility = selection?.selectedTargetVolatility ??
-          onboardingPick?.targetVolatility;
-      final stockWeights = portfolio?.stockWeights;
-      // Backend requires one of selected_point_index / target_volatility /
-      // stock_weights. Skip silently if we have no targeting yet.
-      if (selectedPointIndex == null &&
-          targetVolatility == null &&
-          (stockWeights == null || stockWeights.isEmpty)) {
-        return;
-      }
-      final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
-        preferredDataSource: selection?.dataSource ??
-            onboardingPick?.dataSource ??
-            state.accountSummary?.dataSource,
-        investmentHorizon: selection?.resolvedProfile.investmentHorizon ??
-            state.accountSummary?.investmentHorizon ??
-            'medium',
-        selectedPointIndex: selectedPointIndex,
-        targetVolatility: targetVolatility,
-        stockWeights: stockWeights,
-        portfolioCode: portfolio?.code,
-        startDate: DateTime.tryParse(state.accountSummary?.startedAt ?? ''),
-      );
-      if (!mounted) return;
-      PortfolioStateProvider.of(context).setBacktest(bt);
-    } catch (_) {}
+    final state = PortfolioStateProvider.of(context);
+    // No-op when login/splash already prefetched — `prefetchBacktest`
+    // sets `state.backtest` and exits early on a second call.
+    await HomeShell.prefetchBacktest(state);
   }
 
   Future<void> _fetchAccountDashboard() async {

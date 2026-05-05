@@ -1,10 +1,13 @@
-import 'dart:math';
+import 'dart:async';
+import 'dart:developer' as developer;
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
+import '../../services/mobile_backend_api.dart';
 import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
@@ -28,6 +31,8 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
   bool _showAllocationAmounts = false;
+  bool _earningsHistoryFetchStarted = false;
+  String? _loadedEarningsRiskCode;
 
   @override
   void initState() {
@@ -44,6 +49,61 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     logPageExit('HomeTab');
     _staggerCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final state = PortfolioStateProvider.of(context);
+    final riskCode = state.type.riskCode;
+    if (_loadedEarningsRiskCode != riskCode) {
+      _loadedEarningsRiskCode = riskCode;
+      _earningsHistoryFetchStarted = false;
+    }
+    if (!_earningsHistoryFetchStarted && state.earningsHistory == null) {
+      _earningsHistoryFetchStarted = true;
+      _loadEarningsHistory(state, riskCode);
+    }
+  }
+
+  Future<void> _loadEarningsHistory(
+    PortfolioState state,
+    String riskCode,
+  ) async {
+    final selected = state.selectedPortfolio;
+    final startedAt = state.accountSummary?.startedAt;
+    if (selected == null || startedAt == null || startedAt.isEmpty) {
+      // Cold-start path: fall back to mock immediately so the card has data
+      // when the user starts dragging. Defer past the current build frame so
+      // notifyListeners() doesn't fire during didChangeDependencies.
+      Future.microtask(() {
+        if (!mounted) return;
+        state.setEarningsHistory(
+          MockEarningsData.mockEarningsHistoryResponse(riskCode: riskCode),
+        );
+      });
+      return;
+    }
+    try {
+      final api = MobileBackendApi.instance;
+      final response = await api.fetchEarningsHistory(
+        weights: {
+          for (final s in selected.sectorAllocations) s.assetCode: s.weight,
+        },
+        startDate: startedAt,
+      );
+      if (!mounted) return;
+      state.setEarningsHistory(response);
+    } catch (e) {
+      if (!mounted) return;
+      developer.log(
+        'fetchEarningsHistory failed; using mock fallback: $e',
+        name: 'HomeTab',
+      );
+      state.setEarningsHistory(
+        MockEarningsData.mockEarningsHistoryResponse(riskCode: riskCode),
+      );
+    }
   }
 
   Animation<double> _fadeAt(int index) {
@@ -203,7 +263,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   }
 }
 
-// ─── Hero chart: value + dual-line chart + time range ─────────
+// ─── Hero chart: value + chart + time range ─────────
 
 class _PortfolioHeroChart extends StatefulWidget {
   final InvestmentType type;
@@ -222,6 +282,12 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   late AnimationController _drawCtrl;
   late CurvedAnimation _drawCurve;
   late AnimationController _glowCtrl;
+  // The draw animation is deferred until comparison-backtest data is
+  // available, so all four lines (portfolio + benchmarks) sweep in
+  // left-to-right together as a single pass. A timer enforces a max
+  // wait so the chart still animates if backtest fetch is slow or fails.
+  bool _drawStarted = false;
+  Timer? _drawDelayTimer;
   int _range = 4; // 전체
   int? _touchIndex;
 
@@ -244,34 +310,42 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     );
   }
 
-  List<ChartPoint> get _allCostBasis {
-    final accountHistory = PortfolioStateProvider.of(context).accountHistory;
-    if (accountHistory.isNotEmpty) {
-      return _ensureRenderable([
-        for (final point in accountHistory)
-          ChartPoint(date: point.date, value: point.investedAmount),
-      ]);
-    }
-    final valuePts = _allValue;
-    if (valuePts.isEmpty) return const [];
-    return [
-      ChartPoint(date: valuePts.first.date, value: _baseInvestment),
-      ChartPoint(date: valuePts.last.date, value: _baseInvestment),
-    ];
-  }
-
   @override
   void initState() {
     super.initState();
     _drawCtrl = AnimationController(
       duration: const Duration(milliseconds: 700),
       vsync: this,
-    )..forward();
+    );
     _drawCurve = CurvedAnimation(parent: _drawCtrl, curve: Curves.linear);
     _glowCtrl = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
+    // Fallback: if backtest never lands (offline, mock fallback, etc.),
+    // start the animation anyway so the portfolio line still draws in.
+    _drawDelayTimer = Timer(const Duration(milliseconds: 1200), () {
+      _startDrawAnimation();
+    });
+  }
+
+  void _startDrawAnimation() {
+    if (_drawStarted || !mounted) return;
+    _drawStarted = true;
+    _drawDelayTimer?.cancel();
+    _drawCtrl.forward();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_drawStarted) {
+      final hasBenchmarks =
+          PortfolioStateProvider.of(context).comparisonLines.isNotEmpty;
+      if (hasBenchmarks) {
+        _startDrawAnimation();
+      }
+    }
   }
 
   @override
@@ -285,6 +359,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
   @override
   void dispose() {
+    _drawDelayTimer?.cancel();
     _glowCtrl.dispose();
     _drawCurve.dispose();
     _drawCtrl.dispose();
@@ -312,6 +387,264 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     ];
   }
 
+  /// Rebase a KRW-valued `ChartPoint` series to percent return from the
+  /// first point. The output's `value` field carries fractional return
+  /// (`0.0` = 0%, `0.05` = +5%). First point is always exactly `0.0`.
+  List<ChartPoint> _pctSeries(List<ChartPoint> krw) {
+    if (krw.isEmpty) return const [];
+    final base = krw.first.value;
+    if (base == 0) return const [];
+    return [
+      for (final p in krw)
+        ChartPoint(date: p.date, value: (p.value - base) / base),
+    ];
+  }
+
+  /// Market benchmark line (`benchmark_avg`), filtered to the visible
+  /// range, rebased to 0% at the first visible point. Returns an empty
+  /// list when the comparison backtest hasn't loaded yet.
+  List<ChartPoint> _marketSeries(List<ChartPoint> portfolioRangePts) {
+    if (portfolioRangePts.isEmpty) return const [];
+    final all = PortfolioStateProvider.of(context).comparisonLines;
+    final market = all.firstWhere(
+      (l) => l.key == 'benchmark_avg',
+      orElse: () => const ChartLine(
+        key: '',
+        label: '',
+        color: Colors.transparent,
+        points: [],
+      ),
+    );
+    if (market.points.length < 2) return const [];
+
+    final cutoff = portfolioRangePts.first.date;
+    final filtered =
+        market.points.where((p) => !p.date.isBefore(cutoff)).toList();
+    if (filtered.length < 2) return const [];
+
+    final base = filtered.first.value;
+    return [
+      for (final p in filtered)
+        ChartPoint(date: p.date, value: p.value - base),
+    ];
+  }
+
+  /// 채권 수익률 — drawn as a 2-point dashed line from the start of the
+  /// visible range (0%) to the treasury's end-of-range cumulative return.
+  /// Mirrors the `bond_trend` derivation in `portfolio_charts.dart`.
+  List<ChartPoint> _bondEndpoints(List<ChartPoint> portfolioRangePts) {
+    if (portfolioRangePts.isEmpty) return const [];
+    final all = PortfolioStateProvider.of(context).comparisonLines;
+    final treasury = all.firstWhere(
+      (l) => l.key == 'treasury',
+      orElse: () => const ChartLine(
+        key: '',
+        label: '',
+        color: Colors.transparent,
+        points: [],
+      ),
+    );
+    if (treasury.points.length < 2) return const [];
+
+    final cutoff = portfolioRangePts.first.date;
+    final filtered =
+        treasury.points.where((p) => !p.date.isBefore(cutoff)).toList();
+    if (filtered.length < 2) return const [];
+
+    final base = filtered.first.value;
+    return [
+      ChartPoint(date: filtered.first.date, value: 0.0),
+      ChartPoint(
+        date: filtered.last.date,
+        value: filtered.last.value - base,
+      ),
+    ];
+  }
+
+  /// 연 기대수익률 — 2-point dashed line from the start of the visible
+  /// range (0%) to `expectedReturn × elapsedYears`. Returns empty when
+  /// `expectedReturn` is null or the visible range is empty.
+  List<ChartPoint> _expectedReturnEndpoints(
+    List<ChartPoint> portfolioRangePts,
+  ) {
+    if (portfolioRangePts.length < 2) return const [];
+    final expected =
+        PortfolioStateProvider.of(context).expectedReturn;
+    if (expected == null) return const [];
+    final first = portfolioRangePts.first.date;
+    final last = portfolioRangePts.last.date;
+    final elapsedDays = math.max(0, last.difference(first).inDays);
+    final terminalReturn = expected * (elapsedDays / 365.25);
+    return [
+      ChartPoint(date: first, value: 0.0),
+      ChartPoint(date: last, value: terminalReturn),
+    ];
+  }
+
+  ({
+    double x,
+    double y,
+    double portfolioPct,
+    double? marketPct,
+    List<({String name, double pct})> assetRows,
+  })? _buildCardData(
+    List<ChartPoint> valuePts, {
+    required double fullWidth,
+    required double stackWidth,
+  }) {
+    final ti = _touchIndex;
+    if (ti == null || ti < 1 || ti >= valuePts.length) return null;
+
+    // Day-over-day portfolio %.
+    final curr = valuePts[ti].value;
+    final prev = valuePts[ti - 1].value;
+    if (prev == 0) return null;
+    final portfolioPct = (curr - prev) / prev;
+
+    // Day-over-day market %, if benchmark data exists.
+    double? marketPct;
+    final state = PortfolioStateProvider.of(context);
+    final marketLine = state.comparisonLines.firstWhere(
+      (l) => l.key == 'benchmark_avg',
+      orElse: () => const ChartLine(
+        key: '',
+        label: '',
+        color: Colors.transparent,
+        points: [],
+      ),
+    );
+    if (marketLine.points.length >= 2) {
+      final touchDate = valuePts[ti].date;
+      final mIdx = marketLine.points.indexWhere(
+        (p) =>
+            p.date.year == touchDate.year &&
+            p.date.month == touchDate.month &&
+            p.date.day == touchDate.day,
+      );
+      if (mIdx >= 1) {
+        // comparisonLines values are cumulative returns (e.g. 0.12 = +12%
+        // from backtest start). The day-over-day rate is NOT the raw
+        // subtraction — that would only be correct for small mPrev. The
+        // exact conversion from cumulative-return space to daily-return
+        // space is (mCurr - mPrev) / (1 + mPrev), which equals the asset
+        // value's actual day-over-day percent change.
+        final mCurr = marketLine.points[mIdx].value;
+        final mPrev = marketLine.points[mIdx - 1].value;
+        final denom = 1 + mPrev;
+        if (denom != 0) {
+          marketPct = (mCurr - mPrev) / denom;
+        }
+      }
+      // If the touch date isn't in the market series (typically a non-
+      // trading day — weekend/holiday — where the portfolio value also
+      // didn't change), show 0% rather than dropping the row entirely.
+      // The portfolio row will read +0.00% on the same day, so the two
+      // rows stay consistent.
+      marketPct ??= 0.0;
+    }
+
+    // Top 2 asset gainers/losers based on portfolio direction.
+    final assetReturns = state.dayOverDayAssetReturns(valuePts[ti].date);
+    final names = <String, String>{
+      for (final s in (state.selectedPortfolio?.sectorAllocations ??
+          const <MobileSectorAllocation>[]))
+        s.assetCode: s.assetName,
+    };
+    final entries = assetReturns.entries
+        .where((e) => names.containsKey(e.key))
+        .map((e) => (name: names[e.key]!, pct: e.value))
+        .toList();
+    if (portfolioPct >= 0) {
+      entries.sort((a, b) => b.pct.compareTo(a.pct));
+    } else {
+      entries.sort((a, b) => a.pct.compareTo(b.pct));
+    }
+    // When portfolio is exactly 0%, the underlying account history likely
+    // repeated yesterday's snapshot (non-trading day or sparse backend
+    // data). Showing per-asset movement for the same date contradicts the
+    // 0% portfolio number and confuses readers — drop the asset rows so
+    // the card reads consistently as "no movement on this date."
+    final assetRows = portfolioPct == 0
+        ? const <({String name, double pct})>[]
+        : entries.take(2).toList();
+
+    // Position: anchor x at touch index, y above the dot if room else below.
+    // touchX is in Stack-relative coords: the chart canvas is laid out at
+    // `fullWidth` via OverflowBox, then shifted left by 24px (the parent
+    // SingleChildScrollView's horizontal padding). Clamp the card against
+    // the Stack's actual width, not the chart canvas width, so it doesn't
+    // overflow into the parent's right padding.
+    const padX = 8.0;
+    const cardWidth = _DragContextCard.width;
+    final touchX = (ti / (valuePts.length - 1)) * fullWidth - 24;
+    final x = (touchX - cardWidth / 2)
+        .clamp(padX, stackWidth - cardWidth - padX)
+        .toDouble();
+
+    // Compute the actual portfolio dot Y using the painter's range math
+    // (global min/max across all 4 line series + 5% padding) so the card
+    // can be positioned with real awareness of where the orange line is.
+    final portfolioPctSeries = _pctSeries(valuePts);
+    final marketPts = _marketSeries(valuePts);
+    final expectedPts = _expectedReturnEndpoints(valuePts);
+    final bondPts = _bondEndpoints(valuePts);
+    double minY = double.infinity;
+    double maxY = double.negativeInfinity;
+    void scan(List<ChartPoint> pts) {
+      for (final p in pts) {
+        if (p.value < minY) minY = p.value;
+        if (p.value > maxY) maxY = p.value;
+      }
+    }
+    scan(portfolioPctSeries);
+    scan(marketPts);
+    scan(expectedPts);
+    scan(bondPts);
+    if (minY == double.infinity) {
+      minY = 0;
+      maxY = 0;
+    }
+    final yRange = (maxY - minY).clamp(0.0001, double.infinity);
+    final paddedMin = minY - yRange * 0.05;
+    final paddedMax = maxY + yRange * 0.05;
+    final paddedRange = paddedMax - paddedMin;
+    const graphTopPad = 36.0;
+    const graphBotPad = 50.0;
+    const chartTotalH = 320.0;
+    const chartH = chartTotalH - graphTopPad - graphBotPad;
+    final currPctValue =
+        ti < portfolioPctSeries.length ? portfolioPctSeries[ti].value : 0.0;
+    final dotY = graphTopPad +
+        chartH -
+        ((currPctValue - paddedMin) / paddedRange) * chartH;
+
+    // Place the card on the side of the dot with more room, with a 24px
+    // breathing margin so the card never sits ON or NEAR the orange line.
+    const cardHeight = _DragContextCard.height;
+    const margin = 24.0;
+    const padY = 8.0;
+    final spaceAbove = dotY - padY;
+    final spaceBelow = chartTotalH - dotY - padY;
+    double y;
+    if (spaceAbove >= cardHeight + margin) {
+      y = dotY - margin - cardHeight;
+    } else if (spaceBelow >= cardHeight + margin) {
+      y = dotY + margin;
+    } else {
+      // Tight on both sides — pick the larger gap and clamp.
+      y = spaceAbove > spaceBelow ? padY : chartTotalH - cardHeight - padY;
+    }
+    y = y.clamp(padY, chartTotalH - cardHeight - padY).toDouble();
+
+    return (
+      x: x,
+      y: y,
+      portfolioPct: portfolioPct,
+      marketPct: marketPct,
+      assetRows: assetRows,
+    );
+  }
+
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -335,9 +668,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final portfolioState = PortfolioStateProvider.of(context);
     final accountSummary = portfolioState.accountSummary;
     final allValue = _allValue;
-    final allCost = _allCostBasis;
     final valuePts = _filterByRange(allValue);
-    final costPts = _filterByRange(allCost);
 
     // Compute hero stats from filtered data
     final currentValue =
@@ -350,24 +681,19 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         : (startValue > 0 ? (change / startValue) * 100 : 0.0);
     // Compute drag-aware values from touch position
     double? crosshairValue;
-    double? crosshairCost;
     if (_touchIndex != null && _touchIndex! < valuePts.length) {
       crosshairValue = valuePts[_touchIndex!].value;
-      if (_touchIndex! < costPts.length) {
-        crosshairCost = costPts[_touchIndex!].value;
-      }
     }
 
-    final displayChange = crosshairValue != null && crosshairCost != null
-        ? crosshairValue - crosshairCost
+    // Without a cost-basis line, drag-time deltas are computed against the
+    // chart's first visible point (start of the selected range).
+    final displayChange = crosshairValue != null
+        ? crosshairValue - startValue
         : change;
-    final displayChangePct =
-        crosshairValue != null && crosshairCost != null && crosshairCost > 0
-        ? ((crosshairValue - crosshairCost) / crosshairCost) * 100
+    final displayChangePct = crosshairValue != null && startValue > 0
+        ? ((crosshairValue - startValue) / startValue) * 100
         : changePct;
     final displayIsPositive = displayChange >= 0;
-    final displayInvested =
-        crosshairCost ?? accountSummary?.investedAmount ?? _baseInvestment;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -412,18 +738,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           rangeLabel: _rangeLabels[_range],
         ),
 
-        // Net funding line (always visible, updates on drag)
-        const SizedBox(height: 4),
-        Text(
-          '— ₩${_formatCurrency(displayInvested.toInt())} 총 입금',
-          style: TextStyle(
-            fontFamily: WeRoboFonts.english,
-            fontSize: 13,
-            fontWeight: FontWeight.w400,
-            color: tc.textPrimary,
-          ),
-        ),
-
         const SizedBox(height: 20),
 
         // Chart (edge-to-edge)
@@ -438,73 +752,175 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     return '${d.year}년 ${d.month}월 ${d.day}일';
                   }()
                 : '';
+            // Compute card data when dragging at a non-zero index
+            final cardData = _touchIndex != null && _touchIndex! >= 1
+                ? _buildCardData(
+                    valuePts,
+                    fullWidth: fullWidth,
+                    stackWidth: constraints.maxWidth,
+                  )
+                : null;
             return SizedBox(
               height: 320,
-              child: OverflowBox(
-                maxWidth: fullWidth,
-                alignment: Alignment.centerLeft,
-                child: Transform.translate(
-                  offset: const Offset(-24, 0),
-                  child: GestureDetector(
-                    onPanDown: (d) {
-                      final x = d.localPosition.dx;
-                      final idx = ((x / fullWidth) * (valuePts.length - 1))
-                          .round()
-                          .clamp(0, valuePts.length - 1);
-                      _glowCtrl.repeat(reverse: true);
-                      setState(() => _touchIndex = idx);
-                    },
-                    onPanUpdate: (d) {
-                      final x = d.localPosition.dx;
-                      final idx = ((x / fullWidth) * (valuePts.length - 1))
-                          .round()
-                          .clamp(0, valuePts.length - 1);
-                      setState(() => _touchIndex = idx);
-                    },
-                    onPanEnd: (_) {
-                      _glowCtrl.stop();
-                      _glowCtrl.value = 0;
-                      setState(() => _touchIndex = null);
-                    },
-                    onPanCancel: () {
-                      _glowCtrl.stop();
-                      _glowCtrl.value = 0;
-                      setState(() => _touchIndex = null);
-                    },
-                    child: AnimatedBuilder(
-                      animation: Listenable.merge([_drawCurve, _glowCtrl]),
-                      builder: (context, _) {
-                        return CustomPaint(
-                          size: Size(fullWidth, 320),
-                          painter: _PortfolioValuePainter(
-                            valuePts: valuePts,
-                            costPts: costPts,
-                            progress: _drawCurve.value,
-                            touchIndex: _touchIndex,
-                            glowPhase: _glowCtrl.value,
-                            dateLabel: dateLabel,
-                            primaryColor: WeRoboColors.primary,
-                            glowColor: WeRoboColors.assetTier3,
-                            costColor: tc.textPrimary,
-                            gridColor: tc.border,
-                            crosshairColor: tc.textSecondary,
-                          ),
-                        );
-                      },
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  OverflowBox(
+                    maxWidth: fullWidth,
+                    alignment: Alignment.centerLeft,
+                    child: Transform.translate(
+                      offset: const Offset(-24, 0),
+                      child: GestureDetector(
+                        onPanDown: (d) {
+                          final x = d.localPosition.dx;
+                          final idx =
+                              ((x / fullWidth) * (valuePts.length - 1))
+                                  .round()
+                                  .clamp(0, valuePts.length - 1);
+                          _glowCtrl.repeat(reverse: true);
+                          setState(() => _touchIndex = idx);
+                        },
+                        onPanUpdate: (d) {
+                          final x = d.localPosition.dx;
+                          final idx =
+                              ((x / fullWidth) * (valuePts.length - 1))
+                                  .round()
+                                  .clamp(0, valuePts.length - 1);
+                          setState(() => _touchIndex = idx);
+                        },
+                        onPanEnd: (_) {
+                          _glowCtrl.stop();
+                          _glowCtrl.value = 0;
+                          setState(() => _touchIndex = null);
+                        },
+                        onPanCancel: () {
+                          _glowCtrl.stop();
+                          _glowCtrl.value = 0;
+                          setState(() => _touchIndex = null);
+                        },
+                        child: AnimatedBuilder(
+                          animation:
+                              Listenable.merge([_drawCurve, _glowCtrl]),
+                          builder: (context, _) {
+                            // lines[0] is drawn last (on top); benchmarks
+                            // are drawn back-to-front by the painter. Cache
+                            // helper outputs so the animation builder
+                            // doesn't re-walk comparisonLines + reallocate
+                            // every frame.
+                            final portfolioPts = _pctSeries(valuePts);
+                            final marketPts = _marketSeries(valuePts);
+                            final expectedPts =
+                                _expectedReturnEndpoints(valuePts);
+                            final bondPts = _bondEndpoints(valuePts);
+                            return CustomPaint(
+                              size: Size(fullWidth, 320),
+                              painter: _HomePerformancePainter(
+                                lines: [
+                                  ChartLine(
+                                    key: 'portfolio',
+                                    label: '포트폴리오',
+                                    color: WeRoboColors.primary,
+                                    points: portfolioPts,
+                                  ),
+                                  if (marketPts.isNotEmpty)
+                                    ChartLine(
+                                      key: 'market',
+                                      label: '시장',
+                                      color: tc.textSecondary,
+                                      points: marketPts,
+                                    ),
+                                  if (expectedPts.isNotEmpty)
+                                    ChartLine(
+                                      key: 'expected',
+                                      label: '연 기대수익률',
+                                      color: WeRoboColors.primary.withValues(
+                                        alpha: 0.5,
+                                      ),
+                                      dashed: true,
+                                      points: expectedPts,
+                                    ),
+                                  if (bondPts.isNotEmpty)
+                                    ChartLine(
+                                      // Short form. The comparison chart
+                                      // uses '채권 수익률' — the home legend
+                                      // keeps the shorter '채권' to fit 4
+                                      // entries on a phone.
+                                      key: 'bond',
+                                      label: '채권',
+                                      color: tc.textTertiary.withValues(
+                                        alpha: 0.7,
+                                      ),
+                                      dashed: true,
+                                      points: bondPts,
+                                    ),
+                                ],
+                                progress: _drawCurve.value,
+                                touchIndex: _touchIndex,
+                                glowPhase: _glowCtrl.value,
+                                dateLabel: dateLabel,
+                                glowColor: WeRoboColors.assetTier3,
+                                gridColor: tc.border,
+                                crosshairColor: tc.textSecondary,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  if (cardData != null)
+                    Positioned(
+                      left: cardData.x,
+                      top: cardData.y,
+                      child: _DragContextCard(
+                        portfolioPct: cardData.portfolioPct,
+                        marketPct: cardData.marketPct,
+                        assetRows: cardData.assetRows,
+                      ),
+                    ),
+                ],
               ),
             );
           },
         ),
 
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
 
-        // Time range chips. Rev K (2026-05-04): the previous styling used
-        // white-with-45%-alpha on the warm-gray app background, making
-        // inactive chips invisible. Switched to theme-aware
-        // tc.textSecondary so every chip reads against the background.
+        // Legend sits ABOVE the range chips, full-width-centered so the
+        // four entries balance across the screen rather than hugging the
+        // column's start edge.
+        SizedBox(
+          width: double.infinity,
+          child: _ChartLegend(
+            entries: [
+              (
+                label: '포트폴리오',
+                color: WeRoboColors.primary,
+                dashed: false,
+              ),
+              (
+                label: '시장',
+                color: tc.textSecondary,
+                dashed: false,
+              ),
+              (
+                label: '연 기대수익률',
+                color: WeRoboColors.primary.withValues(alpha: 0.5),
+                dashed: true,
+              ),
+              (
+                label: '채권',
+                color: tc.textTertiary.withValues(alpha: 0.7),
+                dashed: true,
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Time range chips. Inactive chips use tc.textSecondary so they
+        // read against the warm-gray app background.
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(_rangeLabels.length, (i) {
@@ -591,368 +1007,527 @@ class _PerformanceBadge extends StatelessWidget {
   }
 }
 
-// ─── Dual-line chart painter ──────────────────────────────────
+// ─── Multi-line % return chart painter ───────────────────────
 
-class _PortfolioValuePainter extends CustomPainter {
-  final List<ChartPoint> valuePts;
-  final List<ChartPoint> costPts;
+class _HomePerformancePainter extends CustomPainter {
+  /// Lines to draw. The portfolio line (index 0) is drawn last and sits
+  /// on top of every benchmark. Benchmarks at higher indices are drawn
+  /// earlier and therefore sit below benchmarks at lower indices.
+  final List<ChartLine> lines;
   final double progress;
   final int? touchIndex;
   final double glowPhase;
   final String dateLabel;
-  final Color primaryColor;
   final Color glowColor;
-  final Color costColor;
   final Color gridColor;
-  // Color for the drag crosshair line + date label. Was hardcoded to
-  // Colors.white; that vanished against the warm-gray light theme.
   final Color crosshairColor;
 
-  _PortfolioValuePainter({
-    required this.valuePts,
-    required this.costPts,
+  _HomePerformancePainter({
+    required this.lines,
     required this.progress,
     this.touchIndex,
     this.glowPhase = 0,
     required this.dateLabel,
-    required this.primaryColor,
     required this.glowColor,
-    required this.costColor,
     required this.gridColor,
     required this.crosshairColor,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (valuePts.length < 2) return;
+    if (lines.isEmpty || lines.first.points.length < 2) return;
 
     final w = size.width;
     final h = size.height;
     final isDragging = touchIndex != null;
-    // Draggable line extends beyond graph area; graph is shorter
     const lineTopPad = 16.0;
     const graphTopPad = 36.0;
     const graphBotPad = 50.0;
     final chartH = h - graphTopPad - graphBotPad;
 
-    // Y-range across both lines
+    // Y-range across all lines (% space — symmetric padding).
     double minY = double.infinity;
     double maxY = double.negativeInfinity;
-    for (final p in valuePts) {
-      if (p.value < minY) minY = p.value;
-      if (p.value > maxY) maxY = p.value;
+    for (final line in lines) {
+      for (final p in line.points) {
+        if (p.value < minY) minY = p.value;
+        if (p.value > maxY) maxY = p.value;
+      }
     }
-    for (final p in costPts) {
-      if (p.value < minY) minY = p.value;
-      if (p.value > maxY) maxY = p.value;
-    }
-    final range = (maxY - minY).clamp(1.0, double.infinity);
+    if (minY == double.infinity) return;
+    final range = (maxY - minY).clamp(0.0001, double.infinity);
     minY -= range * 0.05;
     maxY += range * 0.05;
     final rangeY = maxY - minY;
 
+    final basePts = lines.first.points;
     double toX(int i, int total) => w * i / (total - 1);
     double toY(double val) =>
         graphTopPad + chartH - ((val - minY) / rangeY) * chartH;
 
-    // Grid lines (4 horizontal, very subtle)
+    // Grid lines — dimmed to 0.08 (was 0.15) so the chart reads
+    // "no Y axis" while keeping spatial reference.
     final gridPaint = Paint()
-      ..color = gridColor.withValues(alpha: 0.15)
+      ..color = gridColor.withValues(alpha: 0.08)
       ..strokeWidth = 0.5;
     for (int i = 0; i <= 4; i++) {
       final y = graphTopPad + chartH * i / 4;
       canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
     }
 
-    // Fractional index for smooth interpolation between data points
-    final fIdx = (valuePts.length - 1) * progress.clamp(0.0, 1.0);
+    final fIdx = (basePts.length - 1) * progress.clamp(0.0, 1.0);
     final complete = fIdx.floor();
     final frac = fIdx - complete;
-    final drawCount = (complete + 1).clamp(2, valuePts.length);
+    final drawCount = (complete + 1).clamp(2, basePts.length);
+    // The animation cursor (drives left-to-right reveal) is decoupled
+    // from the drag cursor — drag only moves the crosshair / glow dot,
+    // it never clips or fades the lines themselves. So `ti` is purely
+    // the touch index when dragging (used by the crosshair); benchmark
+    // and portfolio drawing use `drawCount` based on `progress`.
     final ti = isDragging
-        ? touchIndex!.clamp(0, valuePts.length - 1)
+        ? touchIndex!.clamp(0, basePts.length - 1)
         : drawCount - 1;
 
-    // ── Cost basis line ──
-    if (costPts.length >= 2) {
-      final costCount = min(drawCount, costPts.length);
-      if (isDragging) {
-        // Left of drag: full opacity
-        final leftEnd = min(ti + 1, costCount);
-        final leftPath = Path();
-        for (int i = 0; i < leftEnd; i++) {
-          final x = toX(i, valuePts.length);
-          final y = toY(costPts[i].value);
-          if (i == 0) {
-            leftPath.moveTo(x, y);
-          } else {
-            leftPath.lineTo(x, y);
-          }
-        }
-        canvas.drawPath(
-          leftPath,
-          Paint()
-            ..color = costColor.withValues(alpha: 0.6)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
-        // Right of drag: fade out
-        if (ti < costCount - 1) {
-          _drawFadingSegment(
-            canvas,
-            costPts,
-            ti,
-            costCount,
-            valuePts.length,
-            toX,
-            toY,
-            costColor.withValues(alpha: 0.6),
-            1.5,
-          );
-        }
-      } else {
-        final costPath = Path();
-        for (int i = 0; i < costCount; i++) {
-          final x = toX(i, valuePts.length);
-          final y = toY(costPts[i].value);
-          if (i == 0) {
-            costPath.moveTo(x, y);
-          } else {
-            costPath.lineTo(x, y);
-          }
-        }
-        canvas.drawPath(
-          costPath,
-          Paint()
-            ..color = costColor.withValues(alpha: 0.6)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
-      }
-    }
-
-    // ── Portfolio value line ──
-    if (isDragging) {
-      // Transition zone before touch
-      const transitionLen = 20;
-      final transStart = max(0, ti - transitionLen);
-
-      // Main segment (before transition)
-      final mainEnd = min(transStart + 1, drawCount);
-      final mainPath = Path();
-      for (int i = 0; i < mainEnd; i++) {
-        final x = toX(i, valuePts.length);
-        final y = toY(valuePts[i].value);
-        if (i == 0) {
-          mainPath.moveTo(x, y);
-        } else {
-          mainPath.lineTo(x, y);
-        }
-      }
-      canvas.drawPath(
-        mainPath,
-        Paint()
-          ..color = primaryColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-
-      // Transition segment (gradient to glow)
-      if (transStart < ti) {
-        final transPath = Path();
-        transPath.moveTo(
-          toX(transStart, valuePts.length),
-          toY(valuePts[transStart].value),
-        );
-        for (int i = transStart + 1; i <= ti && i < drawCount; i++) {
-          transPath.lineTo(toX(i, valuePts.length), toY(valuePts[i].value));
-        }
-        final shader = ui.Gradient.linear(
-          Offset(toX(transStart, valuePts.length), 0),
-          Offset(toX(ti, valuePts.length), 0),
-          [primaryColor, glowColor],
-        );
-        canvas.drawPath(
-          transPath,
-          Paint()
-            ..shader = shader
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
-      }
-
-      // Right of drag: fade out
-      if (ti < drawCount - 1) {
-        _drawFadingSegment(
-          canvas,
-          valuePts,
-          ti,
-          drawCount,
-          valuePts.length,
-          toX,
-          toY,
-          primaryColor,
-          2,
-        );
-      }
-    } else {
-      // Not dragging: draw line with smooth interpolated tip
-      final fullPath = Path();
-      for (int i = 0; i <= complete; i++) {
-        final x = toX(i, valuePts.length);
-        final y = toY(valuePts[i].value);
-        if (i == 0) {
-          fullPath.moveTo(x, y);
-        } else {
-          fullPath.lineTo(x, y);
-        }
-      }
-      // Interpolate between complete and next point for smooth tip
-      if (frac > 0 && complete < valuePts.length - 1) {
-        final x0 = toX(complete, valuePts.length);
-        final y0 = toY(valuePts[complete].value);
-        final x1 = toX(complete + 1, valuePts.length);
-        final y1 = toY(valuePts[complete + 1].value);
-        fullPath.lineTo(x0 + frac * (x1 - x0), y0 + frac * (y1 - y0));
-      }
-      canvas.drawPath(
-        fullPath,
-        Paint()
-          ..color = primaryColor
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
+    // Draw benchmarks first (behind portfolio). Map by DATE — benchmark
+    // series may have a different point count than the portfolio (e.g.,
+    // 2-point projection lines, or shorter market data). Index-based
+    // mapping squashes 2-point lines to a stub at x=0 and ends shorter
+    // series early.
+    final minDate = basePts.first.date;
+    final maxDate = basePts.last.date;
+    final animCursorIdx = math.min(drawCount - 1, basePts.length - 1);
+    final drawnUpToDate = basePts[animCursorIdx].date;
+    for (var lineIdx = lines.length - 1; lineIdx >= 1; lineIdx--) {
+      _drawBenchmarkLine(
+        canvas,
+        lines[lineIdx],
+        minDate,
+        maxDate,
+        drawnUpToDate,
+        w,
+        toY,
       );
     }
 
-    // ── Draggable line, date label, glow (only when dragging) ──
+    // Portfolio line on top. Always drawn fully per the animation cursor
+    // — drag moves the crosshair only, it does not clip or fade the line.
+    _drawPortfolioLine(
+      canvas,
+      lines.first.points,
+      lines.first.color,
+      basePts.length,
+      drawCount,
+      complete,
+      frac,
+      toX,
+      toY,
+    );
+
+    // Crosshair + glow + date label (only when dragging).
     if (isDragging) {
-      final tx = toX(ti, valuePts.length);
-      final lineTop = lineTopPad;
-      final lineBot = h - lineTopPad;
-
-      // Vertical line: crosshair color in middle, fading to grid at ends.
-      final lineShader = ui.Gradient.linear(
-        Offset(tx, lineTop),
-        Offset(tx, lineBot),
-        [
-          gridColor.withValues(alpha: 0.12),
-          crosshairColor.withValues(alpha: 0.55),
-          crosshairColor.withValues(alpha: 0.55),
-          gridColor.withValues(alpha: 0.12),
-        ],
-        [0.0, 0.12, 0.88, 1.0],
+      _drawCrosshair(
+        canvas,
+        size,
+        ti,
+        basePts.length,
+        toX,
+        toY,
+        lines.first.points,
+        drawCount,
+        lineTopPad,
       );
-      canvas.drawLine(
-        Offset(tx, lineTop),
-        Offset(tx, lineBot),
-        Paint()
-          ..shader = lineShader
-          ..strokeWidth = 0.8,
-      );
-
-      // Date label at top of line
-      if (dateLabel.isNotEmpty) {
-        final dateTp = TextPainter(
-          text: TextSpan(
-            text: dateLabel,
-            style: TextStyle(
-              fontSize: 10,
-              color: crosshairColor.withValues(alpha: 0.85),
-              fontFamily: 'NotoSansKR',
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        final dateX = (tx - dateTp.width / 2).clamp(4.0, w - dateTp.width - 4);
-        dateTp.paint(canvas, Offset(dateX, lineTop - dateTp.height - 2));
-      }
-
-      // Glow dot at intersection
-      if (ti < drawCount) {
-        final vy = toY(valuePts[ti].value);
-        final glowRadius = 14 + 4 * glowPhase;
-        final glowAlpha = 0.25 + 0.15 * glowPhase;
-        // Outer pulsing glow
-        canvas.drawCircle(
-          Offset(tx, vy),
-          glowRadius,
-          Paint()
-            ..color = glowColor.withValues(alpha: glowAlpha)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-        );
-        // Bright white center dot
-        canvas.drawCircle(
-          Offset(tx, vy),
-          4,
-          Paint()
-            ..color = Colors.white
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-        );
-        canvas.drawCircle(Offset(tx, vy), 3, Paint()..color = Colors.white);
-      }
     }
   }
 
-  /// Draw a line segment that fades out over a short distance
-  /// then disappears. Uses a gradient shader on a single path
-  /// to avoid visible dots between segments.
-  void _drawFadingSegment(
+  void _drawBenchmarkLine(
     Canvas canvas,
-    List<ChartPoint> pts,
-    int startIdx,
-    int endIdx,
-    int totalPts,
-    double Function(int, int) toX,
+    ChartLine line,
+    DateTime minDate,
+    DateTime maxDate,
+    DateTime drawnUpToDate,
+    double w,
     double Function(double) toY,
-    Color color,
-    double strokeWidth,
   ) {
-    if (startIdx >= endIdx - 1) return;
-    // Fixed fade distance: always ~3 data points
-    final fadeCount = min(3, endIdx - startIdx);
-    final fadeEnd = min(startIdx + fadeCount, endIdx);
+    final pts = line.points;
+    if (pts.length < 2) return;
+    final totalMs = maxDate.difference(minDate).inMilliseconds;
+    if (totalMs <= 0) return;
 
-    final fadePath = Path();
-    fadePath.moveTo(toX(startIdx, totalPts), toY(pts[startIdx].value));
-    for (int i = startIdx + 1; i < fadeEnd; i++) {
-      fadePath.lineTo(toX(i, totalPts), toY(pts[i].value));
+    double xForDate(DateTime d) {
+      final elapsedMs = d.difference(minDate).inMilliseconds;
+      return w * (elapsedMs / totalMs).clamp(0.0, 1.0);
     }
 
-    final x0 = toX(startIdx, totalPts);
-    final x1 = toX(fadeEnd - 1, totalPts);
-    if ((x1 - x0).abs() < 1) return;
+    final path = Path();
+    var moved = false;
+    for (var i = 0; i < pts.length; i++) {
+      final p = pts[i];
+      if (!p.date.isAfter(drawnUpToDate)) {
+        // Point fully revealed by the animation cursor.
+        final x = xForDate(p.date);
+        final y = toY(p.value);
+        if (!moved) {
+          path.moveTo(x, y);
+          moved = true;
+        } else {
+          path.lineTo(x, y);
+        }
+      } else if (moved) {
+        // Animation cursor falls inside this segment — interpolate
+        // proportionally so the line grows in lock-step with the
+        // portfolio's draw-in animation.
+        final p0 = pts[i - 1];
+        final segMs = p.date.difference(p0.date).inMilliseconds;
+        if (segMs > 0) {
+          final fracMs = drawnUpToDate.difference(p0.date).inMilliseconds;
+          final frac = (fracMs / segMs).clamp(0.0, 1.0);
+          final x0 = xForDate(p0.date);
+          final x1 = xForDate(p.date);
+          final y0 = toY(p0.value);
+          final y1 = toY(p.value);
+          path.lineTo(x0 + frac * (x1 - x0), y0 + frac * (y1 - y0));
+        }
+        break;
+      } else {
+        // First point already past the cursor — nothing to draw yet.
+        return;
+      }
+    }
+    if (!moved) return;
 
-    final shader = ui.Gradient.linear(Offset(x0, 0), Offset(x1, 0), [
-      color,
-      color.withValues(alpha: 0),
-    ]);
+    final paint = Paint()
+      ..color = line.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    if (line.dashed) {
+      _drawDashedPath(canvas, path, paint);
+    } else {
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  void _drawPortfolioLine(
+    Canvas canvas,
+    List<ChartPoint> pts,
+    Color color,
+    int totalPts,
+    int drawCount,
+    int complete,
+    double frac,
+    double Function(int, int) toX,
+    double Function(double) toY,
+  ) {
+    final fullPath = Path();
+    for (int i = 0; i <= complete; i++) {
+      final x = toX(i, totalPts);
+      final y = toY(pts[i].value);
+      if (i == 0) {
+        fullPath.moveTo(x, y);
+      } else {
+        fullPath.lineTo(x, y);
+      }
+    }
+    if (frac > 0 && complete < pts.length - 1) {
+      final x0 = toX(complete, totalPts);
+      final y0 = toY(pts[complete].value);
+      final x1 = toX(complete + 1, totalPts);
+      final y1 = toY(pts[complete + 1].value);
+      fullPath.lineTo(x0 + frac * (x1 - x0), y0 + frac * (y1 - y0));
+    }
     canvas.drawPath(
-      fadePath,
+      fullPath,
       Paint()
-        ..shader = shader
+        ..color = color
         ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
+        ..strokeWidth = 2
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
     );
   }
 
+  void _drawCrosshair(
+    Canvas canvas,
+    Size size,
+    int ti,
+    int totalPts,
+    double Function(int, int) toX,
+    double Function(double) toY,
+    List<ChartPoint> portfolioPts,
+    int drawCount,
+    double lineTopPad,
+  ) {
+    final w = size.width;
+    final h = size.height;
+    final tx = toX(ti, totalPts);
+    final lineTop = lineTopPad;
+    final lineBot = h - lineTopPad;
+    final lineShader = ui.Gradient.linear(
+      Offset(tx, lineTop),
+      Offset(tx, lineBot),
+      [
+        gridColor.withValues(alpha: 0.12),
+        crosshairColor.withValues(alpha: 0.55),
+        crosshairColor.withValues(alpha: 0.55),
+        gridColor.withValues(alpha: 0.12),
+      ],
+      [0.0, 0.12, 0.88, 1.0],
+    );
+    canvas.drawLine(
+      Offset(tx, lineTop),
+      Offset(tx, lineBot),
+      Paint()
+        ..shader = lineShader
+        ..strokeWidth = 0.8,
+    );
+
+    if (dateLabel.isNotEmpty) {
+      final dateTp = TextPainter(
+        text: TextSpan(
+          text: dateLabel,
+          style: TextStyle(
+            fontSize: 10,
+            color: crosshairColor.withValues(alpha: 0.85),
+            fontFamily: 'NotoSansKR',
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final dateX =
+          (tx - dateTp.width / 2).clamp(4.0, w - dateTp.width - 4);
+      dateTp.paint(canvas, Offset(dateX, lineTop - dateTp.height - 2));
+    }
+
+    if (ti < drawCount && ti < portfolioPts.length) {
+      final vy = toY(portfolioPts[ti].value);
+      final glowRadius = 14 + 4 * glowPhase;
+      final glowAlpha = 0.25 + 0.15 * glowPhase;
+      canvas.drawCircle(
+        Offset(tx, vy),
+        glowRadius,
+        Paint()
+          ..color = glowColor.withValues(alpha: glowAlpha)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+      canvas.drawCircle(
+        Offset(tx, vy),
+        4,
+        Paint()
+          ..color = Colors.white
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+      );
+      canvas.drawCircle(Offset(tx, vy), 3, Paint()..color = Colors.white);
+    }
+  }
+
+  void _drawDashedPath(Canvas canvas, Path path, Paint paint,
+      {double dashLen = 6, double gapLen = 10}) {
+    for (final metric in path.computeMetrics()) {
+      double dist = 0;
+      while (dist < metric.length) {
+        final end = (dist + dashLen).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(dist, end), paint);
+        dist += dashLen + gapLen;
+      }
+    }
+  }
+
   @override
-  bool shouldRepaint(covariant _PortfolioValuePainter old) =>
+  bool shouldRepaint(covariant _HomePerformancePainter old) =>
       old.progress != progress ||
       old.touchIndex != touchIndex ||
       old.glowPhase != glowPhase;
+  // `lines` is freshly constructed every build (new list, new ChartLine
+  // instances) so reference equality is always false — we'd always
+  // repaint. Range/data changes already trigger a setState that
+  // unconditionally rebuilds, so omitting `lines` here is safe.
+}
+
+// ─── Chart legend ─────────────────────────────────────────────
+
+class _LegendDot extends StatelessWidget {
+  final Color color;
+  final bool dashed;
+  const _LegendDot({required this.color, required this.dashed});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 12,
+      height: 2,
+      child: CustomPaint(
+        painter: _LegendDotPainter(color: color, dashed: dashed),
+      ),
+    );
+  }
+}
+
+class _LegendDotPainter extends CustomPainter {
+  final Color color;
+  final bool dashed;
+  _LegendDotPainter({required this.color, required this.dashed});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+    final y = size.height / 2;
+    if (dashed) {
+      // 3-on/2-off dash pattern within the 12 px sample
+      const dashLen = 3.0;
+      const gapLen = 2.0;
+      double x = 0;
+      while (x < size.width) {
+        final end = math.min(x + dashLen, size.width);
+        canvas.drawLine(Offset(x, y), Offset(end, y), paint);
+        x = end + gapLen;
+      }
+    } else {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LegendDotPainter old) =>
+      old.color != color || old.dashed != dashed;
+}
+
+class _ChartLegend extends StatelessWidget {
+  final List<({String label, Color color, bool dashed})> entries;
+  const _ChartLegend({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Wrap(
+      spacing: 12,
+      runSpacing: 4,
+      alignment: WrapAlignment.center,
+      children: [
+        for (final e in entries)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _LegendDot(color: e.color, dashed: e.dashed),
+              const SizedBox(width: 4),
+              Text(
+                e.label,
+                style: WeRoboTypography.caption.copyWith(
+                  color: tc.textSecondary,
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+      ],
+    );
+  }
+}
+
+// ─── Drag context card ────────────────────────────────────────
+
+class _DragContextCard extends StatelessWidget {
+  final double portfolioPct;
+  final double? marketPct;
+  final List<({String name, double pct})> assetRows;
+
+  const _DragContextCard({
+    required this.portfolioPct,
+    required this.marketPct,
+    required this.assetRows,
+  });
+
+  /// Fixed width bounds the row's Expanded label inside a Positioned
+  /// (which provides loose constraints). Height is a max-case upper
+  /// bound used by `_buildCardData` for the gap-from-line placement —
+  /// the actual card sizes to its content via `mainAxisSize.min`, so
+  /// rows with no asset breakdown make it shorter.
+  static const double width = 150.0;
+  static const double height = 110.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    // Frosted-glass annotation. The BackdropFilter blurs the chart lines
+    // visible behind the card so they read as soft ghosts — the card
+    // never opaquely blocks them, while still giving the numbers enough
+    // contrast to scan. No explicit border: the blur edge + alpha
+    // surface implies the boundary without adding chrome.
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          width: width,
+          color: tc.surface.withValues(alpha: 0.62),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DragContextRow(label: '포트폴리오', pct: portfolioPct),
+              if (marketPct != null)
+                _DragContextRow(label: '시장', pct: marketPct!),
+              if (assetRows.isNotEmpty) const SizedBox(height: 4),
+              for (final row in assetRows)
+                _DragContextRow(label: row.name, pct: row.pct),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DragContextRow extends StatelessWidget {
+  final String label;
+  final double pct;
+  const _DragContextRow({
+    required this.label,
+    required this.pct,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final color = pct >= 0 ? tc.accent : WeRoboColors.error;
+    final sign = pct >= 0 ? '+' : '−';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 1),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontFamily: WeRoboFonts.body,
+                fontSize: 11,
+                fontWeight: FontWeight.w400,
+                color: tc.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '$sign${(pct * 100).abs().toStringAsFixed(2)}%',
+            style: TextStyle(
+              fontFamily: WeRoboFonts.english,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: color,
+              fontFeatures: const [ui.FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─── Shared helpers ───────────────────────────────────────────
@@ -1013,7 +1588,7 @@ DateTime _addOneMonth(DateTime date) {
   final nextMonth = date.month == 12 ? 1 : date.month + 1;
   final nextYear = date.month == 12 ? date.year + 1 : date.year;
   final lastDayOfNextMonth = DateTime(nextYear, nextMonth + 1, 0).day;
-  final nextDay = min(date.day, lastDayOfNextMonth);
+  final nextDay = math.min(date.day, lastDayOfNextMonth);
   return DateTime(nextYear, nextMonth, nextDay);
 }
 

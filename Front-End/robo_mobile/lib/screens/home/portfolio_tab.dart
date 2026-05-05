@@ -249,7 +249,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
                     onTap: () => setState(() => _viewTab = 0),
                   ),
                   _ToggleChip(
-                    label: '성과 추이',
+                    label: '변동성',
                     isActive: _viewTab == 1,
                     onTap: () => setState(() => _viewTab = 1),
                   ),
@@ -258,29 +258,27 @@ class _PortfolioTabState extends State<PortfolioTab> {
             ),
             const SizedBox(height: 16),
 
-            // Content
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: _viewTab == 0
-                  ? _AllocationView(
-                      key: ValueKey('alloc_${type.name}'),
-                      categories: categories,
-                      details: details,
-                      hasResolvedPortfolio: selectedPortfolio != null,
-                      selectedSector: _selectedSector,
-                      onSectorSelected: (idx) =>
-                          setState(() => _selectedSector = idx),
-                    )
-                  : _TrendView(
-                      key: ValueKey('trend_${type.name}'),
-                      type: type,
-                      volatilityPoints: _volatilityPoints,
-                      comparisonLines: comparisonLines,
-                      rebalanceDates: rebalanceDates,
-                      expectedAnnualReturn: portfolioState.expectedReturn,
-                      isLoading: _isLoadingHistory,
-                    ),
-            ),
+            // Content — direct swap (no AnimatedSwitcher) because the
+            // two views differ in height; stacking them during a fade
+            // overlaps the allocation rows with the volatility chart.
+            if (_viewTab == 0)
+              _AllocationView(
+                categories: categories,
+                details: details,
+                hasResolvedPortfolio: selectedPortfolio != null,
+                selectedSector: _selectedSector,
+                onSectorSelected: (idx) =>
+                    setState(() => _selectedSector = idx),
+              )
+            else
+              _TrendView(
+                type: type,
+                volatilityPoints: _volatilityPoints,
+                comparisonLines: comparisonLines,
+                rebalanceDates: rebalanceDates,
+                expectedAnnualReturn: portfolioState.expectedReturn,
+                isLoading: _isLoadingHistory,
+              ),
             const SizedBox(height: 28),
 
             // Next rebalance card
@@ -469,7 +467,6 @@ class _AllocationView extends StatelessWidget {
   final ValueChanged<int?> onSectorSelected;
 
   const _AllocationView({
-    super.key,
     required this.categories,
     required this.details,
     required this.hasResolvedPortfolio,
@@ -612,7 +609,6 @@ class _TrendView extends StatelessWidget {
   final bool isLoading;
 
   const _TrendView({
-    super.key,
     required this.type,
     this.volatilityPoints,
     required this.comparisonLines,

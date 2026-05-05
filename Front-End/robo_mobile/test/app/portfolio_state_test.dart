@@ -279,4 +279,152 @@ void main() {
       expect(state.isWeeklyDigestAvailable, isFalse);
     });
   });
+
+  group('PortfolioState earnings history', () {
+    late PortfolioState state;
+
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      state = PortfolioState();
+    });
+
+    tearDown(() {
+      state.dispose();
+    });
+
+    MobileEarningsPoint point(
+      String date,
+      Map<String, double> earnings,
+    ) {
+      return MobileEarningsPoint(
+        date: DateTime.parse(date),
+        totalEarnings: earnings.values.fold(0.0, (a, b) => a + b),
+        totalReturnPct: 0,
+        assetEarnings: earnings,
+      );
+    }
+
+    test('dayOverDayAssetReturns computes per-asset diff vs prior point', () {
+      state.setEarningsHistory(MobileEarningsHistoryResponse(
+        points: [
+          point('2026-04-14', {'us_value': 100000, 'gold': 50000}),
+          point('2026-04-15', {'us_value': 105000, 'gold': 49000}),
+        ],
+        investmentAmount: 10000000,
+        startDate: '2026-04-14',
+        endDate: '2026-04-15',
+        totalReturnPct: 0,
+        totalEarnings: 0,
+        assetSummary: const [],
+      ));
+
+      final diffs = state.dayOverDayAssetReturns(DateTime.parse('2026-04-15'));
+
+      expect(diffs['us_value'], closeTo(0.05, 1e-9));
+      expect(diffs['gold'], closeTo(-0.02, 1e-9));
+    });
+
+    test('dayOverDayAssetReturns returns empty map when no prior point exists',
+        () {
+      state.setEarningsHistory(MobileEarningsHistoryResponse(
+        points: [
+          point('2026-04-15', {'us_value': 100000}),
+        ],
+        investmentAmount: 10000000,
+        startDate: '2026-04-15',
+        endDate: '2026-04-15',
+        totalReturnPct: 0,
+        totalEarnings: 0,
+        assetSummary: const [],
+      ));
+
+      final diffs = state.dayOverDayAssetReturns(DateTime.parse('2026-04-15'));
+      expect(diffs, isEmpty);
+    });
+
+    test('dayOverDayAssetReturns is empty when earningsHistory is null', () {
+      final diffs = state.dayOverDayAssetReturns(DateTime.parse('2026-04-15'));
+      expect(diffs, isEmpty);
+    });
+
+    test('dayOverDayAssetReturns is empty when prior asset value is zero', () {
+      state.setEarningsHistory(MobileEarningsHistoryResponse(
+        points: [
+          point('2026-04-14', {'us_value': 0, 'gold': 50000}),
+          point('2026-04-15', {'us_value': 5000, 'gold': 51000}),
+        ],
+        investmentAmount: 10000000,
+        startDate: '2026-04-14',
+        endDate: '2026-04-15',
+        totalReturnPct: 0,
+        totalEarnings: 0,
+        assetSummary: const [],
+      ));
+
+      final diffs = state.dayOverDayAssetReturns(DateTime.parse('2026-04-15'));
+      expect(diffs.containsKey('us_value'), isFalse);
+      expect(diffs['gold'], closeTo(0.02, 1e-9));
+    });
+
+    test('setEarningsHistory stores value and notifies', () {
+      var notified = 0;
+      state.addListener(() => notified += 1);
+
+      final response = MobileEarningsHistoryResponse(
+        points: const [],
+        investmentAmount: 0,
+        startDate: '',
+        endDate: '',
+        totalReturnPct: 0,
+        totalEarnings: 0,
+        assetSummary: const [],
+      );
+
+      state.setEarningsHistory(response);
+
+      expect(state.earningsHistory, same(response));
+      expect(notified, 1);
+    });
+
+    test('setEarningsHistory accepts null and notifies', () {
+      var notified = 0;
+      state.addListener(() => notified += 1);
+
+      state.setEarningsHistory(null);
+
+      expect(state.earningsHistory, isNull);
+      expect(notified, 1);
+    });
+
+    test('dayOverDayAssetReturns is empty when target date not in history',
+        () {
+      MobileEarningsPoint point(
+        String date,
+        Map<String, double> earnings,
+      ) {
+        return MobileEarningsPoint(
+          date: DateTime.parse(date),
+          totalEarnings: earnings.values.fold(0.0, (a, b) => a + b),
+          totalReturnPct: 0,
+          assetEarnings: earnings,
+        );
+      }
+
+      state.setEarningsHistory(MobileEarningsHistoryResponse(
+        points: [
+          point('2026-04-14', {'us_value': 100000}),
+          point('2026-04-15', {'us_value': 105000}),
+        ],
+        investmentAmount: 10000000,
+        startDate: '2026-04-14',
+        endDate: '2026-04-15',
+        totalReturnPct: 0,
+        totalEarnings: 0,
+        assetSummary: const [],
+      ));
+
+      final diffs = state.dayOverDayAssetReturns(DateTime(2030, 1, 1));
+      expect(diffs, isEmpty);
+    });
+  });
 }
