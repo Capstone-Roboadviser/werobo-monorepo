@@ -76,6 +76,26 @@ class FakeStockDataRepository:
         )
 
 
+class LowVolatilityStockDataRepository:
+    def load_stock_prices(self, path: str) -> pd.DataFrame:
+        end_date = datetime.now(timezone.utc).date() - timedelta(days=1)
+        dates = pd.bdate_range(end=end_date, periods=90)
+        price = 100.0
+        rows = []
+        for index, day in enumerate(dates):
+            if index > 0:
+                daily_return = 0.004 if index >= len(dates) - 5 else (0.0005 if index % 2 == 0 else -0.0002)
+                price *= 1 + daily_return
+            rows.append(
+                {
+                    "date": day,
+                    "ticker": "AAA",
+                    "adjusted_close": price,
+                }
+            )
+        return pd.DataFrame(rows)
+
+
 def test_below_threshold_returns_unavailable_sentinel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -142,6 +162,50 @@ def test_below_threshold_returns_unavailable_sentinel(
     assert news_calls == []  # below-threshold path skips news fetch
     assert narrative_calls == []  # below-threshold path skips LLM
     assert digest["total_return_pct"] == 2.0
+
+
+def test_low_volatility_portfolio_surfaces_digest_below_fixed_5pct(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": (datetime.now(timezone.utc).date() - timedelta(days=1)).isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", LowVolatilityStockDataRepository)
+    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
+    monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
+    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    digest = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "안정형",
+            "stock_allocations": [
+                {
+                    "ticker": "AAA",
+                    "name": "Low Vol Asset",
+                    "sector_code": "cash_like",
+                    "sector_name": "현금성 자산",
+                    "weight": 1.0,
+                },
+            ],
+        }
+    )
+
+    assert 1.0 < digest["total_return_pct"] < 5.0
+    assert digest["available"] is True
+    assert digest["drivers"][0]["ticker"] == "AAA"
+    assert digest["trigger_sigma_multiple"] >= 2.0
+    assert digest["trigger_threshold_pct"] < 5.0
 
 
 def test_above_positive_threshold_keeps_drivers_only(

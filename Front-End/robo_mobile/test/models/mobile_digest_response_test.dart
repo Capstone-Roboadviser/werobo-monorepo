@@ -35,4 +35,17 @@ void main() {
     final result = MobileDigestResponse.fromJson(json);
     expect(result.available, isTrue);
   });
+
+  test('parses rolling volatility trigger context', () {
+    final json = baseJson()
+      ..['baseline_volatility_pct'] = 0.42
+      ..['trigger_threshold_pct'] = 0.84
+      ..['trigger_sigma_multiple'] = 2.7;
+
+    final result = MobileDigestResponse.fromJson(json);
+
+    expect(result.baselineVolatilityPct, 0.42);
+    expect(result.triggerThresholdPct, 0.84);
+    expect(result.triggerSigmaMultiple, 2.7);
+  });
 }

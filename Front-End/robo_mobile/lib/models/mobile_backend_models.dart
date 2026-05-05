@@ -1499,6 +1499,9 @@ class MobileDigestResponse {
   final int degradationLevel;
   final double? benchmark7assetReturnPct;
   final double? benchmarkBondReturnPct;
+  final double? baselineVolatilityPct;
+  final double? triggerThresholdPct;
+  final double? triggerSigmaMultiple;
 
   const MobileDigestResponse({
     required this.digestDate,
@@ -1517,6 +1520,9 @@ class MobileDigestResponse {
     required this.degradationLevel,
     this.benchmark7assetReturnPct,
     this.benchmarkBondReturnPct,
+    this.baselineVolatilityPct,
+    this.triggerThresholdPct,
+    this.triggerSigmaMultiple,
   });
 
   factory MobileDigestResponse.fromJson(Map<String, dynamic> json) {
@@ -1549,6 +1555,15 @@ class MobileDigestResponse {
           : null,
       benchmarkBondReturnPct: json['benchmark_bond_return_pct'] != null
           ? _asDouble(json['benchmark_bond_return_pct'])
+          : null,
+      baselineVolatilityPct: json['baseline_volatility_pct'] != null
+          ? _asDouble(json['baseline_volatility_pct'])
+          : null,
+      triggerThresholdPct: json['trigger_threshold_pct'] != null
+          ? _asDouble(json['trigger_threshold_pct'])
+          : null,
+      triggerSigmaMultiple: json['trigger_sigma_multiple'] != null
+          ? _asDouble(json['trigger_sigma_multiple'])
           : null,
     );
   }

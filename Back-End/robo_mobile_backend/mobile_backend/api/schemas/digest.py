@@ -21,7 +21,7 @@ class DigestResponse(BaseModel):
     total_return_won: float = Field(..., description="주간 총 수익(원)", examples=[-32400])
     available: bool = Field(
         default=True,
-        description="이번 주 다이제스트 노출 여부 (총 수익률이 ±5% 이상일 때만 true)",
+        description="이번 주 다이제스트 노출 여부 (최근 변동성 대비 유의미한 움직임일 때 true)",
     )
     narrative_ko: str | None = Field(None, description="AI 생성 한국어 요약")
     has_narrative: bool = Field(..., description="AI 요약 포함 여부")
@@ -43,4 +43,13 @@ class DigestResponse(BaseModel):
     )
     benchmark_bond_return_pct: float | None = Field(
         None, description="채권 벤치마크 주간 수익률(%)"
+    )
+    baseline_volatility_pct: float | None = Field(
+        None, description="최근 60개 5영업일 포트폴리오 수익률의 표준편차(%)"
+    )
+    trigger_threshold_pct: float | None = Field(
+        None, description="다이제스트 노출 기준 수익률 절대값(%)"
+    )
+    trigger_sigma_multiple: float | None = Field(
+        None, description="이번 주 수익률이 평소 5영업일 변동성의 몇 배인지"
     )

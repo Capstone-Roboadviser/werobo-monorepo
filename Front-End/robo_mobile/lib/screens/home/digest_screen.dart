@@ -296,6 +296,15 @@ class _SummaryCard extends StatelessWidget {
               ),
             ],
           ),
+          if (_volatilityContextText != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _volatilityContextText!,
+              style: WeRoboTypography.caption.copyWith(
+                color: tc.textTertiary,
+              ),
+            ),
+          ],
           if (digest.hasNarrative && digest.narrativeKo != null) ...[
             const SizedBox(height: 12),
             Text.rich(
@@ -325,6 +334,12 @@ class _SummaryCard extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  String? get _volatilityContextText {
+    final multiple = digest.triggerSigmaMultiple;
+    if (multiple == null) return null;
+    return '최근 60영업일 기준, 평소보다 ${multiple.toStringAsFixed(1)}배 큰 움직임이에요.';
   }
 
   TextSpan _buildNarrativeSpans(

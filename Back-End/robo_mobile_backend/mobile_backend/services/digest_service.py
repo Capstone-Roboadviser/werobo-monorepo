@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -23,7 +23,12 @@ logger = logging.getLogger(__name__)
 
 DIGEST_PERIOD_DAYS = 7
 TOP_N = 2
-DIGEST_THRESHOLD_PCT = 5.0
+DIGEST_FALLBACK_THRESHOLD_PCT = 5.0
+DIGEST_TRIGGER_SIGMA_MULTIPLIER = 2.0
+DIGEST_SIGMA_WINDOW_TRADING_DAYS = 5
+DIGEST_SIGMA_LOOKBACK_WINDOWS = 60
+DIGEST_SIGMA_MIN_WINDOWS = 20
+DIGEST_HISTORY_LOOKBACK_DAYS = 140
 
 
 class DigestError(Exception):
@@ -100,6 +105,152 @@ def top_drivers_detractors(
     detractors = [a for a in attributions if a["contribution_won"] < 0]
     detractors.sort(key=lambda x: x["contribution_won"])
     return drivers, detractors[:n]
+
+
+def _prices_by_ticker(prices_df: pd.DataFrame) -> dict[str, dict[str, float]]:
+    prices_by_ticker: dict[str, dict[str, float]] = {}
+    for _, row in prices_df.iterrows():
+        ticker = str(row.get("ticker", "")).strip().upper()
+        date_value = pd.to_datetime(row.get("date"), errors="coerce")
+        if not ticker or pd.isna(date_value):
+            continue
+        date_str = date_value.normalize().strftime("%Y-%m-%d")
+        price = float(row.get("adjusted_close", 0))
+        if ticker not in prices_by_ticker:
+            prices_by_ticker[ticker] = {}
+        prices_by_ticker[ticker][date_str] = price
+    return prices_by_ticker
+
+
+def _filter_prices_by_date(
+    prices_df: pd.DataFrame,
+    *,
+    start_date: date,
+    end_date: date,
+) -> pd.DataFrame:
+    if prices_df.empty:
+        return prices_df
+    normalized = prices_df.copy()
+    normalized["date"] = pd.to_datetime(
+        normalized["date"],
+        errors="coerce",
+    ).dt.normalize()
+    start_ts = pd.Timestamp(start_date).normalize()
+    end_ts = pd.Timestamp(end_date).normalize()
+    return normalized[
+        (normalized["date"] >= start_ts)
+        & (normalized["date"] <= end_ts)
+    ].dropna(subset=["date", "ticker", "adjusted_close"])
+
+
+def _portfolio_window_sigma_pct(
+    prices_df: pd.DataFrame,
+    stock_allocations: list[dict],
+    *,
+    baseline_end_date: date,
+) -> float | None:
+    if prices_df.empty:
+        return None
+
+    weights = {
+        str(item.get("ticker", "")).strip().upper(): float(item.get("weight", 0))
+        for item in stock_allocations
+    }
+    weights = {
+        ticker: weight
+        for ticker, weight in weights.items()
+        if ticker and weight > 0
+    }
+    if not weights:
+        return None
+
+    normalized = prices_df.copy()
+    normalized["date"] = pd.to_datetime(
+        normalized["date"],
+        errors="coerce",
+    ).dt.normalize()
+    normalized["ticker"] = normalized["ticker"].astype(str).str.strip().str.upper()
+    normalized["adjusted_close"] = pd.to_numeric(
+        normalized["adjusted_close"],
+        errors="coerce",
+    )
+    normalized = normalized.dropna(subset=["date", "ticker", "adjusted_close"])
+    if normalized.empty:
+        return None
+
+    pivot = (
+        normalized.pivot_table(
+            index="date",
+            columns="ticker",
+            values="adjusted_close",
+            aggfunc="last",
+        )
+        .sort_index()
+    )
+    tickers = [ticker for ticker in weights if ticker in pivot.columns]
+    if not tickers:
+        return None
+
+    pivot = pivot[tickers].ffill().dropna(how="any")
+    if len(pivot) <= DIGEST_SIGMA_WINDOW_TRADING_DAYS + DIGEST_SIGMA_MIN_WINDOWS:
+        return None
+
+    weight_series = pd.Series(
+        {ticker: weights[ticker] for ticker in tickers},
+        dtype=float,
+    )
+    total_weight = float(weight_series.sum())
+    if total_weight <= 0:
+        return None
+    weight_series = weight_series / total_weight
+
+    daily_returns = pivot.pct_change(fill_method=None).dropna(how="any")
+    if daily_returns.empty:
+        return None
+
+    portfolio_daily_returns = daily_returns.mul(weight_series, axis=1).sum(axis=1)
+    window_returns = (
+        (1 + portfolio_daily_returns)
+        .rolling(window=DIGEST_SIGMA_WINDOW_TRADING_DAYS)
+        .apply(lambda values: values.prod() - 1, raw=True)
+        .dropna()
+    )
+    baseline_end_ts = pd.Timestamp(baseline_end_date).normalize()
+    baseline_returns = window_returns[
+        window_returns.index < baseline_end_ts
+    ].tail(DIGEST_SIGMA_LOOKBACK_WINDOWS)
+    if len(baseline_returns) < DIGEST_SIGMA_MIN_WINDOWS:
+        return None
+
+    sigma_pct = float(baseline_returns.std(ddof=1) * 100)
+    if pd.isna(sigma_pct) or sigma_pct <= 0:
+        return None
+    return sigma_pct
+
+
+def _digest_trigger_stats(
+    *,
+    prices_df: pd.DataFrame,
+    stock_allocations: list[dict],
+    total_return_pct: float,
+    baseline_end_date: date,
+) -> dict[str, float | None]:
+    sigma_pct = _portfolio_window_sigma_pct(
+        prices_df,
+        stock_allocations,
+        baseline_end_date=baseline_end_date,
+    )
+    if sigma_pct is None:
+        threshold_pct = DIGEST_FALLBACK_THRESHOLD_PCT
+        sigma_multiple = None
+    else:
+        threshold_pct = sigma_pct * DIGEST_TRIGGER_SIGMA_MULTIPLIER
+        sigma_multiple = abs(total_return_pct) / sigma_pct if sigma_pct > 0 else None
+    return {
+        "baseline_volatility_pct": None if sigma_pct is None else round(sigma_pct, 4),
+        "trigger_threshold_pct": round(threshold_pct, 4),
+        "trigger_sigma_multiple": None if sigma_multiple is None else round(sigma_multiple, 4),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -211,12 +362,19 @@ def _build_user_prompt(
     drivers: list[dict],
     detractors: list[dict],
     news: dict[str, list[str]],
+    trigger_sigma_multiple: float | None = None,
+    trigger_threshold_pct: float | None = None,
     rebalance_triggered: bool = False,
 ) -> str:
     lines = [
         f"총 수익률: {total_return_pct:.1f}% ({total_return_won:+,.0f}원)",
         f"포트폴리오 유형: {portfolio_type}",
     ]
+    if trigger_sigma_multiple is not None and trigger_threshold_pct is not None:
+        lines.append(
+            f"평소 7일 변동성 대비: {trigger_sigma_multiple:.1f}배 "
+            f"(노출 기준 {trigger_threshold_pct:.1f}%)"
+        )
 
     if drivers:
         lines.append("")
@@ -285,6 +443,8 @@ def generate_narrative(
     drivers: list[dict],
     detractors: list[dict],
     news: dict[str, list[str]],
+    trigger_sigma_multiple: float | None = None,
+    trigger_threshold_pct: float | None = None,
     rebalance_triggered: bool = False,
 ) -> dict[str, str] | None:
     """Call Gemini Flash to generate Korean narrative + per-ticker explanations.
@@ -312,6 +472,8 @@ def generate_narrative(
             drivers=drivers,
             detractors=detractors,
             news=news,
+            trigger_sigma_multiple=trigger_sigma_multiple,
+            trigger_threshold_pct=trigger_threshold_pct,
             rebalance_triggered=rebalance_triggered,
         )
 
@@ -442,28 +604,30 @@ class DigestService:
         # Compute date range
         end_date = datetime.now(timezone.utc).date()
         start_date = end_date - timedelta(days=DIGEST_PERIOD_DAYS)
+        history_start_date = end_date - timedelta(days=DIGEST_HISTORY_LOOKBACK_DAYS)
 
         # Load prices
         tickers = [a["ticker"] for a in stock_allocations]
         prices_df = self._load_digest_prices(
             account=account,
             tickers=tickers,
-            start_date=start_date.isoformat(),
+            start_date=history_start_date.isoformat(),
             end_date=end_date.isoformat(),
         )
 
         if prices_df is None or prices_df.empty:
             raise InsufficientDataError("아직 충분한 데이터가 없습니다.")
 
+        digest_prices_df = _filter_prices_by_date(
+            prices_df,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if digest_prices_df.empty:
+            raise InsufficientDataError("아직 충분한 데이터가 없습니다.")
+
         # Build prices_by_ticker: {ticker: {date_str: price}}
-        prices_by_ticker: dict[str, dict[str, float]] = {}
-        for _, row in prices_df.iterrows():
-            ticker = str(row.get("ticker", ""))
-            date_str = str(row.get("date", ""))
-            price = float(row.get("adjusted_close", 0))
-            if ticker not in prices_by_ticker:
-                prices_by_ticker[ticker] = {}
-            prices_by_ticker[ticker][date_str] = price
+        prices_by_ticker = _prices_by_ticker(digest_prices_df)
 
         # Attribution
         attributions = compute_attribution(
@@ -481,18 +645,29 @@ class DigestService:
             (total_return_won / portfolio_value * 100) if portfolio_value > 0 else 0,
             2,
         )
+        trigger_stats = _digest_trigger_stats(
+            prices_df=prices_df,
+            stock_allocations=stock_allocations,
+            total_return_pct=total_return_pct,
+            baseline_end_date=start_date,
+        )
+        trigger_threshold_pct = float(
+            trigger_stats["trigger_threshold_pct"]
+            or DIGEST_FALLBACK_THRESHOLD_PCT
+        )
 
         drivers, detractors = top_drivers_detractors(attributions)
 
         # Sign-based narrowing: positive moves show drivers only,
         # negative moves show detractors only.
-        if total_return_pct >= DIGEST_THRESHOLD_PCT:
+        if total_return_pct >= trigger_threshold_pct:
             detractors = []
-        elif total_return_pct <= -DIGEST_THRESHOLD_PCT:
+        elif total_return_pct <= -trigger_threshold_pct:
             drivers = []
 
-        # Threshold gate: only surface a digest for ±5% moves.
-        if abs(total_return_pct) < DIGEST_THRESHOLD_PCT:
+        # Threshold gate: surface a digest only when the 7-day portfolio
+        # return is unusual relative to its recent rolling volatility.
+        if abs(total_return_pct) < trigger_threshold_pct:
             now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
             unavailable = {
                 "digest_date": end_date.isoformat(),
@@ -511,12 +686,14 @@ class DigestService:
                 "degradation_level": 0,
                 "benchmark_7asset_return_pct": None,
                 "benchmark_bond_return_pct": None,
+                **trigger_stats,
             }
             self.digest_repo.cache(account_id, unavailable)
             logger.info(
-                "digest.generate.below_threshold account_id=%s total_return_pct=%s",
+                "digest.generate.below_threshold account_id=%s total_return_pct=%s threshold_pct=%s",
                 account_id,
                 total_return_pct,
+                trigger_threshold_pct,
             )
             return unavailable
 
@@ -543,6 +720,8 @@ class DigestService:
             drivers=drivers,
             detractors=detractors,
             news=news,
+            trigger_sigma_multiple=trigger_stats["trigger_sigma_multiple"],
+            trigger_threshold_pct=trigger_stats["trigger_threshold_pct"],
         )
 
         narrative_ko = None
@@ -579,6 +758,7 @@ class DigestService:
             "degradation_level": degradation_level,
             "benchmark_7asset_return_pct": benchmark_7asset,
             "benchmark_bond_return_pct": benchmark_bond,
+            **trigger_stats,
         }
 
         # Cache the result
