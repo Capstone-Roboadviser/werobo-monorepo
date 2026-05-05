@@ -7,7 +7,7 @@ WeRobo is a robo-advisor mobile app built with Flutter. It helps users find opti
 - **Font**: Jalnan (custom, in `assets/fonts/`)
 - **iCloud limitation**: iOS simulator builds fail from iCloud Drive paths. Always sync to `~/Developer/robo_mobile/` before running.
 - **Run flow**: `rsync` project to local → `flutter pub get` → `flutter run -d <simulator_udid>`
-- **Simulator**: iPhone 17 Pro (UDID: `6BFFDF4C-A1E8-4031-8883-6C660465972B`)
+- **Simulator**: iPhone 17 Pro (UDID: `E59D10D1-D076-4149-9AC9-ABFB4855F165`)
 
 ## Architecture
 - **Pattern**: Feature-based organization with MVVM separation

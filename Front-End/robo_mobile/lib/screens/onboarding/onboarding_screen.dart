@@ -710,28 +710,38 @@ class _FrontierBodyState extends State<_FrontierBody> {
           ),
           const SizedBox(height: 12),
 
-          // Chart fills all leftover vertical space — no fixed aspect
-          // ratio, no scrolling, just maximizes height inside the column.
+          // Chart fills the leftover vertical space, but capped by
+          // a 4:5 (w:h) aspect ratio so the idealized concave curve
+          // still reads as curved. Without the cap the chart goes so
+          // portrait that the curve looks like a vertical line — same
+          // bounding-box math, but Δy ≫ Δx flattens the perceived
+          // curvature. Center vertically so any leftover headroom
+          // becomes balanced whitespace, not a top-anchored block.
           Expanded(
-            child: EfficientFrontierChart(
-              previewPoints: _preview.points,
-              selectedPreviewPosition: _selectedPreviewPosition,
-              onPreviewPointChanged: _handlePreviewPositionChanged,
-              onPositionChanged: (t) {
-                // Drag updates _dotT → setState → AssetWeightBar re-renders.
-                // Each segment's flex ratio animates smoothly via
-                // AnimatedContainer.
-                final selection = _selectionForNormalizedT(t);
-                setState(() {
-                  _dotT = selection?.normalizedT ?? t;
-                  _selectedPreviewPosition = selection == null
-                      ? null
-                      : _preview
-                          .positionForPointIndex(selection.selectedPointIndex);
-                });
-                widget.onPositionChanged?.call(selection?.normalizedT ?? t);
-                widget.onFrontierSelectionChanged?.call(selection);
-              },
+            child: Center(
+              child: AspectRatio(
+                aspectRatio: 0.8,
+                child: EfficientFrontierChart(
+                  previewPoints: _preview.points,
+                  selectedPreviewPosition: _selectedPreviewPosition,
+                  onPreviewPointChanged: _handlePreviewPositionChanged,
+                  onPositionChanged: (t) {
+                    // Drag updates _dotT → setState → AssetWeightBar re-renders.
+                    // Each segment's flex ratio animates smoothly via
+                    // AnimatedContainer.
+                    final selection = _selectionForNormalizedT(t);
+                    setState(() {
+                      _dotT = selection?.normalizedT ?? t;
+                      _selectedPreviewPosition = selection == null
+                          ? null
+                          : _preview.positionForPointIndex(
+                              selection.selectedPointIndex);
+                    });
+                    widget.onPositionChanged?.call(selection?.normalizedT ?? t);
+                    widget.onFrontierSelectionChanged?.call(selection);
+                  },
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 12),
