@@ -576,9 +576,9 @@ class _PerformanceBadge extends StatelessWidget {
 // ─── Multi-line % return chart painter ───────────────────────
 
 class _HomePerformancePainter extends CustomPainter {
-  /// Lines to draw, in z-order (last drawn = on top). The portfolio line
-  /// is conventionally first; benchmarks/projections layer below it via
-  /// the order they appear in this list.
+  /// Lines to draw. The portfolio line (index 0) is drawn last and sits
+  /// on top of every benchmark. Benchmarks at higher indices are drawn
+  /// earlier and therefore sit below benchmarks at lower indices.
   final List<ChartLine> lines;
   final double progress;
   final int? touchIndex;
@@ -951,8 +951,11 @@ class _HomePerformancePainter extends CustomPainter {
   bool shouldRepaint(covariant _HomePerformancePainter old) =>
       old.progress != progress ||
       old.touchIndex != touchIndex ||
-      old.glowPhase != glowPhase ||
-      old.lines != lines;
+      old.glowPhase != glowPhase;
+  // `lines` is freshly constructed every build (new list, new ChartLine
+  // instances) so reference equality is always false — we'd always
+  // repaint. Range/data changes already trigger a setState that
+  // unconditionally rebuilds, so omitting `lines` here is safe.
 }
 
 // ─── Shared helpers ───────────────────────────────────────────
