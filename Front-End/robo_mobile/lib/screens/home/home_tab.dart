@@ -1040,6 +1040,11 @@ class _HomePerformancePainter extends CustomPainter {
     final complete = fIdx.floor();
     final frac = fIdx - complete;
     final drawCount = (complete + 1).clamp(2, basePts.length);
+    // The animation cursor (drives left-to-right reveal) is decoupled
+    // from the drag cursor — drag only moves the crosshair / glow dot,
+    // it never clips or fades the lines themselves. So `ti` is purely
+    // the touch index when dragging (used by the crosshair); benchmark
+    // and portfolio drawing use `drawCount` based on `progress`.
     final ti = isDragging
         ? touchIndex!.clamp(0, basePts.length - 1)
         : drawCount - 1;
@@ -1051,9 +1056,8 @@ class _HomePerformancePainter extends CustomPainter {
     // series early.
     final minDate = basePts.first.date;
     final maxDate = basePts.last.date;
-    final drawnUpToDate = ti < basePts.length
-        ? basePts[ti].date
-        : maxDate;
+    final animCursorIdx = math.min(drawCount - 1, basePts.length - 1);
+    final drawnUpToDate = basePts[animCursorIdx].date;
     for (var lineIdx = lines.length - 1; lineIdx >= 1; lineIdx--) {
       _drawBenchmarkLine(
         canvas,
@@ -1066,7 +1070,8 @@ class _HomePerformancePainter extends CustomPainter {
       );
     }
 
-    // Portfolio line on top with the existing polish.
+    // Portfolio line on top. Always drawn fully per the animation cursor
+    // — drag moves the crosshair only, it does not clip or fade the line.
     _drawPortfolioLine(
       canvas,
       lines.first.points,
@@ -1075,8 +1080,6 @@ class _HomePerformancePainter extends CustomPainter {
       drawCount,
       complete,
       frac,
-      ti,
-      isDragging,
       toX,
       toY,
     );
@@ -1174,90 +1177,35 @@ class _HomePerformancePainter extends CustomPainter {
     int drawCount,
     int complete,
     double frac,
-    int ti,
-    bool isDragging,
     double Function(int, int) toX,
     double Function(double) toY,
   ) {
-    if (isDragging) {
-      const transitionLen = 20;
-      final transStart = math.max(0, ti - transitionLen);
-      final mainEnd = math.min(transStart + 1, drawCount);
-      final mainPath = Path();
-      for (int i = 0; i < mainEnd; i++) {
-        final x = toX(i, totalPts);
-        final y = toY(pts[i].value);
-        if (i == 0) {
-          mainPath.moveTo(x, y);
-        } else {
-          mainPath.lineTo(x, y);
-        }
+    final fullPath = Path();
+    for (int i = 0; i <= complete; i++) {
+      final x = toX(i, totalPts);
+      final y = toY(pts[i].value);
+      if (i == 0) {
+        fullPath.moveTo(x, y);
+      } else {
+        fullPath.lineTo(x, y);
       }
-      canvas.drawPath(
-        mainPath,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-      if (transStart < ti) {
-        final transPath = Path();
-        transPath.moveTo(
-          toX(transStart, totalPts),
-          toY(pts[transStart].value),
-        );
-        for (int i = transStart + 1; i <= ti && i < drawCount; i++) {
-          transPath.lineTo(toX(i, totalPts), toY(pts[i].value));
-        }
-        final shader = ui.Gradient.linear(
-          Offset(toX(transStart, totalPts), 0),
-          Offset(toX(ti, totalPts), 0),
-          [color, glowColor],
-        );
-        canvas.drawPath(
-          transPath,
-          Paint()
-            ..shader = shader
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 2
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
-      }
-      if (ti < drawCount - 1) {
-        _drawFadingSegment(canvas, pts, ti, drawCount, totalPts, toX, toY,
-            color, 2);
-      }
-    } else {
-      final fullPath = Path();
-      for (int i = 0; i <= complete; i++) {
-        final x = toX(i, totalPts);
-        final y = toY(pts[i].value);
-        if (i == 0) {
-          fullPath.moveTo(x, y);
-        } else {
-          fullPath.lineTo(x, y);
-        }
-      }
-      if (frac > 0 && complete < pts.length - 1) {
-        final x0 = toX(complete, totalPts);
-        final y0 = toY(pts[complete].value);
-        final x1 = toX(complete + 1, totalPts);
-        final y1 = toY(pts[complete + 1].value);
-        fullPath.lineTo(x0 + frac * (x1 - x0), y0 + frac * (y1 - y0));
-      }
-      canvas.drawPath(
-        fullPath,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
     }
+    if (frac > 0 && complete < pts.length - 1) {
+      final x0 = toX(complete, totalPts);
+      final y0 = toY(pts[complete].value);
+      final x1 = toX(complete + 1, totalPts);
+      final y1 = toY(pts[complete + 1].value);
+      fullPath.lineTo(x0 + frac * (x1 - x0), y0 + frac * (y1 - y0));
+    }
+    canvas.drawPath(
+      fullPath,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
   }
 
   void _drawCrosshair(
@@ -1333,46 +1281,6 @@ class _HomePerformancePainter extends CustomPainter {
       );
       canvas.drawCircle(Offset(tx, vy), 3, Paint()..color = Colors.white);
     }
-  }
-
-  void _drawFadingSegment(
-    Canvas canvas,
-    List<ChartPoint> pts,
-    int startIdx,
-    int endIdx,
-    int totalPts,
-    double Function(int, int) toX,
-    double Function(double) toY,
-    Color color,
-    double strokeWidth,
-  ) {
-    if (startIdx >= endIdx - 1) return;
-    final fadeCount = math.min(3, endIdx - startIdx);
-    final fadeEnd = math.min(startIdx + fadeCount, endIdx);
-
-    final fadePath = Path();
-    fadePath.moveTo(toX(startIdx, totalPts), toY(pts[startIdx].value));
-    for (int i = startIdx + 1; i < fadeEnd; i++) {
-      fadePath.lineTo(toX(i, totalPts), toY(pts[i].value));
-    }
-
-    final x0 = toX(startIdx, totalPts);
-    final x1 = toX(fadeEnd - 1, totalPts);
-    if ((x1 - x0).abs() < 1) return;
-
-    final shader = ui.Gradient.linear(Offset(x0, 0), Offset(x1, 0), [
-      color,
-      color.withValues(alpha: 0),
-    ]);
-    canvas.drawPath(
-      fadePath,
-      Paint()
-        ..shader = shader
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeWidth
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
   }
 
   void _drawDashedPath(Canvas canvas, Path path, Paint paint,
