@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -281,13 +282,12 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   late AnimationController _drawCtrl;
   late CurvedAnimation _drawCurve;
   late AnimationController _glowCtrl;
-  // Benchmark lines (시장 / 채권 / 연 기대수익률) depend on the comparison
-  // backtest fetch in home_shell, which may land after the chart's first
-  // paint. When that happens we restart `_drawCtrl` from zero so all
-  // four lines draw in left-to-right together in a single pass — instead
-  // of the portfolio animating first and the benchmarks popping in
-  // afterwards. Tracked once-only so the restart never re-fires.
-  bool _benchmarkRedrawDone = false;
+  // The draw animation is deferred until comparison-backtest data is
+  // available, so all four lines (portfolio + benchmarks) sweep in
+  // left-to-right together as a single pass. A timer enforces a max
+  // wait so the chart still animates if backtest fetch is slow or fails.
+  bool _drawStarted = false;
+  Timer? _drawDelayTimer;
   int _range = 4; // 전체
   int? _touchIndex;
 
@@ -316,28 +316,34 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     _drawCtrl = AnimationController(
       duration: const Duration(milliseconds: 700),
       vsync: this,
-    )..forward();
+    );
     _drawCurve = CurvedAnimation(parent: _drawCtrl, curve: Curves.linear);
     _glowCtrl = AnimationController(
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
+    // Fallback: if backtest never lands (offline, mock fallback, etc.),
+    // start the animation anyway so the portfolio line still draws in.
+    _drawDelayTimer = Timer(const Duration(milliseconds: 1200), () {
+      _startDrawAnimation();
+    });
+  }
+
+  void _startDrawAnimation() {
+    if (_drawStarted || !mounted) return;
+    _drawStarted = true;
+    _drawDelayTimer?.cancel();
+    _drawCtrl.forward();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // The first time the comparison backtest data arrives, restart the
-    // draw animation from zero so the benchmarks animate in left-to-
-    // right alongside the portfolio in a single unified pass. If the
-    // backtest was already loaded by chart init, the empty-lines branch
-    // never matched and this stays a no-op.
-    if (!_benchmarkRedrawDone) {
+    if (!_drawStarted) {
       final hasBenchmarks =
           PortfolioStateProvider.of(context).comparisonLines.isNotEmpty;
       if (hasBenchmarks) {
-        _benchmarkRedrawDone = true;
-        _drawCtrl.forward(from: 0);
+        _startDrawAnimation();
       }
     }
   }
@@ -353,6 +359,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
   @override
   void dispose() {
+    _drawDelayTimer?.cancel();
     _glowCtrl.dispose();
     _drawCurve.dispose();
     _drawCtrl.dispose();
