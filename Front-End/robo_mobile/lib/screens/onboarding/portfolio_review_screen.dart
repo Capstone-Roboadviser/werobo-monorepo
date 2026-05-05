@@ -7,11 +7,13 @@ import 'widgets/asset_weight.dart';
 import 'widgets/donut_chart.dart';
 import 'widgets/portfolio_charts.dart';
 
-/// Post-frontier confirmation screen. Layout per 2026-05-05 user notes:
-///   - Donut stacked above the asset list (vertical, small-screen friendly)
-///   - Tabs: 포트폴리오 비교 (default) / 변동성 (secondary) [filled in 3.3/3.4]
-///   - 3-year default time range with pinch-zoom [filled in 3.5]
-///   - Bottom CTA: 투자 확정 [wired in 3.6]
+/// Post-frontier confirmation screen. Layout per 2026-05-05 user notes
+/// (and rev F–J 2026-05-04):
+///   - Centered "포트폴리오 상세" page title
+///   - Donut centered with tap-for-details (slice → asset breakdown)
+///   - Tabs: 포트폴리오 비교 (default) / 변동성 (secondary)
+///   - 3-year default time range with pinch-zoom
+///   - Bottom CTA: 투자 확정
 class PortfolioReviewScreen extends StatefulWidget {
   final OnboardingFrontierSelection selection;
 
@@ -36,6 +38,19 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
         .map((a) => DonutSegment(
               weight: a.weight,
               color: WeRoboColors.assetColor(a.cls),
+              label: a.label,
+              tickers: [
+                // The frontier preview only carries the slice's overall
+                // weight, so we split it evenly across the constituent
+                // tickers. Once a per-ticker weight feed is wired this can
+                // be replaced with the real values.
+                if (a.tickers.isNotEmpty)
+                  for (final t in a.tickers)
+                    DonutTicker(
+                      symbol: t,
+                      weight: a.weight / a.tickers.length,
+                    ),
+              ],
             ))
         .toList();
   }
@@ -54,23 +69,11 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
         backgroundColor: tc.background,
         elevation: 0,
         leading: const BackButton(),
-        title: Row(children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: WeRoboColors.primaryLight,
-              borderRadius: BorderRadius.circular(WeRoboColors.radiusS),
-            ),
-            child: Text(
-              '선택 포트폴리오',
-              style: WeRoboTypography.caption
-                  .copyWith(color: WeRoboColors.primaryDark),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text('포트폴리오 상세',
-              style: WeRoboTypography.heading3.themed(context)),
-        ]),
+        centerTitle: true,
+        title: Text(
+          '포트폴리오 상세',
+          style: WeRoboTypography.heading3.themed(context),
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -79,7 +82,7 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 16),
-              _DonutAndListColumn(segments: _segments, assets: _assets),
+              _DonutAndListColumn(segments: _segments),
               const SizedBox(height: 24),
               _CompareVolatilityTabs(
                 controller: _tabController,
@@ -109,31 +112,22 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
   }
 }
 
-/// Vertical layout: donut on top (~240px), asset list below.
-/// Decided 2026-05-05 over a side-by-side layout because horizontal
-/// arrangement breaks on iPhone Mini-class viewports (375pt wide).
+/// Donut chart only — the asset list was removed (rev J, 2026-05-04) because
+/// tap-for-details on the donut now surfaces the same per-asset breakdown.
 class _DonutAndListColumn extends StatelessWidget {
   final List<DonutSegment> segments;
-  final List<AssetWeight> assets;
-  const _DonutAndListColumn({required this.segments, required this.assets});
+  const _DonutAndListColumn({required this.segments});
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Center(
-            child: DonutChart(
-              segments: segments,
-              centerLabel: '포트폴리오\n비중',
-              compact: false, // full size — top of screen, anchors hierarchy
-            ),
-          ),
-          const SizedBox(height: 20),
-          AssetWeightList(assets: assets),
-        ],
+      child: Center(
+        child: DonutChart(
+          segments: segments,
+          centerLabel: '포트폴리오\n비중',
+          compact: false, // full size — top of screen, anchors hierarchy
+        ),
       ),
     );
   }
