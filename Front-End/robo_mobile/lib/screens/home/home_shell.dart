@@ -42,22 +42,28 @@ class _HomeShellState extends State<HomeShell> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_backtestFetched) {
-      _backtestFetched = true;
-      _fetchBacktest();
-    }
-    if (!_accountFetched) {
-      _accountFetched = true;
-      _fetchAccountDashboard();
-    }
-    if (!_insightsFetched) {
-      _insightsFetched = true;
-      _fetchInsights();
-    }
-    if (!_digestFetched) {
-      _digestFetched = true;
-      _fetchWeeklyDigest();
-    }
+    // Defer fetches to a post-frame callback so the synchronous fallback
+    // paths in PortfolioState.refresh* (which call notifyListeners without
+    // awaiting an API) don't trigger setState-during-build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (!_backtestFetched) {
+        _backtestFetched = true;
+        _fetchBacktest();
+      }
+      if (!_accountFetched) {
+        _accountFetched = true;
+        _fetchAccountDashboard();
+      }
+      if (!_insightsFetched) {
+        _insightsFetched = true;
+        _fetchInsights();
+      }
+      if (!_digestFetched) {
+        _digestFetched = true;
+        _fetchWeeklyDigest();
+      }
+    });
   }
 
   Future<void> _fetchBacktest() async {
