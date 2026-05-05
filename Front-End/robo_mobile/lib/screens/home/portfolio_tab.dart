@@ -249,7 +249,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
                     onTap: () => setState(() => _viewTab = 0),
                   ),
                   _ToggleChip(
-                    label: '성과 추이',
+                    label: '변동성',
                     isActive: _viewTab == 1,
                     onTap: () => setState(() => _viewTab = 1),
                   ),
