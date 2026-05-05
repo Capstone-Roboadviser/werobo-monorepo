@@ -82,22 +82,22 @@ void main() {
         cashBalance: 25000,
         profitLossPct: 0.05,
         sectorAllocations: [
-          sector(code: 'us_value', name: '미국 가치주', weight: 0.6),
-          sector(code: 'gold', name: '금', weight: 0.4),
+          sector(code: 'cash_equivalents', name: '현금성자산', weight: 0.6),
+          sector(code: 'short_term_bond', name: '단기 채권', weight: 0.4),
         ],
         stockAllocations: [
           stock(
-            ticker: 'VTV',
-            name: 'Vanguard Value ETF',
-            sectorCode: 'us_value',
-            sectorName: '미국 가치주',
+            ticker: 'BIL',
+            name: 'State Street SPDR Bloomberg 1-3',
+            sectorCode: 'cash_equivalents',
+            sectorName: '현금성자산',
             weight: 0.6,
           ),
           stock(
-            ticker: 'GLD',
-            name: 'SPDR Gold Shares',
-            sectorCode: 'gold',
-            sectorName: '금',
+            ticker: 'AGG',
+            name: 'iShares Core U.S. Aggregate Bond',
+            sectorCode: 'short_term_bond',
+            sectorName: '단기 채권',
             weight: 0.4,
           ),
         ],
@@ -106,6 +106,19 @@ void main() {
       recentActivity: const [],
     );
   }
+
+  test('earnings history request weights use ticker codes, not sector codes',
+      () {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    state.setAccountDashboard(accountDashboard());
+    final portfolio = state.selectedPortfolio!;
+
+    expect(
+      earningsHistoryWeightsFor(portfolio),
+      {'BIL': 0.6, 'AGG': 0.4},
+    );
+  });
 
   testWidgets('shows reserve cash as separate from portfolio allocation',
       (tester) async {

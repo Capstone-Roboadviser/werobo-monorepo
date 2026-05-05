@@ -21,6 +21,21 @@ import 'widgets/glowing_border.dart';
 import 'projection_screen.dart';
 import 'widgets/insight_transition_chart.dart';
 
+Map<String, double> earningsHistoryWeightsFor(
+  MobilePortfolioRecommendation portfolio,
+) {
+  final weights = <String, double>{};
+  for (final allocation in portfolio.stockAllocations) {
+    final ticker = allocation.ticker.trim().toUpperCase();
+    final weight = allocation.weight;
+    if (ticker.isEmpty || weight <= 0) {
+      continue;
+    }
+    weights[ticker] = (weights[ticker] ?? 0) + weight;
+  }
+  return weights;
+}
+
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
 
@@ -84,12 +99,20 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       });
       return;
     }
+    final weights = earningsHistoryWeightsFor(selected);
+    if (weights.isEmpty) {
+      Future.microtask(() {
+        if (!mounted) return;
+        state.setEarningsHistory(
+          MockEarningsData.mockEarningsHistoryResponse(riskCode: riskCode),
+        );
+      });
+      return;
+    }
     try {
       final api = MobileBackendApi.instance;
       final response = await api.fetchEarningsHistory(
-        weights: {
-          for (final s in selected.sectorAllocations) s.assetCode: s.weight,
-        },
+        weights: weights,
         startDate: startedAt,
       );
       if (!mounted) return;
