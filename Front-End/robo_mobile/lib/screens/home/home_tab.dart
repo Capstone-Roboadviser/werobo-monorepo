@@ -338,6 +338,38 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     ];
   }
 
+  /// 채권 수익률 — drawn as a 2-point dashed line from the start of the
+  /// visible range (0%) to the treasury's end-of-range cumulative return.
+  /// Mirrors the `bond_trend` derivation in `portfolio_charts.dart`.
+  List<ChartPoint> _bondEndpoints(List<ChartPoint> portfolioRangePts) {
+    if (portfolioRangePts.isEmpty) return const [];
+    final all = PortfolioStateProvider.of(context).comparisonLines;
+    final treasury = all.firstWhere(
+      (l) => l.key == 'treasury',
+      orElse: () => const ChartLine(
+        key: '',
+        label: '',
+        color: Colors.transparent,
+        points: [],
+      ),
+    );
+    if (treasury.points.length < 2) return const [];
+
+    final cutoff = portfolioRangePts.first.date;
+    final filtered =
+        treasury.points.where((p) => !p.date.isBefore(cutoff)).toList();
+    if (filtered.length < 2) return const [];
+
+    final base = filtered.first.value;
+    return [
+      ChartPoint(date: filtered.first.date, value: 0.0),
+      ChartPoint(
+        date: filtered.last.date,
+        value: filtered.last.value - base,
+      ),
+    ];
+  }
+
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -497,6 +529,16 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                   label: '시장',
                                   color: tc.textSecondary,
                                   points: _marketSeries(valuePts),
+                                ),
+                              if (_bondEndpoints(valuePts).isNotEmpty)
+                                ChartLine(
+                                  key: 'bond',
+                                  label: '채권',
+                                  color: tc.textTertiary.withValues(
+                                    alpha: 0.7,
+                                  ),
+                                  dashed: true,
+                                  points: _bondEndpoints(valuePts),
                                 ),
                             ],
                             progress: _drawCurve.value,
