@@ -156,3 +156,18 @@ class MobilePortfolioService:
             portfolio_code=portfolio_code,
             start_date=start_date,
         )
+
+    def build_earnings_history(
+        self,
+        *,
+        weights: dict[str, float],
+        data_source: SimulationDataSource,
+        start_date: str,
+        investment_amount: float,
+    ) -> dict[str, object]:
+        return self.calculation_adapter.get_earnings_history(
+            weights=weights,
+            data_source=data_source,
+            start_date=start_date,
+            investment_amount=investment_amount,
+        )

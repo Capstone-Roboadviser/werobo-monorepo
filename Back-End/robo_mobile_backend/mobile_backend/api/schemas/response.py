@@ -223,6 +223,31 @@ class VolatilityHistoryResponse(BaseModel):
     points: list[VolatilityPointResponse] = Field(default_factory=list, description="날짜별 변동성 추이")
 
 
+class EarningsPointResponse(BaseModel):
+    date: str = Field(..., description="수익 관측일", examples=["2026-04-29"])
+    total_earnings: float = Field(..., description="누적 평가 손익", examples=[350000])
+    total_return_pct: float = Field(..., description="누적 수익률(%)", examples=[3.5])
+    asset_earnings: dict[str, float] = Field(default_factory=dict, description="자산군별 누적 평가 손익")
+
+
+class AssetEarningSummary(BaseModel):
+    asset_code: str = Field(..., description="자산군 코드", examples=["us_growth"])
+    asset_name: str = Field(..., description="자산군 이름", examples=["미국 성장주"])
+    weight: float = Field(..., description="자산군 비중", examples=[0.42])
+    earnings: float = Field(..., description="자산군 누적 평가 손익", examples=[120000])
+    return_pct: float = Field(..., description="자산군 수익률(%)", examples=[2.8])
+
+
+class EarningsHistoryResponse(BaseModel):
+    points: list[EarningsPointResponse] = Field(default_factory=list, description="날짜별 평가 손익 추이")
+    investment_amount: float = Field(..., description="초기 투자 금액", examples=[10000000])
+    start_date: str = Field(..., description="계산 시작일", examples=["2026-03-01"])
+    end_date: str = Field(..., description="계산 종료일", examples=["2026-04-29"])
+    total_return_pct: float = Field(..., description="전체 누적 수익률(%)", examples=[3.5])
+    total_earnings: float = Field(..., description="전체 누적 평가 손익", examples=[350000])
+    asset_summary: list[AssetEarningSummary] = Field(default_factory=list, description="자산군별 최종 손익 요약")
+
+
 class ComparisonLinePointResponse(BaseModel):
     date: str = Field(..., description="백테스트 기준일", examples=["2025-01-31"])
     return_pct: float = Field(..., description="누적 수익률", examples=[0.0834])

@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from mobile_backend.api.schemas.request import (
     ComparisonBacktestRequest,
+    EarningsHistoryRequest,
     FrontierPreviewRequest,
     FrontierSelectionRequest,
     ProfileResolutionRequest,
@@ -12,6 +13,7 @@ from mobile_backend.api.schemas.request import (
 )
 from mobile_backend.api.schemas.response import (
     ComparisonBacktestResponse,
+    EarningsHistoryResponse,
     ErrorResponse,
     FrontierPreviewResponse,
     FrontierSelectionResponse,
@@ -175,5 +177,25 @@ def get_comparison_backtest(
             start_date=None if payload.start_date is None else payload.start_date.isoformat(),
         )
         return ComparisonBacktestResponse(**response)
+    except Exception as exc:
+        _handle_runtime_error(exc)
+
+
+@router.post(
+    "/portfolio/earnings-history",
+    response_model=EarningsHistoryResponse,
+    summary="포트폴리오 평가 손익 추이",
+    description="선택 포트폴리오의 종목 비중과 시작일을 기준으로 누적 평가 손익 및 자산군별 기여도를 반환합니다.",
+    responses=COMMON_ERROR_RESPONSES,
+)
+def get_earnings_history(payload: EarningsHistoryRequest) -> EarningsHistoryResponse:
+    try:
+        response = mobile_portfolio_service.build_earnings_history(
+            weights=payload.weights,
+            data_source=payload.data_source,
+            start_date=payload.start_date,
+            investment_amount=payload.investment_amount,
+        )
+        return EarningsHistoryResponse(**response)
     except Exception as exc:
         _handle_runtime_error(exc)

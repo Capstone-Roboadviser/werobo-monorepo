@@ -15,6 +15,7 @@ def test_mobile_account_routes_are_registered() -> None:
     assert "/api/v1/account/cash-in" in route_paths
     assert "/api/v1/account/digest" in route_paths
     assert "/api/v1/insights" in route_paths
+    assert "/api/v1/portfolio/earnings-history" in route_paths
 
 
 def test_startup_initializes_account_storage(monkeypatch) -> None:

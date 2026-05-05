@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date
 
 import logging
+import pandas as pd
 
 from app.engine.rebalance import build_two_stage_rebalance_policy, serialize_rebalance_policy
 from app.services.managed_universe_service import ManagedUniverseService
@@ -1356,6 +1357,141 @@ class EmbeddedPortfolioEngineAdapter:
         return self.build_materialized_comparison_backtest(
             data_source=data_source,
         )
+
+    def get_earnings_history(
+        self,
+        *,
+        weights: dict[str, float],
+        data_source: SimulationDataSource,
+        start_date: str,
+        investment_amount: float,
+    ) -> dict[str, object]:
+        weight_map = {
+            str(ticker).strip().upper(): float(weight)
+            for ticker, weight in weights.items()
+            if str(ticker).strip() and float(weight) > 0
+        }
+        if not weight_map:
+            raise ValueError("포트폴리오 비중 합계가 0보다 커야 합니다.")
+
+        core_data_source = self._to_core_data_source(data_source)
+        prices = self.portfolio_analytics_service.load_history_prices(
+            tickers=list(weight_map),
+            data_source=core_data_source,
+        )
+
+        instruments = self.portfolio_service.list_stocks(core_data_source)
+        ticker_to_sector = {
+            instrument.ticker.upper(): (instrument.sector_code, instrument.sector_name)
+            for instrument in instruments
+        }
+
+        pivoted = prices.pivot_table(
+            index="date",
+            columns="ticker",
+            values="adjusted_close",
+            aggfunc="last",
+        )
+        pivoted = pivoted.sort_index().ffill()
+        pivoted.index = pd.to_datetime(pivoted.index)
+        pivoted = pivoted.sort_index()
+        pivoted = pivoted[pivoted.index >= pd.Timestamp(start_date)]
+        if pivoted.empty:
+            raise ValueError("시작일 이후 가격 데이터가 없습니다.")
+
+        available = set(pivoted.columns)
+        available_weights = {
+            ticker: weight
+            for ticker, weight in weight_map.items()
+            if ticker in available
+        }
+        if not available_weights:
+            raise ValueError("요청 종목의 가격 데이터가 없습니다.")
+
+        total_weight = sum(available_weights.values())
+        normalized_weights = {
+            ticker: weight / total_weight
+            for ticker, weight in available_weights.items()
+        }
+
+        cumulative_returns = pivoted.div(pivoted.iloc[0]) - 1
+        sector_names: dict[str, str] = {}
+        sector_weights: dict[str, float] = {}
+        sector_cumulative_returns: dict[str, pd.Series] = {}
+        for ticker, weight in normalized_weights.items():
+            sector_code, sector_name = ticker_to_sector.get(ticker, ("unknown", "기타"))
+            sector_names[sector_code] = sector_name
+            sector_weights[sector_code] = sector_weights.get(sector_code, 0.0) + weight
+            weighted_return = cumulative_returns[ticker] * weight
+            if sector_code in sector_cumulative_returns:
+                sector_cumulative_returns[sector_code] = sector_cumulative_returns[sector_code].add(
+                    weighted_return,
+                    fill_value=0,
+                )
+            else:
+                sector_cumulative_returns[sector_code] = weighted_return.copy()
+
+        sector_series = list(sector_cumulative_returns.values())
+        total_cumulative_return = sector_series[0].copy()
+        for series in sector_series[1:]:
+            total_cumulative_return = total_cumulative_return.add(series, fill_value=0)
+
+        dates = list(pivoted.index)
+        step = max(1, len(dates) // 250)
+        sampled_indices = list(range(0, len(dates), step))
+        if sampled_indices[-1] != len(dates) - 1:
+            sampled_indices.append(len(dates) - 1)
+
+        sector_codes = sorted(sector_cumulative_returns)
+        points = []
+        for index in sampled_indices:
+            observed_date = dates[index]
+            asset_earnings = {
+                sector_code: round(
+                    float(sector_cumulative_returns[sector_code].iloc[index])
+                    * investment_amount,
+                    0,
+                )
+                for sector_code in sector_codes
+            }
+            total_return = float(total_cumulative_return.iloc[index])
+            points.append(
+                {
+                    "date": observed_date.strftime("%Y-%m-%d"),
+                    "total_earnings": round(total_return * investment_amount, 0),
+                    "total_return_pct": round(total_return * 100, 2),
+                    "asset_earnings": asset_earnings,
+                }
+            )
+
+        final_total_return = float(total_cumulative_return.iloc[-1])
+        asset_summary = []
+        for sector_code in sector_codes:
+            final_sector_return = float(sector_cumulative_returns[sector_code].iloc[-1])
+            sector_weight = sector_weights.get(sector_code, 0.0)
+            asset_summary.append(
+                {
+                    "asset_code": sector_code,
+                    "asset_name": sector_names.get(sector_code, sector_code),
+                    "weight": round(sector_weight, 4),
+                    "earnings": round(final_sector_return * investment_amount, 0),
+                    "return_pct": (
+                        round(final_sector_return / sector_weight * 100, 2)
+                        if sector_weight > 0
+                        else 0
+                    ),
+                }
+            )
+
+        return {
+            "points": points,
+            "investment_amount": investment_amount,
+            "start_date": dates[0].strftime("%Y-%m-%d"),
+            "end_date": dates[-1].strftime("%Y-%m-%d"),
+            "total_return_pct": round(final_total_return * 100, 2),
+            "total_earnings": round(final_total_return * investment_amount, 0),
+            "asset_summary": asset_summary,
+        }
 
     def _resolve_selected_frontier_point_data(
         self,
