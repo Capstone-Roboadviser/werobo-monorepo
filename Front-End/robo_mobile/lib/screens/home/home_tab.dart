@@ -491,9 +491,18 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
             p.date.day == touchDate.day,
       );
       if (mIdx >= 1) {
+        // comparisonLines values are cumulative returns (e.g. 0.12 = +12%
+        // from backtest start). The day-over-day rate is NOT the raw
+        // subtraction — that would only be correct for small mPrev. The
+        // exact conversion from cumulative-return space to daily-return
+        // space is (mCurr - mPrev) / (1 + mPrev), which equals the asset
+        // value's actual day-over-day percent change.
         final mCurr = marketLine.points[mIdx].value;
         final mPrev = marketLine.points[mIdx - 1].value;
-        marketPct = mCurr - mPrev;
+        final denom = 1 + mPrev;
+        if (denom != 0) {
+          marketPct = (mCurr - mPrev) / denom;
+        }
       }
     }
 

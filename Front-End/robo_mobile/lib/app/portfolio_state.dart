@@ -423,6 +423,7 @@ class PortfolioState extends ChangeNotifier {
     _frontierPreview = null;
     _backtest = null;
     _accountDashboard = null;
+    _earningsHistory = null;
     _insights = [];
     if (notify) {
       notifyListeners();
@@ -440,6 +441,7 @@ class PortfolioState extends ChangeNotifier {
     _frontierSelection = null;
     _onboardingFrontierSelection = null;
     _accountDashboard = null;
+    _earningsHistory = null;
     _insights = [];
     _digestSeenDate = null;
     _welcomeBannerSeen = false;
