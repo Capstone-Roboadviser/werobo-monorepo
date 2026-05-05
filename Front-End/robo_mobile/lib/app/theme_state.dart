@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 /// App-wide theme mode notifier.
 class ThemeNotifier extends ChangeNotifier {
-  ThemeMode _mode = ThemeMode.dark;
+  ThemeMode _mode = ThemeMode.light;
 
   ThemeMode get mode => _mode;
 

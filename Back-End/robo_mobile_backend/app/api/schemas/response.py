@@ -30,7 +30,7 @@ class AssetUniverseResponse(BaseModel):
 
 
 class AssetRoleTemplateResponse(BaseModel):
-    key: str = Field(..., description="role key", examples=["equal_weight_dividend_basket"])
+    key: str = Field(..., description="role key", examples=["equal_weight_basket"])
     name: str = Field(..., description="role 이름", examples=["동일비중 바스켓"])
     description: str = Field(..., description="role 설명")
     selection_mode: str = Field(..., description="후보 선택 방식", examples=["all_members"])
@@ -89,30 +89,6 @@ class ComparisonLineResponse(BaseModel):
     points: list[ComparisonLinePointResponse]
 
 
-class RebalancePolicyResponse(BaseModel):
-    strategy: str = Field(..., description="리밸런싱 정책 식별자", examples=["scheduled_plus_drift_guard"])
-    scheduled_rebalance_frequency: str | None = Field(
-        default=None,
-        description="정기 리밸런싱 주기",
-        examples=["quarterly"],
-    )
-    force_rebalance_on_schedule: bool = Field(
-        ...,
-        description="정기 점검일에는 drift와 무관하게 리밸런싱을 수행하는지 여부",
-        examples=[True],
-    )
-    drift_check_frequency: str | None = Field(
-        default=None,
-        description="drift guard를 검사하는 빈도",
-        examples=["daily"],
-    )
-    drift_threshold: float | None = Field(
-        default=None,
-        description="drift guard 임계값",
-        examples=[0.10],
-    )
-
-
 class ComparisonBacktestResponse(BaseModel):
     train_start_date: str
     train_end_date: str
@@ -121,7 +97,6 @@ class ComparisonBacktestResponse(BaseModel):
     end_date: str
     split_ratio: float
     rebalance_dates: list[str]
-    rebalance_policy: RebalancePolicyResponse
     lines: list[ComparisonLineResponse]
 
 
@@ -181,7 +156,7 @@ class ManagedUniverseItemResponse(BaseModel):
 class ManagedUniverseAssetRoleResponse(BaseModel):
     asset_code: str = Field(..., description="자산군 코드", examples=["gold"])
     asset_name: str = Field(..., description="자산군 이름", examples=["금"])
-    role_key: str = Field(..., description="적용된 role key", examples=["equal_weight_dividend_basket"])
+    role_key: str = Field(..., description="적용된 role key", examples=["equal_weight_basket"])
     role_name: str = Field(..., description="적용된 role 이름", examples=["동일비중 바스켓"])
     role_description: str = Field(..., description="role 설명")
     selection_mode: str = Field(..., description="선택 방식", examples=["all_members"])
@@ -248,22 +223,6 @@ class ManagedFrontierSnapshotStatusResponse(BaseModel):
     message: str | None = Field(default=None, description="frontier snapshot 갱신 메시지")
 
 
-class ManagedComparisonBacktestSnapshotStatusResponse(BaseModel):
-    status: str = Field(..., description="comparison backtest snapshot 갱신 상태", examples=["success"])
-    snapshot_count: int = Field(..., description="이번 요청에서 갱신한 snapshot 수", examples=[1])
-    line_count: int = Field(..., description="저장된 comparison backtest 라인 수", examples=[8])
-    message: str | None = Field(default=None, description="comparison backtest snapshot 갱신 메시지")
-
-
-class ManagedPortfolioAccountSnapshotStatusResponse(BaseModel):
-    status: str = Field(..., description="포트폴리오 계정 snapshot 갱신 상태", examples=["success"])
-    account_count: int = Field(..., description="이번 요청에서 처리 대상이 된 포트폴리오 계정 수", examples=[18])
-    success_count: int = Field(..., description="갱신 성공한 포트폴리오 계정 수", examples=[18])
-    failure_count: int = Field(..., description="갱신 실패한 포트폴리오 계정 수", examples=[0])
-    failed_user_ids: list[int] = Field(default_factory=list, description="갱신 실패한 사용자 ID 목록")
-    message: str | None = Field(default=None, description="포트폴리오 계정 snapshot 갱신 메시지")
-
-
 class ManagedUniverseStatusResponse(BaseModel):
     database_configured: bool = Field(..., description="DATABASE_URL 설정 여부", examples=[True])
     active_version: ManagedUniverseVersionResponse | None = Field(default=None, description="현재 active 유니버스 버전")
@@ -313,14 +272,6 @@ class ManagedPriceRefreshResponse(BaseModel):
     price_stats: ManagedPriceStatsResponse = Field(..., description="갱신 후 가격 통계")
     price_window: ManagedUniversePriceWindowResponse | None = Field(default=None, description="갱신 후 공통 가격 구간")
     frontier_snapshot: ManagedFrontierSnapshotStatusResponse | None = Field(default=None, description="가격 갱신 직후 재생성한 frontier snapshot 결과")
-    comparison_backtest_snapshot: ManagedComparisonBacktestSnapshotStatusResponse | None = Field(
-        default=None,
-        description="가격 갱신 직후 재생성한 comparison backtest snapshot 결과",
-    )
-    account_snapshot_refresh: ManagedPortfolioAccountSnapshotStatusResponse | None = Field(
-        default=None,
-        description="가격 갱신 직후 재계산한 포트폴리오 계정 snapshot 결과",
-    )
 
 
 class TickerLookupResponse(BaseModel):
@@ -408,7 +359,6 @@ class RebalanceSimulationResponse(BaseModel):
     investment_amount: float
     target_weights: dict[str, float]
     drift_threshold: float = 0.10
-    rebalance_policy: RebalancePolicyResponse
     sector_names: dict[str, str] = {}
     time_series: list[RebalanceTimePointResponse]
     rebalance_events: list[RebalanceEventResponse]

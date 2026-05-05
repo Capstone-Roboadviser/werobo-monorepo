@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import '../../app/chart_point_filters.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
+import '../../models/mock_earnings_data.dart';
+import '../../models/rebalance_data.dart';
 import '../../services/mobile_backend_api.dart';
 import '../onboarding/widgets/portfolio_charts.dart';
 import '../onboarding/widgets/vestor_pie_chart.dart';
@@ -20,14 +21,18 @@ class PortfolioTab extends StatefulWidget {
 class _PortfolioTabState extends State<PortfolioTab> {
   int _viewTab = 0; // 0 = 비중, 1 = 성과 추이
   int? _selectedSector;
+  int? _expandedEvent;
 
   // Card 2 API data (volatility-history)
   bool _isLoadingHistory = false;
-  InvestmentType? _loadedHistoryType;
+  String? _loadedHistoryKey;
   List<ChartPoint>? _volatilityPoints;
 
   // Card 7 backtest fetch guard
   bool _backtestFetched = false;
+
+  // Rebalance simulation API data (falls back to mock)
+  bool _rebalanceFetched = false;
 
   @override
   void initState() {
@@ -45,12 +50,15 @@ class _PortfolioTabState extends State<PortfolioTab> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final state = PortfolioStateProvider.of(context);
-    final type = state.type;
-    if (_loadedHistoryType != type) {
-      _fetchHistoryForType(type);
+    final historyKey = _historyKeyForState(state);
+    if (_loadedHistoryKey != historyKey) {
+      _fetchHistoryForCurrentSelection();
     }
     if (!_backtestFetched && state.backtest == null) {
       _fetchBacktest();
+    }
+    if (!_rebalanceFetched) {
+      _fetchRebalanceSimulation();
     }
   }
 
@@ -58,36 +66,62 @@ class _PortfolioTabState extends State<PortfolioTab> {
     _backtestFetched = true;
     try {
       final state = PortfolioStateProvider.of(context);
+      final selection = state.frontierSelection;
+      if (selection == null) return;
       final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
-        preferredDataSource: state.frontierSelection?.dataSource ??
-            state.accountSummary?.dataSource,
+        selectedPointIndex: selection.selectedPointIndex,
+        targetVolatility: selection.selectedTargetVolatility,
+        investmentHorizon:
+            state.recommendation?.resolvedProfile.investmentHorizon ?? 'medium',
+        preferredDataSource: selection.dataSource,
       );
       if (!mounted) return;
-      PortfolioStateProvider.of(context).setBacktest(bt);
+      state.setBacktest(bt);
     } catch (_) {}
   }
 
-  Future<void> _fetchHistoryForType(InvestmentType type) async {
+  Future<void> _fetchRebalanceSimulation() async {
+    if (_rebalanceFetched) return;
+    _rebalanceFetched = true;
+    try {
+      final state = PortfolioStateProvider.of(context);
+      final portfolio = state.selectedPortfolio;
+      if (portfolio == null) return;
+      final weights = <String, double>{};
+      for (final s in portfolio.stockAllocations) {
+        weights[s.ticker] = s.weight;
+      }
+      await MobileBackendApi.instance.fetchRebalanceSimulation(
+        weights: weights,
+        startDate: '2025-03-03',
+      );
+    } catch (_) {
+      // Endpoint not deployed yet, mock data used as fallback
+    }
+  }
+
+  String _historyKeyForState(PortfolioState state) {
+    final selection = state.frontierSelection;
+    if (selection != null) {
+      return selection.pointKey;
+    }
+    return state.type.riskCode;
+  }
+
+  Future<void> _fetchHistoryForCurrentSelection() async {
     if (_isLoadingHistory) return;
+    final state = PortfolioStateProvider.of(context);
+    final historyKey = _historyKeyForState(state);
     setState(() {
       _isLoadingHistory = true;
-      _loadedHistoryType = type;
+      _loadedHistoryKey = historyKey;
     });
 
-    final state = PortfolioStateProvider.of(context);
     final rec = state.recommendation;
     final selection = state.frontierSelection;
-    final portfolio =
-        state.selectedPortfolio ?? rec?.portfolioByCode(type.riskCode);
-    final accountSummary = state.accountSummary;
-    final portfolioStartedAt =
-        DateTime.tryParse(accountSummary?.startedAt ?? '');
-    final horizon = selection?.resolvedProfile.investmentHorizon ??
-        accountSummary?.investmentHorizon ??
-        rec?.resolvedProfile.investmentHorizon ??
-        'medium';
-    final riskProfile =
-        selection?.classificationCode ?? portfolio?.code ?? type.riskCode;
+    final type = state.type;
+    final horizon = rec?.resolvedProfile.investmentHorizon ?? 'medium';
+    final riskProfile = selection == null ? type.riskCode : null;
 
     List<ChartPoint>? volPoints;
 
@@ -96,9 +130,9 @@ class _PortfolioTabState extends State<PortfolioTab> {
           await MobileBackendApi.instance.fetchVolatilityHistory(
         riskProfile: riskProfile,
         investmentHorizon: horizon,
-        preferredDataSource:
-            selection?.dataSource ?? accountSummary?.dataSource,
-        stockWeights: portfolio?.stockWeights,
+        targetVolatility: selection?.selectedTargetVolatility,
+        selectedPointIndex: selection?.selectedPointIndex,
+        preferredDataSource: selection?.dataSource,
       );
       volPoints = volResponse.points
           .map((p) => ChartPoint(
@@ -106,10 +140,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
                 value: p.volatility,
               ))
           .toList();
-      volPoints = filterChartPointsFromStartDate(
-        volPoints,
-        startDate: portfolioStartedAt,
-      );
     } catch (_) {}
 
     if (!mounted) return;
@@ -119,25 +149,28 @@ class _PortfolioTabState extends State<PortfolioTab> {
     });
   }
 
+  /// Extract performance points from comparison-backtest data
+  /// for the selected portfolio type.
+  List<ChartPoint>? _performancePoints() {
+    final state = PortfolioStateProvider.of(context);
+    final code =
+        state.frontierSelection == null ? state.type.riskCode : 'selected';
+    for (final line in state.comparisonLines) {
+      if (line.key == code) return line.points;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final portfolioState = PortfolioStateProvider.of(context);
     final type = portfolioState.type;
-    final portfolioStartedAt =
-        DateTime.tryParse(portfolioState.accountSummary?.startedAt ?? '');
-    final selectedPortfolio = portfolioState.selectedPortfolio;
     final categories = portfolioState.categories;
     final details = portfolioState.categoryDetails;
-    final lines = filterChartLinesFromStartDate(
-      portfolioState.comparisonLines,
-      startDate: portfolioStartedAt,
-      rebaseToZero: true,
-    );
-    final rebalanceDates = filterDatesFromStartDate(
-      portfolioState.rebalanceDates,
-      startDate: portfolioStartedAt,
-    );
+    final lines = portfolioState.comparisonLines;
+    final rebalanceDates = portfolioState.rebalanceDates;
+    final rebalanceEvents = MockRebalanceData.eventsFor(type);
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -150,16 +183,14 @@ class _PortfolioTabState extends State<PortfolioTab> {
             Text('내 포트폴리오', style: WeRoboTypography.heading2.themed(context)),
             const SizedBox(height: 12),
 
-            // Portfolio type selector
-            if (!portfolioState.hasPrototypeAccount &&
-                portfolioState.recommendation != null &&
-                portfolioState.frontierSelection == null) ...[
+            if (portfolioState.frontierSelection == null) ...[
+              // Portfolio type selector
               _PortfolioTypeSelector(
                 currentType: type,
                 onTypeChanged: (t) {
                   PortfolioStateProvider.of(context).setType(t);
                   setState(() => _selectedSector = null);
-                  _fetchHistoryForType(t);
+                  _fetchHistoryForCurrentSelection();
                 },
               ),
               const SizedBox(height: 16),
@@ -203,7 +234,6 @@ class _PortfolioTabState extends State<PortfolioTab> {
                       key: ValueKey('alloc_${type.name}'),
                       categories: categories,
                       details: details,
-                      hasResolvedPortfolio: selectedPortfolio != null,
                       selectedSector: _selectedSector,
                       onSectorSelected: (idx) =>
                           setState(() => _selectedSector = idx),
@@ -212,6 +242,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
                       key: ValueKey('trend_${type.name}'),
                       type: type,
                       volatilityPoints: _volatilityPoints,
+                      performancePoints: _performancePoints(),
                       comparisonLines: lines,
                       rebalanceDates: rebalanceDates,
                       isLoading: _isLoadingHistory,
@@ -221,6 +252,67 @@ class _PortfolioTabState extends State<PortfolioTab> {
 
             // Next rebalance card
             _NextRebalanceCard(rebalanceDates: rebalanceDates),
+            const SizedBox(height: 20),
+
+            // Return contribution analysis
+            _ContributionSection(
+              riskCode: type.riskCode,
+            ),
+            const SizedBox(height: 20),
+
+            // Auto-rebalancing explanation
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: WeRoboColors.primary.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.auto_fix_high_rounded,
+                          size: 18, color: WeRoboColors.primary),
+                      const SizedBox(width: 8),
+                      Text(
+                        '자동 리밸런싱',
+                        style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'WeRobo는 분기마다 포트폴리오를 자동으로 점검합니다. '
+                    '자산 비중이 목표에서 10% 이상 벗어나면 '
+                    '자동으로 조정해서 위험을 관리합니다.',
+                    style: WeRoboTypography.caption.copyWith(
+                      color: tc.textSecondary,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Rebalancing history
+            Text('리밸런싱 기록', style: WeRoboTypography.heading3.themed(context)),
+            const SizedBox(height: 12),
+            ...rebalanceEvents.asMap().entries.map((entry) {
+              final i = entry.key;
+              final event = entry.value;
+              return _RebalanceEventCard(
+                event: event,
+                isExpanded: _expandedEvent == i,
+                onTap: () => setState(
+                    () => _expandedEvent = _expandedEvent == i ? null : i),
+              );
+            }),
             const SizedBox(height: 32),
           ],
         ),
@@ -400,7 +492,6 @@ class _ToggleChip extends StatelessWidget {
 class _AllocationView extends StatelessWidget {
   final List<PortfolioCategory> categories;
   final List<PortfolioCategoryDetail> details;
-  final bool hasResolvedPortfolio;
   final int? selectedSector;
   final ValueChanged<int?> onSectorSelected;
 
@@ -408,7 +499,6 @@ class _AllocationView extends StatelessWidget {
     super.key,
     required this.categories,
     required this.details,
-    required this.hasResolvedPortfolio,
     required this.selectedSector,
     required this.onSectorSelected,
   });
@@ -417,14 +507,11 @@ class _AllocationView extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     if (categories.isEmpty) {
-      final message = hasResolvedPortfolio
-          ? '포트폴리오 비중 데이터가 아직 없습니다.'
-          : '포트폴리오 데이터를 불러오는 중...';
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 60),
         child: Center(
           child: Text(
-            message,
+            '포트폴리오 데이터를 불러오는 중...',
             style: WeRoboTypography.bodySmall.themed(context),
           ),
         ),
@@ -542,6 +629,7 @@ class _AllocationView extends StatelessWidget {
 class _TrendView extends StatelessWidget {
   final InvestmentType type;
   final List<ChartPoint>? volatilityPoints;
+  final List<ChartPoint>? performancePoints;
   final List<ChartLine> comparisonLines;
   final List<DateTime> rebalanceDates;
   final bool isLoading;
@@ -550,6 +638,7 @@ class _TrendView extends StatelessWidget {
     super.key,
     required this.type,
     this.volatilityPoints,
+    this.performancePoints,
     required this.comparisonLines,
     required this.rebalanceDates,
     this.isLoading = false,
@@ -573,6 +662,7 @@ class _TrendView extends StatelessWidget {
       child: PortfolioCharts(
         type: type,
         volatilityPoints: volatilityPoints,
+        performancePoints: performancePoints,
         comparisonLines: comparisonLines.isNotEmpty ? comparisonLines : null,
         rebalanceDates: rebalanceDates.isNotEmpty ? rebalanceDates : null,
         useFallbackMock: false,
@@ -648,6 +738,337 @@ class _NextRebalanceCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── Contribution analysis section ──
+
+class _ContributionSection extends StatelessWidget {
+  final String riskCode;
+
+  const _ContributionSection({required this.riskCode});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final summary = MockEarningsData.summaryFor(riskCode);
+    final commentary = MockEarningsData.commentaryFor(riskCode);
+    final sorted = [...summary]
+      ..sort((a, b) => b.earnings.compareTo(a.earnings));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('수익 기여 분석', style: WeRoboTypography.heading3.themed(context)),
+        const SizedBox(height: 8),
+        // Commentary
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: tc.accent.withValues(alpha: 0.06),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(
+            commentary,
+            style: WeRoboTypography.caption.copyWith(
+              color: tc.textSecondary,
+              height: 1.5,
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        // Per-asset bars
+        ...sorted.map((a) {
+          final isPositive = a.earnings >= 0;
+          final color = isPositive ? tc.accent : WeRoboColors.error;
+          final maxEarnings = sorted.first.earnings.abs();
+          final barFraction =
+              maxEarnings > 0 ? (a.earnings.abs() / maxEarnings) : 0.0;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: tc.card,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          a.assetName,
+                          style: WeRoboTypography.caption.copyWith(
+                              color: tc.textPrimary,
+                              fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      Text(
+                        '${isPositive ? '+' : ''}'
+                        '${a.returnPct.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          fontFamily: WeRoboFonts.english,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '${isPositive ? '+' : ''}'
+                        '₩${_formatAmount(a.earnings)}',
+                        style: TextStyle(
+                          fontFamily: WeRoboFonts.english,
+                          fontSize: 11,
+                          color: tc.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(3),
+                    child: SizedBox(
+                      height: 6,
+                      child: LinearProgressIndicator(
+                        value: barFraction.clamp(0.0, 1.0),
+                        backgroundColor: tc.border.withValues(alpha: 0.2),
+                        valueColor: AlwaysStoppedAnimation(color),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  static String _formatAmount(double amount) {
+    final abs = amount.abs().round();
+    final str = abs.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < str.length; i++) {
+      if (i > 0 && (str.length - i) % 3 == 0) buf.write(',');
+      buf.write(str[i]);
+    }
+    return buf.toString();
+  }
+}
+
+// ── Rebalance event card (expandable) ──
+
+class _RebalanceEventCard extends StatelessWidget {
+  final RebalanceEvent event;
+  final bool isExpanded;
+  final VoidCallback onTap;
+
+  const _RebalanceEventCard({
+    required this.event,
+    required this.isExpanded,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final dateStr =
+        '${event.date.year}-${event.date.month.toString().padLeft(2, '0')}'
+        '-${event.date.day.toString().padLeft(2, '0')}';
+
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: tc.card,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: tc.accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(Icons.check_rounded, size: 20, color: tc.accent),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(dateStr,
+                          style: WeRoboTypography.bodySmall.copyWith(
+                              color: tc.textPrimary,
+                              fontWeight: FontWeight.w500,
+                              fontFamily: WeRoboFonts.english)),
+                      Text(event.status,
+                          style: WeRoboTypography.caption.themed(context)),
+                    ],
+                  ),
+                ),
+                Icon(
+                  isExpanded
+                      ? Icons.expand_less_rounded
+                      : Icons.expand_more_rounded,
+                  size: 20,
+                  color: tc.textTertiary,
+                ),
+              ],
+            ),
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: _buildDetail(tc),
+              crossFadeState: isExpanded
+                  ? CrossFadeState.showSecond
+                  : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 250),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetail(WeRoboThemeColors tc) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _AllocationBar(
+              label: '변경 전', changes: event.changes, useBefore: true),
+          const SizedBox(height: 6),
+          _AllocationBar(
+              label: '변경 후', changes: event.changes, useBefore: false),
+          const SizedBox(height: 14),
+          ...event.changes.map((change) {
+            final isPositive = change.delta >= 0;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: change.color,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(change.sectorName,
+                        style: WeRoboTypography.caption
+                            .copyWith(color: tc.textPrimary)),
+                  ),
+                  Text(
+                    '${change.beforePct.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontFamily: WeRoboFonts.english,
+                      fontSize: 11,
+                      color: tc.textSecondary,
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 12, color: tc.textTertiary),
+                  ),
+                  Text(
+                    '${change.afterPct.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontFamily: WeRoboFonts.english,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: tc.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: (isPositive ? tc.accent : WeRoboColors.warning)
+                          .withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${isPositive ? '+' : ''}'
+                      '${change.delta.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontFamily: WeRoboFonts.english,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: isPositive ? tc.accent : WeRoboColors.warning,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Horizontal stacked allocation bar ──
+
+class _AllocationBar extends StatelessWidget {
+  final String label;
+  final List<AllocationChange> changes;
+  final bool useBefore;
+
+  const _AllocationBar({
+    required this.label,
+    required this.changes,
+    required this.useBefore,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: WeRoboTypography.caption.copyWith(color: tc.textSecondary)),
+        const SizedBox(height: 4),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: SizedBox(
+            height: 16,
+            child: Row(
+              children: changes.map((change) {
+                final pct = useBefore ? change.beforePct : change.afterPct;
+                return Flexible(
+                  flex: (pct * 10).round().clamp(1, 1000),
+                  child: Container(
+                    color:
+                        change.color.withValues(alpha: useBefore ? 0.5 : 1.0),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

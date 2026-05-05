@@ -19,8 +19,6 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _currentTab = 0;
   bool _backtestFetched = false;
-  bool _accountFetched = false;
-  bool _insightsFetched = false;
 
   static const _tabs = [
     HomeTab(),
@@ -45,38 +43,22 @@ class _HomeShellState extends State<HomeShell> {
       _backtestFetched = true;
       _fetchBacktest();
     }
-    if (!_accountFetched) {
-      _accountFetched = true;
-      _fetchAccountDashboard();
-    }
-    if (!_insightsFetched) {
-      _insightsFetched = true;
-      _fetchInsights();
-    }
   }
 
   Future<void> _fetchBacktest() async {
     try {
-      final bt = await MobileBackendApi.instance.fetchComparisonBacktest();
+      final state = PortfolioStateProvider.of(context);
+      final selection = state.frontierSelection;
+      if (selection == null) return;
+      final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
+        selectedPointIndex: selection.selectedPointIndex,
+        targetVolatility: selection.selectedTargetVolatility,
+        investmentHorizon:
+            state.recommendation?.resolvedProfile.investmentHorizon ?? 'medium',
+        preferredDataSource: selection.dataSource,
+      );
       if (!mounted) return;
-      PortfolioStateProvider.of(context).setBacktest(bt);
-    } catch (_) {}
-  }
-
-  Future<void> _fetchAccountDashboard() async {
-    final state = PortfolioStateProvider.of(context);
-    if (!state.isLoggedIn) {
-      return;
-    }
-    try {
-      await state.refreshAccountDashboard(notify: true);
-    } catch (_) {}
-  }
-
-  Future<void> _fetchInsights() async {
-    final state = PortfolioStateProvider.of(context);
-    try {
-      await state.refreshInsights(notify: true);
+      state.setBacktest(bt);
     } catch (_) {}
   }
 

@@ -5,35 +5,6 @@ import 'package:robo_mobile/models/portfolio_data.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  MobileSectorAllocation sector({
-    required String code,
-    required String name,
-    required double weight,
-  }) {
-    return MobileSectorAllocation(
-      assetCode: code,
-      assetName: name,
-      weight: weight,
-      riskContribution: weight,
-    );
-  }
-
-  MobileStockAllocation stock({
-    required String ticker,
-    required String name,
-    required String sectorCode,
-    required String sectorName,
-    required double weight,
-  }) {
-    return MobileStockAllocation(
-      ticker: ticker,
-      name: name,
-      sectorCode: sectorCode,
-      sectorName: sectorName,
-      weight: weight,
-    );
-  }
-
   group('PortfolioState', () {
     late PortfolioState state;
 
@@ -123,103 +94,132 @@ void main() {
       expect(raw, contains('"provider":"password"'));
     });
 
-    test('restorePersistedState ignores stale cached frontier preview version',
-        () async {
-      SharedPreferences.setMockInitialValues({
-        'werobo.portfolio_bootstrap': '''
-{"selected_type":"balanced","recommendation":{"resolved_profile":{"code":"balanced","label":"균형형","propensity_score":45,"target_volatility":0.12,"investment_horizon":"medium"},"recommended_portfolio_code":"balanced","data_source":"managed_universe","portfolios":[{"code":"balanced","label":"균형형","portfolio_id":"p1","target_volatility":0.12,"expected_return":0.08,"volatility":0.11,"sharpe_ratio":0.7,"sector_allocations":[],"stock_allocations":[]}]},"frontier_selection":null,"frontier_preview_version":1,"frontier_preview":{"resolved_profile":{"code":"balanced","label":"균형형","propensity_score":45,"target_volatility":0.12,"investment_horizon":"medium"},"recommended_portfolio_code":"balanced","data_source":"managed_universe","total_point_count":2,"min_volatility":0.05,"max_volatility":0.10,"points":[{"index":0,"volatility":0.05,"expected_return":0.04,"is_recommended":true}]}}
-''',
-      });
-      state = PortfolioState();
-
-      await state.restorePersistedState();
-
-      expect(state.recommendation?.recommendedPortfolioCode, 'balanced');
-      expect(state.frontierPreview, isNull);
-    });
-
-    test('selectedPortfolio prefers account dashboard over cached selection',
+    test('selectedPortfolio prefers exact frontier selection over type bucket',
         () {
-      state.setFrontierSelection(
-        MobileFrontierSelectionResponse(
-          resolvedProfile: const MobileResolvedProfile(
+      const recommendation = MobileRecommendationResponse(
+        resolvedProfile: MobileResolvedProfile(
+          code: 'balanced',
+          label: '균형형',
+          propensityScore: 45,
+          targetVolatility: 0.12,
+          investmentHorizon: 'medium',
+        ),
+        recommendedPortfolioCode: 'balanced',
+        dataSource: 'managed_universe',
+        portfolios: [
+          MobilePortfolioRecommendation(
             code: 'balanced',
             label: '균형형',
-            propensityScore: 45,
-            targetVolatility: 0.12,
-            investmentHorizon: 'medium',
-          ),
-          dataSource: 'managed_universe',
-          asOfDate: null,
-          requestedTargetVolatility: 0.12,
-          selectedTargetVolatility: 0.12,
-          selectedPointIndex: 30,
-          totalPointCount: 61,
-          representativeCode: 'balanced',
-          representativeLabel: '균형형',
-          portfolio: const MobilePortfolioRecommendation(
-            code: 'balanced',
-            label: '균형형',
-            portfolioId: 'cached-portfolio',
+            portfolioId: 'balanced-id',
             targetVolatility: 0.12,
             expectedReturn: 0.08,
-            volatility: 0.11,
+            volatility: 0.12,
             sharpeRatio: 0.7,
             sectorAllocations: [],
             stockAllocations: [],
           ),
+        ],
+      );
+      const selected = MobileFrontierSelectionResponse(
+        resolvedProfile: MobileResolvedProfile(
+          code: 'balanced',
+          label: '균형형',
+          propensityScore: 45,
+          targetVolatility: 0.12,
+          investmentHorizon: 'medium',
+        ),
+        dataSource: 'managed_universe',
+        requestedTargetVolatility: 0.151,
+        selectedTargetVolatility: 0.16,
+        selectedPointIndex: 19,
+        totalPointCount: 80,
+        representativeCode: 'growth',
+        representativeLabel: '성장형',
+        portfolio: MobilePortfolioRecommendation(
+          code: 'selected',
+          label: '선택 포트폴리오',
+          portfolioId: 'selected-id',
+          targetVolatility: 0.16,
+          expectedReturn: 0.11,
+          volatility: 0.16,
+          sharpeRatio: 0.8,
+          sectorAllocations: [],
+          stockAllocations: [],
         ),
       );
 
-      state.setAccountDashboard(
-        MobileAccountDashboard(
-          hasAccount: true,
-          summary: MobileAccountSummary(
-            portfolioCode: 'balanced',
-            portfolioLabel: '균형형',
-            portfolioId: 'account-portfolio',
-            dataSource: 'managed_universe',
-            investmentHorizon: 'medium',
-            targetVolatility: 0.12,
-            expectedReturn: 0.08,
-            volatility: 0.11,
-            sharpeRatio: 0.7,
-            startedAt: '2026-03-01',
-            lastSnapshotDate: '2026-04-15',
-            currentValue: 10500000,
-            investedAmount: 10000000,
-            profitLoss: 500000,
-            profitLossPct: 0.05,
-            sectorAllocations: [
-              sector(code: 'us_value', name: '미국 가치주', weight: 0.6),
-              sector(code: 'gold', name: '금', weight: 0.4),
-            ],
-            stockAllocations: [
-              stock(
-                ticker: 'VTV',
-                name: 'Vanguard Value ETF',
-                sectorCode: 'us_value',
-                sectorName: '미국 가치주',
-                weight: 0.6,
+      state.setRecommendation(recommendation);
+      state.setFrontierSelection(selected);
+
+      expect(state.type, InvestmentType.balanced);
+      expect(state.selectedPortfolio?.code, 'selected');
+      expect(state.selectedPortfolio?.expectedReturn, 0.11);
+    });
+
+    test('portfolioValuePoints uses selected backtest line for frontier point',
+        () {
+      const selected = MobileFrontierSelectionResponse(
+        resolvedProfile: MobileResolvedProfile(
+          code: 'balanced',
+          label: '균형형',
+          propensityScore: 45,
+          targetVolatility: 0.12,
+          investmentHorizon: 'medium',
+        ),
+        dataSource: 'managed_universe',
+        requestedTargetVolatility: 0.151,
+        selectedTargetVolatility: 0.16,
+        selectedPointIndex: 19,
+        totalPointCount: 80,
+        representativeCode: 'growth',
+        representativeLabel: '성장형',
+        portfolio: MobilePortfolioRecommendation(
+          code: 'selected',
+          label: '선택 포트폴리오',
+          portfolioId: 'selected-id',
+          targetVolatility: 0.16,
+          expectedReturn: 0.11,
+          volatility: 0.16,
+          sharpeRatio: 0.8,
+          sectorAllocations: [],
+          stockAllocations: [],
+        ),
+      );
+      final backtest = MobileComparisonBacktestResponse(
+        trainStartDate: DateTime(2024),
+        trainEndDate: DateTime(2024, 1, 1),
+        testStartDate: DateTime(2024, 1, 2),
+        startDate: DateTime(2024, 1, 2),
+        endDate: DateTime(2024, 1, 3),
+        splitRatio: 0.9,
+        rebalanceDates: const [],
+        lines: [
+          MobileComparisonLine(
+            key: 'selected',
+            label: '선택 포트폴리오',
+            color: '#20A7DB',
+            style: 'solid',
+            points: [
+              MobileComparisonLinePoint(
+                date: DateTime(2024, 1, 2),
+                returnPct: 0.0,
               ),
-              stock(
-                ticker: 'GLD',
-                name: 'SPDR Gold Shares',
-                sectorCode: 'gold',
-                sectorName: '금',
-                weight: 0.4,
+              MobileComparisonLinePoint(
+                date: DateTime(2024, 1, 3),
+                returnPct: 0.2,
               ),
             ],
           ),
-          history: const [],
-          recentActivity: const [],
-        ),
+        ],
       );
 
-      expect(state.selectedPortfolio, isNotNull);
-      expect(state.selectedPortfolio?.portfolioId, 'account-portfolio');
-      expect(state.categories, isNotEmpty);
-      expect(state.categoryDetails, isNotEmpty);
+      state.setFrontierSelection(selected);
+      state.setBacktest(backtest);
+
+      final points = state.portfolioValuePoints(baseInvestment: 100);
+
+      expect(points, hasLength(2));
+      expect(points.last.value, 120);
     });
   });
 }

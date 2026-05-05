@@ -9,11 +9,6 @@ from app.core.config import ASSET_ROLE_TEMPLATES_PATH, ASSET_UNIVERSE_PATH, SAMP
 from app.domain.models import AssetClass, AssetRoleTemplate, MarketAssumptions
 
 
-LEGACY_ASSET_ROLE_KEY_ALIASES = {
-    "equal_weight_basket": "equal_weight_dividend_basket",
-}
-
-
 class StaticDataRepository:
     """Loads fixed demo data from local JSON files."""
 
@@ -30,10 +25,6 @@ class StaticDataRepository:
             self._asset_role_templates = {item.key: item for item in templates}
         return self._asset_role_templates
 
-    def normalize_asset_role_key(self, role_key: str) -> str:
-        normalized = str(role_key).strip()
-        return LEGACY_ASSET_ROLE_KEY_ALIASES.get(normalized, normalized)
-
     def load_asset_universe(self, role_overrides: dict[str, str] | None = None) -> list[AssetClass]:
         if role_overrides:
             return self._build_asset_universe(role_overrides=role_overrides)
@@ -48,12 +39,7 @@ class StaticDataRepository:
         assets: list[AssetClass] = []
         for item in payload:
             asset_code = str(item["code"])
-            configured_role_key = (
-                str(role_overrides.get(asset_code, item.get("role_key", "single_representative")))
-                if role_overrides
-                else str(item.get("role_key", "single_representative"))
-            )
-            role_key = self.normalize_asset_role_key(configured_role_key)
+            role_key = str(role_overrides.get(asset_code, item.get("role_key", "single_representative"))) if role_overrides else str(item.get("role_key", "single_representative"))
             role = role_templates.get(role_key)
             if role is None:
                 raise RuntimeError(f"자산군 '{item.get('code', 'unknown')}'의 role_key '{role_key}'를 찾을 수 없습니다.")

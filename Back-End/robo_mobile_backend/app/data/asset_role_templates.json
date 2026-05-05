@@ -8,19 +8,27 @@
     "return_mode": "black_litterman_plus_dividend_yield"
   },
   {
-    "key": "equal_weight_dividend_basket",
-    "name": "배당 가산 전체 후보 BL",
+    "key": "equal_weight_basket",
+    "name": "전체 후보 사용 배당반영 BL",
     "description": "자산군에 등록된 후보 종목 전체를 개별 Efficient Frontier 후보로 사용하고, Black-Litterman 기대수익률에 배당수익률을 추가 반영합니다.",
     "selection_mode": "all_members",
     "weighting_mode": "individual_candidates",
     "return_mode": "black_litterman_plus_dividend_yield"
   },
   {
+    "key": "equal_weight_dividend_basket",
+    "name": "배당 가산 전체 후보 BL",
+    "description": "호환용 role입니다. 자산군에 등록된 후보 종목 전체를 개별 Efficient Frontier 후보로 사용하고, Black-Litterman 기대수익률에 배당수익률을 추가 반영합니다.",
+    "selection_mode": "all_members",
+    "weighting_mode": "individual_candidates",
+    "return_mode": "black_litterman_plus_dividend_yield"
+  },
+  {
     "key": "fixed_five_percent_equal_weight",
-    "name": "전체 5% 고정 동일분할 스프레드 캡",
-    "description": "자산군에 등록된 후보 종목 전체를 개별 Efficient Frontier 후보로 사용하되, 이 자산군 전체 비중은 항상 5%로 고정하고 내부 종목은 동일비중으로 나눕니다. 기대수익률은 과거 실적을 직접 외삽하지 않고, 일반 주식 대비 보수적으로 캡된 초과수익률 스프레드를 사용합니다.",
+    "name": "전체 5% 고정 동일분할 BL",
+    "description": "자산군에 등록된 후보 종목 전체를 개별 Efficient Frontier 후보로 사용하되, 이 자산군 전체 비중은 항상 5%로 고정하고 내부 종목은 동일비중으로 나눕니다. 기대수익률은 Black-Litterman에 배당수익률을 추가 반영합니다.",
     "selection_mode": "all_members",
     "weighting_mode": "equal_weight_fixed_total_5pct",
-    "return_mode": "conservative_market_spread_cap"
+    "return_mode": "black_litterman_plus_dividend_yield"
   }
 ]

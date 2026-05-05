@@ -5,15 +5,18 @@ import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
-import '../home/home_shell.dart';
 import 'comparison_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  final MobileFrontierSelectionResponse frontierSelection;
+  final MobileRecommendationResponse recommendation;
+  final String selectedPortfolioCode;
+  final MobileFrontierSelectionResponse? frontierSelection;
 
   const LoginScreen({
     super.key,
-    required this.frontierSelection,
+    required this.recommendation,
+    required this.selectedPortfolioCode,
+    this.frontierSelection,
   });
 
   @override
@@ -40,8 +43,7 @@ class _LoginScreenState extends State<LoginScreen>
   void initState() {
     super.initState();
     logPageEnter('LoginScreen', {
-      'selected': widget.frontierSelection.classificationCode,
-      'selected_point_index': widget.frontierSelection.selectedPointIndex,
+      'selected': widget.selectedPortfolioCode,
     });
     _fadeController = AnimationController(
       duration: const Duration(milliseconds: 600),
@@ -68,6 +70,8 @@ class _LoginScreenState extends State<LoginScreen>
     Navigator.of(context).push(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => ComparisonScreen(
+          recommendation: widget.recommendation,
+          selectedPortfolioCode: widget.selectedPortfolioCode,
           frontierSelection: widget.frontierSelection,
         ),
         transitionsBuilder: (_, anim, __, child) =>
@@ -75,36 +79,6 @@ class _LoginScreenState extends State<LoginScreen>
         transitionDuration: const Duration(milliseconds: 400),
       ),
     );
-  }
-
-  void _navigateToHome() {
-    Navigator.of(context).pushAndRemoveUntil(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const HomeShell(),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
-      (_) => false,
-    );
-  }
-
-  Future<void> _navigateAfterAuthenticated() async {
-    final state = PortfolioStateProvider.of(context);
-    try {
-      await state.refreshAccountDashboard(notify: true);
-    } catch (_) {}
-    if (!mounted) {
-      return;
-    }
-    if (state.hasPrototypeAccount) {
-      logAction('skip onboarding after login', {
-        'reason': 'existing_account',
-      });
-      _navigateToHome();
-      return;
-    }
-    _navigateToComparison();
   }
 
   void _onSocialLogin(String provider) {
@@ -137,7 +111,7 @@ class _LoginScreenState extends State<LoginScreen>
       'userId': user.id,
       'provider': authProviderTypeToApi(user.provider),
     });
-    await _navigateAfterAuthenticated();
+    _navigateToComparison();
   }
 
   Future<void> _submitDirectAuth() async {
@@ -184,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen>
         'mode': _isLogin ? 'login' : 'signup',
         'userId': session.user.id,
       });
-      await _navigateAfterAuthenticated();
+      _navigateToComparison();
     } catch (error) {
       if (!mounted) {
         return;

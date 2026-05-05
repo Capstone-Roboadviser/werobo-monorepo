@@ -6,6 +6,4 @@ pandas
 scipy
 yfinance
 psycopg[binary]
-google-generativeai
-feedparser
 

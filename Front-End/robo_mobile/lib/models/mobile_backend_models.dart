@@ -22,22 +22,6 @@ DateTime _parseDate(Object? value) {
       DateTime.fromMillisecondsSinceEpoch(0);
 }
 
-DateTime? _parseOptionalDate(Object? value) {
-  final text = value?.toString().trim() ?? '';
-  if (text.isEmpty) {
-    return null;
-  }
-  return DateTime.tryParse(text);
-}
-
-String? _dateToJson(DateTime? value) {
-  if (value == null) {
-    return null;
-  }
-  final normalized = DateTime(value.year, value.month, value.day);
-  return normalized.toIso8601String().split('T').first;
-}
-
 Color parseBackendHexColor(String value) {
   final hex = value.replaceFirst('#', '');
   if (hex.length == 6) {
@@ -239,168 +223,6 @@ class MobileCurrentAuthSession {
   }
 }
 
-class MobileAccountSummary {
-  final String portfolioCode;
-  final String portfolioLabel;
-  final String portfolioId;
-  final String dataSource;
-  final String investmentHorizon;
-  final double targetVolatility;
-  final double expectedReturn;
-  final double volatility;
-  final double sharpeRatio;
-  final String startedAt;
-  final String lastSnapshotDate;
-  final double currentValue;
-  final double investedAmount;
-  final double profitLoss;
-  final double profitLossPct;
-  final List<MobileSectorAllocation> sectorAllocations;
-  final List<MobileStockAllocation> stockAllocations;
-
-  const MobileAccountSummary({
-    required this.portfolioCode,
-    required this.portfolioLabel,
-    required this.portfolioId,
-    required this.dataSource,
-    required this.investmentHorizon,
-    required this.targetVolatility,
-    required this.expectedReturn,
-    required this.volatility,
-    required this.sharpeRatio,
-    required this.startedAt,
-    required this.lastSnapshotDate,
-    required this.currentValue,
-    required this.investedAmount,
-    required this.profitLoss,
-    required this.profitLossPct,
-    required this.sectorAllocations,
-    required this.stockAllocations,
-  });
-
-  factory MobileAccountSummary.fromJson(Map<String, dynamic> json) {
-    return MobileAccountSummary(
-      portfolioCode: json['portfolio_code']?.toString() ?? '',
-      portfolioLabel: json['portfolio_label']?.toString() ?? '',
-      portfolioId: json['portfolio_id']?.toString() ?? '',
-      dataSource: json['data_source']?.toString() ?? '',
-      investmentHorizon: json['investment_horizon']?.toString() ?? 'medium',
-      targetVolatility: _asDouble(json['target_volatility']),
-      expectedReturn: _asDouble(json['expected_return']),
-      volatility: _asDouble(json['volatility']),
-      sharpeRatio: _asDouble(json['sharpe_ratio']),
-      startedAt: json['started_at']?.toString() ?? '',
-      lastSnapshotDate: json['last_snapshot_date']?.toString() ?? '',
-      currentValue: _asDouble(json['current_value']),
-      investedAmount: _asDouble(json['invested_amount']),
-      profitLoss: _asDouble(json['profit_loss']),
-      profitLossPct: _asDouble(json['profit_loss_pct']),
-      sectorAllocations:
-          (json['sector_allocations'] as List<dynamic>? ?? const [])
-              .whereType<Map<String, dynamic>>()
-              .map(MobileSectorAllocation.fromJson)
-              .toList(),
-      stockAllocations:
-          (json['stock_allocations'] as List<dynamic>? ?? const [])
-              .whereType<Map<String, dynamic>>()
-              .map(MobileStockAllocation.fromJson)
-              .toList(),
-    );
-  }
-}
-
-class MobileAccountHistoryPoint {
-  final DateTime date;
-  final double portfolioValue;
-  final double investedAmount;
-  final double profitLoss;
-  final double profitLossPct;
-
-  const MobileAccountHistoryPoint({
-    required this.date,
-    required this.portfolioValue,
-    required this.investedAmount,
-    required this.profitLoss,
-    required this.profitLossPct,
-  });
-
-  factory MobileAccountHistoryPoint.fromJson(Map<String, dynamic> json) {
-    return MobileAccountHistoryPoint(
-      date: _parseDate(json['date']),
-      portfolioValue: _asDouble(json['portfolio_value']),
-      investedAmount: _asDouble(json['invested_amount']),
-      profitLoss: _asDouble(json['profit_loss']),
-      profitLossPct: _asDouble(json['profit_loss_pct']),
-    );
-  }
-}
-
-class MobileAccountActivity {
-  final String type;
-  final String title;
-  final String date;
-  final double? amount;
-  final String? description;
-
-  const MobileAccountActivity({
-    required this.type,
-    required this.title,
-    required this.date,
-    required this.amount,
-    required this.description,
-  });
-
-  factory MobileAccountActivity.fromJson(Map<String, dynamic> json) {
-    return MobileAccountActivity(
-      type: json['type']?.toString() ?? '',
-      title: json['title']?.toString() ?? '',
-      date: json['date']?.toString() ?? '',
-      amount: json['amount'] == null ? null : _asDouble(json['amount']),
-      description: json['description']?.toString(),
-    );
-  }
-}
-
-class MobileAccountDashboard {
-  final bool hasAccount;
-  final MobileAccountSummary? summary;
-  final List<MobileAccountHistoryPoint> history;
-  final List<MobileAccountActivity> recentActivity;
-
-  const MobileAccountDashboard({
-    required this.hasAccount,
-    required this.summary,
-    required this.history,
-    required this.recentActivity,
-  });
-
-  factory MobileAccountDashboard.fromJson(Map<String, dynamic> json) {
-    return MobileAccountDashboard(
-      hasAccount: json['has_account'] == true,
-      summary: (json['summary'] as Map<String, dynamic>?)
-          ?.let(MobileAccountSummary.fromJson),
-      history: (json['history'] as List<dynamic>? ?? const [])
-          .whereType<Map<String, dynamic>>()
-          .map(MobileAccountHistoryPoint.fromJson)
-          .toList(),
-      recentActivity: (json['recent_activity'] as List<dynamic>? ?? const [])
-          .whereType<Map<String, dynamic>>()
-          .map(MobileAccountActivity.fromJson)
-          .toList(),
-    );
-  }
-}
-
-extension _NullableMapLet on Map<String, dynamic>? {
-  T? let<T>(T Function(Map<String, dynamic> value) mapper) {
-    final value = this;
-    if (value == null) {
-      return null;
-    }
-    return mapper(value);
-  }
-}
-
 class MobileResolvedProfile {
   final String code;
   final String label;
@@ -592,13 +414,6 @@ class MobilePortfolioRecommendation {
 
   String get expectedReturnLabel => formatRatioPercent(expectedReturn);
 
-  Map<String, double> get stockWeights {
-    return <String, double>{
-      for (final allocation in stockAllocations)
-        allocation.ticker.toUpperCase(): allocation.weight,
-    };
-  }
-
   List<PortfolioCategory> toCategories() {
     if (sectorAllocations.isNotEmpty) {
       return [
@@ -700,14 +515,12 @@ class MobileRecommendationResponse {
   final MobileResolvedProfile resolvedProfile;
   final String recommendedPortfolioCode;
   final String dataSource;
-  final DateTime? asOfDate;
   final List<MobilePortfolioRecommendation> portfolios;
 
   const MobileRecommendationResponse({
     required this.resolvedProfile,
     required this.recommendedPortfolioCode,
     required this.dataSource,
-    required this.asOfDate,
     required this.portfolios,
   });
 
@@ -719,7 +532,6 @@ class MobileRecommendationResponse {
       recommendedPortfolioCode:
           json['recommended_portfolio_code']?.toString() ?? '',
       dataSource: json['data_source']?.toString() ?? '',
-      asOfDate: _parseOptionalDate(json['as_of_date']),
       portfolios: (json['portfolios'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(MobilePortfolioRecommendation.fromJson)
@@ -783,7 +595,6 @@ class MobileRecommendationResponse {
       'resolved_profile': resolvedProfile.toJson(),
       'recommended_portfolio_code': recommendedPortfolioCode,
       'data_source': dataSource,
-      'as_of_date': _dateToJson(asOfDate),
       'portfolios': portfolios.map((portfolio) => portfolio.toJson()).toList(),
     };
   }
@@ -830,20 +641,20 @@ class MobileFrontierPreviewPoint {
 }
 
 class MobileFrontierPreviewResponse {
+  final int? snapshotId;
   final MobileResolvedProfile resolvedProfile;
   final String recommendedPortfolioCode;
   final String dataSource;
-  final DateTime? asOfDate;
   final int totalPointCount;
   final double minVolatility;
   final double maxVolatility;
   final List<MobileFrontierPreviewPoint> points;
 
   const MobileFrontierPreviewResponse({
+    this.snapshotId,
     required this.resolvedProfile,
     required this.recommendedPortfolioCode,
     required this.dataSource,
-    required this.asOfDate,
     required this.totalPointCount,
     required this.minVolatility,
     required this.maxVolatility,
@@ -852,13 +663,13 @@ class MobileFrontierPreviewResponse {
 
   factory MobileFrontierPreviewResponse.fromJson(Map<String, dynamic> json) {
     return MobileFrontierPreviewResponse(
+      snapshotId: (json['snapshot_id'] as num?)?.toInt(),
       resolvedProfile: MobileResolvedProfile.fromJson(
         json['resolved_profile'] as Map<String, dynamic>? ?? const {},
       ),
       recommendedPortfolioCode:
           json['recommended_portfolio_code']?.toString() ?? '',
       dataSource: json['data_source']?.toString() ?? '',
-      asOfDate: _parseOptionalDate(json['as_of_date']),
       totalPointCount: (json['total_point_count'] as num?)?.toInt() ?? 0,
       minVolatility: _asDouble(json['min_volatility']),
       maxVolatility: _asDouble(json['max_volatility']),
@@ -887,43 +698,12 @@ class MobileFrontierPreviewResponse {
     return points[recommendedPreviewPosition];
   }
 
-  double get averageVolatility {
-    if (points.isEmpty) {
-      return 0.0;
-    }
-    final total = points.fold<double>(
-      0.0,
-      (sum, point) => sum + point.volatility,
-    );
-    return total / points.length;
-  }
-
-  MobileFrontierPreviewPoint? pointByIndex(int index) {
-    for (final point in points) {
-      if (point.index == index) {
-        return point;
-      }
-    }
-    return null;
-  }
-
-  int positionForPointIndex(int index) {
-    final position = points.indexWhere((point) => point.index == index);
-    if (position >= 0) {
-      return position;
-    }
-    if (points.isEmpty) {
-      return 0;
-    }
-    return recommendedPreviewPosition;
-  }
-
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
+      'snapshot_id': snapshotId,
       'resolved_profile': resolvedProfile.toJson(),
       'recommended_portfolio_code': recommendedPortfolioCode,
       'data_source': dataSource,
-      'as_of_date': _dateToJson(asOfDate),
       'total_point_count': totalPointCount,
       'min_volatility': minVolatility,
       'max_volatility': maxVolatility,
@@ -933,9 +713,10 @@ class MobileFrontierPreviewResponse {
 }
 
 class MobileFrontierSelectionResponse {
+  final int? snapshotId;
+  final String pointKey;
   final MobileResolvedProfile resolvedProfile;
   final String dataSource;
-  final DateTime? asOfDate;
   final double requestedTargetVolatility;
   final double selectedTargetVolatility;
   final int selectedPointIndex;
@@ -945,9 +726,10 @@ class MobileFrontierSelectionResponse {
   final MobilePortfolioRecommendation portfolio;
 
   const MobileFrontierSelectionResponse({
+    this.snapshotId,
+    String? pointKey,
     required this.resolvedProfile,
     required this.dataSource,
-    required this.asOfDate,
     required this.requestedTargetVolatility,
     required this.selectedTargetVolatility,
     required this.selectedPointIndex,
@@ -955,18 +737,21 @@ class MobileFrontierSelectionResponse {
     required this.representativeCode,
     required this.representativeLabel,
     required this.portfolio,
-  });
+  }) : pointKey = pointKey ?? 'live:$selectedPointIndex';
 
   factory MobileFrontierSelectionResponse.fromJson(Map<String, dynamic> json) {
+    final selectedPointIndex =
+        (json['selected_point_index'] as num?)?.toInt() ?? 0;
     return MobileFrontierSelectionResponse(
+      snapshotId: (json['snapshot_id'] as num?)?.toInt(),
+      pointKey: json['point_key']?.toString(),
       resolvedProfile: MobileResolvedProfile.fromJson(
         json['resolved_profile'] as Map<String, dynamic>? ?? const {},
       ),
       dataSource: json['data_source']?.toString() ?? '',
-      asOfDate: _parseOptionalDate(json['as_of_date']),
       requestedTargetVolatility: _asDouble(json['requested_target_volatility']),
       selectedTargetVolatility: _asDouble(json['selected_target_volatility']),
-      selectedPointIndex: (json['selected_point_index'] as num?)?.toInt() ?? 0,
+      selectedPointIndex: selectedPointIndex,
       totalPointCount: (json['total_point_count'] as num?)?.toInt() ?? 0,
       representativeCode: json['representative_code']?.toString(),
       representativeLabel: json['representative_label']?.toString(),
@@ -976,16 +761,12 @@ class MobileFrontierSelectionResponse {
     );
   }
 
-  String get classificationCode => representativeCode ?? resolvedProfile.code;
-
-  String get classificationLabel =>
-      representativeLabel ?? resolvedProfile.label;
-
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
+      'snapshot_id': snapshotId,
+      'point_key': pointKey,
       'resolved_profile': resolvedProfile.toJson(),
       'data_source': dataSource,
-      'as_of_date': _dateToJson(asOfDate),
       'requested_target_volatility': requestedTargetVolatility,
       'selected_target_volatility': selectedTargetVolatility,
       'selected_point_index': selectedPointIndex,
@@ -1015,27 +796,35 @@ class MobileVolatilityPoint {
 }
 
 class MobileVolatilityHistoryResponse {
+  final int? snapshotId;
+  final int? selectedPointIndex;
+  final double? selectedTargetVolatility;
   final String portfolioCode;
   final String portfolioLabel;
   final int rollingWindow;
   final DateTime earliestDataDate;
   final DateTime latestDataDate;
   final List<MobileVolatilityPoint> points;
-  final List<MobileVolatilityPoint>? benchmarkPoints;
 
   const MobileVolatilityHistoryResponse({
+    this.snapshotId,
+    this.selectedPointIndex,
+    this.selectedTargetVolatility,
     required this.portfolioCode,
     required this.portfolioLabel,
     required this.rollingWindow,
     required this.earliestDataDate,
     required this.latestDataDate,
     required this.points,
-    this.benchmarkPoints,
   });
 
   factory MobileVolatilityHistoryResponse.fromJson(Map<String, dynamic> json) {
-    final rawBenchmark = json['benchmark_points'] as List<dynamic>?;
     return MobileVolatilityHistoryResponse(
+      snapshotId: (json['snapshot_id'] as num?)?.toInt(),
+      selectedPointIndex: (json['selected_point_index'] as num?)?.toInt(),
+      selectedTargetVolatility: json['selected_target_volatility'] == null
+          ? null
+          : _asDouble(json['selected_target_volatility']),
       portfolioCode: json['portfolio_code']?.toString() ?? '',
       portfolioLabel: json['portfolio_label']?.toString() ?? '',
       rollingWindow: (json['rolling_window'] as num?)?.toInt() ?? 20,
@@ -1043,10 +832,6 @@ class MobileVolatilityHistoryResponse {
       latestDataDate: _parseDate(json['latest_data_date']),
       points: (json['points'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
-          .map(MobileVolatilityPoint.fromJson)
-          .toList(),
-      benchmarkPoints: rawBenchmark
-          ?.whereType<Map<String, dynamic>>()
           .map(MobileVolatilityPoint.fromJson)
           .toList(),
     );
@@ -1141,37 +926,10 @@ class MobileComparisonLine {
   }
 }
 
-class MobileRebalancePolicy {
-  final String strategy;
-  final String? scheduledRebalanceFrequency;
-  final bool forceRebalanceOnSchedule;
-  final String? driftCheckFrequency;
-  final double? driftThreshold;
-
-  const MobileRebalancePolicy({
-    required this.strategy,
-    required this.scheduledRebalanceFrequency,
-    required this.forceRebalanceOnSchedule,
-    required this.driftCheckFrequency,
-    required this.driftThreshold,
-  });
-
-  factory MobileRebalancePolicy.fromJson(Map<String, dynamic> json) {
-    return MobileRebalancePolicy(
-      strategy: json['strategy']?.toString() ?? '',
-      scheduledRebalanceFrequency:
-          json['scheduled_rebalance_frequency']?.toString(),
-      forceRebalanceOnSchedule:
-          (json['force_rebalance_on_schedule'] as bool?) ?? false,
-      driftCheckFrequency: json['drift_check_frequency']?.toString(),
-      driftThreshold: json['drift_threshold'] == null
-          ? null
-          : _asDouble(json['drift_threshold']),
-    );
-  }
-}
-
 class MobileComparisonBacktestResponse {
+  final int? snapshotId;
+  final int? selectedPointIndex;
+  final double? selectedTargetVolatility;
   final DateTime trainStartDate;
   final DateTime trainEndDate;
   final DateTime testStartDate;
@@ -1179,10 +937,12 @@ class MobileComparisonBacktestResponse {
   final DateTime endDate;
   final double splitRatio;
   final List<DateTime> rebalanceDates;
-  final MobileRebalancePolicy? rebalancePolicy;
   final List<MobileComparisonLine> lines;
 
   const MobileComparisonBacktestResponse({
+    this.snapshotId,
+    this.selectedPointIndex,
+    this.selectedTargetVolatility,
     required this.trainStartDate,
     required this.trainEndDate,
     required this.testStartDate,
@@ -1190,14 +950,16 @@ class MobileComparisonBacktestResponse {
     required this.endDate,
     required this.splitRatio,
     required this.rebalanceDates,
-    required this.rebalancePolicy,
     required this.lines,
   });
 
   factory MobileComparisonBacktestResponse.fromJson(Map<String, dynamic> json) {
-    final rebalancePolicyJson =
-        json['rebalance_policy'] as Map<String, dynamic>?;
     return MobileComparisonBacktestResponse(
+      snapshotId: (json['snapshot_id'] as num?)?.toInt(),
+      selectedPointIndex: (json['selected_point_index'] as num?)?.toInt(),
+      selectedTargetVolatility: json['selected_target_volatility'] == null
+          ? null
+          : _asDouble(json['selected_target_volatility']),
       trainStartDate: _parseDate(json['train_start_date']),
       trainEndDate: _parseDate(json['train_end_date']),
       testStartDate: _parseDate(json['test_start_date']),
@@ -1207,9 +969,6 @@ class MobileComparisonBacktestResponse {
       rebalanceDates: (json['rebalance_dates'] as List<dynamic>? ?? const [])
           .map(_parseDate)
           .toList(),
-      rebalancePolicy: rebalancePolicyJson == null
-          ? null
-          : MobileRebalancePolicy.fromJson(rebalancePolicyJson),
       lines: (json['lines'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(MobileComparisonLine.fromJson)
@@ -1365,7 +1124,6 @@ class MobileRebalanceSimulationResponse {
   final String endDate;
   final double investmentAmount;
   final Map<String, double> targetWeights;
-  final MobileRebalancePolicy? rebalancePolicy;
   final Map<String, String> sectorNames;
   final List<MobileRebalanceTimePoint> timeSeries;
   final List<MobileRebalanceEvent> rebalanceEvents;
@@ -1379,7 +1137,6 @@ class MobileRebalanceSimulationResponse {
     required this.endDate,
     required this.investmentAmount,
     required this.targetWeights,
-    required this.rebalancePolicy,
     required this.sectorNames,
     required this.timeSeries,
     required this.rebalanceEvents,
@@ -1393,16 +1150,11 @@ class MobileRebalanceSimulationResponse {
       Map<String, dynamic> json) {
     final tw = json['target_weights'] as Map<String, dynamic>? ?? {};
     final sn = json['sector_names'] as Map<String, dynamic>? ?? {};
-    final rebalancePolicyJson =
-        json['rebalance_policy'] as Map<String, dynamic>?;
     return MobileRebalanceSimulationResponse(
       startDate: json['start_date']?.toString() ?? '',
       endDate: json['end_date']?.toString() ?? '',
       investmentAmount: _asDouble(json['investment_amount']),
       targetWeights: tw.map((k, v) => MapEntry(k, _asDouble(v))),
-      rebalancePolicy: rebalancePolicyJson == null
-          ? null
-          : MobileRebalancePolicy.fromJson(rebalancePolicyJson),
       sectorNames: sn.map((k, v) => MapEntry(k, v?.toString() ?? '')),
       timeSeries: (json['time_series'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
@@ -1432,101 +1184,4 @@ class _GroupedSector {
     required this.weight,
     required this.tickers,
   });
-}
-
-// ---------------------------------------------------------------------------
-// Digest models
-// ---------------------------------------------------------------------------
-
-class DigestDriver {
-  final String ticker;
-  final String nameKo;
-  final String sectorCode;
-  final double weightPct;
-  final double returnPct;
-  final double contributionWon;
-  final String? explanationKo;
-
-  const DigestDriver({
-    required this.ticker,
-    required this.nameKo,
-    required this.sectorCode,
-    required this.weightPct,
-    required this.returnPct,
-    required this.contributionWon,
-    this.explanationKo,
-  });
-
-  factory DigestDriver.fromJson(Map<String, dynamic> json) {
-    return DigestDriver(
-      ticker: json['ticker']?.toString() ?? '',
-      nameKo: json['name_ko']?.toString() ?? '',
-      sectorCode: json['sector_code']?.toString() ?? '',
-      weightPct: _asDouble(json['weight_pct']),
-      returnPct: _asDouble(json['return_pct']),
-      contributionWon: _asDouble(json['contribution_won']),
-      explanationKo: json['explanation_ko']?.toString(),
-    );
-  }
-}
-
-class MobileDigestResponse {
-  final String digestDate;
-  final String periodStart;
-  final String periodEnd;
-  final double totalReturnPct;
-  final double totalReturnWon;
-  final String? narrativeKo;
-  final bool hasNarrative;
-  final List<DigestDriver> drivers;
-  final List<DigestDriver> detractors;
-  final List<String> sourcesUsed;
-  final String disclaimer;
-  final String generatedAt;
-  final int degradationLevel;
-
-  const MobileDigestResponse({
-    required this.digestDate,
-    required this.periodStart,
-    required this.periodEnd,
-    required this.totalReturnPct,
-    required this.totalReturnWon,
-    this.narrativeKo,
-    required this.hasNarrative,
-    required this.drivers,
-    required this.detractors,
-    required this.sourcesUsed,
-    required this.disclaimer,
-    required this.generatedAt,
-    required this.degradationLevel,
-  });
-
-  factory MobileDigestResponse.fromJson(Map<String, dynamic> json) {
-    return MobileDigestResponse(
-      digestDate: json['digest_date']?.toString() ?? '',
-      periodStart: json['period_start']?.toString() ?? '',
-      periodEnd: json['period_end']?.toString() ?? '',
-      totalReturnPct: _asDouble(json['total_return_pct']),
-      totalReturnWon: _asDouble(json['total_return_won']),
-      narrativeKo: json['narrative_ko']?.toString(),
-      hasNarrative: json['has_narrative'] == true,
-      drivers: (json['drivers'] as List<dynamic>?)
-              ?.map((e) =>
-                  DigestDriver.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          const [],
-      detractors: (json['detractors'] as List<dynamic>?)
-              ?.map((e) =>
-                  DigestDriver.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          const [],
-      sourcesUsed: (json['sources_used'] as List<dynamic>?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          const [],
-      disclaimer: json['disclaimer']?.toString() ?? '',
-      generatedAt: json['generated_at']?.toString() ?? '',
-      degradationLevel: (json['degradation_level'] as num?)?.toInt() ?? 0,
-    );
-  }
 }

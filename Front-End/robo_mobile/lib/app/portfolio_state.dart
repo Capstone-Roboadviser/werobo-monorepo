@@ -3,11 +3,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'debug_page_logger.dart';
 import '../models/chart_data.dart';
 import '../models/mobile_backend_models.dart';
 import '../models/portfolio_data.dart';
-import '../models/rebalance_insight.dart';
 import '../services/mobile_backend_api.dart';
 
 /// App-level state holder for auth, onboarding bootstrap state, and portfolio data.
@@ -15,8 +13,6 @@ class PortfolioState extends ChangeNotifier {
   static const String _authSessionStorageKey = 'werobo.auth_session';
   static const String _portfolioBootstrapStorageKey =
       'werobo.portfolio_bootstrap';
-  static const int _frontierPreviewStorageVersion = 2;
-  static const String _digestSeenDateKey = 'werobo.digest_seen_date';
 
   InvestmentType _type = InvestmentType.balanced;
   MobileRecommendationResponse? _recommendation;
@@ -24,9 +20,6 @@ class PortfolioState extends ChangeNotifier {
   MobileFrontierPreviewResponse? _frontierPreview;
   MobileFrontierSelectionResponse? _frontierSelection;
   MobileAuthSession? _authSession;
-  MobileAccountDashboard? _accountDashboard;
-  List<RebalanceInsight> _insights = [];
-  String? _digestSeenDate;
 
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
@@ -35,33 +28,12 @@ class PortfolioState extends ChangeNotifier {
   MobileFrontierSelectionResponse? get frontierSelection => _frontierSelection;
   MobileAuthSession? get authSession => _authSession;
   MobileAuthUser? get currentUser => _authSession?.user;
-  MobileAccountDashboard? get accountDashboard => _accountDashboard;
-  MobileAccountSummary? get accountSummary => _accountDashboard?.summary;
-  List<MobileAccountHistoryPoint> get accountHistory =>
-      _accountDashboard?.history ?? const [];
-  List<MobileAccountActivity> get accountActivities =>
-      _accountDashboard?.recentActivity ?? const [];
-  List<RebalanceInsight> get insights => _insights;
-  List<RebalanceInsight> get unreadInsights =>
-      _insights.where((i) => !i.isRead).toList();
-  int get unreadInsightCount => _insights.where((i) => !i.isRead).length;
-  String? get digestSeenDate => _digestSeenDate;
-  bool get hasSeenCurrentDigest => _digestSeenDate != null;
-
   bool get isLoggedIn => _authSession != null;
-  bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
-  bool get hasCompletedPortfolioSetup =>
-      _frontierSelection != null || _recommendation != null;
-  bool get canAutoEnterHome =>
-      isLoggedIn && (hasCompletedPortfolioSetup || hasPrototypeAccount);
+  bool get hasCompletedPortfolioSetup => _recommendation != null;
+  bool get canAutoEnterHome => isLoggedIn && hasCompletedPortfolioSetup;
 
   /// The selected portfolio from the API recommendation.
   MobilePortfolioRecommendation? get selectedPortfolio {
-    final accountPortfolio =
-        _portfolioFromAccountSummary(_accountDashboard?.summary);
-    if (accountPortfolio != null) {
-      return accountPortfolio;
-    }
     if (_frontierSelection != null) {
       return _frontierSelection!.portfolio;
     }
@@ -80,34 +52,6 @@ class PortfolioState extends ChangeNotifier {
     return selectedPortfolio?.toCategoryDetails() ?? const [];
   }
 
-  /// Expected annual return for Monte Carlo projection.
-  double? get expectedReturn => selectedPortfolio?.expectedReturn;
-
-  /// Annual volatility for Monte Carlo projection.
-  double? get portfolioVolatility => selectedPortfolio?.volatility;
-
-  MobilePortfolioRecommendation? _portfolioFromAccountSummary(
-    MobileAccountSummary? summary,
-  ) {
-    if (summary == null) {
-      return null;
-    }
-    if (summary.sectorAllocations.isEmpty && summary.stockAllocations.isEmpty) {
-      return null;
-    }
-    return MobilePortfolioRecommendation(
-      code: summary.portfolioCode,
-      label: summary.portfolioLabel,
-      portfolioId: summary.portfolioId,
-      targetVolatility: summary.targetVolatility,
-      expectedReturn: summary.expectedReturn,
-      volatility: summary.volatility,
-      sharpeRatio: summary.sharpeRatio,
-      sectorAllocations: summary.sectorAllocations,
-      stockAllocations: summary.stockAllocations,
-    );
-  }
-
   void setType(InvestmentType newType) {
     if (_type != newType) {
       _type = newType;
@@ -124,21 +68,12 @@ class PortfolioState extends ChangeNotifier {
 
   void setBacktest(MobileComparisonBacktestResponse bt) {
     _backtest = bt;
-    logApi(
-      'success',
-      'fetchComparisonBacktest',
-      {
-        'lineKeys': bt.lines.map((line) => line.key).join(','),
-        'lineCount': bt.lines.length,
-      },
-    );
     notifyListeners();
   }
 
   void setFrontierPreview(MobileFrontierPreviewResponse preview) {
     _frontierPreview = preview;
     notifyListeners();
-    _persistPortfolioBootstrapState();
   }
 
   void setFrontierSelection(MobileFrontierSelectionResponse? selection) {
@@ -151,7 +86,6 @@ class PortfolioState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await _restoreAuthSessionFromPrefs(prefs);
     await _restorePortfolioBootstrapFromPrefs(prefs);
-    _digestSeenDate = prefs.getString(_digestSeenDateKey);
   }
 
   Future<bool> validateAuthSession() async {
@@ -228,8 +162,6 @@ class PortfolioState extends ChangeNotifier {
     _frontierSelection = null;
     _frontierPreview = null;
     _backtest = null;
-    _accountDashboard = null;
-    _insights = [];
     if (notify) {
       notifyListeners();
     }
@@ -244,8 +176,6 @@ class PortfolioState extends ChangeNotifier {
     _backtest = null;
     _frontierPreview = null;
     _frontierSelection = null;
-    _accountDashboard = null;
-    _insights = [];
     if (notify) {
       notifyListeners();
     }
@@ -264,142 +194,11 @@ class PortfolioState extends ChangeNotifier {
     _persistPortfolioBootstrapState();
   }
 
-  Future<MobileAccountDashboard?> refreshAccountDashboard({
-    bool notify = true,
-  }) async {
-    final accessToken = _authSession?.accessToken;
-    if (accessToken == null || accessToken.isEmpty) {
-      setAccountDashboard(null, notify: notify);
-      return null;
-    }
-
-    try {
-      final dashboard = await MobileBackendApi.instance
-          .fetchPortfolioAccountDashboard(accessToken: accessToken);
-      setAccountDashboard(dashboard, notify: notify);
-      return dashboard;
-    } on MobileBackendException catch (error) {
-      if (error.statusCode == 401) {
-        await clearAllPersistedState(notify: true);
-        return null;
-      }
-      rethrow;
-    }
-  }
-
-  Future<MobileAccountDashboard> createPrototypeAccount({
-    required MobileFrontierSelectionResponse selection,
-    double initialCashAmount = 10000000,
-  }) async {
-    final accessToken = _authSession?.accessToken;
-    if (accessToken == null || accessToken.isEmpty) {
-      throw const MobileBackendException('프로토타입 자산 계정을 만들려면 로그인이 필요합니다.');
-    }
-    final portfolio = selection.portfolio;
-    final dashboard = await MobileBackendApi.instance.createPortfolioAccount(
-      accessToken: accessToken,
-      dataSource: selection.dataSource,
-      investmentHorizon: selection.resolvedProfile.investmentHorizon,
-      portfolio: portfolio,
-      portfolioCode: selection.classificationCode,
-      portfolioLabel: portfolio.label,
-      initialCashAmount: initialCashAmount,
-      startedAt: selection.asOfDate,
-    );
-    setAccountDashboard(dashboard);
-    return dashboard;
-  }
-
-  Future<MobileAccountDashboard> cashInPrototypeAccount({
-    required double amount,
-  }) async {
-    final accessToken = _authSession?.accessToken;
-    if (accessToken == null || accessToken.isEmpty) {
-      throw const MobileBackendException('입금을 진행하려면 로그인이 필요합니다.');
-    }
-    final dashboard = await MobileBackendApi.instance.cashInPortfolioAccount(
-      accessToken: accessToken,
-      amount: amount,
-    );
-    setAccountDashboard(dashboard);
-    return dashboard;
-  }
-
-  void setAccountDashboard(
-    MobileAccountDashboard? dashboard, {
-    bool notify = true,
-  }) {
-    _accountDashboard = dashboard;
-    final summary = dashboard?.summary;
-    if (summary != null) {
-      _type = investmentTypeFromRiskCode(summary.portfolioCode);
-    }
-    if (notify) {
-      notifyListeners();
-    }
-  }
-
-  Future<void> refreshInsights({bool notify = true}) async {
-    final accessToken = _authSession?.accessToken;
-    if (accessToken != null && accessToken.isNotEmpty) {
-      try {
-        final response = await MobileBackendApi.instance
-            .fetchRebalanceInsights(accessToken: accessToken);
-        _insights = response.insights;
-        if (notify) notifyListeners();
-        return;
-      } catch (_) {}
-    }
-    // Fall back to mock insights based on current portfolio
-    _insights = MockInsightData.insightsFor(categories);
-    if (notify) notifyListeners();
-  }
-
-  Future<void> markDigestSeen(String digestDate) async {
-    _digestSeenDate = digestDate;
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_digestSeenDateKey, digestDate);
-  }
-
-  Future<void> markInsightAsRead(int insightId) async {
-    // For mock insights (negative IDs), just update locally
-    if (insightId < 0) {
-      _markInsightReadLocally(insightId);
-      return;
-    }
-    final accessToken = _authSession?.accessToken;
-    if (accessToken == null || accessToken.isEmpty) return;
-    try {
-      await MobileBackendApi.instance.markInsightRead(
-        accessToken: accessToken,
-        insightId: insightId,
-      );
-      _markInsightReadLocally(insightId);
-    } catch (_) {}
-  }
-
-  void _markInsightReadLocally(int insightId) {
-    final idx = _insights.indexWhere((i) => i.id == insightId);
-    if (idx >= 0) {
-      final old = _insights[idx];
-      _insights[idx] = RebalanceInsight(
-        id: old.id,
-        rebalanceDate: old.rebalanceDate,
-        allocations: old.allocations,
-        explanationText: old.explanationText,
-        isRead: true,
-        createdAt: old.createdAt,
-      );
-      notifyListeners();
-    }
-  }
-
   List<ChartPoint> portfolioValuePoints({
     double baseInvestment = 10000000,
   }) {
     if (_backtest == null) return const [];
-    final code = _type.riskCode;
+    final code = _frontierSelection == null ? _type.riskCode : 'selected';
     MobileComparisonLine? line;
     for (final l in _backtest!.lines) {
       if (l.key == code) {
@@ -481,34 +280,20 @@ class PortfolioState extends ChangeNotifier {
           frontierSelectionJson,
         );
       }
-      final previewVersion = switch (decoded['frontier_preview_version']) {
-        int value => value,
-        num value => value.toInt(),
-        _ => 1,
-      };
-      final frontierPreviewJson = decoded['frontier_preview'];
-      if (previewVersion == _frontierPreviewStorageVersion &&
-          frontierPreviewJson is Map<String, dynamic>) {
-        _frontierPreview = MobileFrontierPreviewResponse.fromJson(
-          frontierPreviewJson,
-        );
-      }
     } catch (_) {
       await prefs.remove(_portfolioBootstrapStorageKey);
     }
   }
 
   Future<void> _persistPortfolioBootstrapState() async {
-    if (_recommendation == null && _frontierSelection == null) {
+    if (_recommendation == null) {
       return;
     }
     final prefs = await SharedPreferences.getInstance();
     final payload = <String, dynamic>{
       'selected_type': _type.riskCode,
-      'recommendation': _recommendation?.toJson(),
+      'recommendation': _recommendation!.toJson(),
       'frontier_selection': _frontierSelection?.toJson(),
-      'frontier_preview_version': _frontierPreviewStorageVersion,
-      'frontier_preview': _frontierPreview?.toJson(),
     };
     await prefs.setString(
       _portfolioBootstrapStorageKey,

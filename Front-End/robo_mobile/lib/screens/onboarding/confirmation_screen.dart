@@ -12,11 +12,15 @@ import 'widgets/portfolio_charts.dart';
 import 'widgets/vestor_pie_chart.dart';
 
 class ConfirmationScreen extends StatefulWidget {
-  final MobileFrontierSelectionResponse frontierSelection;
+  final MobileRecommendationResponse recommendation;
+  final String selectedPortfolioCode;
+  final MobileFrontierSelectionResponse? frontierSelection;
 
   const ConfirmationScreen({
     super.key,
-    required this.frontierSelection,
+    required this.recommendation,
+    required this.selectedPortfolioCode,
+    this.frontierSelection,
   });
 
   @override
@@ -25,8 +29,6 @@ class ConfirmationScreen extends StatefulWidget {
 
 class _ConfirmationScreenState extends State<ConfirmationScreen>
     with SingleTickerProviderStateMixin {
-  static const double _initialPrototypeCashAmount = 10000000.0;
-
   int? _selectedSector;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
@@ -38,19 +40,18 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   bool _isLoadingCharts = true;
   String? _chartError;
   List<ChartPoint>? _volatilityPoints;
-  List<ChartPoint>? _benchmarkVolatilityPoints;
+  List<ChartPoint>? _performancePoints;
   List<ChartLine>? _comparisonLines;
   List<DateTime>? _rebalanceDates;
   MobileComparisonBacktestResponse? _backtestResponse;
-  bool _isConfirming = false;
 
   @override
   void initState() {
     super.initState();
-    _portfolio = widget.frontierSelection.portfolio;
+    _portfolio = widget.frontierSelection?.portfolio ??
+        widget.recommendation.recommendedPortfolio;
     logPageEnter('ConfirmationScreen', {
-      'selected': widget.frontierSelection.classificationCode,
-      'selected_point_index': widget.frontierSelection.selectedPointIndex,
+      'selected': widget.selectedPortfolioCode,
       'portfolio': _portfolio.code,
     });
     _details = _portfolio.toCategoryDetails();
@@ -87,24 +88,32 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     try {
       volatilityHistory =
           await MobileBackendApi.instance.fetchVolatilityHistory(
-        riskProfile: widget.frontierSelection.classificationCode,
+        riskProfile: widget.frontierSelection == null ? _portfolio.code : null,
         investmentHorizon:
-            widget.frontierSelection.resolvedProfile.investmentHorizon,
-        preferredDataSource: widget.frontierSelection.dataSource,
-        stockWeights: _portfolio.stockWeights,
+            widget.recommendation.resolvedProfile.investmentHorizon,
+        targetVolatility: widget.frontierSelection?.selectedTargetVolatility,
+        selectedPointIndex: widget.frontierSelection?.selectedPointIndex,
+        preferredDataSource: widget.frontierSelection?.dataSource,
       );
     } catch (error) {
       errors.add(_friendlyError(error));
     }
 
-    // Card 7: comparison-backtest
-    try {
-      comparisonBacktest =
-          await MobileBackendApi.instance.fetchComparisonBacktest(
-        preferredDataSource: widget.frontierSelection.dataSource,
-      );
-    } catch (error) {
-      errors.add(_friendlyError(error));
+    // Card 7: selected frontier point backtest
+    final selection = widget.frontierSelection;
+    if (selection != null) {
+      try {
+        comparisonBacktest =
+            await MobileBackendApi.instance.fetchComparisonBacktest(
+          selectedPointIndex: selection.selectedPointIndex,
+          targetVolatility: selection.selectedTargetVolatility,
+          investmentHorizon:
+              widget.recommendation.resolvedProfile.investmentHorizon,
+          preferredDataSource: selection.dataSource,
+        );
+      } catch (error) {
+        errors.add(_friendlyError(error));
+      }
     }
 
     if (!mounted) {
@@ -118,14 +127,6 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       if (volatilityHistory != null) {
         _volatilityPoints = volatilityHistory.points
             .map(
-              (point) => ChartPoint(
-                date: point.date,
-                value: point.volatility,
-              ),
-            )
-            .toList();
-        _benchmarkVolatilityPoints = volatilityHistory.benchmarkPoints
-            ?.map(
               (point) => ChartPoint(
                 date: point.date,
                 value: point.volatility,
@@ -155,6 +156,22 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
               ),
             )
             .toList();
+
+        // Extract performance points from the portfolio's
+        // return line in comparison-backtest.
+        final code =
+            widget.frontierSelection == null ? _portfolio.code : 'selected';
+        for (final line in comparisonBacktest.lines) {
+          if (line.key == code) {
+            _performancePoints = line.points
+                .map((p) => ChartPoint(
+                      date: p.date,
+                      value: p.returnPct,
+                    ))
+                .toList();
+            break;
+          }
+        }
       }
     });
   }
@@ -226,6 +243,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     }
 
     if (_volatilityPoints == null &&
+        _performancePoints == null &&
         _comparisonLines == null) {
       return _ChartErrorState(
         message: _chartError ?? '차트 데이터를 불러오지 못했어요.',
@@ -257,7 +275,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
           child: PortfolioCharts(
             type: _portfolio.investmentType,
             volatilityPoints: _volatilityPoints,
-            benchmarkVolatilityPoints: _benchmarkVolatilityPoints,
+            performancePoints: _performancePoints,
             comparisonLines: _comparisonLines,
             rebalanceDates: _rebalanceDates,
             useFallbackMock: false,
@@ -267,53 +285,24 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     );
   }
 
-  Future<void> _confirmPortfolio() async {
-    if (_isConfirming) {
-      return;
-    }
-    setState(() => _isConfirming = true);
+  void _confirmPortfolio() {
     logAction('confirm portfolio selection', {
-      'selected': widget.frontierSelection.classificationCode,
-      'selected_point_index': widget.frontierSelection.selectedPointIndex,
+      'selected': _portfolio.code,
     });
     final state = PortfolioStateProvider.of(context);
-    final selectedType = investmentTypeFromRiskCode(
-      widget.frontierSelection.classificationCode,
+    final selectedType = widget.frontierSelection == null
+        ? _portfolio.investmentType
+        : investmentTypeFromRiskCode(
+            widget.frontierSelection!.representativeCode ??
+                widget.recommendation.recommendedPortfolioCode,
+          );
+    state.setTypeAndRecommendation(
+      selectedType,
+      widget.recommendation,
     );
-    state.setType(selectedType);
     state.setFrontierSelection(widget.frontierSelection);
     if (_backtestResponse != null) {
       state.setBacktest(_backtestResponse!);
-    }
-    if (state.isLoggedIn) {
-      try {
-        logAction('create prototype account', {
-          'portfolio': _portfolio.code,
-          'initialCash': _initialPrototypeCashAmount.toInt(),
-        });
-        await state.createPrototypeAccount(
-          selection: widget.frontierSelection,
-          initialCashAmount: _initialPrototypeCashAmount,
-        );
-      } catch (error) {
-        if (!mounted) {
-          return;
-        }
-        setState(() => _isConfirming = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              error is MobileBackendException
-                  ? error.message
-                  : '프로토타입 자산 계정을 만들지 못했어요.',
-            ),
-          ),
-        );
-        return;
-      }
-    }
-    if (!mounted) {
-      return;
     }
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
@@ -394,8 +383,8 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _isConfirming ? null : _confirmPortfolio,
-                    child: Text(_isConfirming ? '계정 생성 중...' : '투자 확정'),
+                    onPressed: _confirmPortfolio,
+                    child: const Text('투자 확정'),
                   ),
                 ),
               ),

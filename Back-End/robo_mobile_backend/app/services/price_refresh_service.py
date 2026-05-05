@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
 from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
@@ -8,23 +7,14 @@ import yfinance as yf
 
 from app.domain.enums import PriceRefreshMode
 from app.domain.models import ManagedPriceRefreshResult, ManagedUniverseVersion, StockInstrument
-from app.services.dividend_yield_service import LiveDividendYieldProvider
 from app.services.managed_universe_service import ManagedUniverseService
 
 
 class PriceRefreshService:
-    """Fetches market prices for managed-universe and held-account tickers."""
+    """Fetches market prices for managed-universe tickers and stores them in Postgres."""
 
-    def __init__(
-        self,
-        managed_universe_service: ManagedUniverseService | None = None,
-        *,
-        extra_ticker_provider: Callable[[ManagedUniverseVersion], Iterable[str]] | None = None,
-        dividend_yield_provider: LiveDividendYieldProvider | None = None,
-    ) -> None:
+    def __init__(self, managed_universe_service: ManagedUniverseService | None = None) -> None:
         self.managed_universe_service = managed_universe_service or ManagedUniverseService()
-        self.extra_ticker_provider = extra_ticker_provider
-        self.dividend_yield_provider = dividend_yield_provider or LiveDividendYieldProvider()
 
     def refresh_prices(
         self,
@@ -40,38 +30,33 @@ class PriceRefreshService:
         instruments = self.managed_universe_service.repository.get_instruments_for_version(version.version_id)
         if not instruments:
             raise RuntimeError("가격 데이터를 갱신할 종목이 없습니다.")
-        refresh_tickers = self._build_refresh_tickers(
-            version=version,
-            instruments=instruments,
-        )
 
         latest_dates = (
-            self.managed_universe_service.repository.get_latest_price_dates(refresh_tickers)
+            self.managed_universe_service.repository.get_latest_price_dates([instrument.ticker for instrument in instruments])
             if refresh_mode == PriceRefreshMode.INCREMENTAL
             else {}
         )
         job = self.managed_universe_service.repository.create_refresh_job(
             version_id=version.version_id,
             refresh_mode=refresh_mode,
-            ticker_count=len(refresh_tickers),
+            ticker_count=len(instruments),
         )
 
         success_count = 0
         failure_count = 0
-        for ticker in refresh_tickers:
+        for instrument in instruments:
             try:
                 start_date = self._resolve_start_date(
-                    ticker=ticker,
+                    instrument=instrument,
                     refresh_mode=refresh_mode,
                     latest_dates=latest_dates,
                     full_lookback_years=full_lookback_years,
                 )
-                frame = self._fetch_ticker_history(ticker, start_date)
+                frame = self._fetch_ticker_history(instrument.ticker, start_date)
                 rows_upserted = self.managed_universe_service.repository.upsert_prices(frame, source="yfinance")
-                self._refresh_dividend_yield_estimate(ticker)
                 self.managed_universe_service.repository.record_refresh_job_item(
                     job_id=job.job_id,
-                    ticker=ticker,
+                    ticker=instrument.ticker,
                     status="success",
                     rows_upserted=rows_upserted,
                 )
@@ -79,7 +64,7 @@ class PriceRefreshService:
             except Exception as exc:  # pragma: no cover - network/data-source dependent
                 self.managed_universe_service.repository.record_refresh_job_item(
                     job_id=job.job_id,
-                    ticker=ticker,
+                    ticker=instrument.ticker,
                     status="failed",
                     error_message=str(exc),
                 )
@@ -135,7 +120,7 @@ class PriceRefreshService:
     def _resolve_start_date(
         self,
         *,
-        ticker: str,
+        instrument: StockInstrument,
         refresh_mode: PriceRefreshMode,
         latest_dates: dict[str, str],
         full_lookback_years: int,
@@ -143,36 +128,10 @@ class PriceRefreshService:
         if refresh_mode == PriceRefreshMode.FULL:
             return (datetime.now(timezone.utc) - timedelta(days=365 * full_lookback_years)).date()
 
-        latest = latest_dates.get(ticker)
+        latest = latest_dates.get(instrument.ticker)
         if latest:
             return (datetime.fromisoformat(latest) - timedelta(days=7)).date()
         return (datetime.now(timezone.utc) - timedelta(days=365 * full_lookback_years)).date()
-
-    def _build_refresh_tickers(
-        self,
-        *,
-        version: ManagedUniverseVersion,
-        instruments: list[StockInstrument],
-    ) -> list[str]:
-        tickers = {
-            str(instrument.ticker).strip().upper()
-            for instrument in instruments
-            if str(instrument.ticker).strip()
-        }
-        if self.extra_ticker_provider is not None:
-            for raw_ticker in self.extra_ticker_provider(version):
-                ticker = str(raw_ticker).strip().upper()
-                if ticker:
-                    tickers.add(ticker)
-        return sorted(tickers)
-
-    def _refresh_dividend_yield_estimate(self, ticker: str) -> None:
-        try:
-            estimate = self.dividend_yield_provider.fetch_estimate(ticker)
-            self.managed_universe_service.repository.upsert_dividend_yield_estimate(estimate)
-        except Exception:
-            # Dividend metadata should not block price refresh success.
-            return
 
     def _fetch_ticker_history(self, ticker: str, start_date: date) -> pd.DataFrame:
         frame = yf.download(

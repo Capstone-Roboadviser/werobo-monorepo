@@ -191,12 +191,10 @@ class EfficientFrontierChart extends StatefulWidget {
 }
 
 class _EfficientFrontierChartState extends State<EfficientFrontierChart>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _curveAnimation;
   late Animation<double> _dotAnimation;
-  late AnimationController _pulseController;
-  late Animation<double> _pulseAnimation;
 
   /// Position along the curve: 0.0 = start, 1.0 = end
   double _dotT = 0.45;
@@ -227,17 +225,6 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
       ),
     );
 
-    _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 2000),
-      vsync: this,
-    )..repeat();
-    _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _pulseController,
-        curve: Curves.easeInOut,
-      ),
-    );
-
     _controller.forward();
   }
 
@@ -264,7 +251,6 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
 
   @override
   void dispose() {
-    _pulseController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -349,7 +335,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return AnimatedBuilder(
-      animation: Listenable.merge([_controller, _pulseController]),
+      animation: _controller,
       builder: (context, _) {
         return LayoutBuilder(
           builder: (context, constraints) {
@@ -357,7 +343,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
             const h = 300.0;
 
             return GestureDetector(
-              onPanStart: (details) {
+              onLongPressStart: (details) {
                 if (_controller.isCompleted) {
                   late final Offset dotPos;
                   if (_hasPreviewPoints) {
@@ -375,58 +361,53 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                   } else {
                     dotPos = _tToPoint(_dotT, w, h);
                   }
-                  if ((details.localPosition - dotPos).distance <
-                      60) {
+                  if ((details.localPosition - dotPos).distance < 60) {
                     setState(() => _isDragging = true);
                     widget.onDragStateChanged?.call(true);
                   }
                 }
               },
-              onPanUpdate: (details) {
+              onLongPressMoveUpdate: (details) {
                 if (_isDragging) {
                   if (_hasPreviewPoints) {
                     final previewPosition =
-                        _nearestPreviewPosition(
-                          details.localPosition, w, h);
-                    final nextDotT =
-                        widget.previewPoints!.length <= 1
+                        _nearestPreviewPosition(details.localPosition, w, h);
+                    final nextDotT = widget.previewPoints!.length <= 1
                         ? 0.45
-                        : previewPosition /
-                            (widget.previewPoints!.length - 1);
+                        : previewPosition / (widget.previewPoints!.length - 1);
                     setState(() => _dotT = nextDotT);
-                    widget.onPreviewPointChanged
-                        ?.call(previewPosition);
+                    // Preview mode uses the discrete frontier point callback as
+                    // the single source of truth for card values and selection.
+                    widget.onPreviewPointChanged?.call(previewPosition);
                   } else {
                     setState(() {
-                      _dotT = _screenToT(
-                          details.localPosition, w, h);
+                      _dotT = _screenToT(details.localPosition, w, h);
                     });
                     widget.onPositionChanged?.call(_dotT);
                   }
                 }
               },
-              onPanEnd: (_) {
-                if (_isDragging) {
-                  setState(() => _isDragging = false);
-                  widget.onDragStateChanged?.call(false);
-                }
+              onLongPressEnd: (_) {
+                setState(() => _isDragging = false);
+                widget.onDragStateChanged?.call(false);
+              },
+              onLongPressCancel: () {
+                setState(() => _isDragging = false);
+                widget.onDragStateChanged?.call(false);
               },
               child: SizedBox(
                 width: double.infinity,
                 height: h,
                 child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: CustomPaint(
                     painter: _FrontierPainter(
                       curveProgress: _curveAnimation.value,
                       dotProgress: _dotAnimation.value,
                       dotT: _dotT,
                       isDragging: _isDragging,
-                      pulseValue: _pulseAnimation.value,
                       previewPoints: widget.previewPoints,
-                      selectedPreviewPosition:
-                          widget.selectedPreviewPosition,
+                      selectedPreviewPosition: widget.selectedPreviewPosition,
                       gridColor: tc.border,
                       textTertiaryColor: tc.textTertiary,
                     ),
@@ -446,35 +427,21 @@ class _FrontierPainter extends CustomPainter {
   final double dotProgress;
   final double dotT;
   final bool isDragging;
-  final double pulseValue;
   final List<MobileFrontierPreviewPoint>? previewPoints;
   final int? selectedPreviewPosition;
   final Color gridColor;
   final Color textTertiaryColor;
-
-  static const _zoneColors = [
-    Color(0xFF059669), // safe (green)
-    Color(0xFFFBBF24), // moderate (yellow)
-    Color(0xFFF97316), // growth (orange)
-  ];
 
   _FrontierPainter({
     required this.curveProgress,
     required this.dotProgress,
     required this.dotT,
     required this.isDragging,
-    required this.pulseValue,
     required this.previewPoints,
     required this.selectedPreviewPosition,
     required this.gridColor,
     required this.textTertiaryColor,
   });
-
-  int _activeZone(double t) {
-    if (t < 1 / 3) return 0;
-    if (t < 2 / 3) return 1;
-    return 2;
-  }
 
   Offset _tToPoint(double t, double w, double h) {
     final x = w * 0.15 + (w * 0.7) * t;
@@ -517,18 +484,42 @@ class _FrontierPainter extends CustomPainter {
       return;
     }
 
-    // Efficient frontier curve with zone coloring
+    // Efficient frontier curve
     if (curveProgress > 0) {
-      final allPoints = <Offset>[];
+      final curvePath = Path();
+      final points = <Offset>[];
+
       for (int i = 0; i <= 50; i++) {
         final t = i / 50.0;
         if (t > curveProgress) break;
-        allPoints.add(_tToPoint(t, w, h));
+        points.add(_tToPoint(t, w, h));
       }
 
-      if (allPoints.isNotEmpty) {
-        final activeZone = _activeZone(dotT);
-        _drawZonedCurve(canvas, allPoints, 50, activeZone);
+      if (points.isNotEmpty) {
+        curvePath.moveTo(points.first.dx, points.first.dy);
+        for (int i = 1; i < points.length; i++) {
+          if (i < points.length - 1) {
+            final cp = Offset(
+              (points[i].dx + points[i + 1].dx) / 2,
+              (points[i].dy + points[i + 1].dy) / 2,
+            );
+            curvePath.quadraticBezierTo(
+              points[i].dx,
+              points[i].dy,
+              cp.dx,
+              cp.dy,
+            );
+          } else {
+            curvePath.lineTo(points[i].dx, points[i].dy);
+          }
+        }
+
+        final curvePaint = Paint()
+          ..color = WeRoboColors.primary
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..strokeCap = StrokeCap.round;
+        canvas.drawPath(curvePath, curvePaint);
       }
     }
 
@@ -541,45 +532,34 @@ class _FrontierPainter extends CustomPainter {
         final x = w * 0.2 + rng.nextDouble() * w * 0.6;
         final y = h * 0.2 + rng.nextDouble() * h * 0.6;
         scatterPaint.color =
-            textTertiaryColor.withValues(
-                alpha: 0.3 * dotProgress);
-        canvas.drawCircle(
-            Offset(x, y), 3 * dotProgress, scatterPaint);
+            textTertiaryColor.withValues(alpha: 0.3 * dotProgress);
+        canvas.drawCircle(Offset(x, y), 3 * dotProgress, scatterPaint);
       }
 
       // Draggable dot on the curve
       final dotPos = _tToPoint(dotT, w, h);
-      final dotRadius = isDragging ? 12.0 : 8.0;
-      final pulseGlow = sin(pulseValue * 2 * pi) * 3.0;
-      final glowRadius =
-          (isDragging ? 28.0 : 18.0) + pulseGlow;
-      final glowAlpha =
-          ((isDragging ? 0.3 : 0.2) +
-              sin(pulseValue * 2 * pi) * 0.05) *
-          dotProgress;
+      final dotRadius = isDragging ? 14.0 : 10.0;
+      final glowRadius = isDragging ? 32.0 : 22.0;
 
       // Glow
       final glowPaint = Paint()
         ..color = WeRoboColors.primary
-            .withValues(alpha: glowAlpha)
+            .withValues(alpha: (isDragging ? 0.3 : 0.2) * dotProgress)
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(
-          dotPos, glowRadius * dotProgress, glowPaint);
+      canvas.drawCircle(dotPos, glowRadius * dotProgress, glowPaint);
 
       // Dot fill
       final dotPaint = Paint()
         ..color = WeRoboColors.primary
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(
-          dotPos, dotRadius * dotProgress, dotPaint);
+      canvas.drawCircle(dotPos, dotRadius * dotProgress, dotPaint);
 
       // White ring
       final ringPaint = Paint()
         ..color = WeRoboColors.white
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.5;
-      canvas.drawCircle(
-          dotPos, dotRadius * dotProgress, ringPaint);
+      canvas.drawCircle(dotPos, dotRadius * dotProgress, ringPaint);
     }
   }
 
@@ -597,6 +577,7 @@ class _FrontierPainter extends CustomPainter {
         points.map((point) => point.expectedReturn).reduce(min);
     final maxExpectedReturn =
         points.map((point) => point.expectedReturn).reduce(max);
+    final curvePath = Path();
     final pointOffsets = [
       for (final point in points)
         _previewPointToOffset(
@@ -613,17 +594,19 @@ class _FrontierPainter extends CustomPainter {
       1,
       (pointOffsets.length * curveProgress).ceil(),
     );
-    final visiblePoints =
-        pointOffsets.take(visibleCount).toList();
+    final visiblePoints = pointOffsets.take(visibleCount).toList();
 
-    if (visiblePoints.length >= 2) {
-      final activeZone = _activeZone(dotT);
-      _drawZonedCurve(
-        canvas,
-        visiblePoints,
-        points.length - 1,
-        activeZone,
-      );
+    if (visiblePoints.isNotEmpty) {
+      curvePath.moveTo(visiblePoints.first.dx, visiblePoints.first.dy);
+      for (int i = 1; i < visiblePoints.length; i++) {
+        curvePath.lineTo(visiblePoints[i].dx, visiblePoints[i].dy);
+      }
+      final curvePaint = Paint()
+        ..color = WeRoboColors.primary
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(curvePath, curvePaint);
     }
 
     final pointPaint = Paint()
@@ -656,34 +639,25 @@ class _FrontierPainter extends CustomPainter {
       return points.length ~/ 2;
     })();
     final selectedPoint = pointOffsets[selectedPosition];
-    final dotRadius = isDragging ? 12.0 : 8.0;
-    final pulseGlow = sin(pulseValue * 2 * pi) * 3.0;
-    final glowRadius =
-        (isDragging ? 28.0 : 18.0) + pulseGlow;
-    final glowAlpha =
-        ((isDragging ? 0.3 : 0.2) +
-            sin(pulseValue * 2 * pi) * 0.05) *
-        dotProgress;
+    final dotRadius = isDragging ? 14.0 : 10.0;
+    final glowRadius = isDragging ? 32.0 : 22.0;
 
     final glowPaint = Paint()
       ..color = WeRoboColors.primary
-          .withValues(alpha: glowAlpha)
+          .withValues(alpha: (isDragging ? 0.3 : 0.2) * dotProgress)
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(
-        selectedPoint, glowRadius * dotProgress, glowPaint);
+    canvas.drawCircle(selectedPoint, glowRadius * dotProgress, glowPaint);
 
     final dotPaint = Paint()
       ..color = WeRoboColors.primary
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(
-        selectedPoint, dotRadius * dotProgress, dotPaint);
+    canvas.drawCircle(selectedPoint, dotRadius * dotProgress, dotPaint);
 
     final ringPaint = Paint()
       ..color = WeRoboColors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5;
-    canvas.drawCircle(
-        selectedPoint, dotRadius * dotProgress, ringPaint);
+    canvas.drawCircle(selectedPoint, dotRadius * dotProgress, ringPaint);
 
     final labelPoint = points[selectedPosition];
     if (labelPoint.representativeLabel != null) {
@@ -724,22 +698,17 @@ class _FrontierPainter extends CustomPainter {
         if (slot == null) continue;
 
         final pos = Offset(w * slot.dx, h * slot.dy);
-        // Scale: 3px at 10% → 8px at 30%+, with pulse.
-        final baseRadius =
-            3 + (weight - 0.10).clamp(0.0, 0.20) * 25;
+        // Scale: 3px at 10% → 8px at 30%+.
         final radius =
-            (baseRadius + sin(pulseValue * 2 * pi) * 0.5) *
-            dotProgress;
+            (3 + (weight - 0.10).clamp(0.0, 0.20) * 25) * dotProgress;
         final assetPaint = Paint()
           ..style = PaintingStyle.fill
-          ..color = asset.color.withValues(
-              alpha: 0.85 * dotProgress);
+          ..color = asset.color.withValues(alpha: 0.7 * dotProgress);
         canvas.drawCircle(pos, radius, assetPaint);
         // Border ring
         final assetRingPaint = Paint()
           ..style = PaintingStyle.stroke
-          ..color = asset.color.withValues(
-              alpha: 1.0 * dotProgress)
+          ..color = asset.color.withValues(alpha: 0.9 * dotProgress)
           ..strokeWidth = 1.5;
         canvas.drawCircle(pos, radius, assetRingPaint);
 
@@ -749,158 +718,25 @@ class _FrontierPainter extends CustomPainter {
           asset.name,
           Offset(pos.dx + radius + 4, pos.dy - 6),
           labelStyle.copyWith(
-            color: asset.color
-                .withValues(alpha: dotProgress),
+            color: asset.color.withValues(alpha: dotProgress),
             fontWeight: FontWeight.w600,
             fontSize: 9,
           ),
         );
-        // Weight percentage
-        final pctText =
-            '${(weight * 100).toStringAsFixed(0)}%';
+        // Weight percentage (faint but readable)
+        final pctText = '${(weight * 100).toStringAsFixed(0)}%';
         _drawText(
           canvas,
           pctText,
           Offset(pos.dx + radius + 4, pos.dy + 5),
           labelStyle.copyWith(
-            color: asset.color.withValues(
-                alpha: 0.75 * dotProgress),
+            color: asset.color.withValues(alpha: 0.50 * dotProgress),
             fontWeight: FontWeight.w400,
             fontSize: 9,
           ),
         );
       }
     }
-  }
-
-  /// Draw the frontier curve split into 3 zones with coloring.
-  void _drawZonedCurve(
-    Canvas canvas,
-    List<Offset> pts,
-    int totalCount,
-    int activeZone,
-  ) {
-    if (pts.length < 2) return;
-    final n = pts.length;
-
-    for (int zone = 0; zone < 3; zone++) {
-      final zoneStart = zone / 3.0;
-      final zoneEnd = (zone + 1) / 3.0;
-
-      // Collect points in this zone (with overlap for
-      // continuity at boundaries).
-      final segPts = <Offset>[];
-      for (int i = 0; i < n; i++) {
-        final t = totalCount <= 0
-            ? 0.5
-            : i / totalCount.toDouble();
-        if (t >= zoneStart - 0.02 && t <= zoneEnd + 0.02) {
-          segPts.add(pts[i]);
-        }
-      }
-      if (segPts.length < 2) continue;
-
-      final segPath = Path()
-        ..moveTo(segPts.first.dx, segPts.first.dy);
-      for (int i = 1; i < segPts.length; i++) {
-        segPath.lineTo(segPts[i].dx, segPts[i].dy);
-      }
-
-      final isActive = zone == activeZone;
-      final segColor = isActive
-          ? _zoneColors[zone]
-          : WeRoboColors.primary;
-
-      if (isActive) {
-        // Faint glow under active zone
-        final glowPaint = Paint()
-          ..color = segColor.withValues(alpha: 0.2)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 9
-          ..strokeCap = StrokeCap.round;
-        canvas.drawPath(segPath, glowPaint);
-      }
-
-      final segPaint = Paint()
-        ..color = segColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round;
-
-      // Gradient blend at zone boundaries
-      if (isActive && segPts.length >= 2) {
-        // Blend start boundary
-        if (zone > 0) {
-          final gradStart = segPts.first;
-          final gradEnd = segPts.length > 2
-              ? segPts[1]
-              : segPts.last;
-          segPaint.shader = _blendShader(
-            WeRoboColors.primary,
-            segColor,
-            gradStart,
-            gradEnd,
-            segPts.first,
-            segPts.last,
-          );
-        }
-        // For single-segment approach, apply full gradient
-        // across the path from blue edges to colored center.
-        if (segPts.length >= 4) {
-          segPaint.shader = _zoneGradientShader(
-            segColor,
-            segPts.first,
-            segPts.last,
-            zone > 0,
-            zone < 2,
-          );
-        }
-      }
-
-      canvas.drawPath(segPath, segPaint);
-    }
-  }
-
-  /// Create a gradient shader that blends from blue
-  /// at the edges to the zone color in the center.
-  Shader _zoneGradientShader(
-    Color zoneColor,
-    Offset start,
-    Offset end,
-    bool blendStart,
-    bool blendEnd,
-  ) {
-    final colors = <Color>[
-      if (blendStart) WeRoboColors.primary,
-      zoneColor,
-      zoneColor,
-      if (blendEnd) WeRoboColors.primary,
-    ];
-    final stops = <double>[
-      if (blendStart) 0.0,
-      blendStart ? 0.15 : 0.0,
-      blendEnd ? 0.85 : 1.0,
-      if (blendEnd) 1.0,
-    ];
-    return LinearGradient(
-      colors: colors,
-      stops: stops,
-    ).createShader(Rect.fromPoints(start, end));
-  }
-
-  Shader _blendShader(
-    Color from,
-    Color to,
-    Offset gradStart,
-    Offset gradEnd,
-    Offset pathStart,
-    Offset pathEnd,
-  ) {
-    return LinearGradient(
-      colors: [from, to, to, from],
-      stops: const [0.0, 0.15, 0.85, 1.0],
-    ).createShader(
-        Rect.fromPoints(pathStart, pathEnd));
   }
 
   Offset _previewPointToOffset(
@@ -917,29 +753,22 @@ class _FrontierPainter extends CustomPainter {
     const topPaddingRatio = 0.12;
     const bottomPaddingRatio = 0.86;
 
-    final normalizedVolatility =
-        maxVolatility == minVolatility
+    final normalizedVolatility = maxVolatility == minVolatility
         ? 0.5
-        : (point.volatility - minVolatility) /
-            (maxVolatility - minVolatility);
-    final normalizedExpectedReturn =
-        maxExpectedReturn == minExpectedReturn
+        : (point.volatility - minVolatility) / (maxVolatility - minVolatility);
+    final normalizedExpectedReturn = maxExpectedReturn == minExpectedReturn
         ? 0.5
         : (point.expectedReturn - minExpectedReturn) /
             (maxExpectedReturn - minExpectedReturn);
 
     final x = w * leftPaddingRatio +
-        (w * (rightPaddingRatio - leftPaddingRatio)) *
-            normalizedVolatility;
+        (w * (rightPaddingRatio - leftPaddingRatio)) * normalizedVolatility;
     final y = h * bottomPaddingRatio -
-        (h * (bottomPaddingRatio - topPaddingRatio)) *
-            normalizedExpectedReturn;
+        (h * (bottomPaddingRatio - topPaddingRatio)) * normalizedExpectedReturn;
     return Offset(x, y);
   }
 
-  void _drawText(
-      Canvas canvas, String text, Offset offset,
-      TextStyle style) {
+  void _drawText(Canvas canvas, String text, Offset offset, TextStyle style) {
     final tp = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,
@@ -949,14 +778,12 @@ class _FrontierPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _FrontierPainter old) {
-    return old.curveProgress != curveProgress ||
-        old.dotProgress != dotProgress ||
-        old.dotT != dotT ||
-        old.isDragging != isDragging ||
-        old.pulseValue != pulseValue ||
-        old.selectedPreviewPosition !=
-            selectedPreviewPosition ||
-        old.previewPoints != previewPoints;
+  bool shouldRepaint(covariant _FrontierPainter oldDelegate) {
+    return oldDelegate.curveProgress != curveProgress ||
+        oldDelegate.dotProgress != dotProgress ||
+        oldDelegate.dotT != dotT ||
+        oldDelegate.isDragging != isDragging ||
+        oldDelegate.selectedPreviewPosition != selectedPreviewPosition ||
+        oldDelegate.previewPoints != previewPoints;
   }
 }

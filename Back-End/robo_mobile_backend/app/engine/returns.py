@@ -52,13 +52,11 @@ class BlackLittermanReturnModel:
         periods_per_year: int = 252,
         min_obs: int = 252,
         risk_aversion: float = 2.5,
-        risk_free_rate: float = 0.0,
         allow_equal_weight_fallback: bool = True,
     ) -> None:
         self.periods_per_year = periods_per_year
         self.min_obs = min_obs
         self.risk_aversion = risk_aversion
-        self.risk_free_rate = risk_free_rate
         self.allow_equal_weight_fallback = allow_equal_weight_fallback
 
     def calculate(self, model_input: ExpectedReturnModelInput) -> pd.Series:
@@ -83,9 +81,7 @@ class BlackLittermanReturnModel:
             model_input.prior_weights,
             asset_codes,
         )
-        implied = float(self.risk_free_rate) + float(self.risk_aversion) * (
-            covariance.values @ prior_weights.values
-        )
+        implied = float(self.risk_aversion) * (covariance.values @ prior_weights.values)
         expected_returns = pd.Series(implied, index=asset_codes, name="expected_return")
         return expected_returns.reindex(model_input.asset_codes).astype(float)
 
