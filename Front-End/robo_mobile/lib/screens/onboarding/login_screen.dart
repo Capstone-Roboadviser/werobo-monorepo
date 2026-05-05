@@ -6,15 +6,10 @@ import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
 import '../home/home_shell.dart';
-import 'comparison_screen.dart';
+import 'onboarding_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  final MobileFrontierSelectionResponse frontierSelection;
-
-  const LoginScreen({
-    super.key,
-    required this.frontierSelection,
-  });
+  const LoginScreen({super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -39,10 +34,7 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   void initState() {
     super.initState();
-    logPageEnter('LoginScreen', {
-      'selected': widget.frontierSelection.classificationCode,
-      'selected_point_index': widget.frontierSelection.selectedPointIndex,
-    });
+    logPageEnter('LoginScreen');
     _fadeController = AnimationController(
       duration: WeRoboMotion.medium,
       vsync: this,
@@ -64,11 +56,9 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  void _navigateToComparison() {
-    Navigator.of(context).push(
-      WeRoboMotion.fadeRoute(ComparisonScreen(
-        frontierSelection: widget.frontierSelection,
-      )),
+  void _navigateToOnboarding() {
+    Navigator.of(context).pushReplacement(
+      WeRoboMotion.fadeRoute(const OnboardingScreen()),
     );
   }
 
@@ -94,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen>
       _navigateToHome();
       return;
     }
-    _navigateToComparison();
+    _navigateToOnboarding();
   }
 
   void _onSocialLogin(String provider) {
@@ -527,17 +517,16 @@ class _LoginScreenState extends State<LoginScreen>
                         onTap: () => _onSocialLogin('apple'),
                       ),
                       const SizedBox(height: 24),
-                      GestureDetector(
-                        onTap: () {
+                      TextButton(
+                        onPressed: () {
                           logAction('continue without login');
-                          _navigateToComparison();
+                          _navigateToOnboarding();
                         },
                         child: Text(
                           '로그인 없이 둘러보기',
-                          style: WeRoboTypography.caption.copyWith(
-                            color: tc.textSecondary,
-                            decoration: TextDecoration.underline,
-                          ),
+                          style: WeRoboTypography.bodySmall
+                              .themed(context)
+                              .copyWith(color: WeRoboColors.primary),
                         ),
                       ),
                       const SizedBox(height: 32),

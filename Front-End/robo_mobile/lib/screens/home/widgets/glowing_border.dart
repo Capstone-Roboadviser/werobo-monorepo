@@ -82,17 +82,20 @@ class _GlowingBorderPainter extends CustomPainter {
       ..color = WeRoboColors.primary.withValues(alpha: 0.12);
     canvas.drawRRect(rrect, basePaint);
 
-    // Animated glow arc - bright, visible traveling segment
+    // Animated glow arc — bright, visible traveling segment.
+    // Rev L (2026-05-04): switched from sky-blue (#20A7DB) to the brand
+    // primary orange so the future-tab glow matches the app palette.
+    final glowColor = WeRoboColors.primary;
     final sweepGradient = SweepGradient(
       transform: GradientRotation(progress * 2 * pi),
-      colors: const [
-        Color(0x0020A7DB),
-        Color(0x6620A7DB),
-        Color(0xFF20A7DB),
-        Color(0xFF20A7DB),
-        Color(0x6620A7DB),
-        Color(0x0020A7DB),
-        Color(0x0020A7DB),
+      colors: [
+        glowColor.withValues(alpha: 0),
+        glowColor.withValues(alpha: 0.4),
+        glowColor,
+        glowColor,
+        glowColor.withValues(alpha: 0.4),
+        glowColor.withValues(alpha: 0),
+        glowColor.withValues(alpha: 0),
       ],
       stops: const [
         0.0,
@@ -118,14 +121,14 @@ class _GlowingBorderPainter extends CustomPainter {
     );
     final outerGlow = SweepGradient(
       transform: GradientRotation(progress * 2 * pi),
-      colors: const [
-        Color(0x0020A7DB),
-        Color(0x1A20A7DB),
-        Color(0x4D20A7DB),
-        Color(0x4D20A7DB),
-        Color(0x1A20A7DB),
-        Color(0x0020A7DB),
-        Color(0x0020A7DB),
+      colors: [
+        glowColor.withValues(alpha: 0),
+        glowColor.withValues(alpha: 0.10),
+        glowColor.withValues(alpha: 0.30),
+        glowColor.withValues(alpha: 0.30),
+        glowColor.withValues(alpha: 0.10),
+        glowColor.withValues(alpha: 0),
+        glowColor.withValues(alpha: 0),
       ],
       stops: const [
         0.0,

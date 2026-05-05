@@ -110,40 +110,35 @@ InvestmentType investmentTypeFromRiskCode(String code) {
 
 Color _categoryColorForCode(String code, int index) {
   switch (code) {
-    case 'us_value':
-    case 'value_stock':
-      return CategoryColors.valueStock;
-    case 'us_growth':
-    case 'growth_stock':
-      return CategoryColors.growthStock;
-    case 'new_growth':
-    case 'innovation':
-      return CategoryColors.newGrowth;
+    case 'cash':
+    case 'cash_equivalent':
+    case 'cash_equivalents':
+      return WeRoboColors.assetColor(AssetClass.cash);
     case 'short_term_bond':
     case 'bond':
     case 'treasury':
-      return CategoryColors.bond;
-    case 'cash':
-    case 'cash_equivalent':
-      return CategoryColors.cash;
-    case 'gold':
-    case 'commodity_gold':
-      return CategoryColors.gold;
+      return WeRoboColors.assetColor(AssetClass.shortBond);
     case 'infra':
+    case 'infra_bond':
     case 'infrastructure':
     case 'infrastructure_bond':
-      return CategoryColors.infra;
+      return WeRoboColors.assetColor(AssetClass.infraBond);
+    case 'gold':
+    case 'commodity_gold':
+      return WeRoboColors.assetColor(AssetClass.gold);
+    case 'us_value':
+    case 'value_stock':
+      return WeRoboColors.assetColor(AssetClass.usValue);
+    case 'us_growth':
+    case 'growth_stock':
+      return WeRoboColors.assetColor(AssetClass.usGrowth);
+    case 'new_growth':
+    case 'innovation':
+      return WeRoboColors.assetColor(AssetClass.newGrowth);
     default:
-      const palette = <Color>[
-        CategoryColors.valueStock,
-        CategoryColors.bond,
-        CategoryColors.growthStock,
-        CategoryColors.newGrowth,
-        CategoryColors.gold,
-        CategoryColors.cash,
-        CategoryColors.infra,
-      ];
-      return palette[index % palette.length];
+      // Unknown backend codes fall back to a neutral gray so they don't
+      // collide with the asset tonal palette used elsewhere.
+      return WeRoboColors.silver;
   }
 }
 
@@ -1143,7 +1138,7 @@ class MobileComparisonLine {
     return MobileComparisonLine(
       key: json['key']?.toString() ?? '',
       label: json['label']?.toString() ?? '',
-      color: json['color']?.toString() ?? '#20A7DB',
+      color: json['color']?.toString() ?? '#FE9337',
       style: json['style']?.toString() ?? 'solid',
       points: (json['points'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()

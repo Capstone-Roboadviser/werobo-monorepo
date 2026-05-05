@@ -4,58 +4,54 @@ import 'package:flutter/material.dart';
 class WeRoboColors {
   WeRoboColors._();
 
-  // 주 색상 (Primary sky blue palette)
-  static const Color sky1 = Color(0xFFCFECF7);
-  static const Color sky2 = Color(0xFFA0D9EF);
-  static const Color sky3 = Color(0xFF62C1E5);
-  static const Color sky4 = Color(0xFF20A7DB);
-  static const Color sky5 = Color(0xFF1C96C5);
+  // Primary — Neon Carrot (#FE9337), main brand color (capstone 2026-05-04).
+  static const Color primary = Color(0xFFFE9337);
+  static const Color primaryDark = Color(0xFFE07A1F);    // 8% darker, pressed
+  static const Color primaryLight = Color(0xFFFFC091);   // = assetTier5
 
-  // Semantic aliases
-  static const Color primary = sky4;
-  static const Color primaryLight = sky2;
-  static const Color primaryDark = sky5;
-
-  // 부 색상 (Cool-tinted Neutrals)
+  // 부 색상 — warm-tinted neutrals to harmonize with orange.
   static const Color white = Color(0xFFFFFFFF);
-  static const Color lightGray = Color(0xFFCDD1D6);
+  static const Color lightGray = Color(0xFFE5E1DD);   // warm border
   static const Color silver = Color(0xFF8E8E8E);
-  static const Color black = Color(0xFF000000);
+  static const Color black = Color(0xFF1A1919);       // warm black
 
-  // Surfaces (cool-tinted to harmonize with sky blue)
-  static const Color background = Color(0xFFF6F7F8);
+  // Surfaces (warm-tinted to harmonize with orange).
+  static const Color background = Color(0xFFF4F2F0);
   static const Color surface = white;
-  static const Color card = Color(0xFFEFF1F3);
+  static const Color card = Color(0xFFF4F2F0);
 
   // Text
   static const Color textPrimary = black;
   static const Color textSecondary = Color(0xFF6B6B6B);
-  static const Color textTertiary = Color(0xFF8E8E8E); // WCAG AA 4.6:1
+  static const Color textTertiary = Color(0xFF8E8E8E);
 
   // Status
   static const Color accent = Color(0xFF059669);
   static const Color warning = Color(0xFFFBBF24);
   static const Color error = Color(0xFFEF4444);
 
-  // Chart colors (7-color portfolio category palette)
-  static const Color chartBlue = sky4;
-  static const Color chartGreen = Color(0xFF059669);
-  static const Color chartYellow = Color(0xFFFBBF24);
-  static const Color chartPurple = Color(0xFF8B5CF6);
-  static const Color chartOrange = Color(0xFFF97316);
-  static const Color chartPink = Color(0xFFEC4899);
-  static const Color chartTeal = Color(0xFF14B8A6);
+  // Asset tonal palette — 5-tier monochromatic orange (DESIGN.md §Color System).
+  // Conveys portfolio character (defensive ↔ aggressive) at a glance.
+  static const Color assetTier5 = Color(0xFFFFC091); // 현금성자산
+  static const Color assetTier4 = Color(0xFFFFB57D); // 단기채권
+  static const Color assetTier3 = Color(0xFFFFAA69); // 인프라채권, 금
+  static const Color assetTier2 = Color(0xFFFF9F52); // 미국가치주
+  static const Color assetTier1 = Color(0xFFFE9337); // 미국성장주, 신성장주
 
-  /// Ordered chart palette for portfolio categories.
-  static const List<Color> chartPalette = [
-    chartBlue,
-    chartGreen,
-    chartYellow,
-    chartPurple,
-    chartOrange,
-    chartPink,
-    chartTeal,
+  /// Ordered palette indexed by AssetClass. Use `assetColor(AssetClass)`
+  /// for ergonomic lookup.
+  static const List<Color> assetTonalPalette = [
+    assetTier5, // index 0 — 현금성자산
+    assetTier4, // index 1 — 단기채권
+    assetTier3, // index 2 — 인프라채권
+    assetTier3, // index 3 — 금 (tier-shared with 인프라채권)
+    assetTier2, // index 4 — 미국가치주
+    assetTier1, // index 5 — 미국성장주
+    assetTier1, // index 6 — 신성장주 (tier-shared with 미국성장주)
   ];
+
+  static Color assetColor(AssetClass cls) =>
+      assetTonalPalette[cls.index];
 
   // Social auth brand colors
   static const Color kakaoYellow = Color(0xFFFEE500);
@@ -70,12 +66,12 @@ class WeRoboColors {
   static const double radiusFull = 9999;
 
   // Dot indicator
-  static const Color dotActive = sky4;
+  static const Color dotActive = primary;
   static const Color dotInactive = lightGray;
 
   // Interactive states
   static const double disabledOpacity = 0.4;
-  static const Color focusRing = Color(0x4D20A7DB); // sky4 at 30%
+  static const Color focusRing = Color(0x4DFE9337); // primary @ 30%
 }
 
 /// Spacing scale — base unit 4px, all multiples of 4.
@@ -323,25 +319,25 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
   });
 
   static const light = WeRoboThemeColors(
-    background: Color(0xFFF6F7F8),
+    background: Color(0xFFF4F2F0),  // warm gray (was #F6F7F8)
     surface: Color(0xFFFFFFFF),
-    card: Color(0xFFEFF1F3),
-    border: Color(0xFFCDD1D6),
-    textPrimary: Color(0xFF000000),
+    card: Color(0xFFF4F2F0),         // warm gray (was #EFF1F3)
+    border: Color(0xFFE5E1DD),       // warm hairline (was #CDD1D6)
+    textPrimary: Color(0xFF1A1919),  // warm black (was #000000)
     textSecondary: Color(0xFF6B6B6B),
     textTertiary: Color(0xFF8E8E8E),
     accent: Color(0xFF059669),
   );
 
   static const dark = WeRoboThemeColors(
-    background: Color(0xFF141414),
-    surface: Color(0xFF1A1A1A),
-    card: Color(0xFF232528),
-    border: Color(0xFF363840),
-    textPrimary: Color(0xFFF0F0F0),
-    textSecondary: Color(0xFF999999),
-    textTertiary: Color(0xFF6B6B6B),
-    accent: Color(0xFF34D399),
+    background: Color(0xFF1A1919),   // warm black (was #141414)
+    surface: Color(0xFF232020),      // warm card surface
+    card: Color(0xFF2A2625),         // warm inset card
+    border: Color(0xFF3A3636),       // warm hairline
+    textPrimary: Color(0xFFF0EEEC),  // warm off-white
+    textSecondary: Color(0xFFA39E99),
+    textTertiary: Color(0xFF7A7470),
+    accent: Color(0xFF34D399),       // green stays unchanged
   );
 
   static WeRoboThemeColors of(BuildContext context) =>
@@ -509,4 +505,28 @@ class WeRoboTheme {
       extensions: const [WeRoboThemeColors.dark],
     );
   }
+}
+
+/// Canonical order for portfolio asset classes. Order is defensive→aggressive
+/// to match the tonal palette (lightest tier = least risky).
+enum AssetClass {
+  cash,        // 현금성자산
+  shortBond,   // 단기채권
+  infraBond,   // 인프라채권
+  gold,        // 금
+  usValue,     // 미국가치주
+  usGrowth,    // 미국성장주
+  newGrowth,   // 신성장주
+}
+
+extension AssetClassLabel on AssetClass {
+  String get koLabel => switch (this) {
+        AssetClass.cash => '현금성자산',
+        AssetClass.shortBond => '단기채권',
+        AssetClass.infraBond => '인프라채권',
+        AssetClass.gold => '금',
+        AssetClass.usValue => '미국가치주',
+        AssetClass.usGrowth => '미국성장주',
+        AssetClass.newGrowth => '신성장주',
+      };
 }

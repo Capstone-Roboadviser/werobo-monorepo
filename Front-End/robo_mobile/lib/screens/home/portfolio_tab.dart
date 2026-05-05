@@ -99,15 +99,31 @@ class _PortfolioTabState extends State<PortfolioTab> {
     try {
       final state = PortfolioStateProvider.of(context);
       final selection = state.frontierSelection;
+      // See home_shell._fetchBacktest — same fallback rationale.
+      final onboardingPick = state.onboardingFrontierSelection;
+      final selectedPointIndex =
+          selection?.selectedPointIndex ?? onboardingPick?.selectedPointIndex;
+      final targetVolatility = selection?.selectedTargetVolatility ??
+          onboardingPick?.targetVolatility;
+      final stockWeights = portfolio?.stockWeights;
+      if (selectedPointIndex == null &&
+          targetVolatility == null &&
+          (stockWeights == null || stockWeights.isEmpty)) {
+        if (_loadedBacktestSignature == signature) {
+          _loadedBacktestSignature = null;
+        }
+        return;
+      }
       final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
-        preferredDataSource: state.frontierSelection?.dataSource ??
+        preferredDataSource: selection?.dataSource ??
+            onboardingPick?.dataSource ??
             state.accountSummary?.dataSource,
         investmentHorizon: selection?.resolvedProfile.investmentHorizon ??
             state.accountSummary?.investmentHorizon ??
             'medium',
-        selectedPointIndex: selection?.selectedPointIndex,
-        targetVolatility: selection?.selectedTargetVolatility,
-        stockWeights: portfolio?.stockWeights,
+        selectedPointIndex: selectedPointIndex,
+        targetVolatility: targetVolatility,
+        stockWeights: stockWeights,
         portfolioCode: portfolio?.code,
         startDate: DateTime.tryParse(state.accountSummary?.startedAt ?? ''),
       );

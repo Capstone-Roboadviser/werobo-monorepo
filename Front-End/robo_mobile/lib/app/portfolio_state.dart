@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,11 +6,80 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'comparison_backtest_chart_mapper.dart';
 import 'debug_page_logger.dart';
+import 'theme.dart' show AssetClass;
 import '../models/chart_data.dart';
 import '../models/mobile_backend_models.dart';
 import '../models/portfolio_data.dart';
 import '../models/rebalance_insight.dart';
+import '../screens/onboarding/onboarding_screen.dart'
+    show OnboardingFrontierSelection;
+import '../services/alert_analytics.dart';
 import '../services/mobile_backend_api.dart';
+
+/// User-facing alert frequency setting. Maps internally to a σ threshold.
+/// Plain-language labels never expose σ to the user.
+enum AlertFrequency {
+  often, // 자주 받기 → 1.5σ → ~월 2-3회
+  normal, // 보통 → 2.0σ → ~월 1-2회 (default)
+  important; // 중요할 때만 → 3.0σ → ~분기 1회
+
+  double get sigmaThreshold => switch (this) {
+        AlertFrequency.often => 1.5,
+        AlertFrequency.normal => 2.0,
+        AlertFrequency.important => 3.0,
+      };
+
+  String get koLabel => switch (this) {
+        AlertFrequency.often => '자주 받기',
+        AlertFrequency.normal => '보통',
+        AlertFrequency.important => '중요할 때만',
+      };
+}
+
+/// Top-N contribution analysis for a moment in the portfolio simulation.
+/// Consumed by the deferred Phase 4 ContributionTooltip widget.
+class ContributionAnalysis {
+  /// Sorted by `|krwImpact|` descending; capped to the top 2 entries.
+  final List<ContributionEntry> topEntries;
+
+  /// True when any of the top entries is `AssetClass.newGrowth`. Drives the
+  /// "데이터 정합성 검토 중" caveat shown next to 신성장주 figures.
+  final bool containsNewGrowth;
+
+  const ContributionAnalysis({
+    required this.topEntries,
+    required this.containsNewGrowth,
+  });
+
+  factory ContributionAnalysis.fromEntries(List<ContributionEntry> entries) {
+    final top = [...entries]
+      ..sort((a, b) => b.krwImpact.abs().compareTo(a.krwImpact.abs()));
+    final top2 = top.take(2).toList();
+    return ContributionAnalysis(
+      topEntries: top2,
+      containsNewGrowth: top2.any((e) => e.cls == AssetClass.newGrowth),
+    );
+  }
+}
+
+/// One row of the contribution-analysis breakdown.
+class ContributionEntry {
+  final AssetClass cls;
+  final String label;
+  final double weight;
+  final double assetReturn;
+  final double krwImpact;
+  final bool isOutlier;
+
+  const ContributionEntry({
+    required this.cls,
+    required this.label,
+    required this.weight,
+    required this.assetReturn,
+    required this.krwImpact,
+    this.isOutlier = false,
+  });
+}
 
 /// App-level state holder for auth, onboarding bootstrap state, and portfolio data.
 class PortfolioState extends ChangeNotifier {
@@ -19,18 +89,29 @@ class PortfolioState extends ChangeNotifier {
   static const int _frontierPreviewStorageVersion = 3;
   static const String _digestSeenDateKey = 'werobo.digest_seen_date';
   static const String _welcomeBannerSeenKey = 'werobo.welcome_banner_seen';
+  static const String _alertFrequencyKey = 'alertFrequency';
 
   InvestmentType _type = InvestmentType.balanced;
   MobileRecommendationResponse? _recommendation;
   MobileComparisonBacktestResponse? _backtest;
   MobileFrontierPreviewResponse? _frontierPreview;
   MobileFrontierSelectionResponse? _frontierSelection;
+  // Captured at 투자 확정 from the post-frontier review screen so the home
+  // tab can read what the user picked even before the authoritative
+  // backend selection arrives.
+  OnboardingFrontierSelection? _onboardingFrontierSelection;
   MobileAuthSession? _authSession;
   MobileAccountDashboard? _accountDashboard;
   List<RebalanceInsight> _insights = [];
   String? _digestSeenDate;
   bool _welcomeBannerSeen = false;
   MobileDigestResponse? _weeklyDigest;
+  AlertFrequency _alertFrequency = AlertFrequency.normal;
+  // Forward-compat for the deferred home dashboard rework: backend will flip
+  // this on when a 긴급-level alert lands so the 홈 nav tab can render an
+  // unread dot. No production consumer triggers this today (MVP scope), but
+  // the flag + setter are exposed so debug/test paths can simulate the badge.
+  bool _hasUnreadEmergencyAlert = false;
 
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
@@ -56,6 +137,8 @@ class PortfolioState extends ChangeNotifier {
   bool get welcomeBannerSeen => _welcomeBannerSeen;
   MobileDigestResponse? get weeklyDigest => _weeklyDigest;
   bool get isWeeklyDigestAvailable => _weeklyDigest?.available == true;
+  AlertFrequency get alertFrequency => _alertFrequency;
+  bool get hasUnreadEmergencyAlert => _hasUnreadEmergencyAlert;
 
   bool get isLoggedIn => _authSession != null;
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
@@ -117,6 +200,16 @@ class PortfolioState extends ChangeNotifier {
     );
   }
 
+  /// Returns the top-N contribution breakdown at `time`. Returns null in the
+  /// MVP — backend wiring lands with the deferred home dashboard rework.
+  ///
+  /// BACKEND TODO: when wiring to MobileBackendApi.fetchContributionAnalysis,
+  /// build via ContributionAnalysis.fromEntries(...) so containsNewGrowth
+  /// is set correctly for the "데이터 정합성 검토 중" caveat.
+  ContributionAnalysis? contributionAnalysisAt(DateTime time) {
+    return null;
+  }
+
   void setType(InvestmentType newType) {
     if (_type != newType) {
       _type = newType;
@@ -156,12 +249,64 @@ class PortfolioState extends ChangeNotifier {
     _persistPortfolioBootstrapState();
   }
 
+  /// Snapshot of the user's onboarding-side pick — what t/preview was
+  /// selected on the slider, regardless of whether the authoritative
+  /// backend selection has resolved yet.
+  OnboardingFrontierSelection? get onboardingFrontierSelection =>
+      _onboardingFrontierSelection;
+
+  /// Persist the onboarding-flow frontier pick so screens beyond
+  /// onboarding (home tab, etc.) can read it after 투자 확정.
+  void recordFrontierSelection(OnboardingFrontierSelection selection) {
+    _onboardingFrontierSelection = selection;
+    notifyListeners();
+  }
+
   Future<void> restorePersistedState() async {
     final prefs = await SharedPreferences.getInstance();
     await _restoreAuthSessionFromPrefs(prefs);
     await _restorePortfolioBootstrapFromPrefs(prefs);
     _digestSeenDate = prefs.getString(_digestSeenDateKey);
     _welcomeBannerSeen = prefs.getBool(_welcomeBannerSeenKey) ?? false;
+    await _restoreAlertFrequency();
+  }
+
+  Future<void> setAlertFrequency(AlertFrequency f) async {
+    if (_alertFrequency == f) return;
+    _alertFrequency = f;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_alertFrequencyKey, f.name);
+    // Fire-and-forget so persistence/notify aren't blocked on telemetry.
+    unawaited(AlertAnalytics.instance.recordPreferenceChange(f));
+    notifyListeners();
+  }
+
+  /// Clears the unread 긴급-alert flag (e.g., once the user opens the home
+  /// tab and sees the alert).
+  void markEmergencyAlertSeen() {
+    if (!_hasUnreadEmergencyAlert) return;
+    _hasUnreadEmergencyAlert = false;
+    notifyListeners();
+  }
+
+  /// Backend will call this when a 긴급-level alert lands. Exposed publicly
+  /// so debug/test paths can simulate the badge ahead of the post-MVP
+  /// backend wiring.
+  void setHasUnreadEmergencyAlert(bool v) {
+    if (_hasUnreadEmergencyAlert == v) return;
+    _hasUnreadEmergencyAlert = v;
+    notifyListeners();
+  }
+
+  Future<void> _restoreAlertFrequency() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_alertFrequencyKey);
+    if (raw != null) {
+      _alertFrequency = AlertFrequency.values.firstWhere(
+        (f) => f.name == raw,
+        orElse: () => AlertFrequency.normal,
+      );
+    }
   }
 
   Future<bool> validateAuthSession() async {
@@ -236,6 +381,7 @@ class PortfolioState extends ChangeNotifier {
     _type = InvestmentType.balanced;
     _recommendation = null;
     _frontierSelection = null;
+    _onboardingFrontierSelection = null;
     _frontierPreview = null;
     _backtest = null;
     _accountDashboard = null;
@@ -254,14 +400,24 @@ class PortfolioState extends ChangeNotifier {
     _backtest = null;
     _frontierPreview = null;
     _frontierSelection = null;
+    _onboardingFrontierSelection = null;
     _accountDashboard = null;
     _insights = [];
+    _digestSeenDate = null;
+    _welcomeBannerSeen = false;
+    _weeklyDigest = null;
+    _hasUnreadEmergencyAlert = false;
     if (notify) {
       notifyListeners();
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_authSessionStorageKey);
     await prefs.remove(_portfolioBootstrapStorageKey);
+    await prefs.remove(_digestSeenDateKey);
+    await prefs.remove(_welcomeBannerSeenKey);
+    // Note: _alertFrequency is intentionally NOT cleared here — it's a
+    // device-level preference that should survive logout/login on the same
+    // device.
   }
 
   void setTypeAndRecommendation(

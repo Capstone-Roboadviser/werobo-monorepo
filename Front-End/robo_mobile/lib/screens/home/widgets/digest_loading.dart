@@ -89,7 +89,7 @@ class _DigestLoadingState extends State<DigestLoading>
                             WeRoboColors.primary
                                 .withValues(alpha: 0.25),
                           ]
-                        : [WeRoboColors.sky1, WeRoboColors.sky2],
+                        : [WeRoboColors.assetTier5, WeRoboColors.assetTier4],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
