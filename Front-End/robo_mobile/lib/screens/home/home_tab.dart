@@ -504,6 +504,12 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           marketPct = (mCurr - mPrev) / denom;
         }
       }
+      // If the touch date isn't in the market series (typically a non-
+      // trading day — weekend/holiday — where the portfolio value also
+      // didn't change), show 0% rather than dropping the row entirely.
+      // The portfolio row will read +0.00% on the same day, so the two
+      // rows stay consistent.
+      marketPct ??= 0.0;
     }
 
     // Top 2 asset gainers/losers based on portfolio direction.
