@@ -533,6 +533,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     child: AnimatedBuilder(
                       animation: Listenable.merge([_drawCurve, _glowCtrl]),
                       builder: (context, _) {
+                        // lines[0] is drawn last (on top); benchmarks are
+                        // drawn back-to-front by the painter. Cache helper
+                        // outputs so the animation builder doesn't re-walk
+                        // comparisonLines + reallocate every frame.
+                        final portfolioPts = _pctSeries(valuePts);
+                        final marketPts = _marketSeries(valuePts);
+                        final expectedPts =
+                            _expectedReturnEndpoints(valuePts);
+                        final bondPts = _bondEndpoints(valuePts);
                         return CustomPaint(
                           size: Size(fullWidth, 320),
                           painter: _HomePerformancePainter(
@@ -541,18 +550,16 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                 key: 'portfolio',
                                 label: '포트폴리오',
                                 color: WeRoboColors.primary,
-                                points: _pctSeries(valuePts),
+                                points: portfolioPts,
                               ),
-                              if (_marketSeries(valuePts).isNotEmpty)
+                              if (marketPts.isNotEmpty)
                                 ChartLine(
                                   key: 'market',
                                   label: '시장',
                                   color: tc.textSecondary,
-                                  points: _marketSeries(valuePts),
+                                  points: marketPts,
                                 ),
-                              if (_expectedReturnEndpoints(
-                                    valuePts,
-                                  ).isNotEmpty)
+                              if (expectedPts.isNotEmpty)
                                 ChartLine(
                                   key: 'expected',
                                   label: '연 기대수익률',
@@ -560,19 +567,20 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                     alpha: 0.5,
                                   ),
                                   dashed: true,
-                                  points: _expectedReturnEndpoints(
-                                    valuePts,
-                                  ),
+                                  points: expectedPts,
                                 ),
-                              if (_bondEndpoints(valuePts).isNotEmpty)
+                              if (bondPts.isNotEmpty)
                                 ChartLine(
+                                  // Short form. The comparison chart uses
+                                  // '채권 수익률' — the home legend keeps the
+                                  // shorter '채권' to fit 4 entries on a phone.
                                   key: 'bond',
                                   label: '채권',
                                   color: tc.textTertiary.withValues(
                                     alpha: 0.7,
                                   ),
                                   dashed: true,
-                                  points: _bondEndpoints(valuePts),
+                                  points: bondPts,
                                 ),
                             ],
                             progress: _drawCurve.value,
