@@ -70,6 +70,12 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _scheduleNavigation() async {
     final state = PortfolioStateProvider.of(context);
     await state.validateAuthSession();
+    // Auto-enter path: prime the backtest fetch in parallel with the
+    // 2-second splash timer so the home chart's draw animation kicks
+    // off immediately on arrival instead of waiting for data.
+    if (state.canAutoEnterHome) {
+      unawaited(HomeShell.prefetchBacktest(state));
+    }
     _navigationTimer = Timer(const Duration(milliseconds: 2000), () {
       if (!mounted) {
         return;
