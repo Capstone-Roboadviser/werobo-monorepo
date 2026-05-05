@@ -528,7 +528,14 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     } else {
       entries.sort((a, b) => a.pct.compareTo(b.pct));
     }
-    final assetRows = entries.take(2).toList();
+    // When portfolio is exactly 0%, the underlying account history likely
+    // repeated yesterday's snapshot (non-trading day or sparse backend
+    // data). Showing per-asset movement for the same date contradicts the
+    // 0% portfolio number and confuses readers — drop the asset rows so
+    // the card reads consistently as "no movement on this date."
+    final assetRows = portfolioPct == 0
+        ? const <({String name, double pct})>[]
+        : entries.take(2).toList();
 
     // Position: anchor x at touch index, y above the dot if room else below.
     // touchX is in Stack-relative coords: the chart canvas is laid out at
