@@ -14,6 +14,184 @@ const Map<AssetClass, String> _kAssetShortLabels = {
   AssetClass.newGrowth: '신성장',
 };
 
+const Map<String, AssetClass> _kAssetClassByCode = {
+  'cash_equivalents': AssetClass.cash,
+  'short_term_bond': AssetClass.shortBond,
+  'infra_bond': AssetClass.infraBond,
+  'gold': AssetClass.gold,
+  'us_value': AssetClass.usValue,
+  'us_growth': AssetClass.usGrowth,
+  'new_growth': AssetClass.newGrowth,
+};
+
+const Map<AssetClass, Offset> _kAssetBubbleSlots = {
+  AssetClass.cash: Offset(0.20, 0.78),
+  AssetClass.shortBond: Offset(0.36, 0.72),
+  AssetClass.infraBond: Offset(0.18, 0.34),
+  AssetClass.gold: Offset(0.40, 0.24),
+  AssetClass.usValue: Offset(0.60, 0.20),
+  AssetClass.usGrowth: Offset(0.78, 0.36),
+  AssetClass.newGrowth: Offset(0.82, 0.22),
+};
+
+const Map<int, Map<AssetClass, double>> _kFallbackWeightsAtPosition = {
+  0: {
+    AssetClass.shortBond: 0.30,
+    AssetClass.cash: 0.30,
+    AssetClass.gold: 0.22,
+    AssetClass.usValue: 0.07,
+    AssetClass.newGrowth: 0.05,
+    AssetClass.infraBond: 0.03,
+    AssetClass.usGrowth: 0.03,
+  },
+  20: {
+    AssetClass.shortBond: 0.30,
+    AssetClass.cash: 0.29,
+    AssetClass.infraBond: 0.26,
+    AssetClass.newGrowth: 0.05,
+    AssetClass.usValue: 0.04,
+    AssetClass.usGrowth: 0.03,
+    AssetClass.gold: 0.03,
+  },
+  35: {
+    AssetClass.shortBond: 0.30,
+    AssetClass.usValue: 0.23,
+    AssetClass.cash: 0.19,
+    AssetClass.infraBond: 0.17,
+    AssetClass.newGrowth: 0.05,
+    AssetClass.gold: 0.03,
+    AssetClass.usGrowth: 0.03,
+  },
+  45: {
+    AssetClass.usValue: 0.30,
+    AssetClass.shortBond: 0.30,
+    AssetClass.infraBond: 0.16,
+    AssetClass.cash: 0.13,
+    AssetClass.newGrowth: 0.05,
+    AssetClass.usGrowth: 0.03,
+    AssetClass.gold: 0.03,
+  },
+  55: {
+    AssetClass.shortBond: 0.30,
+    AssetClass.usValue: 0.30,
+    AssetClass.infraBond: 0.24,
+    AssetClass.cash: 0.05,
+    AssetClass.newGrowth: 0.05,
+    AssetClass.gold: 0.03,
+    AssetClass.usGrowth: 0.03,
+  },
+  60: {
+    AssetClass.usValue: 0.30,
+    AssetClass.infraBond: 0.30,
+    AssetClass.shortBond: 0.21,
+    AssetClass.usGrowth: 0.08,
+    AssetClass.newGrowth: 0.05,
+    AssetClass.cash: 0.03,
+    AssetClass.gold: 0.03,
+  },
+};
+
+class FrontierAssetBubbleSpec {
+  final AssetClass cls;
+  final double weight;
+  final Offset anchor;
+  final double radius;
+
+  const FrontierAssetBubbleSpec({
+    required this.cls,
+    required this.weight,
+    required this.anchor,
+    required this.radius,
+  });
+}
+
+List<FrontierAssetBubbleSpec> frontierAssetBubbleSpecs({
+  required MobileFrontierPreviewPoint? point,
+  required Size size,
+  required int selectedPosition,
+  required int previewPointCount,
+}) {
+  final weights = _weightsForFrontierPoint(
+    point: point,
+    selectedPosition: selectedPosition,
+    previewPointCount: previewPointCount,
+  );
+  final specs = <FrontierAssetBubbleSpec>[];
+  for (final cls in AssetClass.values) {
+    final weight = weights[cls] ?? 0;
+    if (weight <= 0.005) continue;
+    final slot = _kAssetBubbleSlots[cls]!;
+    specs.add(
+      FrontierAssetBubbleSpec(
+        cls: cls,
+        weight: weight,
+        anchor: Offset(size.width * slot.dx, size.height * slot.dy),
+        radius: _bubbleRadiusForWeight(weight),
+      ),
+    );
+  }
+  return specs..sort((a, b) => a.radius.compareTo(b.radius));
+}
+
+Map<AssetClass, double> _weightsForFrontierPoint({
+  required MobileFrontierPreviewPoint? point,
+  required int selectedPosition,
+  required int previewPointCount,
+}) {
+  if (point != null && point.sectorAllocations.isNotEmpty) {
+    final weights = <AssetClass, double>{};
+    for (final allocation in point.sectorAllocations) {
+      final cls = _kAssetClassByCode[allocation.assetCode];
+      if (cls == null || allocation.weight <= 0) continue;
+      weights[cls] = (weights[cls] ?? 0) + allocation.weight;
+    }
+    return weights;
+  }
+
+  final maxPosition = max(0, previewPointCount - 1);
+  final clampedPosition = selectedPosition.clamp(0, maxPosition).toDouble();
+  final normalizedPosition =
+      maxPosition <= 0 ? 0.0 : clampedPosition / maxPosition;
+  return _interpolateFallbackWeights(normalizedPosition * 60);
+}
+
+Map<AssetClass, double> _interpolateFallbackWeights(double scaledPosition) {
+  final keys = _kFallbackWeightsAtPosition.keys.toList()..sort();
+  if (keys.isEmpty) return const {};
+  if (scaledPosition <= keys.first) {
+    return _kFallbackWeightsAtPosition[keys.first]!;
+  }
+  if (scaledPosition >= keys.last) {
+    return _kFallbackWeightsAtPosition[keys.last]!;
+  }
+
+  int lower = keys.first;
+  int upper = keys.last;
+  for (final key in keys) {
+    if (key <= scaledPosition) lower = key;
+    if (key >= scaledPosition) {
+      upper = key;
+      break;
+    }
+  }
+  if (lower == upper) return _kFallbackWeightsAtPosition[lower]!;
+
+  final t = (scaledPosition - lower) / (upper - lower);
+  final lowerWeights = _kFallbackWeightsAtPosition[lower]!;
+  final upperWeights = _kFallbackWeightsAtPosition[upper]!;
+  final allClasses = {...lowerWeights.keys, ...upperWeights.keys};
+  return {
+    for (final cls in allClasses)
+      cls:
+          (lowerWeights[cls] ?? 0.0) * (1 - t) + (upperWeights[cls] ?? 0.0) * t,
+  };
+}
+
+double _bubbleRadiusForWeight(double weight) {
+  final clamped = weight.clamp(0.0, 0.30).toDouble();
+  return 4.5 + clamped * 20.0;
+}
+
 class EfficientFrontierChart extends StatefulWidget {
   final ValueChanged<double>? onPositionChanged;
   final ValueChanged<bool>? onDragStateChanged;
@@ -255,31 +433,6 @@ class _FrontierPainter extends CustomPainter {
     return Offset(x, y);
   }
 
-  /// Fixed t position along the idealized frontier for each asset
-  /// class, ordered defensive → aggressive. Each asset gets a unique
-  /// slot so bubbles don't overlap each other, and the values are
-  /// spaced wider than label width to keep the labels readable.
-  ///
-  /// We don't have backend per-asset stats, and the user has accepted
-  /// approximate placement — this trades scientific accuracy for
-  /// visual cleanliness, matching the textbook efficient-frontier
-  /// presentation the user referenced (smooth curve + clean labels).
-  static const Map<AssetClass, double> _assetT = {
-    AssetClass.cash: 0.00,
-    AssetClass.shortBond: 0.18,
-    AssetClass.infraBond: 0.35,
-    AssetClass.gold: 0.50,
-    AssetClass.usValue: 0.65,
-    AssetClass.usGrowth: 0.85,
-    AssetClass.newGrowth: 1.00,
-  };
-
-  /// Vertical offset (px, screen down) of an asset bubble below the
-  /// curve at its t. Keeps the bubble visually distinct from the
-  /// frontier line without losing the "this asset sits at this risk
-  /// tier" association.
-  static const double _assetBubbleOffsetY = 18.0;
-
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
@@ -308,14 +461,8 @@ class _FrontierPainter extends CustomPainter {
 
     _drawText(canvas, '연 기대수익률', const Offset(4, 4), labelStyle);
 
-    // Single drawing path for both with-preview and no-preview cases.
-    // The curve, dot, and bubbles are all parameterized by t ∈ [0, 1]
-    // along the idealized sqrt-shaped frontier (`_tToPoint`). Using one
-    // smooth function (sampled densely) avoids the kinks the previous
-    // anchor-based cubic-Bezier produced (horizontal tangents at every
-    // anchor → discontinuous slope at junctions). It also means asset
-    // bubbles get unique t slots and never pile up at corners the way
-    // the previous data-bounding-box mapping did.
+    // Keep the selected dot on the smooth frontier curve, while the
+    // allocation bubbles live in stable risk/return slots around it.
     if (curveProgress > 0) {
       _drawSmoothFrontier(canvas, size, curveProgress);
     }
@@ -331,8 +478,8 @@ class _FrontierPainter extends CustomPainter {
       // currently-selected preview point — only present at the marker
       // indices the backend tags.
       final pp = previewPoints;
-      final pos = selectedPreviewPosition;
-      if (pp != null && pos != null && pos >= 0 && pos < pp.length) {
+      final pos = _selectedPosition();
+      if (pp != null && pos >= 0 && pos < pp.length) {
         final label = pp[pos].representativeLabel;
         if (label != null) {
           _drawText(
@@ -354,13 +501,27 @@ class _FrontierPainter extends CustomPainter {
   /// to the no-preview `dotT`.
   double _selectedDotT() {
     final pp = previewPoints;
-    final pos = selectedPreviewPosition;
-    if (pp != null && pp.isNotEmpty && pos != null) {
+    if (pp != null && pp.isNotEmpty) {
       if (pp.length <= 1) return 0.5;
-      final clamped = pos.clamp(0, pp.length - 1);
+      final clamped = _selectedPosition().clamp(0, pp.length - 1);
       return clamped / (pp.length - 1);
     }
     return dotT;
+  }
+
+  int _selectedPosition() {
+    final pp = previewPoints;
+    if (pp != null && pp.isNotEmpty) {
+      final pos = selectedPreviewPosition ?? pp.length ~/ 2;
+      return pos.clamp(0, pp.length - 1);
+    }
+    return (dotT.clamp(0.0, 1.0) * 60).round();
+  }
+
+  MobileFrontierPreviewPoint? _selectedPreviewPoint() {
+    final pp = previewPoints;
+    if (pp == null || pp.isEmpty) return null;
+    return pp[_selectedPosition()];
   }
 
   /// Stroke the idealized frontier as a dense polyline sampled directly
@@ -394,63 +555,47 @@ class _FrontierPainter extends CustomPainter {
     );
   }
 
-  /// Draws the seven asset-class bubbles at their REAL (vol, return)
-  /// coordinates relative to the frontier (mapped onto the same screen
-  /// padding ratios used for the curve). Numbers come from
-  /// [_assetApproxCoords] — a hardcoded approximate table — until the
-  /// backend exposes per-asset stats in
-  /// `MobileFrontierPreviewResponse`. 신성장주 is intentionally
-  /// Draws the seven asset-class bubbles slightly below the curve at
-  /// each asset's fixed t (`_assetT`). Each asset has a unique slot so
-  /// bubbles don't pile up or overlap each other. The vertical offset
-  /// keeps the bubbles visually distinct from the frontier line itself
-  /// while preserving the "this asset sits at this risk tier" reading.
-  /// Reveal-aware: only assets whose t has been reached by the curve
-  /// animation are drawn.
+  /// Draws allocation bubbles for the currently-selected frontier point.
+  /// Radius is data-driven: as the selected point changes, the backend
+  /// sector weights resize these circles.
   void _drawAssetBubbles(Canvas canvas, Size size, double opacity) {
     if (opacity <= 0) return;
-    final w = size.width;
-    final h = size.height;
-    for (final cls in AssetClass.values) {
-      final t = _assetT[cls]!;
-      if (t > curveProgress) continue;
-      final base = _tToPoint(t, w, h);
-      final anchor = Offset(base.dx, base.dy + _assetBubbleOffsetY);
-      final color = WeRoboColors.assetColor(cls);
-      // Fixed radius — NO size-growth animation.
+    final pp = previewPoints;
+    final specs = frontierAssetBubbleSpecs(
+      point: _selectedPreviewPoint(),
+      size: size,
+      selectedPosition: _selectedPosition(),
+      previewPointCount: pp?.length ?? 61,
+    );
+
+    for (final spec in specs) {
+      final color = WeRoboColors.assetColor(spec.cls);
+      final radius = (spec.radius + sin(pulseValue * 2 * pi) * 0.35) * opacity;
       final fillPaint = Paint()
         ..style = PaintingStyle.fill
-        ..color = color.withValues(alpha: opacity);
-      canvas.drawCircle(anchor, 7.0, fillPaint);
-      // White ring for contrast against the warm-gray background.
+        ..color = color.withValues(
+          alpha: (0.58 + spec.weight.clamp(0.0, 0.30) * 1.1)
+                  .clamp(0.58, 0.92)
+                  .toDouble() *
+              opacity,
+        );
+      canvas.drawCircle(spec.anchor, radius, fillPaint);
       final ringPaint = Paint()
         ..style = PaintingStyle.stroke
         ..color = WeRoboColors.white.withValues(alpha: opacity)
         ..strokeWidth = 1.5;
-      canvas.drawCircle(anchor, 7.0, ringPaint);
-      // Label below the bubble (away from the curve), so it never
-      // collides with the curve stroke.
-      _drawLabel(
-        canvas,
-        anchor,
-        _kAssetShortLabels[cls]!,
-        opacity,
-        below: true,
-      );
+      canvas.drawCircle(spec.anchor, radius, ringPaint);
+      _drawBubbleLabel(canvas, size, spec, opacity);
     }
   }
 
-  /// Renders a Noto Sans KR caption near [anchor]. By default the
-  /// caption sits above the anchor; set [below] to drop it underneath
-  /// (used by asset bubbles, which sit below the curve and would
-  /// otherwise get a label that crosses the frontier stroke).
-  void _drawLabel(
+  void _drawBubbleLabel(
     Canvas canvas,
-    Offset anchor,
-    String text,
-    double opacity, {
-    bool below = false,
-  }) {
+    Size size,
+    FrontierAssetBubbleSpec spec,
+    double opacity,
+  ) {
+    final text = _kAssetShortLabels[spec.cls]!;
     final tp = TextPainter(
       text: TextSpan(
         text: text,
@@ -464,14 +609,19 @@ class _FrontierPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
     )..layout();
-    final pos = below
-        ? Offset(anchor.dx - tp.width / 2, anchor.dy + 12)
-        : Offset(anchor.dx - tp.width / 2, anchor.dy - 16 - tp.height);
-    tp.paint(canvas, pos);
+    final labelOnLeft = spec.anchor.dx > size.width * 0.72;
+    final rawDx = labelOnLeft
+        ? spec.anchor.dx - spec.radius - tp.width - 5
+        : spec.anchor.dx + spec.radius + 5;
+    final rawDy = spec.anchor.dy - tp.height / 2;
+    final dx = rawDx.clamp(4.0, max(4.0, size.width - tp.width - 4.0));
+    final dy = rawDy.clamp(4.0, max(4.0, size.height - tp.height - 4.0));
+    tp.paint(canvas, Offset(dx.toDouble(), dy.toDouble()));
   }
 
   /// Selected (draggable) dot with pulse glow — preserved from previous
-  /// behaviour. Asset bubbles are static; only this dot pulses.
+  /// behaviour. Asset bubbles resize from weights; this dot marks the
+  /// currently selected frontier point.
   void _drawSelectedDot(Canvas canvas, Offset position) {
     if (dotProgress <= 0) return;
     final dotRadius = isDragging ? 12.0 : 8.0;
