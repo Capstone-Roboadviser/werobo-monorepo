@@ -161,7 +161,7 @@ void main() {
     expect(find.text('주간 다이제스트'), findsNothing);
   });
 
-  testWidgets('shows digest status in issue timeline when unavailable',
+  testWidgets('uses placeholder digest when live digest is unavailable',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = PortfolioState();
@@ -183,8 +183,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.text('이번 주 다이제스트'), findsOneWidget);
-    expect(find.textContaining('평소 변동 범위'), findsOneWidget);
+    expect(find.text('최근 한 달 다이제스트'), findsOneWidget);
+    expect(find.text('기여도 알림'), findsOneWidget);
+    expect(find.text('시장 변동성 경고'), findsOneWidget);
+    expect(find.text('이번 주 다이제스트'), findsNothing);
     expect(
         find.byKey(const Key('portfolio_issue_timeline_rail')), findsOneWidget);
     expect(find.byKey(const ValueKey('portfolio_issue_timeline_node_0')),

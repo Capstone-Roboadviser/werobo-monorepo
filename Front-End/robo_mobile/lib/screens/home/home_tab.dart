@@ -385,10 +385,12 @@ class _HomeIssueFeedDataSource {
       );
     }
 
+    final usePlaceholderDigest = liveDigest == null || !liveDigest.available;
+
     return _HomeIssueFeedData(
-      digest: liveDigest ?? _placeholderDigest,
+      digest: usePlaceholderDigest ? _placeholderDigest : liveDigest,
       latestInsight: liveInsight ?? _placeholderInsight,
-      usesPlaceholderDigest: liveDigest == null,
+      usesPlaceholderDigest: usePlaceholderDigest,
       usesPlaceholderInsight: liveInsight == null,
     );
   }
