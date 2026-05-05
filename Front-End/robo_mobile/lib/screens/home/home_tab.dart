@@ -484,7 +484,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   ({
     double x,
     double y,
-    String dateLabel,
     double portfolioPct,
     double? marketPct,
     List<({String name, double pct})> assetRows,
@@ -582,23 +581,64 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         .clamp(padX, stackWidth - cardWidth - padX)
         .toDouble();
 
-    // Approximate y of the orange dot using % of chart height.
-    // Without exposing painter internals, place card at top by default and
-    // flip to bottom if the touch is in the upper third of the chart.
-    final firstVal = valuePts.first.value;
-    final lastVal = valuePts.last.value;
-    final spread = (lastVal - firstVal).abs();
-    final touchPct = spread > 0 ? (curr - firstVal) / spread : 0.0;
-    final dotInUpperThird = touchPct < 0.33;
-    final y = dotInUpperThird ? 220.0 : 50.0;
+    // Compute the actual portfolio dot Y using the painter's range math
+    // (global min/max across all 4 line series + 5% padding) so the card
+    // can be positioned with real awareness of where the orange line is.
+    final portfolioPctSeries = _pctSeries(valuePts);
+    final marketPts = _marketSeries(valuePts);
+    final expectedPts = _expectedReturnEndpoints(valuePts);
+    final bondPts = _bondEndpoints(valuePts);
+    double minY = double.infinity;
+    double maxY = double.negativeInfinity;
+    void scan(List<ChartPoint> pts) {
+      for (final p in pts) {
+        if (p.value < minY) minY = p.value;
+        if (p.value > maxY) maxY = p.value;
+      }
+    }
+    scan(portfolioPctSeries);
+    scan(marketPts);
+    scan(expectedPts);
+    scan(bondPts);
+    if (minY == double.infinity) {
+      minY = 0;
+      maxY = 0;
+    }
+    final yRange = (maxY - minY).clamp(0.0001, double.infinity);
+    final paddedMin = minY - yRange * 0.05;
+    final paddedMax = maxY + yRange * 0.05;
+    final paddedRange = paddedMax - paddedMin;
+    const graphTopPad = 36.0;
+    const graphBotPad = 50.0;
+    const chartTotalH = 320.0;
+    const chartH = chartTotalH - graphTopPad - graphBotPad;
+    final currPctValue =
+        ti < portfolioPctSeries.length ? portfolioPctSeries[ti].value : 0.0;
+    final dotY = graphTopPad +
+        chartH -
+        ((currPctValue - paddedMin) / paddedRange) * chartH;
 
-    final date = valuePts[ti].date;
-    final dateLabel = '${date.month}월 ${date.day}일';
+    // Place the card on the side of the dot with more room, with a 24px
+    // breathing margin so the card never sits ON or NEAR the orange line.
+    const cardHeight = _DragContextCard.height;
+    const margin = 24.0;
+    const padY = 8.0;
+    final spaceAbove = dotY - padY;
+    final spaceBelow = chartTotalH - dotY - padY;
+    double y;
+    if (spaceAbove >= cardHeight + margin) {
+      y = dotY - margin - cardHeight;
+    } else if (spaceBelow >= cardHeight + margin) {
+      y = dotY + margin;
+    } else {
+      // Tight on both sides — pick the larger gap and clamp.
+      y = spaceAbove > spaceBelow ? padY : chartTotalH - cardHeight - padY;
+    }
+    y = y.clamp(padY, chartTotalH - cardHeight - padY).toDouble();
 
     return (
       x: x,
       y: y,
-      dateLabel: dateLabel,
       portfolioPct: portfolioPct,
       marketPct: marketPct,
       assetRows: assetRows,
@@ -833,7 +873,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                       left: cardData.x,
                       top: cardData.y,
                       child: _DragContextCard(
-                        dateLabel: cardData.dateLabel,
                         portfolioPct: cardData.portfolioPct,
                         marketPct: cardData.marketPct,
                         assetRows: cardData.assetRows,
@@ -1392,56 +1431,52 @@ class _ChartLegend extends StatelessWidget {
 // ─── Drag context card ────────────────────────────────────────
 
 class _DragContextCard extends StatelessWidget {
-  final String dateLabel;
   final double portfolioPct;
   final double? marketPct;
   final List<({String name, double pct})> assetRows;
 
   const _DragContextCard({
-    required this.dateLabel,
     required this.portfolioPct,
     required this.marketPct,
     required this.assetRows,
   });
 
-  /// Fixed width keeps the card's `Spacer` rows bounded inside Positioned
-  /// (which provides loose constraints) and matches the `cardWidth`
-  /// constant used by `_buildCardData` for clamp math.
-  static const double width = 160.0;
+  /// Fixed dimensions match the constants used by `_buildCardData` for
+  /// clamp math and gap-from-line placement. Width also bounds the
+  /// row's Expanded label inside Positioned (loose constraints).
+  static const double width = 150.0;
+  static const double height = 92.0;
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    return Container(
-      width: width,
-      decoration: BoxDecoration(
-        color: tc.surface.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: tc.border.withValues(alpha: 0.6),
-          width: 0.5,
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            dateLabel,
-            style: WeRoboTypography.caption.copyWith(
-              color: tc.textTertiary,
-              fontSize: 10,
-            ),
+    // Frosted-glass annotation. The BackdropFilter blurs the chart lines
+    // visible behind the card so they read as soft ghosts — the card
+    // never opaquely blocks them, while still giving the numbers enough
+    // contrast to scan. No explicit border: the blur edge + alpha
+    // surface implies the boundary without adding chrome.
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          width: width,
+          height: height,
+          color: tc.surface.withValues(alpha: 0.62),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DragContextRow(label: '포트폴리오', pct: portfolioPct),
+              if (marketPct != null)
+                _DragContextRow(label: '시장', pct: marketPct!),
+              if (assetRows.isNotEmpty) const SizedBox(height: 4),
+              for (final row in assetRows)
+                _DragContextRow(label: row.name, pct: row.pct),
+            ],
           ),
-          const SizedBox(height: 4),
-          _DragContextRow(label: '포트폴리오', pct: portfolioPct),
-          if (marketPct != null)
-            _DragContextRow(label: '시장', pct: marketPct!),
-          if (assetRows.isNotEmpty) const SizedBox(height: 6),
-          for (final row in assetRows)
-            _DragContextRow(label: row.name, pct: row.pct),
-        ],
+        ),
       ),
     );
   }
