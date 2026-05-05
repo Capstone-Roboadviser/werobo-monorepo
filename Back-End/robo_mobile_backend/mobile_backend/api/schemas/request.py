@@ -123,6 +123,82 @@ class ComparisonBacktestRequest(CalculationContextRequest):
         return self
 
 
+class SectorAllocationRequest(BaseModel):
+    asset_code: str = Field(..., min_length=1, description="자산군 코드")
+    asset_name: str = Field(..., min_length=1, description="자산군 이름")
+    weight: float = Field(..., ge=0, description="포트폴리오 내 자산군 비중")
+    risk_contribution: float = Field(default=0, ge=0, description="전체 변동성 대비 위험기여도")
+
+    @field_validator("asset_code", "asset_name")
+    @classmethod
+    def strip_sector_text_fields(cls, value: str) -> str:
+        return value.strip()
+
+
+class StockAllocationRequest(BaseModel):
+    ticker: str = Field(..., min_length=1, description="종목 티커")
+    name: str = Field(..., min_length=1, description="종목명")
+    sector_code: str = Field(..., min_length=1, description="소속 자산군 코드")
+    sector_name: str = Field(..., min_length=1, description="소속 자산군 이름")
+    weight: float = Field(..., ge=0, description="포트폴리오 내 개별 종목 비중")
+
+    @field_validator("ticker", "name", "sector_code", "sector_name")
+    @classmethod
+    def strip_stock_text_fields(cls, value: str) -> str:
+        return value.strip()
+
+
+class PortfolioAccountCreateRequest(BaseModel):
+    data_source: SimulationDataSource = Field(
+        default=SimulationDataSource.MANAGED_UNIVERSE,
+        description="계정 스냅샷 계산에 사용할 종목 유니버스",
+    )
+    investment_horizon: InvestmentHorizon = Field(
+        default=InvestmentHorizon.MEDIUM,
+        description="포트폴리오 계산에 사용한 투자 기간",
+    )
+    portfolio_code: str = Field(..., min_length=1, description="확정 포트폴리오 코드")
+    portfolio_label: str = Field(..., min_length=1, description="확정 포트폴리오 표시 이름")
+    portfolio_id: str = Field(..., min_length=1, description="확정 포트폴리오 식별자")
+    target_volatility: float = Field(
+        ...,
+        ge=TARGET_VOLATILITY_MIN,
+        le=TARGET_VOLATILITY_MAX,
+        description="확정 당시 목표 변동성",
+    )
+    expected_return: float = Field(..., description="확정 당시 연 기대수익률")
+    volatility: float = Field(..., ge=0, description="확정 당시 연 변동성")
+    sharpe_ratio: float = Field(..., description="확정 당시 샤프 비율")
+    initial_cash_amount: float = Field(..., gt=0, description="초기 입금액")
+    sector_allocations: list[SectorAllocationRequest] = Field(
+        default_factory=list,
+        description="자산군별 비중",
+    )
+    stock_allocations: list[StockAllocationRequest] = Field(
+        default_factory=list,
+        description="종목별 비중",
+    )
+    started_at: date | None = Field(
+        default=None,
+        description="자산 추적 시작일. 비우면 서버의 현재 날짜를 사용합니다.",
+    )
+
+    @field_validator("portfolio_code", "portfolio_label", "portfolio_id")
+    @classmethod
+    def strip_portfolio_text_fields(cls, value: str) -> str:
+        return value.strip()
+
+    @model_validator(mode="after")
+    def validate_allocations(self) -> "PortfolioAccountCreateRequest":
+        if not self.stock_allocations:
+            raise ValueError("stock_allocations는 비어 있을 수 없습니다.")
+        return self
+
+
+class PortfolioAccountCashInRequest(BaseModel):
+    amount: float = Field(..., gt=0, description="입금액")
+
+
 class SignupRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=40, description="사용자 이름")
     email: str = Field(..., description="로그인에 사용할 이메일")
