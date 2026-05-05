@@ -610,13 +610,20 @@ class PortfolioState extends ChangeNotifier {
     double baseInvestment = 10000000,
   }) {
     if (_backtest == null) return const [];
-    final code = _type.riskCode;
     MobileComparisonLine? line;
-    for (final l in _backtest!.lines) {
-      if (l.key == code) {
-        line = l;
-        break;
+    final preferredKeys = <String>[
+      if (_frontierSelection != null) 'selected',
+      _type.riskCode,
+      'selected',
+    ];
+    for (final key in preferredKeys.toSet()) {
+      for (final l in _backtest!.lines) {
+        if (l.key == key) {
+          line = l;
+          break;
+        }
       }
+      if (line != null) break;
     }
     if (line == null || line.points.isEmpty) return const [];
     return line.points

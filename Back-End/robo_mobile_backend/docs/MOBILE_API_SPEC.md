@@ -19,7 +19,6 @@
 - 인증:
   - 회원가입/로그인 자체는 인증 없이 호출합니다.
   - `GET /api/v1/auth/me`는 `Authorization: Bearer <token>` 헤더가 필요합니다.
-  - `/api/v1/account/*`는 `Authorization: Bearer <token>` 헤더가 필요합니다.
 - 날짜 형식: `YYYY-MM-DD`
 - 비율 값:
   - `propensity_score`는 `0`부터 `100` 사이 점수입니다.
@@ -29,18 +28,8 @@
 ## Materialized Snapshot 규칙
 
 - `data_source=managed_universe`일 때 recommendation/preview/selection API는 active 유니버스의 materialized frontier snapshot을 먼저 조회합니다.
-- 같은 조건에서 `comparison-backtest` API는 active 유니버스의 materialized comparison backtest snapshot을 먼저 조회합니다.
 - snapshot은 관리자 `가격 갱신 실행` 후 자동 재생성됩니다.
-- 따라서 `managed_universe` 응답은 마지막 성공한 관리자 refresh 시점의 가격 구간을 기준으로 재사용될 수 있습니다.
 - snapshot이 없거나 현재 active 버전의 공통 가격 구간과 맞지 않으면, 서버는 기존 계산 경로로 fallback 합니다.
-
-## Portfolio Account Snapshot 규칙
-
-- 프로토타입 자산 계정은 실제 증권 계좌 연동이 아니라 서버 DB에 저장한 입금 이벤트와 종목 비중을 기준으로 계산합니다.
-- 포트폴리오 확정 시 `POST /api/v1/account`로 계정을 생성하면 `portfolio_accounts`, `portfolio_cash_flows`, `portfolio_daily_snapshots`가 채워집니다.
-- 자산 snapshot은 분기말 정기 리밸런싱과 일일 10% drift guard를 함께 적용하는 공용 리밸런싱 엔진으로 계산합니다.
-- `POST /api/v1/account/cash-in`이 호출되면 누적 원금과 리밸런싱 정책을 반영해 일별 자산 snapshot을 다시 계산합니다.
-- `managed_universe` 계정은 관리자 가격 refresh cron이 성공할 때마다 snapshot이 자동 재계산됩니다.
 
 ## Enum 값
 
@@ -111,15 +100,12 @@
 | `POST` | `/api/v1/auth/login` | 이메일 로그인 후 세션 발급 |
 | `GET` | `/api/v1/auth/me` | 현재 로그인 세션 조회 |
 | `POST` | `/api/v1/auth/logout` | 현재 로그인 세션 종료 |
-| `GET` | `/api/v1/account/dashboard` | 현재 로그인 사용자의 자산 계정 요약/히스토리 조회 |
-| `POST` | `/api/v1/account` | 포트폴리오 확정 시 프로토타입 자산 계정 생성 |
-| `POST` | `/api/v1/account/cash-in` | 프로토타입 입금 이벤트 저장 및 스냅샷 재계산 |
 | `POST` | `/api/v1/profile/resolve` | 투자성향 판정 |
-| `POST` | `/api/v1/portfolios/recommendation` | 안정형/균형형/성장형 대표 포트폴리오 3종 조회 |
-| `POST` | `/api/v1/portfolios/frontier-preview` | 드래그용 efficient frontier preview 포인트 조회 |
-| `POST` | `/api/v1/portfolios/frontier-selection` | 선택한 `point_index` 또는 목표 변동성의 상세 포트폴리오 |
-| `POST` | `/api/v1/portfolios/volatility-history` | 대표 분류 또는 exact 종목 비중 기준 변동성 추이 |
-| `POST` | `/api/v1/portfolios/comparison-backtest` | 대표 포트폴리오 분류별 비교 백테스트 |
+| `POST` | `/api/v1/portfolios/recommendation` | 안정형/균형형/성장형 3개 포트폴리오 추천 |
+| `POST` | `/api/v1/portfolios/frontier-preview` | 드래그용 efficient frontier preview 포인트 |
+| `POST` | `/api/v1/portfolios/frontier-selection` | 선택한 목표 변동성에 대응하는 상세 포트폴리오 |
+| `POST` | `/api/v1/portfolios/volatility-history` | 선택 위험유형 포트폴리오의 변동성 추이 |
+| `POST` | `/api/v1/portfolios/comparison-backtest` | 유형별 비교 백테스트 |
 
 ## 1. 이메일 인증
 
@@ -235,138 +221,7 @@ Authorization: Bearer token-string
 }
 ```
 
-## 2. 프로토타입 자산 계정
-
-### `GET /api/v1/account/dashboard`
-
-설명:
-
-- 현재 로그인 사용자의 자산 계정 상태를 조회합니다.
-- 홈 화면 `현재 자산` 차트, 최근 활동, 누적 원금 표시에 필요한 데이터를 한 번에 반환합니다.
-
-응답 예시:
-
-```json
-{
-  "has_account": true,
-  "summary": {
-    "portfolio_code": "balanced",
-    "portfolio_label": "균형형",
-    "portfolio_id": "stocks-balanced-medium-0.12",
-    "data_source": "managed_universe",
-    "investment_horizon": "medium",
-    "started_at": "2026-04-13",
-    "last_snapshot_date": "2026-04-14",
-    "current_value": 10325000,
-    "invested_amount": 10000000,
-    "profit_loss": 325000,
-    "profit_loss_pct": 0.0325
-  },
-  "history": [
-    {
-      "date": "2026-04-13",
-      "portfolio_value": 10000000,
-      "invested_amount": 10000000,
-      "profit_loss": 0,
-      "profit_loss_pct": 0.0
-    }
-  ],
-  "recent_activity": [
-    {
-      "type": "cash_in",
-      "title": "입금",
-      "date": "2026-04-14",
-      "amount": 500000,
-      "description": null
-    }
-  ]
-}
-```
-
-에러:
-
-- `401`: 헤더 없음, 형식 오류, 만료/무효 토큰
-- `503`: 자산 계정 저장소 미구성
-
-### `POST /api/v1/account`
-
-설명:
-
-- 포트폴리오 확정 시점의 종목 비중과 초기 입금 금액을 저장하고 프로토타입 자산 계정을 생성합니다.
-- 같은 사용자에 대해 다시 호출되면 기존 계정을 교체합니다.
-- exact frontier selection을 사용하는 경우에는 `/portfolios/frontier-selection` 응답의 `portfolio`를 그대로 넘기고, 분류값이 필요하면 `representative_code`/`representative_label`을 `portfolio_code`/`portfolio_label`에 매핑하면 됩니다.
-
-요청 예시:
-
-```json
-{
-  "data_source": "managed_universe",
-  "investment_horizon": "medium",
-  "portfolio_code": "balanced",
-  "portfolio_label": "균형형",
-  "portfolio_id": "stocks-balanced-medium-0.12",
-  "target_volatility": 0.12,
-  "expected_return": 0.08,
-  "volatility": 0.11,
-  "sharpe_ratio": 0.72,
-  "initial_cash_amount": 10000000,
-  "sector_allocations": [
-    {
-      "asset_code": "us_growth",
-      "asset_name": "미국 성장주",
-      "weight": 0.3,
-      "risk_contribution": 0.42
-    }
-  ],
-  "stock_allocations": [
-    {
-      "ticker": "QQQ",
-      "name": "Invesco QQQ Trust",
-      "sector_code": "us_growth",
-      "sector_name": "미국 성장주",
-      "weight": 0.15
-    }
-  ]
-}
-```
-
-응답 형식:
-
-- `GET /api/v1/account/dashboard`와 동일
-
-에러:
-
-- `400`: 초기 입금 금액, 종목 비중 등 입력값 오류
-- `401`: 헤더 없음, 형식 오류, 만료/무효 토큰
-- `503`: 자산 계정 저장소 미구성
-
-### `POST /api/v1/account/cash-in`
-
-설명:
-
-- 실제 결제/계좌 연동 없이 프로토타입 입금 이벤트를 저장합니다.
-- 서버는 입금 후 전체 일별 snapshot을 다시 계산해 최신 자산 곡선을 반환합니다.
-
-요청 예시:
-
-```json
-{
-  "amount": 500000
-}
-```
-
-응답 형식:
-
-- `GET /api/v1/account/dashboard`와 동일
-
-에러:
-
-- `400`: 입금 금액 오류
-- `401`: 헤더 없음, 형식 오류, 만료/무효 토큰
-- `404`: 아직 포트폴리오 계정이 없음
-- `503`: 자산 계정 저장소 미구성
-
-## 3. 투자성향 판정
+## 2. 투자성향 판정
 
 ### `POST /api/v1/profile/resolve`
 
@@ -399,7 +254,7 @@ Authorization: Bearer token-string
 }
 ```
 
-## 4. 대표 포트폴리오 추천
+## 3. 대표 포트폴리오 추천
 
 ### `POST /api/v1/portfolios/recommendation`
 
@@ -408,7 +263,6 @@ Authorization: Bearer token-string
 - 안정형, 균형형, 성장형 3개 포트폴리오를 한 번에 반환합니다.
 - `recommended_portfolio_code`는 현재 사용자가 우선 노출받아야 할 유형입니다.
 - 각 포트폴리오에는 자산군 비중과 종목 비중이 함께 포함됩니다.
-- 현재 모바일 온보딩의 주 흐름은 `frontier-preview` + `frontier-selection` 기반 exact selection이며, 이 endpoint는 대표 3종 요약 카드나 fallback 용도로 유지합니다.
 
 요청 예시:
 
@@ -435,9 +289,9 @@ Authorization: Bearer token-string
 - `sector_allocations`: 자산군별 비중과 위험기여도
 - `stock_allocations`: 종목별 비중
 
-대표 포트폴리오 3개는 내부 efficient frontier 전체 포인트 중 대표 지점만 잘라낸 결과입니다. exact 포트폴리오 선택이 필요하면 `frontier-preview`와 `frontier-selection`을 함께 사용해야 합니다.
+대표 포트폴리오 3개는 내부 efficient frontier 전체 포인트 중 대표 지점만 잘라낸 결과입니다. 모바일 UX를 단순하게 유지하기 위해 전체 frontier를 한 번에 모두 내려주지 않습니다.
 
-## 5. 드래그용 frontier preview
+## 4. 드래그용 frontier preview
 
 ### `POST /api/v1/portfolios/frontier-preview`
 
@@ -447,7 +301,6 @@ Authorization: Bearer token-string
 - 내부적으로는 전체 frontier 포인트를 계산하지만, 응답에는 모바일 차트에 필요한 sample point만 내려줍니다.
 - 대표 3개 포트폴리오에 해당하는 포인트는 sample에서 빠지지 않도록 항상 포함됩니다.
 - `resolved_profile`은 추천 지점을 알려주고, `points[]`는 드래그 가능한 전체 미리보기 점 목록을 제공합니다.
-- `sample_points`는 `3`부터 `1000`까지 허용되며, 충분히 크게 주면 전체 frontier에 가까운 포인트 집합을 받을 수 있습니다.
 
 요청 예시:
 
@@ -456,7 +309,7 @@ Authorization: Bearer token-string
   "propensity_score": 45,
   "investment_horizon": "medium",
   "data_source": "managed_universe",
-  "sample_points": 301
+  "sample_points": 61
 }
 ```
 
@@ -468,7 +321,6 @@ Authorization: Bearer token-string
 - `total_point_count`: 내부에서 실제 계산한 전체 frontier 포인트 수
 - `min_volatility`, `max_volatility`: 차트 축 범위 계산용 힌트
 - `points[]`: 다운샘플된 preview 포인트
-- `points[]`는 `sample_points`가 전체 포인트 수보다 크거나 같으면 사실상 full frontier 목록이 됩니다.
 
 `points[]` 항목:
 
@@ -481,20 +333,18 @@ Authorization: Bearer token-string
 운영 메모:
 
 - 모바일은 이 응답을 앱 메모리에 들고 있다가, 사용자가 점을 옮길 때마다 위험도와 기대수익률 라벨을 즉시 갱신하면 됩니다.
-- 현재 앱 온보딩은 첫 호출부터 `sample_points=301`로 요청해 preview를 메모리/로컬 bootstrap 상태에 유지하고, 이후 선택 확정 시 `selected_point_index`를 그대로 넘깁니다.
 - 사용자가 최종 위치를 확정한 뒤에만 상세 포트폴리오 API를 호출하는 구조를 권장합니다.
 - `managed_universe`에서는 가능한 한 materialized snapshot을 재사용하므로, 첫 호출 성능은 admin refresh 완료 여부에 크게 영향을 받습니다.
 
-## 6. 선택 frontier 포트폴리오 상세
+## 5. 선택 frontier 포트폴리오 상세
 
 ### `POST /api/v1/portfolios/frontier-selection`
 
 설명:
 
-- 사용자가 preview 차트에서 선택한 `point_index` 또는 `target_volatility`를 기준으로, 가장 가까운 frontier 포인트의 실제 포트폴리오 상세를 반환합니다.
+- 사용자가 preview 차트에서 선택한 `target_volatility`를 기준으로, 가장 가까운 frontier 포인트의 실제 포트폴리오 상세를 반환합니다.
 - 드래그 중에는 preview만 사용하고, 손을 떼거나 확정 버튼을 누를 때 이 API를 호출하는 용도입니다.
 - `managed_universe` 요청에서는 저장된 per-point snapshot이 있으면 종목 비중/자산군 비중까지 재계산 없이 바로 반환합니다.
-- `point_index`를 보내면 preview에서 보던 포인트를 그대로 복원할 수 있어, 축 보정 오차 없이 exact selection을 이어붙이기 쉽습니다.
 
 요청 예시:
 
@@ -503,7 +353,7 @@ Authorization: Bearer token-string
   "propensity_score": 45,
   "investment_horizon": "medium",
   "data_source": "managed_universe",
-  "point_index": 37
+  "target_volatility": 0.108
 }
 ```
 
@@ -511,22 +361,21 @@ Authorization: Bearer token-string
 
 - `resolved_profile`
 - `data_source`
-- `requested_target_volatility`: 앱이 보낸 목표 변동성. `point_index`만 보낸 경우 선택된 포인트 변동성과 동일하게 채워집니다.
+- `requested_target_volatility`
 - `selected_target_volatility`: 실제 매칭된 frontier 포인트의 변동성
 - `selected_point_index`
 - `representative_code`, `representative_label`: 가장 가까운 대표 포트폴리오 분류
-- `portfolio`: 사용자가 선택한 상세 포트폴리오. 이 객체의 `code`/`label`은 exact selection 자체를 의미하는 값일 수 있으므로, 대표 분류가 필요하면 `representative_code`/`representative_label`을 함께 사용합니다.
+- `portfolio`: 사용자가 선택한 상세 포트폴리오
 
 `portfolio` 구조는 `/portfolios/recommendation`의 각 포트폴리오 항목과 동일합니다.
 
-## 7. 포트폴리오 변동성 추이
+## 6. 포트폴리오 변동성 추이
 
 ### `POST /api/v1/portfolios/volatility-history`
 
 설명:
 
-- 기본적으로는 사용자의 위험 유형에 대응하는 대표 포트폴리오를 기준으로 과거 실현 변동성 추이를 계산합니다.
-- `stock_weights`를 함께 보내면 대표 포트폴리오 대신 exact 선택 포트폴리오의 종목 비중으로 변동성 추이를 계산합니다.
+- 사용자의 위험 유형에 대응하는 대표 포트폴리오를 기준으로 과거 실현 변동성 추이를 계산합니다.
 - `rolling_window`는 거래일 기준 롤링 윈도우입니다.
 
 요청 예시:
@@ -536,12 +385,7 @@ Authorization: Bearer token-string
   "risk_profile": "balanced",
   "investment_horizon": "medium",
   "data_source": "managed_universe",
-  "rolling_window": 20,
-  "stock_weights": {
-    "QQQ": 0.18,
-    "IEF": 0.22,
-    "GLD": 0.10
-  }
+  "rolling_window": 20
 }
 ```
 
@@ -553,14 +397,13 @@ Authorization: Bearer token-string
 - `earliest_data_date`
 - `latest_data_date`
 - `points[]`
-- `benchmark_points[]`: 동일 기간 7자산 동일비중 benchmark 변동성 추이
 
 `points[]` 항목:
 
 - `date`
 - `volatility`
 
-## 8. 유형별 비교 백테스트
+## 6. 유형별 비교 백테스트
 
 ### `POST /api/v1/portfolios/comparison-backtest`
 
@@ -568,9 +411,6 @@ Authorization: Bearer token-string
 
 - 안정형, 균형형, 성장형 대표 포트폴리오와 벤치마크를 같은 기간에서 비교합니다.
 - 학습 구간과 테스트 구간 분할 정보가 함께 반환됩니다.
-- `managed_universe`에서는 관리자 refresh 때 미리 계산해 둔 comparison backtest snapshot을 우선 재사용합니다.
-- 비교선의 리밸런싱 정책은 분기말 정기 리밸런싱 + 일일 10% drift guard 기준으로 계산됩니다.
-- 이 endpoint는 아직 대표 3분류 기준 비교선에 초점을 맞추며, exact selection 1개를 별도 라인으로 추가해 주지는 않습니다.
 
 요청 예시:
 
@@ -588,14 +428,7 @@ Authorization: Bearer token-string
 - `start_date`
 - `end_date`
 - `split_ratio`
-- `rebalance_policy`
-  - `strategy`
-  - `scheduled_rebalance_frequency`
-  - `force_rebalance_on_schedule`
-  - `drift_check_frequency`
-  - `drift_threshold`
 - `rebalance_dates`
-  - 분기말 정기 리밸런싱과 일일 drift guard 중 실제 조정이 발생한 날짜 목록
 - `lines[]`
 
 `lines[]` 항목:
@@ -605,13 +438,6 @@ Authorization: Bearer token-string
 - `color`
 - `style`
 - `points[]`
-
-주요 `key` 예시:
-
-- `conservative`, `balanced`, `growth`: 대표 포트폴리오 실현 백테스트
-- `conservative_expected`, `balanced_expected`, `growth_expected`: 대표 포트폴리오 기대수익 경로
-- `benchmark_avg`: 7개 자산군을 동일비중으로 평균한 비교선
-- `treasury`: 고정 연수익률 기준의 직선형 채권 비교선
 
 ## 구현 메모
 

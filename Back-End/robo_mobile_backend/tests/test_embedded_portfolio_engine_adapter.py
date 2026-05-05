@@ -174,15 +174,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
 
         self.assertEqual(call_count, 1)
         self.assertEqual(response["recommended_portfolio_code"], "balanced")
-        self.assertEqual(len(response["portfolios"]), 3)
-        self.assertEqual(
-            [portfolio["code"] for portfolio in response["portfolios"]],
-            ["conservative", "balanced", "growth"],
-        )
-        self.assertEqual(
-            [portfolio["target_volatility"] for portfolio in response["portfolios"]],
-            [0.08, 0.12, 0.16],
-        )
+        self.assertEqual(response["portfolios"], [])
 
     def test_build_frontier_preview_keeps_representative_points(self) -> None:
         adapter, _ = self._build_fake_adapter()
@@ -315,10 +307,7 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         )
 
         self.assertEqual(response["recommended_portfolio_code"], "balanced")
-        self.assertEqual(
-            [portfolio["code"] for portfolio in response["portfolios"]],
-            ["conservative", "balanced", "growth"],
-        )
+        self.assertEqual(response["portfolios"], [])
 
     def test_build_frontier_selection_uses_materialized_snapshot_when_available(self) -> None:
         adapter, _ = self._build_fake_adapter()

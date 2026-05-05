@@ -115,7 +115,7 @@ class MobileBackendApi {
           body['target_volatility'] = targetVolatility;
         }
         if (pointIndex != null) {
-          body['point_index'] = pointIndex;
+          body['selected_point_index'] = pointIndex;
         }
         if (asOfDate != null) {
           body['as_of_date'] = _formatDate(asOfDate);
@@ -133,6 +133,8 @@ class MobileBackendApi {
     String investmentHorizon = 'medium',
     int rollingWindow = 20,
     Map<String, double>? stockWeights,
+    int? selectedPointIndex,
+    double? targetVolatility,
     String? preferredDataSource,
   }) {
     return _postWithFallback(
@@ -146,6 +148,12 @@ class MobileBackendApi {
         };
         if (stockWeights != null && stockWeights.isNotEmpty) {
           body['stock_weights'] = stockWeights;
+        }
+        if (selectedPointIndex != null) {
+          body['selected_point_index'] = selectedPointIndex;
+        }
+        if (targetVolatility != null) {
+          body['target_volatility'] = targetVolatility;
         }
         return body;
       },
@@ -211,6 +219,9 @@ class MobileBackendApi {
 
   Future<MobileComparisonBacktestResponse> fetchComparisonBacktest({
     String? preferredDataSource,
+    String investmentHorizon = 'medium',
+    int? selectedPointIndex,
+    double? targetVolatility,
     Map<String, double>? stockWeights,
     String? portfolioCode,
     DateTime? startDate,
@@ -219,6 +230,10 @@ class MobileBackendApi {
       path: '/portfolios/comparison-backtest',
       bodyForDataSource: (dataSource) => <String, dynamic>{
         'data_source': dataSource,
+        'investment_horizon': investmentHorizon,
+        if (selectedPointIndex != null)
+          'selected_point_index': selectedPointIndex,
+        if (targetVolatility != null) 'target_volatility': targetVolatility,
         if (stockWeights != null) 'stock_weights': stockWeights,
         if (portfolioCode != null && portfolioCode.isNotEmpty)
           'portfolio_code': portfolioCode,

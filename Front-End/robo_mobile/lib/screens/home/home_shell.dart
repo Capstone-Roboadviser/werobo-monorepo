@@ -70,9 +70,15 @@ class _HomeShellState extends State<HomeShell> {
     try {
       final state = PortfolioStateProvider.of(context);
       final portfolio = state.selectedPortfolio;
+      final selection = state.frontierSelection;
       final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
         preferredDataSource: state.frontierSelection?.dataSource ??
             state.accountSummary?.dataSource,
+        investmentHorizon: selection?.resolvedProfile.investmentHorizon ??
+            state.accountSummary?.investmentHorizon ??
+            'medium',
+        selectedPointIndex: selection?.selectedPointIndex,
+        targetVolatility: selection?.selectedTargetVolatility,
         stockWeights: portfolio?.stockWeights,
         portfolioCode: portfolio?.code,
         startDate: DateTime.tryParse(state.accountSummary?.startedAt ?? ''),

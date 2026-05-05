@@ -13,7 +13,6 @@ app = FastAPI(
     description=APP_DESCRIPTION,
     version=APP_VERSION,
     openapi_tags=[
-        {"name": "account", "description": "프로토타입 자산 계정과 입금 이벤트 API"},
         {"name": "admin", "description": "유니버스와 가격 데이터를 관리하는 간단한 관리자 API"},
         {"name": "auth", "description": "모바일 앱 직접 회원가입/로그인 API"},
         {"name": "system", "description": "시스템 상태 확인용 엔드포인트"},

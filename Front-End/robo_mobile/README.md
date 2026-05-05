@@ -6,8 +6,8 @@ Flutter 기반 WeRobo 모바일 앱입니다.
 
 - 온보딩 1/2: 서비스 소개
 - 온보딩 2/2: efficient frontier 차트에서 위험도와 기대수익률 preview
-- 로딩: 선택한 preview point의 exact frontier selection 요청
-- 결과/비교/확정: exact 선택 포트폴리오 확인 후 홈 진입
+- 로딩: 대표 포트폴리오 추천 요청
+- 결과/비교/확정: 추천 포트폴리오 확인 후 홈 진입
 
 ## 백엔드 연동
 
@@ -18,7 +18,7 @@ Flutter 기반 WeRobo 모바일 앱입니다.
 - frontier selection API: `/api/v1/portfolios/frontier-selection`
 - 비교 백테스트 API: `/api/v1/portfolios/comparison-backtest`
 
-현재 온보딩 2/2 차트는 `frontier-preview` 응답을 사용해 위험도와 기대수익률 라벨을 실제 backend preview point와 맞춰서 표시합니다. 앱은 기본적으로 `sample_points=301`으로 preview를 받아 두고, 사용자가 확정한 `selected_point_index`를 `frontier-selection`에 전달해 exact 포트폴리오를 이어받습니다.
+현재 온보딩 2/2 차트는 `frontier-preview` 응답을 사용해 위험도와 기대수익률 라벨을 실제 backend preview point와 맞춰서 표시합니다.
 
 로그인 화면은 이제 직접 회원가입/로그인도 지원합니다.
 
@@ -27,7 +27,7 @@ Flutter 기반 WeRobo 모바일 앱입니다.
 - 현재 세션 조회 API: `/api/v1/auth/me`
 - 로그아웃 API: `/api/v1/auth/logout`
 - 세션 저장: 앱 로컬 `shared_preferences`
-- 포트폴리오 bootstrap 저장: frontier preview + exact selection 상태를 로컬에 저장
+- 포트폴리오 bootstrap 저장: 추천 결과 + 선택 포트폴리오 상태를 로컬에 저장
 
 자동로그인 규칙:
 

@@ -64,10 +64,10 @@ def resolve_profile(payload: ProfileResolutionRequest) -> ProfileResolutionRespo
 @router.post(
     "/portfolios/recommendation",
     response_model=RecommendationResponse,
-    summary="대표 포트폴리오 추천",
+    summary="투자성향 메타데이터 조회",
     description=(
-        "모바일 앱이 바로 사용할 수 있도록 안정형, 균형형, 성장형 3개 대표 포트폴리오와 "
-        "사용자에게 매핑된 추천 유형을 한 번에 반환합니다."
+        "연속형 frontier 선택 흐름에서 필요한 사용자 성향 메타데이터를 반환합니다. "
+        "상세 포트폴리오는 frontier-selection 응답을 사용합니다."
     ),
     responses=COMMON_ERROR_RESPONSES,
 )
@@ -78,7 +78,6 @@ def get_recommendation(payload: RecommendationRequest) -> RecommendationResponse
             explicit_profile=payload.risk_profile,
             investment_horizon=payload.investment_horizon,
             data_source=payload.data_source,
-            as_of_date=payload.as_of_date,
         )
         return RecommendationResponse(**response)
     except Exception as exc:
@@ -103,7 +102,6 @@ def get_frontier_preview(payload: FrontierPreviewRequest) -> FrontierPreviewResp
             investment_horizon=payload.investment_horizon,
             data_source=payload.data_source,
             sample_points=payload.sample_points,
-            as_of_date=payload.as_of_date,
         )
         return FrontierPreviewResponse(**response)
     except Exception as exc:
@@ -114,7 +112,7 @@ def get_frontier_preview(payload: FrontierPreviewRequest) -> FrontierPreviewResp
     "/portfolios/frontier-selection",
     response_model=FrontierSelectionResponse,
     summary="선택 frontier 포트폴리오 상세",
-    description="사용자가 차트에서 선택한 point_index 또는 목표 변동성에 해당하는 frontier 포인트의 상세 포트폴리오를 반환합니다.",
+    description="사용자가 차트에서 놓은 목표 변동성을 기준으로 가장 가까운 frontier 포인트의 상세 포트폴리오를 반환합니다.",
     responses=COMMON_ERROR_RESPONSES,
 )
 def get_frontier_selection(payload: FrontierSelectionRequest) -> FrontierSelectionResponse:
@@ -125,8 +123,7 @@ def get_frontier_selection(payload: FrontierSelectionRequest) -> FrontierSelecti
             investment_horizon=payload.investment_horizon,
             data_source=payload.data_source,
             target_volatility=payload.target_volatility,
-            point_index=payload.point_index,
-            as_of_date=payload.as_of_date,
+            selected_point_index=payload.selected_point_index,
         )
         return FrontierSelectionResponse(**response)
     except Exception as exc:
@@ -137,7 +134,7 @@ def get_frontier_selection(payload: FrontierSelectionRequest) -> FrontierSelecti
     "/portfolios/volatility-history",
     response_model=VolatilityHistoryResponse,
     summary="포트폴리오 변동성 추이",
-    description="선택된 대표 포트폴리오 또는 전달된 종목 비중 기준으로 과거 실현 변동성 추이를 반환합니다.",
+    description="선택된 위험유형의 대표 포트폴리오에 대해 과거 실현 변동성 추이를 반환합니다.",
     responses=COMMON_ERROR_RESPONSES,
 )
 def get_volatility_history(payload: VolatilityHistoryRequest) -> VolatilityHistoryResponse:
@@ -149,6 +146,8 @@ def get_volatility_history(payload: VolatilityHistoryRequest) -> VolatilityHisto
             data_source=payload.data_source,
             rolling_window=payload.rolling_window,
             stock_weights=payload.stock_weights,
+            target_volatility=payload.target_volatility,
+            selected_point_index=payload.selected_point_index,
         )
         return VolatilityHistoryResponse(**response)
     except Exception as exc:
@@ -158,8 +157,8 @@ def get_volatility_history(payload: VolatilityHistoryRequest) -> VolatilityHisto
 @router.post(
     "/portfolios/comparison-backtest",
     response_model=ComparisonBacktestResponse,
-    summary="포트폴리오 유형별 성과 비교",
-    description="안정형, 균형형, 성장형 대표 포트폴리오와 벤치마크의 비교 백테스트 결과를 반환합니다.",
+    summary="선택 frontier 포인트 성과 비교",
+    description="사용자가 선택한 frontier 포인트와 벤치마크의 비교 백테스트 결과를 반환합니다.",
     responses=COMMON_ERROR_RESPONSES,
 )
 def get_comparison_backtest(
@@ -168,6 +167,9 @@ def get_comparison_backtest(
     try:
         response = mobile_portfolio_service.build_comparison_backtest(
             data_source=payload.data_source,
+            investment_horizon=payload.investment_horizon,
+            target_volatility=payload.target_volatility,
+            selected_point_index=payload.selected_point_index,
             stock_weights=payload.stock_weights,
             portfolio_code=payload.portfolio_code,
             start_date=None if payload.start_date is None else payload.start_date.isoformat(),

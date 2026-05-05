@@ -70,11 +70,6 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _scheduleNavigation() async {
     final state = PortfolioStateProvider.of(context);
     await state.validateAuthSession();
-    if (state.isLoggedIn) {
-      try {
-        await state.refreshAccountDashboard(notify: false);
-      } catch (_) {}
-    }
     _navigationTimer = Timer(const Duration(milliseconds: 2000), () {
       if (!mounted) {
         return;
@@ -85,7 +80,6 @@ class _SplashScreenState extends State<SplashScreen>
         'target': state.canAutoEnterHome ? 'home' : 'login',
         'loggedIn': state.isLoggedIn,
         'hasPortfolio': state.hasCompletedPortfolioSetup,
-        'hasAccount': state.hasPrototypeAccount,
       });
       Navigator.of(context).pushReplacement(
         WeRoboMotion.fadeRoute(destination),

@@ -98,9 +98,15 @@ class _PortfolioTabState extends State<PortfolioTab> {
     _loadedBacktestSignature = signature;
     try {
       final state = PortfolioStateProvider.of(context);
+      final selection = state.frontierSelection;
       final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
         preferredDataSource: state.frontierSelection?.dataSource ??
             state.accountSummary?.dataSource,
+        investmentHorizon: selection?.resolvedProfile.investmentHorizon ??
+            state.accountSummary?.investmentHorizon ??
+            'medium',
+        selectedPointIndex: selection?.selectedPointIndex,
+        targetVolatility: selection?.selectedTargetVolatility,
         stockWeights: portfolio?.stockWeights,
         portfolioCode: portfolio?.code,
         startDate: DateTime.tryParse(state.accountSummary?.startedAt ?? ''),
@@ -147,6 +153,8 @@ class _PortfolioTabState extends State<PortfolioTab> {
         preferredDataSource:
             selection?.dataSource ?? accountSummary?.dataSource,
         stockWeights: portfolio?.stockWeights,
+        selectedPointIndex: selection?.selectedPointIndex,
+        targetVolatility: selection?.selectedTargetVolatility,
       );
       volPoints = volResponse.points
           .map((p) => ChartPoint(

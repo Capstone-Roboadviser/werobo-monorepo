@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
-
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
 from mobile_backend.integrations.embedded_portfolio_engine import EmbeddedPortfolioEngineAdapter
 from mobile_backend.services.profile_service import ProfileService
@@ -11,6 +9,19 @@ class MobilePortfolioService:
     def __init__(self) -> None:
         self.profile_service = ProfileService()
         self.calculation_adapter = EmbeddedPortfolioEngineAdapter()
+
+    def _resolve_profile_or_default(
+        self,
+        *,
+        propensity_score: float | None,
+        explicit_profile: RiskProfile | None,
+    ) -> RiskProfile:
+        if propensity_score is None and explicit_profile is None:
+            return RiskProfile.BALANCED
+        return self.profile_service.resolve_risk_profile(
+            propensity_score=propensity_score,
+            explicit_profile=explicit_profile,
+        )
 
     def resolve_profile(
         self,
@@ -32,7 +43,6 @@ class MobilePortfolioService:
         explicit_profile: RiskProfile | None,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
-        as_of_date: date | None,
     ) -> dict[str, object]:
         resolved_profile = self.profile_service.resolve_risk_profile(
             propensity_score=propensity_score,
@@ -43,7 +53,6 @@ class MobilePortfolioService:
             investment_horizon=investment_horizon,
             data_source=data_source,
             propensity_score=propensity_score,
-            as_of_date=as_of_date,
         )
 
     def build_frontier_preview(
@@ -53,8 +62,7 @@ class MobilePortfolioService:
         explicit_profile: RiskProfile | None,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
-        sample_points: int,
-        as_of_date: date | None,
+        sample_points: int | None,
     ) -> dict[str, object]:
         resolved_profile = self.profile_service.resolve_risk_profile(
             propensity_score=propensity_score,
@@ -66,7 +74,6 @@ class MobilePortfolioService:
             data_source=data_source,
             propensity_score=propensity_score,
             sample_points=sample_points,
-            as_of_date=as_of_date,
         )
 
     def build_frontier_selection(
@@ -77,10 +84,9 @@ class MobilePortfolioService:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
         target_volatility: float | None,
-        point_index: int | None,
-        as_of_date: date | None,
+        selected_point_index: int | None,
     ) -> dict[str, object]:
-        resolved_profile = self.profile_service.resolve_risk_profile(
+        resolved_profile = self._resolve_profile_or_default(
             propensity_score=propensity_score,
             explicit_profile=explicit_profile,
         )
@@ -90,8 +96,7 @@ class MobilePortfolioService:
             data_source=data_source,
             propensity_score=propensity_score,
             target_volatility=target_volatility,
-            point_index=point_index,
-            as_of_date=as_of_date,
+            selected_point_index=selected_point_index,
         )
 
     def build_volatility_history(
@@ -102,8 +107,21 @@ class MobilePortfolioService:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
         rolling_window: int,
-        stock_weights: dict[str, float] | None,
+        stock_weights: dict[str, float] | None = None,
+        target_volatility: float | None = None,
+        selected_point_index: int | None = None,
     ) -> dict[str, object]:
+        if stock_weights or target_volatility is not None or selected_point_index is not None:
+            return self.calculation_adapter.get_volatility_history(
+                risk_profile=None,
+                investment_horizon=investment_horizon,
+                data_source=data_source,
+                rolling_window=rolling_window,
+                stock_weights=stock_weights,
+                target_volatility=target_volatility,
+                selected_point_index=selected_point_index,
+            )
+
         resolved_profile = self.profile_service.resolve_risk_profile(
             propensity_score=propensity_score,
             explicit_profile=explicit_profile,
@@ -113,19 +131,27 @@ class MobilePortfolioService:
             investment_horizon=investment_horizon,
             data_source=data_source,
             rolling_window=rolling_window,
-            stock_weights=stock_weights,
+            stock_weights=None,
+            target_volatility=None,
+            selected_point_index=None,
         )
 
     def build_comparison_backtest(
         self,
         *,
         data_source: SimulationDataSource,
+        investment_horizon: InvestmentHorizon,
+        target_volatility: float | None,
+        selected_point_index: int | None,
         stock_weights: dict[str, float] | None = None,
         portfolio_code: str | None = None,
         start_date: str | None = None,
     ) -> dict[str, object]:
         return self.calculation_adapter.get_comparison_backtest(
             data_source=data_source,
+            investment_horizon=investment_horizon,
+            target_volatility=target_volatility,
+            selected_point_index=selected_point_index,
             stock_weights=stock_weights,
             portfolio_code=portfolio_code,
             start_date=start_date,
