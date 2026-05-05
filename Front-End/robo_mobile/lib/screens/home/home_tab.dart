@@ -282,11 +282,12 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   late CurvedAnimation _drawCurve;
   late AnimationController _glowCtrl;
   // Benchmark lines (시장 / 채권 / 연 기대수익률) depend on the comparison
-  // backtest fetch in home_shell, which lands after the chart's first
-  // paint. This controller fades them in the moment they first appear so
-  // they don't snap onto the canvas.
-  late AnimationController _benchmarkFadeCtrl;
-  bool _benchmarkFadeStarted = false;
+  // backtest fetch in home_shell, which may land after the chart's first
+  // paint. When that happens we restart `_drawCtrl` from zero so all
+  // four lines draw in left-to-right together in a single pass — instead
+  // of the portfolio animating first and the benchmarks popping in
+  // afterwards. Tracked once-only so the restart never re-fires.
+  bool _benchmarkRedrawDone = false;
   int _range = 4; // 전체
   int? _touchIndex;
 
@@ -321,24 +322,22 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
       duration: const Duration(milliseconds: 1200),
       vsync: this,
     );
-    _benchmarkFadeCtrl = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Trigger the benchmark fade-in the first time the comparison
-    // backtest data arrives. Empty `comparisonLines` → still loading;
-    // non-empty → kick the fade once and never again for this widget.
-    if (!_benchmarkFadeStarted) {
+    // The first time the comparison backtest data arrives, restart the
+    // draw animation from zero so the benchmarks animate in left-to-
+    // right alongside the portfolio in a single unified pass. If the
+    // backtest was already loaded by chart init, the empty-lines branch
+    // never matched and this stays a no-op.
+    if (!_benchmarkRedrawDone) {
       final hasBenchmarks =
           PortfolioStateProvider.of(context).comparisonLines.isNotEmpty;
       if (hasBenchmarks) {
-        _benchmarkFadeStarted = true;
-        _benchmarkFadeCtrl.forward();
+        _benchmarkRedrawDone = true;
+        _drawCtrl.forward(from: 0);
       }
     }
   }
@@ -354,7 +353,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
   @override
   void dispose() {
-    _benchmarkFadeCtrl.dispose();
     _glowCtrl.dispose();
     _drawCurve.dispose();
     _drawCtrl.dispose();
@@ -754,9 +752,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                           setState(() => _touchIndex = null);
                         },
                         child: AnimatedBuilder(
-                          animation: Listenable.merge(
-                            [_drawCurve, _glowCtrl, _benchmarkFadeCtrl],
-                          ),
+                          animation:
+                              Listenable.merge([_drawCurve, _glowCtrl]),
                           builder: (context, _) {
                             // lines[0] is drawn last (on top); benchmarks
                             // are drawn back-to-front by the painter. Cache
@@ -813,7 +810,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                 progress: _drawCurve.value,
                                 touchIndex: _touchIndex,
                                 glowPhase: _glowCtrl.value,
-                                benchmarkOpacity: _benchmarkFadeCtrl.value,
                                 dateLabel: dateLabel,
                                 glowColor: WeRoboColors.assetTier3,
                                 gridColor: tc.border,
@@ -975,10 +971,6 @@ class _HomePerformancePainter extends CustomPainter {
   final double progress;
   final int? touchIndex;
   final double glowPhase;
-  /// Multiplier applied to benchmark line alpha (0..1). Lets the parent
-  /// fade benchmarks in once their data finishes loading without
-  /// disturbing the portfolio line's own draw-in animation.
-  final double benchmarkOpacity;
   final String dateLabel;
   final Color glowColor;
   final Color gridColor;
@@ -989,7 +981,6 @@ class _HomePerformancePainter extends CustomPainter {
     required this.progress,
     this.touchIndex,
     this.glowPhase = 0,
-    this.benchmarkOpacity = 1.0,
     required this.dateLabel,
     required this.glowColor,
     required this.gridColor,
@@ -1156,9 +1147,7 @@ class _HomePerformancePainter extends CustomPainter {
     if (!moved) return;
 
     final paint = Paint()
-      ..color = line.color.withValues(
-        alpha: line.color.a * benchmarkOpacity.clamp(0.0, 1.0),
-      )
+      ..color = line.color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round
@@ -1395,8 +1384,7 @@ class _HomePerformancePainter extends CustomPainter {
   bool shouldRepaint(covariant _HomePerformancePainter old) =>
       old.progress != progress ||
       old.touchIndex != touchIndex ||
-      old.glowPhase != glowPhase ||
-      old.benchmarkOpacity != benchmarkOpacity;
+      old.glowPhase != glowPhase;
   // `lines` is freshly constructed every build (new list, new ChartLine
   // instances) so reference equality is always false — we'd always
   // repaint. Range/data changes already trigger a setState that
