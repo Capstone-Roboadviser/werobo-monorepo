@@ -201,4 +201,28 @@ void main() {
 
     expect(find.text('주간 다이제스트'), findsOneWidget);
   });
+
+  testWidgets('hero chart no longer shows the deposit total text',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(accountDashboard());
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    // The cost-basis "deposit" line and its label are removed in this change.
+    expect(find.textContaining('총 입금'), findsNothing);
+  });
 }
