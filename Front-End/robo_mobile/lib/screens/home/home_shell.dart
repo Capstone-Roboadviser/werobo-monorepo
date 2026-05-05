@@ -71,15 +71,33 @@ class _HomeShellState extends State<HomeShell> {
       final state = PortfolioStateProvider.of(context);
       final portfolio = state.selectedPortfolio;
       final selection = state.frontierSelection;
+      // Fall back to the onboarding pick when the backend frontier
+      // selection response hasn't landed yet (PortfolioReviewScreen
+      // currently stubs that call) — otherwise the backtest hits the
+      // backend with no targeting and 422s.
+      final onboardingPick = state.onboardingFrontierSelection;
+      final selectedPointIndex =
+          selection?.selectedPointIndex ?? onboardingPick?.selectedPointIndex;
+      final targetVolatility = selection?.selectedTargetVolatility ??
+          onboardingPick?.targetVolatility;
+      final stockWeights = portfolio?.stockWeights;
+      // Backend requires one of selected_point_index / target_volatility /
+      // stock_weights. Skip silently if we have no targeting yet.
+      if (selectedPointIndex == null &&
+          targetVolatility == null &&
+          (stockWeights == null || stockWeights.isEmpty)) {
+        return;
+      }
       final bt = await MobileBackendApi.instance.fetchComparisonBacktest(
-        preferredDataSource: state.frontierSelection?.dataSource ??
+        preferredDataSource: selection?.dataSource ??
+            onboardingPick?.dataSource ??
             state.accountSummary?.dataSource,
         investmentHorizon: selection?.resolvedProfile.investmentHorizon ??
             state.accountSummary?.investmentHorizon ??
             'medium',
-        selectedPointIndex: selection?.selectedPointIndex,
-        targetVolatility: selection?.selectedTargetVolatility,
-        stockWeights: portfolio?.stockWeights,
+        selectedPointIndex: selectedPointIndex,
+        targetVolatility: targetVolatility,
+        stockWeights: stockWeights,
         portfolioCode: portfolio?.code,
         startDate: DateTime.tryParse(state.accountSummary?.startedAt ?? ''),
       );
