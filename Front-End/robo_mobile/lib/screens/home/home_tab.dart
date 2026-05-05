@@ -146,9 +146,24 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final allocationDetails = state.categoryDetails;
     final hasResolvedPortfolio =
         state.selectedPortfolio != null || state.accountSummary != null;
-    final hasInsightBanner = state.unreadInsightCount > 0;
-    final hasDigestBanner =
-        state.isWeeklyDigestAvailable && !state.hasSeenCurrentDigest;
+    final latestUnreadInsight =
+        state.unreadInsights.isNotEmpty ? state.unreadInsights.first : null;
+    final issueData = _HomeIssueFeedDataSource.resolve(
+      hasResolvedPortfolio: hasResolvedPortfolio,
+      liveDigest: state.weeklyDigest,
+      liveInsight: latestUnreadInsight,
+    );
+    final issueDigest = issueData.digest;
+    final issueInsight = issueData.latestInsight;
+    final hasIssueFeed = _PortfolioIssueFeed.hasItems(
+      digest: issueDigest,
+      latestInsight: issueInsight,
+    );
+    final hasStandaloneInsightBanner =
+        state.unreadInsightCount > 0 && !hasIssueFeed;
+    final hasStandaloneDigestBanner = state.isWeeklyDigestAvailable &&
+        !state.hasSeenCurrentDigest &&
+        !hasIssueFeed;
     int staggerIdx = 0;
 
     return SafeArea(
@@ -190,13 +205,40 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               !state.welcomeBannerSeen ? ++staggerIdx : staggerIdx,
               _PortfolioHeroChart(type: type),
             ),
-            const SizedBox(height: 28),
+            if (hasIssueFeed) const SizedBox(height: 16),
+            if (hasIssueFeed)
+              _stagger(
+                ++staggerIdx,
+                _PortfolioIssueFeed(
+                  digest: issueDigest,
+                  latestInsight: issueInsight,
+                  onDigestTap: issueData.usesPlaceholderDigest
+                      ? null
+                      : () => Navigator.push(
+                            context,
+                            WeRoboMotion.fadeRoute<void>(
+                              const DigestScreen(),
+                            ),
+                          ),
+                  onInsightTap:
+                      issueData.usesPlaceholderInsight || issueInsight == null
+                          ? null
+                          : () => Navigator.push(
+                                context,
+                                WeRoboMotion.fadeRoute<void>(
+                                  InsightDetailPage(insight: issueInsight),
+                                ),
+                              ),
+                ),
+              ),
+            SizedBox(height: hasIssueFeed ? 24 : 28),
 
-            // Insight banner (after rebalancing) — below chart
-            if (hasInsightBanner)
+            // Standalone legacy banners only render when the timeline has
+            // nothing to own, avoiding duplicate digest/algorithm alerts.
+            if (hasStandaloneInsightBanner)
               Divider(color: tc.border.withValues(alpha: 0.3), height: 1),
-            if (hasInsightBanner) const SizedBox(height: 16),
-            if (hasInsightBanner)
+            if (hasStandaloneInsightBanner) const SizedBox(height: 16),
+            if (hasStandaloneInsightBanner)
               _stagger(
                 ++staggerIdx,
                 _InsightBanner(
@@ -204,10 +246,9 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   unreadCount: state.unreadInsightCount,
                 ),
               ),
-            if (hasInsightBanner) const SizedBox(height: 20),
+            if (hasStandaloneInsightBanner) const SizedBox(height: 20),
 
-            // Digest entry point (hidden after user has seen it)
-            if (hasDigestBanner)
+            if (hasStandaloneDigestBanner)
               _stagger(
                 ++staggerIdx,
                 _DigestBanner(
@@ -217,7 +258,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   ),
                 ),
               ),
-            if (hasDigestBanner) const SizedBox(height: 20),
+            if (hasStandaloneDigestBanner) const SizedBox(height: 20),
 
             _stagger(
               ++staggerIdx,
@@ -259,6 +300,96 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HomeIssueFeedData {
+  final MobileDigestResponse? digest;
+  final RebalanceInsight? latestInsight;
+  final bool usesPlaceholderDigest;
+  final bool usesPlaceholderInsight;
+
+  const _HomeIssueFeedData({
+    required this.digest,
+    required this.latestInsight,
+    required this.usesPlaceholderDigest,
+    required this.usesPlaceholderInsight,
+  });
+}
+
+class _HomeIssueFeedDataSource {
+  static const _placeholderDigest = MobileDigestResponse(
+    digestDate: '2026-05-05',
+    periodStart: '2026-04-05',
+    periodEnd: '2026-05-05',
+    totalReturnPct: -2.8,
+    totalReturnWon: -280000,
+    narrativeKo: '최근 한 달 동안 포트폴리오 움직임이 평소보다 커졌어요.',
+    hasNarrative: true,
+    drivers: [
+      DigestDriver(
+        ticker: 'GLD',
+        nameKo: '금',
+        sectorCode: 'gold',
+        weightPct: 18,
+        returnPct: 3.1,
+        contributionWon: 180000,
+      ),
+    ],
+    detractors: [
+      DigestDriver(
+        ticker: 'QQQ',
+        nameKo: '미국 성장주',
+        sectorCode: 'us_growth',
+        weightPct: 42,
+        returnPct: -5.4,
+        contributionWon: -460000,
+      ),
+    ],
+    sourcesUsed: ['미국 금리 전망', '성장주 변동성'],
+    disclaimer: '',
+    generatedAt: '2026-05-05T09:00:00Z',
+    degradationLevel: 0,
+    triggerSigmaMultiple: 2.8,
+  );
+
+  static const _placeholderInsight = RebalanceInsight(
+    id: -1,
+    rebalanceDate: '2026-05-05',
+    allocations: [],
+    tradeDetails: [],
+    trigger: '포트폴리오 변동성 확대',
+    tradeCount: 3,
+    cashBefore: 80000,
+    cashFromSales: 24791,
+    cashToBuys: 1879,
+    cashAfter: 103256,
+    netCashChange: 23256,
+    explanationText: '포트폴리오 변동성이 커져 알고리즘이 비중 조정을 감지했어요.',
+    isRead: false,
+    createdAt: '2026-05-05T09:00:00Z',
+  );
+
+  static _HomeIssueFeedData resolve({
+    required bool hasResolvedPortfolio,
+    required MobileDigestResponse? liveDigest,
+    required RebalanceInsight? liveInsight,
+  }) {
+    if (!hasResolvedPortfolio) {
+      return const _HomeIssueFeedData(
+        digest: null,
+        latestInsight: null,
+        usesPlaceholderDigest: false,
+        usesPlaceholderInsight: false,
+      );
+    }
+
+    return _HomeIssueFeedData(
+      digest: liveDigest ?? _placeholderDigest,
+      latestInsight: liveInsight ?? _placeholderInsight,
+      usesPlaceholderDigest: liveDigest == null,
+      usesPlaceholderInsight: liveInsight == null,
     );
   }
 }
@@ -424,8 +555,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
     final base = filtered.first.value;
     final result = <ChartPoint>[
-      for (final p in filtered)
-        ChartPoint(date: p.date, value: p.value - base),
+      for (final p in filtered) ChartPoint(date: p.date, value: p.value - base),
     ];
     // Carry the last known value forward to the chart's right edge when
     // the backtest data lags the portfolio's account history (a common
@@ -483,8 +613,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     List<ChartPoint> portfolioRangePts,
   ) {
     if (portfolioRangePts.length < 2) return const [];
-    final expected =
-        PortfolioStateProvider.of(context).expectedReturn;
+    final expected = PortfolioStateProvider.of(context).expectedReturn;
     if (expected == null) return const [];
     final first = portfolioRangePts.first.date;
     final last = portfolioRangePts.last.date;
@@ -611,6 +740,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         if (p.value > maxY) maxY = p.value;
       }
     }
+
     scan(portfolioPctSeries);
     scan(marketPts);
     scan(expectedPts);
@@ -686,8 +816,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final valuePts = _filterByRange(allValue);
 
     // Compute hero stats from filtered data
-    final currentValue =
-        accountSummary?.currentValue ??
+    final currentValue = accountSummary?.currentValue ??
         (valuePts.isNotEmpty ? valuePts.last.value : 0.0);
     final startValue = valuePts.isNotEmpty ? valuePts.first.value : 0.0;
     final change = accountSummary?.profitLoss ?? (currentValue - startValue);
@@ -702,9 +831,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
     // Without a cost-basis line, drag-time deltas are computed against the
     // chart's first visible point (start of the selected range).
-    final displayChange = crosshairValue != null
-        ? crosshairValue - startValue
-        : change;
+    final displayChange =
+        crosshairValue != null ? crosshairValue - startValue : change;
     final displayChangePct = crosshairValue != null && startValue > 0
         ? ((crosshairValue - startValue) / startValue) * 100
         : changePct;
@@ -762,11 +890,11 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
             // Date label for drag position
             final dateLabel =
                 _touchIndex != null && _touchIndex! < valuePts.length
-                ? () {
-                    final d = valuePts[_touchIndex!].date;
-                    return '${d.year}년 ${d.month}월 ${d.day}일';
-                  }()
-                : '';
+                    ? () {
+                        final d = valuePts[_touchIndex!].date;
+                        return '${d.year}년 ${d.month}월 ${d.day}일';
+                      }()
+                    : '';
             // Compute card data when dragging at a non-zero index
             final cardData = _touchIndex != null && _touchIndex! >= 1
                 ? _buildCardData(
@@ -788,19 +916,17 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                       child: GestureDetector(
                         onPanDown: (d) {
                           final x = d.localPosition.dx;
-                          final idx =
-                              ((x / fullWidth) * (valuePts.length - 1))
-                                  .round()
-                                  .clamp(0, valuePts.length - 1);
+                          final idx = ((x / fullWidth) * (valuePts.length - 1))
+                              .round()
+                              .clamp(0, valuePts.length - 1);
                           _glowCtrl.repeat(reverse: true);
                           setState(() => _touchIndex = idx);
                         },
                         onPanUpdate: (d) {
                           final x = d.localPosition.dx;
-                          final idx =
-                              ((x / fullWidth) * (valuePts.length - 1))
-                                  .round()
-                                  .clamp(0, valuePts.length - 1);
+                          final idx = ((x / fullWidth) * (valuePts.length - 1))
+                              .round()
+                              .clamp(0, valuePts.length - 1);
                           setState(() => _touchIndex = idx);
                         },
                         onPanEnd: (_) {
@@ -814,8 +940,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                           setState(() => _touchIndex = null);
                         },
                         child: AnimatedBuilder(
-                          animation:
-                              Listenable.merge([_drawCurve, _glowCtrl]),
+                          animation: Listenable.merge([_drawCurve, _glowCtrl]),
                           builder: (context, _) {
                             // lines[0] is drawn last (on top); benchmarks
                             // are drawn back-to-front by the painter. Cache
@@ -967,8 +1092,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     color: isFuture
                         ? WeRoboColors.primary
                         : active
-                        ? WeRoboColors.white
-                        : tc.textSecondary,
+                            ? WeRoboColors.white
+                            : tc.textSecondary,
                   ),
                 ),
               ),
@@ -986,6 +1111,339 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         ),
       ],
     );
+  }
+}
+
+// ─── Portfolio issue feed ──────────────────────────────────────
+
+class _PortfolioIssueFeed extends StatelessWidget {
+  static const _maxItems = 5;
+
+  final MobileDigestResponse? digest;
+  final RebalanceInsight? latestInsight;
+  final VoidCallback? onDigestTap;
+  final VoidCallback? onInsightTap;
+
+  const _PortfolioIssueFeed({
+    required this.digest,
+    required this.latestInsight,
+    this.onDigestTap,
+    this.onInsightTap,
+  });
+
+  static bool hasItems({
+    required MobileDigestResponse? digest,
+    required RebalanceInsight? latestInsight,
+  }) {
+    return digest != null || latestInsight != null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _buildItems();
+    if (items.isEmpty) return const SizedBox.shrink();
+
+    final tc = WeRoboThemeColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '포트폴리오 주요 이슈 알림',
+          style: WeRoboTypography.bodySmall.copyWith(
+            color: tc.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          key: const Key('portfolio_issue_timeline_rail'),
+          child: Column(
+            children: [
+              for (int i = 0; i < items.length; i++)
+                _PortfolioIssueRow(
+                  item: items[i],
+                  index: i,
+                  isFirst: i == 0,
+                  isLast: i == items.length - 1,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<_PortfolioIssueItem> _buildItems() {
+    final items = <_PortfolioIssueItem>[];
+    if (digest != null) {
+      items.add(_digestStatusItem(digest!, onDigestTap));
+    }
+
+    final contribution = _topContribution(digest);
+    if (contribution != null) {
+      final isPositive = contribution.contributionWon >= 0;
+      final periodLabel = _digestPeriodLabel(digest!);
+      items.add(
+        _PortfolioIssueItem(
+          icon: isPositive
+              ? Icons.trending_up_rounded
+              : Icons.trending_down_rounded,
+          iconColor: isPositive ? WeRoboColors.accent : WeRoboColors.error,
+          eyebrow: periodLabel,
+          title: '기여도 알림',
+          body: _contributionBody(contribution, periodLabel),
+          onTap: onDigestTap,
+        ),
+      );
+    }
+
+    if (_hasVolatilitySignal(digest)) {
+      final multiple = digest!.triggerSigmaMultiple!;
+      final periodLabel = _digestPeriodLabel(digest!);
+      items.add(
+        _PortfolioIssueItem(
+          icon: Icons.show_chart_rounded,
+          iconColor: WeRoboColors.warning,
+          eyebrow: '변동성 감지',
+          title: '시장 변동성 경고',
+          body: '$periodLabel 움직임이 평소보다 ${multiple.toStringAsFixed(1)}배 컸어요.',
+          onTap: onDigestTap,
+        ),
+      );
+    }
+
+    if (latestInsight != null) {
+      items.add(
+        _PortfolioIssueItem(
+          icon: Icons.auto_graph_rounded,
+          iconColor: WeRoboColors.primary,
+          eyebrow: _issueDateLabel(latestInsight!.rebalanceDate),
+          title: '알고리즘 시그널',
+          body: latestInsight!.historySummary,
+          onTap: onInsightTap,
+        ),
+      );
+    }
+
+    if (_hasNewsSignal(digest)) {
+      final sources = digest!.sourcesUsed.take(2).join(', ');
+      items.add(
+        _PortfolioIssueItem(
+          icon: Icons.article_outlined,
+          iconColor: WeRoboColors.assetTier3,
+          eyebrow: '최근 뉴스',
+          title: '자산군 뉴스',
+          body: '$sources 기반 주요 뉴스가 다이제스트에 반영됐어요.',
+          onTap: onDigestTap,
+        ),
+      );
+    }
+
+    return items.take(_maxItems).toList();
+  }
+
+  static _PortfolioIssueItem _digestStatusItem(
+    MobileDigestResponse digest,
+    VoidCallback? onDigestTap,
+  ) {
+    final available = digest.available;
+    final periodLabel = _digestPeriodLabel(digest);
+    final pct = _formatSignedPercent(digest.totalReturnPct);
+    final won = _formatSignedWon(digest.totalReturnWon);
+    return _PortfolioIssueItem(
+      icon: available ? Icons.summarize_rounded : Icons.hourglass_empty_rounded,
+      iconColor: available ? WeRoboColors.primary : WeRoboColors.textTertiary,
+      eyebrow: periodLabel,
+      title: _digestTitle(digest),
+      body: available
+          ? '$periodLabel 수익률 $pct, $won 움직임이 감지됐어요.'
+          : '이번 주는 평소 변동 범위 안이라 주요 이슈만 모니터링 중이에요.',
+      onTap: available ? onDigestTap : null,
+    );
+  }
+
+  static String _digestTitle(MobileDigestResponse digest) {
+    final periodLabel = _digestPeriodLabel(digest);
+    if (periodLabel == '최근 한 달') {
+      return '최근 한 달 다이제스트';
+    }
+    return '이번 주 다이제스트';
+  }
+
+  static String _digestPeriodLabel(MobileDigestResponse digest) {
+    final start = DateTime.tryParse(digest.periodStart);
+    final end = DateTime.tryParse(digest.periodEnd);
+    if (start == null || end == null) return '최근 7일';
+    final days = end.difference(start).inDays.abs();
+    if (days >= 27) return '최근 한 달';
+    if (days >= 10) return '최근 $days일';
+    return '최근 7일';
+  }
+
+  static DigestDriver? _topContribution(MobileDigestResponse? digest) {
+    if (digest?.available != true) return null;
+    final items = [
+      ...digest!.drivers,
+      ...digest.detractors,
+    ]..sort(
+        (a, b) => b.contributionWon.abs().compareTo(a.contributionWon.abs()),
+      );
+    return items.isEmpty ? null : items.first;
+  }
+
+  static bool _hasVolatilitySignal(MobileDigestResponse? digest) {
+    final multiple = digest?.triggerSigmaMultiple;
+    return digest?.available == true && multiple != null && multiple >= 2;
+  }
+
+  static bool _hasNewsSignal(MobileDigestResponse? digest) {
+    return digest?.available == true && digest!.sourcesUsed.isNotEmpty;
+  }
+
+  static String _contributionBody(DigestDriver driver, String periodLabel) {
+    final name = driver.nameKo.isNotEmpty ? driver.nameKo : driver.ticker;
+    final won = _formatSignedWon(driver.contributionWon);
+    if (driver.contributionWon >= 0) {
+      return '$name가 $periodLabel 수익에 $won 기여했어요.';
+    }
+    return '$name가 $periodLabel 수익에 $won 영향을 줬어요.';
+  }
+
+  static String _issueDateLabel(String isoDate) {
+    final parsed = DateTime.tryParse(isoDate);
+    if (parsed == null) return '최근 신호';
+    return '${parsed.month}월 ${parsed.day}일';
+  }
+}
+
+class _PortfolioIssueItem {
+  final IconData icon;
+  final Color iconColor;
+  final String eyebrow;
+  final String title;
+  final String body;
+  final VoidCallback? onTap;
+
+  const _PortfolioIssueItem({
+    required this.icon,
+    required this.iconColor,
+    required this.eyebrow,
+    required this.title,
+    required this.body,
+    this.onTap,
+  });
+}
+
+class _PortfolioIssueRow extends StatelessWidget {
+  final _PortfolioIssueItem item;
+  final int index;
+  final bool isFirst;
+  final bool isLast;
+
+  const _PortfolioIssueRow({
+    required this.item,
+    required this.index,
+    required this.isFirst,
+    required this.isLast,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(
+              width: 34,
+              child: Stack(
+                alignment: Alignment.topCenter,
+                children: [
+                  Positioned(
+                    top: isFirst ? 18 : 0,
+                    bottom: isLast ? 42 : 0,
+                    child: Container(
+                      width: 1,
+                      color: tc.border.withValues(alpha: 0.30),
+                    ),
+                  ),
+                  Positioned(
+                    top: 6,
+                    child: Container(
+                      key: ValueKey('portfolio_issue_timeline_node_$index'),
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: item.iconColor.withValues(alpha: 0.12),
+                        border: Border.all(
+                          color: item.iconColor.withValues(alpha: 0.34),
+                          width: 1,
+                        ),
+                      ),
+                      child: Icon(item.icon, size: 15, color: item.iconColor),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 5, bottom: 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.eyebrow,
+                      style: WeRoboTypography.caption.copyWith(
+                        color: tc.textTertiary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      item.title,
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: tc.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      item.body,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: WeRoboTypography.caption.copyWith(
+                        color: tc.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (item.onTap != null) ...[
+              const SizedBox(width: 8),
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Icon(
+                  Icons.chevron_right_rounded,
+                  size: 18,
+                  color: tc.textTertiary,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    if (item.onTap == null) return row;
+    return Pressable(onTap: item.onTap!, child: row);
   }
 }
 
@@ -1099,9 +1557,8 @@ class _HomePerformancePainter extends CustomPainter {
     // it never clips or fades the lines themselves. So `ti` is purely
     // the touch index when dragging (used by the crosshair); benchmark
     // and portfolio drawing use `drawCount` based on `progress`.
-    final ti = isDragging
-        ? touchIndex!.clamp(0, basePts.length - 1)
-        : drawCount - 1;
+    final ti =
+        isDragging ? touchIndex!.clamp(0, basePts.length - 1) : drawCount - 1;
 
     // Draw benchmarks first (behind portfolio). Map by DATE — benchmark
     // series may have a different point count than the portfolio (e.g.,
@@ -1310,8 +1767,7 @@ class _HomePerformancePainter extends CustomPainter {
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      final dateX =
-          (tx - dateTp.width / 2).clamp(4.0, w - dateTp.width - 4);
+      final dateX = (tx - dateTp.width / 2).clamp(4.0, w - dateTp.width - 4);
       dateTp.paint(canvas, Offset(dateX, lineTop - dateTp.height - 2));
     }
 
@@ -1557,6 +2013,16 @@ String _formatCurrency(int amount) {
   return buf.toString();
 }
 
+String _formatSignedWon(double amount) {
+  final sign = amount >= 0 ? '+' : '-';
+  return '$sign₩${_formatCurrency(amount.abs().round())}';
+}
+
+String _formatSignedPercent(double percentage) {
+  final sign = percentage >= 0 ? '+' : '-';
+  return '$sign${percentage.abs().toStringAsFixed(1)}%';
+}
+
 String _formatPercentLabel(double percentage) {
   return '${percentage.toStringAsFixed(2)}%';
 }
@@ -1798,8 +2264,7 @@ class _DepositsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final latestDeposit = _findLatestDeposit(activities);
-    final latestAmount =
-        latestDeposit?.amount ??
+    final latestAmount = latestDeposit?.amount ??
         ((accountSummary?.investedAmount ?? 0) > 0
             ? accountSummary?.investedAmount
             : null);
@@ -1831,7 +2296,7 @@ class _DepositsPanel extends StatelessWidget {
           valueText: latestAmount == null
               ? '아직 입금 내역이 없어요'
               : '₩${_formatCurrency(latestAmount.round())}'
-                    ' · ${_formatKoreanMonthDay(latestDate!)}',
+                  ' · ${_formatKoreanMonthDay(latestDate!)}',
         ),
         Divider(
           color: tc.border.withValues(alpha: 0.4),
@@ -1843,7 +2308,7 @@ class _DepositsPanel extends StatelessWidget {
           valueText: upcomingDate == null
               ? '예정된 입금이 없어요'
               : '₩${_formatCurrency(upcomingAmount.round())}'
-                    ' · ${_formatKoreanMonthDay(upcomingDate)}',
+                  ' · ${_formatKoreanMonthDay(upcomingDate)}',
         ),
         const SizedBox(height: 16),
         Row(
@@ -1868,19 +2333,17 @@ class _DepositsPanel extends StatelessWidget {
   }
 
   MobileAccountActivity? _findLatestDeposit(List<MobileAccountActivity> items) {
-    final deposits =
-        items
-            .where(
-              (activity) =>
-                  activity.type == 'cash_in' ||
-                  activity.type == 'initial_deposit',
-            )
-            .toList()
-          ..sort((a, b) {
-            final aDate = _parseIsoDate(a.date) ?? DateTime(1970);
-            final bDate = _parseIsoDate(b.date) ?? DateTime(1970);
-            return bDate.compareTo(aDate);
-          });
+    final deposits = items
+        .where(
+          (activity) =>
+              activity.type == 'cash_in' || activity.type == 'initial_deposit',
+        )
+        .toList()
+      ..sort((a, b) {
+        final aDate = _parseIsoDate(a.date) ?? DateTime(1970);
+        final bDate = _parseIsoDate(b.date) ?? DateTime(1970);
+        return bDate.compareTo(aDate);
+      });
 
     if (deposits.isEmpty) {
       return null;
@@ -2150,9 +2613,8 @@ class _PortfolioValueToggle extends StatelessWidget {
             AnimatedAlign(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              alignment: showAmounts
-                  ? Alignment.centerRight
-                  : Alignment.centerLeft,
+              alignment:
+                  showAmounts ? Alignment.centerRight : Alignment.centerLeft,
               child: Container(
                 width: _chipSize,
                 height: _chipSize,
@@ -2267,10 +2729,8 @@ class _PortfolioAllocationRow extends StatelessWidget {
     if (detail.tickers.isEmpty) {
       return '세부 종목 정보 없음';
     }
-    final symbols = detail.tickers
-        .take(3)
-        .map((ticker) => ticker.symbol)
-        .join(', ');
+    final symbols =
+        detail.tickers.take(3).map((ticker) => ticker.symbol).join(', ');
     if (detail.tickers.length <= 3) {
       return symbols;
     }

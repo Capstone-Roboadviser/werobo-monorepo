@@ -5,9 +5,7 @@ import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/rebalance_insight.dart';
-import 'digest_screen.dart';
 import 'insight_detail_page.dart';
-import 'widgets/glowing_border.dart';
 import 'widgets/insight_transition_chart.dart';
 
 class ActivityHubPage extends StatelessWidget {
@@ -67,15 +65,6 @@ class ActivityHubPage extends StatelessWidget {
                   horizontal: 24,
                 ),
                 children: [
-                  // Digest card
-                  _DigestCard(
-                    onTap: () => Navigator.push(
-                      context,
-                      WeRoboMotion.fadeRoute<void>(const DigestScreen()),
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
                   // Insights section
                   Text(
                     '리밸런싱 히스토리',
@@ -143,70 +132,6 @@ class ActivityHubPage extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DigestCard extends StatelessWidget {
-  final VoidCallback onTap;
-  const _DigestCard({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return GlowingBorder(
-      child: Pressable(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: 4,
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: WeRoboColors.primary.withValues(alpha: 0.08),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome,
-                  color: WeRoboColors.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '주간 다이제스트',
-                      style: WeRoboTypography.bodySmall.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: tc.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'AI가 분석한 이번 주 포트폴리오 리포트',
-                      style: WeRoboTypography.caption.copyWith(
-                        color: tc.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.chevron_right,
-                color: tc.textTertiary,
-                size: 20,
-              ),
-            ],
-          ),
         ),
       ),
     );

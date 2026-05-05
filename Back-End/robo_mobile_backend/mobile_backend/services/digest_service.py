@@ -22,6 +22,8 @@ from mobile_backend.services.news_aggregator import (
 logger = logging.getLogger(__name__)
 
 DIGEST_PERIOD_DAYS = 7
+DIGEST_FALLBACK_PERIOD_DAYS = 30
+DIGEST_CACHE_VERSION = 2
 TOP_N = 2
 DIGEST_FALLBACK_THRESHOLD_PCT = 5.0
 DIGEST_TRIGGER_SIGMA_MULTIPLIER = 2.0
@@ -29,6 +31,12 @@ DIGEST_SIGMA_WINDOW_TRADING_DAYS = 5
 DIGEST_SIGMA_LOOKBACK_WINDOWS = 60
 DIGEST_SIGMA_MIN_WINDOWS = 20
 DIGEST_HISTORY_LOOKBACK_DAYS = 140
+
+
+def _digest_period_label(period_days: int) -> str:
+    if period_days >= 28:
+        return "최근 한 달"
+    return "최근 7일"
 
 
 class DigestError(Exception):
@@ -362,12 +370,14 @@ def _build_user_prompt(
     drivers: list[dict],
     detractors: list[dict],
     news: dict[str, list[str]],
+    period_label: str = "최근 7일",
     trigger_sigma_multiple: float | None = None,
     trigger_threshold_pct: float | None = None,
     rebalance_triggered: bool = False,
 ) -> str:
     lines = [
         f"총 수익률: {total_return_pct:.1f}% ({total_return_won:+,.0f}원)",
+        f"분석 기간: {period_label}",
         f"포트폴리오 유형: {portfolio_type}",
     ]
     if trigger_sigma_multiple is not None and trigger_threshold_pct is not None:
@@ -407,21 +417,21 @@ def _build_user_prompt(
 
     if drivers and not detractors:
         instruction_focus = (
-            "1. 요약 문단 (3~5문장): 주간 성과를 설명하고, 상위 상승 종목을 원화 금액과 "
+            f"1. 요약 문단 (3~5문장): {period_label} 성과를 설명하고, 상위 상승 종목을 원화 금액과 "
             "함께 언급하며, 관련 뉴스 맥락을 포함해 주세요. 차분하고 사실 기반의 톤을 "
             "유지해주세요.\n"
             "2. 각 상승 기여 종목에 대해 2~3문장의 한국어 설명을 작성해주세요."
         )
     elif detractors and not drivers:
         instruction_focus = (
-            "1. 요약 문단 (3~5문장): 주간 성과를 설명하고, 상위 하락 종목을 원화 금액과 "
+            f"1. 요약 문단 (3~5문장): {period_label} 성과를 설명하고, 상위 하락 종목을 원화 금액과 "
             "함께 언급하며, 관련 뉴스 맥락을 포함하고, 정상적인 변동 범위인지 평가해주세요. "
             "차분하고 안심을 주는 톤을 유지해주세요.\n"
             "2. 각 하락 기여 종목에 대해 2~3문장의 한국어 설명을 작성해주세요."
         )
     else:
         instruction_focus = (
-            "1. 요약 문단 (3~5문장): 주간 성과를 설명하고, 상위 상승/하락 종목을 원화 금액과 "
+            f"1. 요약 문단 (3~5문장): {period_label} 성과를 설명하고, 상위 상승/하락 종목을 원화 금액과 "
             "함께 언급하며, 관련 뉴스 맥락을 포함하고, 정상 변동인지 평가해주세요.\n"
             "2. 각 상승/하락 기여 종목에 대해 2~3문장의 한국어 설명을 작성해주세요."
         )
@@ -443,6 +453,7 @@ def generate_narrative(
     drivers: list[dict],
     detractors: list[dict],
     news: dict[str, list[str]],
+    period_label: str = "최근 7일",
     trigger_sigma_multiple: float | None = None,
     trigger_threshold_pct: float | None = None,
     rebalance_triggered: bool = False,
@@ -472,6 +483,7 @@ def generate_narrative(
             drivers=drivers,
             detractors=detractors,
             news=news,
+            period_label=period_label,
             trigger_sigma_multiple=trigger_sigma_multiple,
             trigger_threshold_pct=trigger_threshold_pct,
             rebalance_triggered=rebalance_triggered,
@@ -567,6 +579,98 @@ class DigestService:
             end_date=end_date,
         )
 
+    def _build_period_candidate(
+        self,
+        *,
+        prices_df: pd.DataFrame,
+        stock_allocations: list[dict],
+        portfolio_value: float,
+        start_date: date,
+        end_date: date,
+    ) -> dict:
+        digest_prices_df = _filter_prices_by_date(
+            prices_df,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if digest_prices_df.empty:
+            raise InsufficientDataError("아직 충분한 데이터가 없습니다.")
+
+        prices_by_ticker = _prices_by_ticker(digest_prices_df)
+        attributions = compute_attribution(
+            stock_allocations=stock_allocations,
+            prices_by_ticker=prices_by_ticker,
+            portfolio_value=portfolio_value,
+            period_days=(end_date - start_date).days,
+        )
+
+        if not attributions:
+            raise InsufficientDataError("수익률 데이터가 부족합니다.")
+
+        total_return_won = sum(a["contribution_won"] for a in attributions)
+        total_return_pct = round(
+            (total_return_won / portfolio_value * 100) if portfolio_value > 0 else 0,
+            2,
+        )
+        trigger_stats = _digest_trigger_stats(
+            prices_df=prices_df,
+            stock_allocations=stock_allocations,
+            total_return_pct=total_return_pct,
+            baseline_end_date=start_date,
+        )
+        trigger_threshold_pct = float(
+            trigger_stats["trigger_threshold_pct"]
+            or DIGEST_FALLBACK_THRESHOLD_PCT
+        )
+
+        drivers, detractors = top_drivers_detractors(attributions)
+        if total_return_pct >= trigger_threshold_pct:
+            detractors = []
+        elif total_return_pct <= -trigger_threshold_pct:
+            drivers = []
+
+        period_days = (end_date - start_date).days
+        return {
+            "period_start": start_date.isoformat(),
+            "period_end": end_date.isoformat(),
+            "period_days": period_days,
+            "period_label": _digest_period_label(period_days),
+            "total_return_pct": total_return_pct,
+            "total_return_won": total_return_won,
+            "available": abs(total_return_pct) >= trigger_threshold_pct,
+            "drivers": drivers,
+            "detractors": detractors,
+            "trigger_stats": trigger_stats,
+            "trigger_threshold_pct": trigger_threshold_pct,
+        }
+
+    def _unavailable_digest_from_candidate(
+        self,
+        *,
+        candidate: dict,
+        generated_at: str,
+    ) -> dict:
+        return {
+            "digest_date": candidate["period_end"],
+            "period_start": candidate["period_start"],
+            "period_end": candidate["period_end"],
+            "total_return_pct": candidate["total_return_pct"],
+            "total_return_won": candidate["total_return_won"],
+            "available": False,
+            "narrative_ko": None,
+            "has_narrative": False,
+            "drivers": [],
+            "detractors": [],
+            "sources_used": [],
+            "disclaimer": "이 내용은 투자 조언이 아닙니다. AI가 생성한 요약이며 투자 결정의 근거로 사용하지 마세요.",
+            "generated_at": generated_at,
+            "degradation_level": 0,
+            "benchmark_7asset_return_pct": None,
+            "benchmark_bond_return_pct": None,
+            "cache_version": DIGEST_CACHE_VERSION,
+            **candidate["trigger_stats"],
+        }
+
     def generate(self, account: dict) -> dict:
         """Generate or return cached digest for an account.
 
@@ -578,7 +682,10 @@ class DigestService:
         # Check cache (with read-time rebalance bust)
         cached = self.digest_repo.get_cached(account_id)
         if cached is not None:
-            if cached.get("has_narrative") or cached.get("available") is False:
+            cache_version = int(cached.get("cache_version") or 1)
+            if cache_version == DIGEST_CACHE_VERSION and (
+                cached.get("has_narrative") or cached.get("available") is False
+            ):
                 logger.info("digest.cache.hit account_id=%s", account_id)
                 return cached
             logger.info(
@@ -604,6 +711,7 @@ class DigestService:
         # Compute date range
         end_date = datetime.now(timezone.utc).date()
         start_date = end_date - timedelta(days=DIGEST_PERIOD_DAYS)
+        fallback_start_date = end_date - timedelta(days=DIGEST_FALLBACK_PERIOD_DAYS)
         history_start_date = end_date - timedelta(days=DIGEST_HISTORY_LOOKBACK_DAYS)
 
         # Load prices
@@ -618,90 +726,58 @@ class DigestService:
         if prices_df is None or prices_df.empty:
             raise InsufficientDataError("아직 충분한 데이터가 없습니다.")
 
-        digest_prices_df = _filter_prices_by_date(
-            prices_df,
+        weekly_candidate = self._build_period_candidate(
+            prices_df=prices_df,
+            stock_allocations=stock_allocations,
+            portfolio_value=portfolio_value,
             start_date=start_date,
             end_date=end_date,
         )
-        if digest_prices_df.empty:
-            raise InsufficientDataError("아직 충분한 데이터가 없습니다.")
 
-        # Build prices_by_ticker: {ticker: {date_str: price}}
-        prices_by_ticker = _prices_by_ticker(digest_prices_df)
+        candidate = weekly_candidate
+        if not weekly_candidate["available"]:
+            try:
+                monthly_candidate = self._build_period_candidate(
+                    prices_df=prices_df,
+                    stock_allocations=stock_allocations,
+                    portfolio_value=portfolio_value,
+                    start_date=fallback_start_date,
+                    end_date=end_date,
+                )
+                if monthly_candidate["available"]:
+                    candidate = monthly_candidate
+            except InsufficientDataError:
+                logger.info(
+                    "digest.generate.monthly_fallback_insufficient account_id=%s",
+                    account_id,
+                )
 
-        # Attribution
-        attributions = compute_attribution(
-            stock_allocations=stock_allocations,
-            prices_by_ticker=prices_by_ticker,
-            portfolio_value=portfolio_value,
-        )
-
-        if not attributions:
-            raise InsufficientDataError("수익률 데이터가 부족합니다.")
-
-        total_return_won = sum(a["contribution_won"] for a in attributions)
-        total_weight = sum(float(a.get("weight", 0)) for a in stock_allocations)
-        total_return_pct = round(
-            (total_return_won / portfolio_value * 100) if portfolio_value > 0 else 0,
-            2,
-        )
-        trigger_stats = _digest_trigger_stats(
-            prices_df=prices_df,
-            stock_allocations=stock_allocations,
-            total_return_pct=total_return_pct,
-            baseline_end_date=start_date,
-        )
-        trigger_threshold_pct = float(
-            trigger_stats["trigger_threshold_pct"]
-            or DIGEST_FALLBACK_THRESHOLD_PCT
-        )
-
-        drivers, detractors = top_drivers_detractors(attributions)
-
-        # Sign-based narrowing: positive moves show drivers only,
-        # negative moves show detractors only.
-        if total_return_pct >= trigger_threshold_pct:
-            detractors = []
-        elif total_return_pct <= -trigger_threshold_pct:
-            drivers = []
-
-        # Threshold gate: surface a digest only when the 7-day portfolio
-        # return is unusual relative to its recent rolling volatility.
-        if abs(total_return_pct) < trigger_threshold_pct:
+        if not candidate["available"]:
             now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-            unavailable = {
-                "digest_date": end_date.isoformat(),
-                "period_start": start_date.isoformat(),
-                "period_end": end_date.isoformat(),
-                "total_return_pct": total_return_pct,
-                "total_return_won": total_return_won,
-                "available": False,
-                "narrative_ko": None,
-                "has_narrative": False,
-                "drivers": [],
-                "detractors": [],
-                "sources_used": [],
-                "disclaimer": "이 내용은 투자 조언이 아닙니다. AI가 생성한 요약이며 투자 결정의 근거로 사용하지 마세요.",
-                "generated_at": now_utc,
-                "degradation_level": 0,
-                "benchmark_7asset_return_pct": None,
-                "benchmark_bond_return_pct": None,
-                **trigger_stats,
-            }
+            unavailable = self._unavailable_digest_from_candidate(
+                candidate=weekly_candidate,
+                generated_at=now_utc,
+            )
             self.digest_repo.cache(account_id, unavailable)
             logger.info(
                 "digest.generate.below_threshold account_id=%s total_return_pct=%s threshold_pct=%s",
                 account_id,
-                total_return_pct,
-                trigger_threshold_pct,
+                weekly_candidate["total_return_pct"],
+                weekly_candidate["trigger_threshold_pct"],
             )
             return unavailable
+
+        drivers = candidate["drivers"]
+        detractors = candidate["detractors"]
+        trigger_stats = candidate["trigger_stats"]
+        total_return_pct = candidate["total_return_pct"]
+        total_return_won = candidate["total_return_won"]
 
         # Benchmark returns
         benchmark_7asset, benchmark_bond = _compute_benchmark_returns(
             universe_repo=self.universe_repo,
-            start_date=start_date.isoformat(),
-            end_date=end_date.isoformat(),
+            start_date=candidate["period_start"],
+            end_date=candidate["period_end"],
         )
 
         # Fetch news (parallel, 3s timeout per source)
@@ -720,6 +796,7 @@ class DigestService:
             drivers=drivers,
             detractors=detractors,
             news=news,
+            period_label=candidate["period_label"],
             trigger_sigma_multiple=trigger_stats["trigger_sigma_multiple"],
             trigger_threshold_pct=trigger_stats["trigger_threshold_pct"],
         )
@@ -742,10 +819,10 @@ class DigestService:
 
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         digest = {
-            "digest_date": end_date.isoformat(),
+            "digest_date": candidate["period_end"],
             "available": True,
-            "period_start": start_date.isoformat(),
-            "period_end": end_date.isoformat(),
+            "period_start": candidate["period_start"],
+            "period_end": candidate["period_end"],
             "total_return_pct": total_return_pct,
             "total_return_won": total_return_won,
             "narrative_ko": narrative_ko,
@@ -758,6 +835,7 @@ class DigestService:
             "degradation_level": degradation_level,
             "benchmark_7asset_return_pct": benchmark_7asset,
             "benchmark_bond_return_pct": benchmark_bond,
+            "cache_version": DIGEST_CACHE_VERSION,
             **trigger_stats,
         }
 

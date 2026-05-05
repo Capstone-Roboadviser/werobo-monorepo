@@ -96,6 +96,30 @@ class LowVolatilityStockDataRepository:
         return pd.DataFrame(rows)
 
 
+class MonthlyFallbackStockDataRepository:
+    def load_stock_prices(self, path: str) -> pd.DataFrame:
+        end_date = datetime.now(timezone.utc).date()
+        return pd.DataFrame(
+            [
+                {
+                    "date": pd.Timestamp(end_date - timedelta(days=30)),
+                    "ticker": "AAA",
+                    "adjusted_close": 100.0,
+                },
+                {
+                    "date": pd.Timestamp(end_date - timedelta(days=7)),
+                    "ticker": "AAA",
+                    "adjusted_close": 106.0,
+                },
+                {
+                    "date": pd.Timestamp(end_date),
+                    "ticker": "AAA",
+                    "adjusted_close": 106.0,
+                },
+            ]
+        )
+
+
 def test_below_threshold_returns_unavailable_sentinel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -162,6 +186,52 @@ def test_below_threshold_returns_unavailable_sentinel(
     assert news_calls == []  # below-threshold path skips news fetch
     assert narrative_calls == []  # below-threshold path skips LLM
     assert digest["total_return_pct"] == 2.0
+
+
+def test_falls_back_to_monthly_digest_when_weekly_is_quiet(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": datetime.now(timezone.utc).date().isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", MonthlyFallbackStockDataRepository)
+    monkeypatch.setattr(digest_module, "fetch_news_for_tickers", lambda tickers: {})
+    monkeypatch.setattr(digest_module, "get_sources_used", lambda news: [])
+    monkeypatch.setattr(digest_module, "generate_narrative", lambda **kwargs: None)
+
+    digest = service.generate(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {
+                    "ticker": "AAA",
+                    "name": "Alpha Asset",
+                    "sector_code": "us_growth",
+                    "sector_name": "미국 성장주",
+                    "weight": 1.0,
+                },
+            ],
+        }
+    )
+
+    end_date = datetime.now(timezone.utc).date()
+    assert digest["available"] is True
+    assert digest["period_start"] == (end_date - timedelta(days=30)).isoformat()
+    assert digest["period_end"] == end_date.isoformat()
+    assert digest["total_return_pct"] == 6.0
+    assert len(digest["drivers"]) == 1
+    assert digest["drivers"][0]["ticker"] == "AAA"
 
 
 def test_low_volatility_portfolio_surfaces_digest_below_fixed_5pct(
@@ -452,6 +522,7 @@ def test_below_threshold_cache_hit_returns_sentinel(
         "degradation_level": 0,
         "benchmark_7asset_return_pct": None,
         "benchmark_bond_return_pct": None,
+        "cache_version": digest_module.DIGEST_CACHE_VERSION,
     }
     service.digest_repo.cache(1, sentinel)
 

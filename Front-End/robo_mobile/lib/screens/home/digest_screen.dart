@@ -74,7 +74,7 @@ class _DigestScreenState extends State<DigestScreen> {
       if (mounted) {
         setState(() {
           _error = e.statusCode == 422
-              ? '주간 다이제스트를 만들기 위한 최근 데이터가 아직 부족합니다. '
+              ? '다이제스트를 만들기 위한 최근 데이터가 아직 부족합니다. '
                   '다음 가격 갱신 후 다시 확인해주세요.'
               : e.message;
           _loading = false;
@@ -98,7 +98,7 @@ class _DigestScreenState extends State<DigestScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          '주간 다이제스트',
+          '포트폴리오 다이제스트',
           style: WeRoboTypography.heading3.copyWith(
             color: tc.textPrimary,
           ),
@@ -157,7 +157,7 @@ class _DigestContent extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!digest.available) {
       return const _ErrorState(
-        message: '이번 주에는 표시할 다이제스트가 없습니다.',
+        message: '표시할 다이제스트가 없습니다.',
       );
     }
     final tc = WeRoboThemeColors.of(context);

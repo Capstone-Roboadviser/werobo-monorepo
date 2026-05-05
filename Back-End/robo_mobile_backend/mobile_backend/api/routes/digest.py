@@ -47,8 +47,8 @@ def _current_user_id(authorization: str | None) -> int:
 @router.get(
     "/digest",
     response_model=DigestResponse,
-    summary="주간 포트폴리오 다이제스트 조회",
-    description="AI가 생성한 주간 포트폴리오 성과 분석을 반환합니다. 24시간 캐시, 리밸런싱 시 갱신.",
+    summary="포트폴리오 다이제스트 조회",
+    description="AI가 생성한 기간별 포트폴리오 성과 분석을 반환합니다. 24시간 캐시, 리밸런싱 시 갱신.",
     responses=DIGEST_ERROR_RESPONSES,
 )
 def get_digest(
