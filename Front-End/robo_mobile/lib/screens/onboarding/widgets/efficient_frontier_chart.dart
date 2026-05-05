@@ -193,82 +193,79 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
     return AnimatedBuilder(
       animation: Listenable.merge([_controller, _pulseController]),
       builder: (context, _) {
-        // 1:2 width:height per user feedback — taller portrait orientation
-        return AspectRatio(
-          aspectRatio: 0.5,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final w = constraints.maxWidth;
-              final h = constraints.maxHeight;
+        // Chart fills whatever its parent provides — wrap in Expanded
+        // (or a SizedBox) at the call site to control its bounds.
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final w = constraints.maxWidth;
+            final h = constraints.maxHeight;
 
-              return GestureDetector(
-                onPanStart: (details) {
-                  if (_controller.isCompleted) {
-                    late final Offset dotPos;
-                    if (_hasPreviewPoints) {
-                      final pp = widget.previewPoints!;
-                      dotPos = _previewPointToOffset(
-                        pp[widget.selectedPreviewPosition ?? pp.length ~/ 2],
-                        w,
-                        h,
-                        pp.map((p) => p.volatility).reduce(min),
-                        pp.map((p) => p.volatility).reduce(max),
-                        pp.map((p) => p.expectedReturn).reduce(min),
-                        pp.map((p) => p.expectedReturn).reduce(max),
-                      );
-                    } else {
-                      dotPos = _tToPoint(_dotT, w, h);
-                    }
-                    if ((details.localPosition - dotPos).distance < 60) {
-                      setState(() => _isDragging = true);
-                      widget.onDragStateChanged?.call(true);
-                    }
+            return GestureDetector(
+              onPanStart: (details) {
+                if (_controller.isCompleted) {
+                  late final Offset dotPos;
+                  if (_hasPreviewPoints) {
+                    final pp = widget.previewPoints!;
+                    dotPos = _previewPointToOffset(
+                      pp[widget.selectedPreviewPosition ?? pp.length ~/ 2],
+                      w,
+                      h,
+                      pp.map((p) => p.volatility).reduce(min),
+                      pp.map((p) => p.volatility).reduce(max),
+                      pp.map((p) => p.expectedReturn).reduce(min),
+                      pp.map((p) => p.expectedReturn).reduce(max),
+                    );
+                  } else {
+                    dotPos = _tToPoint(_dotT, w, h);
                   }
-                },
-                onPanUpdate: (details) {
-                  if (_isDragging) {
-                    if (_hasPreviewPoints) {
-                      final previewPosition =
-                          _nearestPreviewPosition(details.localPosition, w, h);
-                      final nextDotT = widget.previewPoints!.length <= 1
-                          ? 0.45
-                          : previewPosition /
-                              (widget.previewPoints!.length - 1);
-                      setState(() => _dotT = nextDotT);
-                      widget.onPreviewPointChanged?.call(previewPosition);
-                    } else {
-                      setState(() {
-                        _dotT = _screenToT(details.localPosition, w, h);
-                      });
-                      widget.onPositionChanged?.call(_dotT);
-                    }
+                  if ((details.localPosition - dotPos).distance < 60) {
+                    setState(() => _isDragging = true);
+                    widget.onDragStateChanged?.call(true);
                   }
-                },
-                onPanEnd: (_) {
-                  if (_isDragging) {
-                    setState(() => _isDragging = false);
-                    widget.onDragStateChanged?.call(false);
+                }
+              },
+              onPanUpdate: (details) {
+                if (_isDragging) {
+                  if (_hasPreviewPoints) {
+                    final previewPosition =
+                        _nearestPreviewPosition(details.localPosition, w, h);
+                    final nextDotT = widget.previewPoints!.length <= 1
+                        ? 0.45
+                        : previewPosition / (widget.previewPoints!.length - 1);
+                    setState(() => _dotT = nextDotT);
+                    widget.onPreviewPointChanged?.call(previewPosition);
+                  } else {
+                    setState(() {
+                      _dotT = _screenToT(details.localPosition, w, h);
+                    });
+                    widget.onPositionChanged?.call(_dotT);
                   }
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: CustomPaint(
-                    painter: _FrontierPainter(
-                      curveProgress: _curveAnimation.value,
-                      dotProgress: _dotAnimation.value,
-                      dotT: _dotT,
-                      isDragging: _isDragging,
-                      pulseValue: _pulseAnimation.value,
-                      previewPoints: widget.previewPoints,
-                      selectedPreviewPosition: widget.selectedPreviewPosition,
-                      gridColor: tc.border,
-                      textTertiaryColor: tc.textTertiary,
-                    ),
+                }
+              },
+              onPanEnd: (_) {
+                if (_isDragging) {
+                  setState(() => _isDragging = false);
+                  widget.onDragStateChanged?.call(false);
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: CustomPaint(
+                  painter: _FrontierPainter(
+                    curveProgress: _curveAnimation.value,
+                    dotProgress: _dotAnimation.value,
+                    dotT: _dotT,
+                    isDragging: _isDragging,
+                    pulseValue: _pulseAnimation.value,
+                    previewPoints: widget.previewPoints,
+                    selectedPreviewPosition: widget.selectedPreviewPosition,
+                    gridColor: tc.border,
+                    textTertiaryColor: tc.textTertiary,
                   ),
                 ),
-              );
-            },
-          ),
+              ),
+            );
+          },
         );
       },
     );
@@ -490,8 +487,7 @@ class _FrontierPainter extends CustomPainter {
         // No real preview yet — derive the min/max envelope directly
         // from the approximate per-asset coords so bubbles still span
         // the canvas naturally.
-        final approxVols =
-            _assetApproxCoords.values.map((o) => o.dx).toList();
+        final approxVols = _assetApproxCoords.values.map((o) => o.dx).toList();
         final approxReturns =
             _assetApproxCoords.values.map((o) => o.dy).toList();
         _drawAssetBubbles(

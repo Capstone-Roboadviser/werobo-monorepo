@@ -665,22 +665,21 @@ class _FrontierBodyState extends State<_FrontierBody> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Spacer(flex: 1),
+          const SizedBox(height: 8),
           Text(
             '나에게 맞는 투자 찾기',
             style: WeRoboTypography.heading2.themed(context),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             '이 곡선은 같은 위험도에서 가장 높은\n'
             '수익을 내는 조합을 보여줍니다',
             style: WeRoboTypography.bodySmall.themed(context),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
           // Return + risk display — both cards share `_StatCard` so the
           // shape, padding, border, and label/value hierarchy match.
@@ -709,32 +708,36 @@ class _FrontierBodyState extends State<_FrontierBody> {
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
 
-          EfficientFrontierChart(
-            previewPoints: _preview.points,
-            selectedPreviewPosition: _selectedPreviewPosition,
-            onPreviewPointChanged: _handlePreviewPositionChanged,
-            onPositionChanged: (t) {
-              // Drag updates _dotT → setState → AssetWeightBar re-renders.
-              // Each segment's flex ratio animates smoothly via
-              // AnimatedContainer.
-              final selection = _selectionForNormalizedT(t);
-              setState(() {
-                _dotT = selection?.normalizedT ?? t;
-                _selectedPreviewPosition = selection == null
-                    ? null
-                    : _preview
-                        .positionForPointIndex(selection.selectedPointIndex);
-              });
-              widget.onPositionChanged?.call(selection?.normalizedT ?? t);
-              widget.onFrontierSelectionChanged?.call(selection);
-            },
+          // Chart fills all leftover vertical space — no fixed aspect
+          // ratio, no scrolling, just maximizes height inside the column.
+          Expanded(
+            child: EfficientFrontierChart(
+              previewPoints: _preview.points,
+              selectedPreviewPosition: _selectedPreviewPosition,
+              onPreviewPointChanged: _handlePreviewPositionChanged,
+              onPositionChanged: (t) {
+                // Drag updates _dotT → setState → AssetWeightBar re-renders.
+                // Each segment's flex ratio animates smoothly via
+                // AnimatedContainer.
+                final selection = _selectionForNormalizedT(t);
+                setState(() {
+                  _dotT = selection?.normalizedT ?? t;
+                  _selectedPreviewPosition = selection == null
+                      ? null
+                      : _preview
+                          .positionForPointIndex(selection.selectedPointIndex);
+                });
+                widget.onPositionChanged?.call(selection?.normalizedT ?? t);
+                widget.onFrontierSelectionChanged?.call(selection);
+              },
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           AssetWeightBar(assets: _assetsAtT(_dotT)),
           if (_previewLoading || _previewUnavailable) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Text(
               _previewLoading
                   ? '실제 frontier preview를 불러오는 중이에요.'
@@ -745,9 +748,9 @@ class _FrontierBodyState extends State<_FrontierBody> {
               textAlign: TextAlign.center,
             ),
           ],
-          const SizedBox(height: 24),
+          const SizedBox(height: 12),
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             decoration: BoxDecoration(
               color: WeRoboColors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(12),
@@ -772,7 +775,7 @@ class _FrontierBodyState extends State<_FrontierBody> {
               ],
             ),
           ),
-          const Spacer(flex: 2),
+          const SizedBox(height: 8),
         ],
       ),
     );
