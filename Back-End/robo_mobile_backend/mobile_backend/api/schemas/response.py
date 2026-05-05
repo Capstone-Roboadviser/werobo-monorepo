@@ -38,6 +38,56 @@ class AuthLogoutResponse(BaseModel):
     status: str = Field(..., description="로그아웃 처리 결과", examples=["ok"])
 
 
+class PortfolioAccountSummaryResponse(BaseModel):
+    portfolio_code: str = Field(..., description="현재 계정의 대표 포트폴리오 코드", examples=["balanced"])
+    portfolio_label: str = Field(..., description="현재 계정의 대표 포트폴리오 이름", examples=["균형형"])
+    portfolio_id: str = Field(..., description="현재 계정의 포트폴리오 식별자", examples=["stocks-balanced-medium-0.12"])
+    data_source: str = Field(..., description="계산에 사용한 데이터 소스", examples=["managed_universe"])
+    investment_horizon: str = Field(..., description="포트폴리오 계산에 사용한 투자 기간", examples=["medium"])
+    target_volatility: float = Field(..., description="확정 당시 목표 변동성", examples=[0.12])
+    expected_return: float = Field(..., description="확정 당시 연 기대수익률", examples=[0.0742])
+    volatility: float = Field(..., description="확정 당시 연 변동성", examples=[0.0815])
+    sharpe_ratio: float = Field(..., description="확정 당시 샤프 비율", examples=[0.66])
+    started_at: str = Field(..., description="자산 추적 시작일", examples=["2026-04-13"])
+    last_snapshot_date: str = Field(..., description="가장 최근 평가일", examples=["2026-04-13"])
+    current_value: float = Field(..., description="현재 총 자산", examples=[10325000])
+    invested_amount: float = Field(..., description="누적 입금 원금", examples=[10000000])
+    profit_loss: float = Field(..., description="평가 손익", examples=[325000])
+    cash_balance: float = Field(..., description="현재 리밸런싱 대기 현금", examples=[12500])
+    profit_loss_pct: float = Field(..., description="평가 손익률", examples=[0.0325])
+    sector_allocations: list["SectorAllocationResponse"] = Field(
+        default_factory=list,
+        description="현재 계정 포트폴리오의 자산군 비중",
+    )
+    stock_allocations: list["StockAllocationResponse"] = Field(
+        default_factory=list,
+        description="현재 계정 포트폴리오의 종목 비중",
+    )
+
+
+class PortfolioAccountHistoryPointResponse(BaseModel):
+    date: str = Field(..., description="스냅샷 일자", examples=["2026-04-13"])
+    portfolio_value: float = Field(..., description="해당 일자의 총 자산", examples=[10325000])
+    invested_amount: float = Field(..., description="해당 일자의 누적 입금 원금", examples=[10000000])
+    profit_loss: float = Field(..., description="해당 일자의 평가 손익", examples=[325000])
+    profit_loss_pct: float = Field(..., description="해당 일자의 평가 손익률", examples=[0.0325])
+
+
+class PortfolioAccountActivityResponse(BaseModel):
+    type: str = Field(..., description="활동 타입", examples=["cash_in"])
+    title: str = Field(..., description="활동 표시 제목", examples=["입금"])
+    date: str = Field(..., description="활동 기준일", examples=["2026-04-13"])
+    amount: float | None = Field(default=None, description="활동 금액", examples=[500000])
+    description: str | None = Field(default=None, description="보조 설명", examples=["균형형 포트폴리오로 자산 추적 시작"])
+
+
+class PortfolioAccountDashboardResponse(BaseModel):
+    has_account: bool = Field(..., description="현재 로그인 사용자의 프로토타입 자산 계정 존재 여부", examples=[True])
+    summary: PortfolioAccountSummaryResponse | None = Field(default=None, description="현재 자산 요약")
+    history: list[PortfolioAccountHistoryPointResponse] = Field(default_factory=list, description="일별 자산 스냅샷")
+    recent_activity: list[PortfolioAccountActivityResponse] = Field(default_factory=list, description="최근 활동 내역")
+
+
 class ResolvedProfileItemResponse(BaseModel):
     code: str = Field(..., description="판정된 위험 유형 코드", examples=["balanced"])
     label: str = Field(..., description="위험 유형 표시 이름", examples=["균형형"])
@@ -125,6 +175,10 @@ class FrontierPreviewPointResponse(BaseModel):
     is_recommended: bool = Field(..., description="사용자 추천 위험유형에 해당하는 포인트인지 여부", examples=[False])
     representative_code: str | None = Field(default=None, description="대표 포트폴리오 코드와 일치할 때의 코드", examples=["balanced"])
     representative_label: str | None = Field(default=None, description="대표 포트폴리오 표시 이름", examples=["균형형"])
+    sector_allocations: list[SectorAllocationResponse] = Field(
+        default_factory=list,
+        description="해당 frontier 포인트의 실제 자산군 비중",
+    )
 
 
 class FrontierPreviewResponse(BaseModel):
@@ -180,6 +234,75 @@ class ComparisonLineResponse(BaseModel):
     color: str = Field(..., description="차트 색상", examples=["#2A9D8F"])
     style: str = Field(..., description="차트 렌더링 스타일", examples=["solid"])
     points: list[ComparisonLinePointResponse] = Field(default_factory=list, description="시계열 포인트")
+
+
+class RebalancePolicyResponse(BaseModel):
+    strategy: str = Field(..., description="리밸런싱 정책 식별자", examples=["scheduled_plus_drift_guard"])
+    scheduled_rebalance_frequency: str | None = Field(
+        default=None,
+        description="정기 리밸런싱 주기",
+        examples=["quarterly"],
+    )
+    force_rebalance_on_schedule: bool = Field(
+        ...,
+        description="정기 점검일에는 drift와 무관하게 리밸런싱을 수행하는지 여부",
+        examples=[True],
+    )
+    drift_check_frequency: str | None = Field(
+        default=None,
+        description="drift guard를 검사하는 빈도",
+        examples=["daily"],
+    )
+    drift_threshold: float | None = Field(
+        default=None,
+        description="drift guard 임계값",
+        examples=[0.10],
+    )
+
+
+class RebalanceInsightAllocationResponse(BaseModel):
+    asset_code: str = Field(..., description="자산군 코드", examples=["us_value"])
+    asset_name: str = Field(..., description="자산군 이름", examples=["미국 가치주"])
+    color: str = Field(..., description="차트 색상 (hex)", examples=["#20A7DB"])
+    before_pct: float = Field(..., description="리밸런싱 전 비중", examples=[0.212])
+    after_pct: float = Field(..., description="리밸런싱 후 비중", examples=[0.200])
+
+
+class RebalanceInsightTradeResponse(BaseModel):
+    ticker: str = Field(..., description="실제 매매된 종목 티커", examples=["QQQ"])
+    ticker_name: str | None = Field(default=None, description="종목명", examples=["Invesco QQQ Trust"])
+    asset_code: str | None = Field(default=None, description="소속 자산군 코드", examples=["us_growth"])
+    asset_name: str | None = Field(default=None, description="소속 자산군 이름", examples=["미국 성장주"])
+    direction: str = Field(..., description="매매 방향", examples=["sell"])
+    amount: float = Field(..., description="매매 금액(절대값)", examples=[5572])
+
+
+class RebalanceInsightResponse(BaseModel):
+    id: int = Field(..., description="인사이트 식별자", examples=[1])
+    rebalance_date: str = Field(..., description="리밸런싱 발생일", examples=["2026-04-01"])
+    allocations: list[RebalanceInsightAllocationResponse] = Field(
+        default_factory=list,
+        description="자산군별 리밸런싱 전후 비중",
+    )
+    trade_details: list[RebalanceInsightTradeResponse] = Field(
+        default_factory=list,
+        description="실제 매매된 종목 목록",
+    )
+    trigger: str | None = Field(default=None, description="리밸런싱 트리거", examples=["drift_guard"])
+    trade_count: int = Field(default=0, description="실제 매매가 발생한 종목 수", examples=[3])
+    cash_before: float | None = Field(default=None, description="리밸런싱 전 현금 잔액", examples=[0])
+    cash_from_sales: float | None = Field(default=None, description="매도로 확보한 현금", examples=[700000])
+    cash_to_buys: float | None = Field(default=None, description="매수에 사용한 현금", examples=[520000])
+    cash_after: float | None = Field(default=None, description="리밸런싱 후 예비현금", examples=[180000])
+    net_cash_change: float | None = Field(default=None, description="리밸런싱 전후 순현금 변화", examples=[180000])
+    explanation_text: str | None = Field(default=None, description="리밸런싱 설명 텍스트")
+    is_read: bool = Field(..., description="읽음 여부", examples=[False])
+    created_at: str = Field(..., description="생성 시각(UTC)", examples=["2026-04-01T08:30:00Z"])
+
+
+class RebalanceInsightsListResponse(BaseModel):
+    insights: list[RebalanceInsightResponse] = Field(default_factory=list, description="리밸런싱 인사이트 목록")
+    unread_count: int = Field(..., description="읽지 않은 인사이트 수", examples=[2])
 
 
 class ComparisonBacktestResponse(BaseModel):

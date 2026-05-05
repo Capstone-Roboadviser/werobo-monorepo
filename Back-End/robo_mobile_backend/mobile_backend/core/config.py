@@ -10,6 +10,15 @@ APP_DESCRIPTION = (
 )
 API_PREFIX = "/api/v1"
 ADMIN_REFRESH_SECRET = os.getenv("ADMIN_REFRESH_SECRET", "").strip()
+MOBILE_REQUIRE_MANAGED_UNIVERSE_SNAPSHOTS = os.getenv(
+    "MOBILE_REQUIRE_MANAGED_UNIVERSE_SNAPSHOTS",
+    "true",
+).strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
 
 PROFILE_LABELS = {
     "conservative": "안정형",

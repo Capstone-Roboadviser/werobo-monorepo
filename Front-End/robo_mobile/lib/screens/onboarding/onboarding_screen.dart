@@ -9,22 +9,33 @@ import 'widgets/donut_chart.dart';
 import 'widgets/efficient_frontier_chart.dart';
 import 'widgets/page_indicator.dart';
 
+const _frontierPreviewSamplePoints = 301;
+
 class OnboardingFrontierSelection {
   final double normalizedT;
+  final int selectedPointIndex;
   final double targetVolatility;
-  final int pointIndex;
   final String dataSource;
+  final DateTime? asOfDate;
+  final bool isAuthoritative;
 
   const OnboardingFrontierSelection({
     required this.normalizedT,
+    required this.selectedPointIndex,
     required this.targetVolatility,
-    required this.pointIndex,
     required this.dataSource,
+    required this.asOfDate,
+    required this.isAuthoritative,
   });
 }
 
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key});
+  final DateTime? asOfDate;
+
+  const OnboardingScreen({
+    super.key,
+    this.asOfDate,
+  });
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -36,6 +47,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   bool _chartDragging = false;
   double _selectedDotT = 0.45;
   OnboardingFrontierSelection? _frontierSelection;
+  late final Future<MobileFrontierPreviewResponse?> _frontierPreviewFuture;
 
   static const int _pageCount = 2;
 
@@ -44,20 +56,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.initState();
     logPageEnter('OnboardingScreen');
     logPageEnter('onboarding step 1/2');
-    _prefetchFrontierPreview();
+    _frontierPreviewFuture = _fetchFrontierPreview();
   }
 
   /// Start fetching the frontier preview while the user is still on page 1
   /// so it's cached by the time they swipe to the frontier page.
-  Future<void> _prefetchFrontierPreview() async {
+  Future<MobileFrontierPreviewResponse?> _fetchFrontierPreview() async {
     try {
       final preview = await MobileBackendApi.instance.fetchFrontierPreview(
         propensityScore: 45.0,
+        samplePoints: _frontierPreviewSamplePoints,
+        asOfDate: widget.asOfDate,
       );
-      if (!mounted) return;
+      if (!mounted) {
+        return preview;
+      }
       PortfolioStateProvider.of(context).setFrontierPreview(preview);
+      return preview;
     } catch (_) {
-      // Frontier page will retry on its own if the prefetch fails.
+      return null;
     }
   }
 
@@ -80,20 +97,52 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _goToLoading() {
+    final resolvedSelection =
+        _frontierSelection ?? _selectionFromCachedPreview();
+    if (resolvedSelection != null && _frontierSelection == null) {
+      logAction('hydrate initial frontier selection', {
+        'selected_point_index': resolvedSelection.selectedPointIndex,
+        'target_volatility':
+            resolvedSelection.targetVolatility.toStringAsFixed(4),
+        'dataSource': resolvedSelection.dataSource,
+      });
+    }
     Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) =>
-            PortfolioLoadingScreen(
-          dotT: _selectedDotT,
-          targetVolatility: _frontierSelection?.targetVolatility,
-          selectedPointIndex: _frontierSelection?.pointIndex,
-          previewDataSource: _frontierSelection?.dataSource,
-        ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
+      WeRoboMotion.fadeRoute(PortfolioLoadingScreen(
+        dotT: _selectedDotT,
+        selectedPointIndex: resolvedSelection?.isAuthoritative == true
+            ? resolvedSelection?.selectedPointIndex
+            : null,
+        targetVolatility: resolvedSelection?.targetVolatility,
+        previewDataSource: resolvedSelection?.isAuthoritative == true
+            ? resolvedSelection?.dataSource
+            : null,
+        asOfDate: resolvedSelection?.asOfDate ?? widget.asOfDate,
+        previewFuture: _frontierPreviewFuture,
+      )),
+    );
+  }
+
+  OnboardingFrontierSelection? _selectionFromCachedPreview() {
+    final preview = PortfolioStateProvider.of(context).frontierPreview;
+    if (preview == null || preview.points.isEmpty) {
+      return null;
+    }
+    final previewPosition = preview.points.length <= 1
+        ? 0
+        : (_selectedDotT * (preview.points.length - 1))
+            .round()
+            .clamp(0, preview.points.length - 1);
+    final point = preview.points[previewPosition];
+    return OnboardingFrontierSelection(
+      normalizedT: preview.points.length <= 1
+          ? _selectedDotT
+          : previewPosition / (preview.points.length - 1),
+      selectedPointIndex: point.index,
+      targetVolatility: point.volatility,
+      dataSource: preview.dataSource,
+      asOfDate: preview.asOfDate ?? widget.asOfDate,
+      isAuthoritative: true,
     );
   }
 
@@ -101,7 +150,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -119,6 +168,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 children: [
                   const _ServiceDescriptionPage(),
                   _EfficientFrontierPage(
+                    asOfDate: widget.asOfDate,
+                    frontierPreviewFuture: _frontierPreviewFuture,
                     onDragStateChanged: (dragging) {
                       setState(() => _chartDragging = dragging);
                     },
@@ -258,11 +309,15 @@ class _LegendItem extends StatelessWidget {
 
 /// Page 2: Efficient Frontier explanation
 class _EfficientFrontierPage extends StatefulWidget {
+  final DateTime? asOfDate;
+  final Future<MobileFrontierPreviewResponse?> frontierPreviewFuture;
   final ValueChanged<bool>? onDragStateChanged;
   final ValueChanged<double>? onPositionChanged;
   final ValueChanged<OnboardingFrontierSelection?>? onFrontierSelectionChanged;
 
   const _EfficientFrontierPage({
+    this.asOfDate,
+    required this.frontierPreviewFuture,
     this.onDragStateChanged,
     this.onPositionChanged,
     this.onFrontierSelectionChanged,
@@ -274,7 +329,6 @@ class _EfficientFrontierPage extends StatefulWidget {
 
 class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
   static const double _initialDotT = 0.45;
-  static const double _previewPropensityScore = 45.0;
 
   /// Embedded frontier preview so the real curve renders instantly.
   /// Silently replaced when the live API responds.
@@ -500,6 +554,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
   bool _previewLoading = false;
   bool _previewUnavailable = false;
   bool _didUseInitialCache = false;
+  bool _previewIsAuthoritative = false;
 
   MobileFrontierPreviewPoint? get _selectedPreviewPoint {
     final selectedPreviewPosition = _selectedPreviewPosition;
@@ -520,6 +575,44 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     return 24.7 + (_dotT * (31.6 - 24.7));
   }
 
+  ({String text, Color color}) get _riskComparison {
+    final points = _preview.points;
+    if (points.isEmpty) {
+      return (
+        text: '시장 평균 수준',
+        color: WeRoboColors.accent,
+      );
+    }
+    final averageVol =
+        points.map((p) => p.volatility).reduce((a, b) => a + b) / points.length;
+    final selected = _selectedPreviewPoint;
+    if (selected == null || averageVol == 0) {
+      return (
+        text: '시장 평균 수준',
+        color: WeRoboColors.accent,
+      );
+    }
+    final diff = (selected.volatility - averageVol) / averageVol;
+    final percentDiff = (diff.abs() * 100).round();
+    final isRiskier = diff > 0;
+    if (percentDiff == 0) {
+      return (
+        text: '시장 평균 수준',
+        color: WeRoboColors.accent,
+      );
+    }
+    // Smooth green→orange transition based on risk factor
+    final lerpT = isRiskier ? (diff.abs() * 2).clamp(0.0, 1.0) : 0.0;
+    final color = Color.lerp(
+      const Color(0xFF059669),
+      const Color(0xFFF97316),
+      lerpT,
+    )!;
+    final text = '시장대비 약 $percentDiff%\n'
+        '${isRiskier ? '더 위험한' : '더 안전한'} 포트폴리오';
+    return (text: text, color: color);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -532,7 +625,10 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         ? _initialDotT
         : rec / (_embeddedPreview.points.length - 1);
     widget.onPositionChanged?.call(_dotT);
-    _loadFrontierPreview();
+    widget.onFrontierSelectionChanged?.call(
+      _selectionForPreviewPosition(rec),
+    );
+    _bindFrontierPreviewFuture();
   }
 
   @override
@@ -549,18 +645,13 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
     _applyPreview(cachedPreview, fromCache: true);
   }
 
-  Future<void> _loadFrontierPreview() async {
-    try {
-      final preview = await MobileBackendApi.instance.fetchFrontierPreview(
-        propensityScore: _previewPropensityScore,
-      );
-      if (!mounted) {
-        return;
-      }
-      PortfolioStateProvider.of(context).setFrontierPreview(preview);
-      _applyPreview(preview);
-    } catch (_) {
-      if (!mounted) {
+  Future<void> _bindFrontierPreviewFuture() async {
+    final preview = await widget.frontierPreviewFuture;
+    if (!mounted) {
+      return;
+    }
+    if (preview == null || preview.points.isEmpty) {
+      if (_previewIsAuthoritative) {
         return;
       }
       // Keep the embedded preview — it's better than showing nothing.
@@ -568,7 +659,9 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
         _previewLoading = false;
         _previewUnavailable = true;
       });
+      return;
     }
+    _applyPreview(preview);
   }
 
   void _applyPreview(
@@ -584,6 +677,7 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       _selectedPreviewPosition = recommendedPosition;
       _previewLoading = false;
       _previewUnavailable = false;
+      _previewIsAuthoritative = true;
       _dotT = normalizedT;
     });
     if (fromCache) {
@@ -598,39 +692,57 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
       });
     }
     widget.onPositionChanged?.call(_dotT);
-    final previewPoint = preview.recommendedPoint;
-    if (previewPoint != null) {
-      widget.onFrontierSelectionChanged?.call(
-        OnboardingFrontierSelection(
-          normalizedT: normalizedT,
-          targetVolatility: previewPoint.volatility,
-          pointIndex: previewPoint.index,
-          dataSource: preview.dataSource,
-        ),
-      );
-    }
+    widget.onFrontierSelectionChanged?.call(
+      _selectionForPreviewPosition(recommendedPosition),
+    );
   }
 
   void _handlePreviewPositionChanged(int previewPosition) {
-    if (_preview.points.isEmpty) {
+    final selection = _selectionForPreviewPosition(previewPosition);
+    if (selection == null) {
       return;
     }
+    setState(() {
+      _selectedPreviewPosition = _preview.positionForPointIndex(
+        selection.selectedPointIndex,
+      );
+      _dotT = selection.normalizedT;
+    });
+    widget.onPositionChanged?.call(selection.normalizedT);
+    widget.onFrontierSelectionChanged?.call(selection);
+  }
+
+  OnboardingFrontierSelection? _selectionForPreviewPosition(
+      int previewPosition) {
+    if (_preview.points.isEmpty ||
+        previewPosition < 0 ||
+        previewPosition >= _preview.points.length) {
+      return null;
+    }
+    final point = _preview.points[previewPosition];
     final normalizedT = _preview.points.length <= 1
         ? _initialDotT
         : previewPosition / (_preview.points.length - 1);
-    setState(() {
-      _selectedPreviewPosition = previewPosition;
-      _dotT = normalizedT;
-    });
-    widget.onPositionChanged?.call(normalizedT);
-    widget.onFrontierSelectionChanged?.call(
-      OnboardingFrontierSelection(
-        normalizedT: normalizedT,
-        targetVolatility: _preview.points[previewPosition].volatility,
-        pointIndex: _preview.points[previewPosition].index,
-        dataSource: _preview.dataSource,
-      ),
+    return OnboardingFrontierSelection(
+      normalizedT: normalizedT,
+      selectedPointIndex: point.index,
+      targetVolatility: point.volatility,
+      dataSource: _preview.dataSource,
+      asOfDate: _preview.asOfDate ?? widget.asOfDate,
+      isAuthoritative: _previewIsAuthoritative,
     );
+  }
+
+  OnboardingFrontierSelection? _selectionForNormalizedT(double normalizedT) {
+    if (_preview.points.isEmpty) {
+      return null;
+    }
+    final previewPosition = _preview.points.length <= 1
+        ? 0
+        : (normalizedT * (_preview.points.length - 1))
+            .round()
+            .clamp(0, _preview.points.length - 1);
+    return _selectionForPreviewPosition(previewPosition);
   }
 
   @override
@@ -656,11 +768,43 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
           ),
           const SizedBox(height: 24),
 
-          // Return display
-          _StatCard(
-            label: '연 기대수익률',
-            value: '${_returnRate.toStringAsFixed(1)}%',
-            color: WeRoboColors.primary,
+          // Return + risk display
+          Row(
+            children: [
+              Expanded(
+                child: _StatCard(
+                  label: '연 기대수익률',
+                  value: '${_returnRate.toStringAsFixed(1)}%',
+                  color: WeRoboColors.primary,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 12,
+                    horizontal: 14,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _riskComparison.color.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 300),
+                    style: WeRoboTypography.caption.copyWith(
+                      color: _riskComparison.color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    textAlign: TextAlign.center,
+                    child: Text(
+                      _riskComparison.text,
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 24),
 
@@ -670,12 +814,16 @@ class _EfficientFrontierPageState extends State<_EfficientFrontierPage> {
             onDragStateChanged: widget.onDragStateChanged,
             onPreviewPointChanged: _handlePreviewPositionChanged,
             onPositionChanged: (t) {
+              final selection = _selectionForNormalizedT(t);
               setState(() {
-                _dotT = t;
-                _selectedPreviewPosition = null;
+                _dotT = selection?.normalizedT ?? t;
+                _selectedPreviewPosition = selection == null
+                    ? null
+                    : _preview
+                        .positionForPointIndex(selection.selectedPointIndex);
               });
-              widget.onPositionChanged?.call(t);
-              widget.onFrontierSelectionChanged?.call(null);
+              widget.onPositionChanged?.call(selection?.normalizedT ?? t);
+              widget.onFrontierSelectionChanged?.call(selection);
             },
           ),
           if (_previewLoading || _previewUnavailable) ...[

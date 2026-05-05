@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 
 import pandas as pd
 
@@ -40,6 +41,7 @@ class UserProfile:
     investment_horizon: InvestmentHorizon
     target_volatility: float | None = None
     data_source: SimulationDataSource = SimulationDataSource.MANAGED_UNIVERSE
+    as_of_date: date | None = None
 
 
 @dataclass(frozen=True)
@@ -163,6 +165,18 @@ class ManagedPriceRefreshJobItem:
 
 
 @dataclass(frozen=True)
+class DividendYieldEstimate:
+    ticker: str
+    annualized_dividend: float
+    annual_yield: float
+    payments_per_year: int
+    frequency_label: str
+    last_payment_date: str | None
+    source: str = "unknown"
+    updated_at: str | None = None
+
+
+@dataclass(frozen=True)
 class ManagedFrontierSnapshot:
     snapshot_id: int
     version_id: int
@@ -171,6 +185,20 @@ class ManagedFrontierSnapshot:
     aligned_start_date: str | None
     aligned_end_date: str | None
     total_point_count: int
+    source_refresh_job_id: int | None
+    payload: dict[str, object]
+    created_at: str
+    updated_at: str
+
+
+@dataclass(frozen=True)
+class ManagedComparisonBacktestSnapshot:
+    snapshot_id: int
+    version_id: int
+    data_source: SimulationDataSource
+    aligned_start_date: str | None
+    aligned_end_date: str | None
+    line_count: int
     source_refresh_job_id: int | None
     payload: dict[str, object]
     created_at: str
@@ -187,11 +215,20 @@ class ManagedFrontierSnapshotBuildStatus:
 
 
 @dataclass(frozen=True)
+class ManagedComparisonBacktestSnapshotBuildStatus:
+    status: str
+    snapshot_count: int
+    line_count: int = 0
+    message: str | None = None
+
+
+@dataclass(frozen=True)
 class ManagedPriceRefreshResult:
     job: ManagedPriceRefreshJob
     price_stats: ManagedPriceStats
     price_window: ManagedUniversePriceWindow | None = None
     frontier_snapshot_status: ManagedFrontierSnapshotBuildStatus | None = None
+    comparison_backtest_snapshot_status: ManagedComparisonBacktestSnapshotBuildStatus | None = None
 
 
 @dataclass(frozen=True)
@@ -253,6 +290,19 @@ class CombinationSelectionView:
     total_combinations_tested: int
     successful_combinations: int
     discard_reasons: dict[str, int]
+
+
+@dataclass(frozen=True)
+class PortfolioHistoryPoint:
+    date: str
+    value: float
+
+
+@dataclass(frozen=True)
+class PortfolioHistorySeries:
+    points: list[PortfolioHistoryPoint]
+    earliest_data_date: str
+    latest_data_date: str
 
 
 @dataclass(frozen=True)

@@ -3,6 +3,7 @@ import secrets
 from fastapi import APIRouter, Header, HTTPException, Query
 
 from app.api.schemas.request import (
+    AccountSnapshotBackfillRequest,
     ActivePriceRefreshRequest,
     ManagedUniverseVersionCreateRequest,
     ManagedUniverseVersionUpdateRequest,
@@ -13,7 +14,10 @@ from app.api.schemas.response import (
     AssetRoleTemplateResponse,
     CombinationSelectionResponse,
     ErrorResponse,
+    ManagedComparisonBacktestSnapshotStatusResponse,
     ManagedFrontierSnapshotStatusResponse,
+    ManagedPortfolioAccountSnapshotBackfillResponse,
+    ManagedPortfolioAccountSnapshotStatusResponse,
     ManagedPriceRefreshJobResponse,
     ManagedPriceRefreshResponse,
     ManagedUniverseAssetRoleCatalogResponse,
@@ -43,16 +47,29 @@ from app.services.managed_universe_service import ManagedUniverseService
 from app.services.portfolio_service import PortfolioSimulationService
 from app.services.price_refresh_service import PriceRefreshService
 from app.services.ticker_discovery_service import TickerDiscoveryService
+from mobile_backend.services.account_service import PortfolioAccountService
+from mobile_backend.services.comparison_backtest_snapshot_service import ComparisonBacktestSnapshotService
 from mobile_backend.services.frontier_snapshot_service import FrontierSnapshotService
 from mobile_backend.core.config import ADMIN_REFRESH_SECRET
 
 
 router = APIRouter(prefix="/admin/api", tags=["admin"])
 managed_universe_service = ManagedUniverseService()
-price_refresh_service = PriceRefreshService(managed_universe_service)
 portfolio_simulation_service = PortfolioSimulationService()
 ticker_discovery_service = TickerDiscoveryService()
 frontier_snapshot_service = FrontierSnapshotService(managed_universe_service=managed_universe_service)
+comparison_backtest_snapshot_service = ComparisonBacktestSnapshotService(
+    managed_universe_service=managed_universe_service
+)
+portfolio_account_service = PortfolioAccountService()
+price_refresh_service = PriceRefreshService(
+    managed_universe_service,
+    extra_ticker_provider=lambda version: (
+        portfolio_account_service.list_managed_universe_account_tickers()
+        if version.is_active
+        else []
+    ),
+)
 COMMON_ADMIN_422 = {
     422: {
         "model": ErrorResponse,
@@ -248,6 +265,12 @@ def delete_universe_version(version_id: int) -> ManagedUniverseDeleteResponse:
 def activate_universe_version(version_id: int) -> ManagedUniverseVersionResponse:
     try:
         version = managed_universe_service.activate_version(version_id)
+        frontier_snapshot_service.rebuild_managed_universe_snapshots(
+            version_id=version.version_id,
+        )
+        comparison_backtest_snapshot_service.rebuild_managed_universe_snapshots(
+            version_id=version.version_id,
+        )
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return _version_response(version)
@@ -257,7 +280,10 @@ def activate_universe_version(version_id: int) -> ManagedUniverseVersionResponse
     "/prices/refresh",
     response_model=ManagedPriceRefreshResponse,
     summary="가격 데이터 갱신",
-    description="active 유니버스 또는 지정 버전에 대해 가격 데이터를 증분/전체 갱신합니다.",
+    description=(
+        "active 유니버스 또는 지정 버전에 대해 가격 데이터를 증분/전체 갱신합니다. "
+        "active 버전을 갱신할 때는 managed_universe 사용자 계정이 이미 보유 중인 티커도 함께 최신화합니다."
+    ),
     responses=COMMON_ADMIN_422,
 )
 def refresh_prices(payload: PriceRefreshRequest) -> ManagedPriceRefreshResponse:
@@ -270,18 +296,26 @@ def refresh_prices(payload: PriceRefreshRequest) -> ManagedPriceRefreshResponse:
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     snapshot_status = None
+    comparison_snapshot_status = None
+    account_snapshot_status = None
     if result.job.status in {"success", "partial_success"}:
         snapshot_status = frontier_snapshot_service.rebuild_managed_universe_snapshots(
             version_id=result.job.version_id,
             source_refresh_job_id=result.job.job_id,
         )
+        comparison_snapshot_status = comparison_backtest_snapshot_service.rebuild_managed_universe_snapshots(
+            version_id=result.job.version_id,
+            source_refresh_job_id=result.job.job_id,
+        )
+        account_snapshot_status = portfolio_account_service.refresh_managed_universe_accounts()
         result = ManagedPriceRefreshResult(
             job=result.job,
             price_stats=result.price_stats,
             price_window=result.price_window,
             frontier_snapshot_status=snapshot_status,
+            comparison_backtest_snapshot_status=comparison_snapshot_status,
         )
-    return _price_refresh_response(result)
+    return _price_refresh_response(result, account_snapshot_status=account_snapshot_status)
 
 
 @router.post(
@@ -290,6 +324,7 @@ def refresh_prices(payload: PriceRefreshRequest) -> ManagedPriceRefreshResponse:
     summary="active 유니버스 가격 갱신",
     description=(
         "cron/job에서 호출하기 위한 active 유니버스 전용 가격 갱신 엔드포인트입니다. "
+        "active 유니버스 종목과 managed_universe 사용자 계정이 보유 중인 티커를 함께 갱신합니다. "
         "ADMIN_REFRESH_SECRET 환경변수와 X-Admin-Secret 헤더가 일치해야 실행됩니다."
     ),
     responses={**COMMON_ADMIN_401, **COMMON_ADMIN_422},
@@ -307,6 +342,7 @@ def refresh_active_prices(
         )
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    account_snapshot_status = None
     if result.job.status in {"success", "partial_success"}:
         result = ManagedPriceRefreshResult(
             job=result.job,
@@ -316,8 +352,55 @@ def refresh_active_prices(
                 version_id=result.job.version_id,
                 source_refresh_job_id=result.job.job_id,
             ),
+            comparison_backtest_snapshot_status=comparison_backtest_snapshot_service.rebuild_managed_universe_snapshots(
+                version_id=result.job.version_id,
+                source_refresh_job_id=result.job.job_id,
+            ),
         )
-    return _price_refresh_response(result)
+        account_snapshot_status = portfolio_account_service.refresh_managed_universe_accounts()
+    return _price_refresh_response(result, account_snapshot_status=account_snapshot_status)
+
+
+@router.post(
+    "/accounts/snapshots/backfill",
+    response_model=ManagedPortfolioAccountSnapshotBackfillResponse,
+    summary="포트폴리오 계정 snapshot backfill",
+    description=(
+        "legacy 계정의 portfolio_daily_snapshots를 현재 계산 로직으로 다시 생성하는 one-off 운영 엔드포인트입니다. "
+        "기본은 dry-run이며, ADMIN_REFRESH_SECRET 환경변수와 X-Admin-Secret 헤더가 일치해야 실행됩니다."
+    ),
+    responses={**COMMON_ADMIN_401, **COMMON_ADMIN_422},
+)
+def backfill_account_snapshots(
+    payload: AccountSnapshotBackfillRequest,
+    x_admin_secret: str | None = Header(default=None, alias="X-Admin-Secret"),
+) -> ManagedPortfolioAccountSnapshotBackfillResponse:
+    _verify_admin_refresh_secret(x_admin_secret)
+    try:
+        result = portfolio_account_service.backfill_account_snapshots(
+            data_source=payload.data_source,
+            account_ids=payload.account_ids,
+            user_ids=payload.user_ids,
+            started_from=payload.started_from,
+            started_to=payload.started_to,
+            limit=payload.limit if not payload.allow_all_matching else None,
+            dry_run=payload.dry_run,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return ManagedPortfolioAccountSnapshotBackfillResponse(
+        status=result.status,
+        dry_run=result.dry_run,
+        data_source=result.data_source,
+        account_count=result.account_count,
+        success_count=result.success_count,
+        failure_count=result.failure_count,
+        selected_account_ids=result.selected_account_ids,
+        updated_account_ids=result.updated_account_ids,
+        failed_account_ids=result.failed_account_ids,
+        failed_user_ids=result.failed_user_ids,
+        message=result.message,
+    )
 
 
 @router.get(
@@ -523,7 +606,11 @@ def _price_refresh_job_response(job: ManagedPriceRefreshJob) -> ManagedPriceRefr
     )
 
 
-def _price_refresh_response(result: ManagedPriceRefreshResult) -> ManagedPriceRefreshResponse:
+def _price_refresh_response(
+    result: ManagedPriceRefreshResult,
+    *,
+    account_snapshot_status=None,
+) -> ManagedPriceRefreshResponse:
     return ManagedPriceRefreshResponse(
         job=_price_refresh_job_response(result.job),
         price_stats=_price_stats_response(result.price_stats),
@@ -536,6 +623,24 @@ def _price_refresh_response(result: ManagedPriceRefreshResult) -> ManagedPriceRe
             horizons=result.frontier_snapshot_status.horizons,
             failed_horizons=result.frontier_snapshot_status.failed_horizons,
             message=result.frontier_snapshot_status.message,
+        ),
+        comparison_backtest_snapshot=None
+        if result.comparison_backtest_snapshot_status is None
+        else ManagedComparisonBacktestSnapshotStatusResponse(
+            status=result.comparison_backtest_snapshot_status.status,
+            snapshot_count=result.comparison_backtest_snapshot_status.snapshot_count,
+            line_count=result.comparison_backtest_snapshot_status.line_count,
+            message=result.comparison_backtest_snapshot_status.message,
+        ),
+        account_snapshot_refresh=None
+        if account_snapshot_status is None
+        else ManagedPortfolioAccountSnapshotStatusResponse(
+            status=account_snapshot_status.status,
+            account_count=account_snapshot_status.account_count,
+            success_count=account_snapshot_status.success_count,
+            failure_count=account_snapshot_status.failure_count,
+            failed_user_ids=account_snapshot_status.failed_user_ids,
+            message=account_snapshot_status.message,
         ),
     )
 

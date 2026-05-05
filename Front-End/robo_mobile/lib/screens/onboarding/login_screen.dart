@@ -5,18 +5,15 @@ import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
+import '../home/home_shell.dart';
 import 'comparison_screen.dart';
 
 class LoginScreen extends StatefulWidget {
-  final MobileRecommendationResponse recommendation;
-  final String selectedPortfolioCode;
-  final MobileFrontierSelectionResponse? frontierSelection;
+  final MobileFrontierSelectionResponse frontierSelection;
 
   const LoginScreen({
     super.key,
-    required this.recommendation,
-    required this.selectedPortfolioCode,
-    this.frontierSelection,
+    required this.frontierSelection,
   });
 
   @override
@@ -43,14 +40,15 @@ class _LoginScreenState extends State<LoginScreen>
   void initState() {
     super.initState();
     logPageEnter('LoginScreen', {
-      'selected': widget.selectedPortfolioCode,
+      'selected': widget.frontierSelection.classificationCode,
+      'selected_point_index': widget.frontierSelection.selectedPointIndex,
     });
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 600),
+      duration: WeRoboMotion.medium,
       vsync: this,
     );
     _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
+      CurvedAnimation(parent: _fadeController, curve: WeRoboMotion.enter),
     );
     _fadeController.forward();
   }
@@ -68,17 +66,35 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _navigateToComparison() {
     Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => ComparisonScreen(
-          recommendation: widget.recommendation,
-          selectedPortfolioCode: widget.selectedPortfolioCode,
-          frontierSelection: widget.frontierSelection,
-        ),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
+      WeRoboMotion.fadeRoute(ComparisonScreen(
+        frontierSelection: widget.frontierSelection,
+      )),
     );
+  }
+
+  void _navigateToHome() {
+    Navigator.of(context).pushAndRemoveUntil(
+      WeRoboMotion.fadeRoute(const HomeShell()),
+      (_) => false,
+    );
+  }
+
+  Future<void> _navigateAfterAuthenticated() async {
+    final state = PortfolioStateProvider.of(context);
+    try {
+      await state.refreshAccountDashboard(notify: true);
+    } catch (_) {}
+    if (!mounted) {
+      return;
+    }
+    if (state.hasPrototypeAccount) {
+      logAction('skip onboarding after login', {
+        'reason': 'existing_account',
+      });
+      _navigateToHome();
+      return;
+    }
+    _navigateToComparison();
   }
 
   void _onSocialLogin(String provider) {
@@ -111,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen>
       'userId': user.id,
       'provider': authProviderTypeToApi(user.provider),
     });
-    _navigateToComparison();
+    await _navigateAfterAuthenticated();
   }
 
   Future<void> _submitDirectAuth() async {
@@ -158,7 +174,7 @@ class _LoginScreenState extends State<LoginScreen>
         'mode': _isLogin ? 'login' : 'signup',
         'userId': session.user.id,
       });
-      _navigateToComparison();
+      await _navigateAfterAuthenticated();
     } catch (error) {
       if (!mounted) {
         return;
@@ -229,7 +245,7 @@ class _LoginScreenState extends State<LoginScreen>
     final currentUser = state.currentUser;
     final hasActiveSession = currentUser != null;
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -631,7 +647,8 @@ class _TabButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: WeRoboMotion.short,
+        curve: WeRoboMotion.move,
         padding: const EdgeInsets.symmetric(vertical: 12),
         decoration: BoxDecoration(
           color: isActive ? WeRoboColors.primary : Colors.transparent,

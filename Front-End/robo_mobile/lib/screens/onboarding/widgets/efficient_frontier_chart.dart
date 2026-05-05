@@ -8,78 +8,83 @@ import '../../../models/portfolio_data.dart';
 class _AssetDot {
   final String code;
   final String name;
-  final double volatility;
-  final double expectedReturn;
   final Color color;
 
   const _AssetDot({
     required this.code,
     required this.name,
-    required this.volatility,
-    required this.expectedReturn,
     required this.color,
   });
 }
 
-/// Hardcoded asset positions estimated from backend data.
-/// Volatility = individual asset std-dev; expectedReturn = individual
-/// expected annual return.  Values are rough estimates that place each
-/// asset class in the right relative position on the frontier chart.
+class _WeightedAsset {
+  final _AssetDot asset;
+  final double weight;
+
+  const _WeightedAsset({
+    required this.asset,
+    required this.weight,
+  });
+}
+
+/// Asset metadata used to color and label the surrounding allocation dots.
 const _kAssetDots = <_AssetDot>[
   _AssetDot(
     code: 'cash_equivalents',
     name: '현금성',
-    volatility: 0.02,
-    expectedReturn: 0.032,
     color: CategoryColors.cash,
   ),
   _AssetDot(
     code: 'short_term_bond',
     name: '단기채권',
-    volatility: 0.03,
-    expectedReturn: 0.038,
     color: CategoryColors.bond,
   ),
   _AssetDot(
     code: 'infra_bond',
     name: '인프라채권',
-    volatility: 0.07,
-    expectedReturn: 0.048,
     color: CategoryColors.infra,
   ),
   _AssetDot(
     code: 'gold',
     name: '금',
-    volatility: 0.15,
-    expectedReturn: 0.052,
     color: CategoryColors.gold,
   ),
   _AssetDot(
     code: 'new_growth',
     name: '신성장주',
-    volatility: 0.22,
-    expectedReturn: 0.070,
     color: CategoryColors.newGrowth,
   ),
   _AssetDot(
     code: 'us_value',
     name: '미국가치주',
-    volatility: 0.18,
-    expectedReturn: 0.075,
     color: CategoryColors.valueStock,
   ),
   _AssetDot(
     code: 'us_growth',
     name: '미국성장주',
-    volatility: 0.25,
-    expectedReturn: 0.085,
     color: CategoryColors.growthStock,
   ),
 ];
 
-/// Sector weights at sampled preview positions (0-based index into the
-/// 61-point preview array).  Values from backend frontier-selection API.
-const _kWeightsAtPosition = <int, Map<String, double>>{
+const _kAssetSlotsByCode = <String, Offset>{
+  'short_term_bond': Offset(0.47, 0.74), // below curve, center
+  'cash_equivalents': Offset(0.67, 0.76), // below curve, right
+  'infra_bond': Offset(0.08, 0.17), // top-left corner
+  'gold': Offset(0.31, 0.11), // top, left-center
+  'us_value': Offset(0.56, 0.08), // top, right-center
+  'new_growth': Offset(0.78, 0.36), // right, mid
+  'us_growth': Offset(0.78, 0.55), // right, lower
+};
+
+const _kUnknownAssetColor = Color(0xFF94A3B8);
+
+final _kAssetDotByCode = {
+  for (final asset in _kAssetDots) asset.code: asset,
+};
+
+/// Fallback weights used only for embedded/stale preview payloads that
+/// do not yet carry per-point sector allocations.
+const _kFallbackWeightsAtPosition = <int, Map<String, double>>{
   // conservative end (vol ≈ 0.057)
   0: {
     'short_term_bond': 0.30,
@@ -142,32 +147,82 @@ const _kWeightsAtPosition = <int, Map<String, double>>{
   },
 };
 
-/// Linearly interpolate asset weights between nearest keyed positions.
-Map<String, double> _interpolateWeights(int position) {
-  final keys = _kWeightsAtPosition.keys.toList()..sort();
+Map<String, double> _interpolateFallbackWeights(double scaledPosition) {
+  final keys = _kFallbackWeightsAtPosition.keys.toList()..sort();
   if (keys.isEmpty) return {};
-  if (position <= keys.first) return _kWeightsAtPosition[keys.first]!;
-  if (position >= keys.last) return _kWeightsAtPosition[keys.last]!;
+  if (scaledPosition <= keys.first) {
+    return _kFallbackWeightsAtPosition[keys.first]!;
+  }
+  if (scaledPosition >= keys.last) {
+    return _kFallbackWeightsAtPosition[keys.last]!;
+  }
 
   int lower = keys.first;
   int upper = keys.last;
   for (final k in keys) {
-    if (k <= position) lower = k;
-    if (k >= position) {
+    if (k <= scaledPosition) lower = k;
+    if (k >= scaledPosition) {
       upper = k;
       break;
     }
   }
-  if (lower == upper) return _kWeightsAtPosition[lower]!;
+  if (lower == upper) return _kFallbackWeightsAtPosition[lower]!;
 
-  final t = (position - lower) / (upper - lower);
-  final lowerW = _kWeightsAtPosition[lower]!;
-  final upperW = _kWeightsAtPosition[upper]!;
+  final t = (scaledPosition - lower) / (upper - lower);
+  final lowerW = _kFallbackWeightsAtPosition[lower]!;
+  final upperW = _kFallbackWeightsAtPosition[upper]!;
   final allCodes = {...lowerW.keys, ...upperW.keys};
   return {
     for (final code in allCodes)
       code: (lowerW[code] ?? 0.0) * (1 - t) + (upperW[code] ?? 0.0) * t,
   };
+}
+
+_AssetDot _assetDotForAllocation(MobileSectorAllocation allocation) {
+  final known = _kAssetDotByCode[allocation.assetCode];
+  if (known != null) {
+    return _AssetDot(
+      code: known.code,
+      name: allocation.assetName.isEmpty ? known.name : allocation.assetName,
+      color: known.color,
+    );
+  }
+  return _AssetDot(
+    code: allocation.assetCode,
+    name: allocation.assetName.isEmpty
+        ? allocation.assetCode
+        : allocation.assetName,
+    color: _kUnknownAssetColor,
+  );
+}
+
+List<_WeightedAsset> _weightedAssetsForPreviewPoint({
+  required MobileFrontierPreviewPoint point,
+  required int selectedPosition,
+  required int previewPointCount,
+}) {
+  if (point.sectorAllocations.isNotEmpty) {
+    return [
+      for (final allocation in point.sectorAllocations)
+        if (allocation.weight > 0)
+          _WeightedAsset(
+            asset: _assetDotForAllocation(allocation),
+            weight: allocation.weight,
+          ),
+    ];
+  }
+
+  final normalizedPosition =
+      previewPointCount <= 1 ? 0.0 : selectedPosition / (previewPointCount - 1);
+  final fallbackWeights = _interpolateFallbackWeights(normalizedPosition * 60);
+  return [
+    for (final asset in _kAssetDots)
+      if ((fallbackWeights[asset.code] ?? 0) > 0)
+        _WeightedAsset(
+          asset: asset,
+          weight: fallbackWeights[asset.code] ?? 0.0,
+        ),
+  ];
 }
 
 class EfficientFrontierChart extends StatefulWidget {
@@ -191,10 +246,12 @@ class EfficientFrontierChart extends StatefulWidget {
 }
 
 class _EfficientFrontierChartState extends State<EfficientFrontierChart>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _curveAnimation;
   late Animation<double> _dotAnimation;
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnimation;
 
   /// Position along the curve: 0.0 = start, 1.0 = end
   double _dotT = 0.45;
@@ -225,6 +282,17 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
       ),
     );
 
+    _pulseController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    )..repeat();
+    _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _pulseController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
     _controller.forward();
   }
 
@@ -251,6 +319,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -272,10 +341,8 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
 
   int _nearestPreviewPosition(Offset localPos, double w, double h) {
     final previewPoints = widget.previewPoints!;
-    final minVolatility =
-        previewPoints.map((p) => p.volatility).reduce(min);
-    final maxVolatility =
-        previewPoints.map((p) => p.volatility).reduce(max);
+    final minVolatility = previewPoints.map((p) => p.volatility).reduce(min);
+    final maxVolatility = previewPoints.map((p) => p.volatility).reduce(max);
     final minExpectedReturn =
         previewPoints.map((p) => p.expectedReturn).reduce(min);
     final maxExpectedReturn =
@@ -335,7 +402,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return AnimatedBuilder(
-      animation: _controller,
+      animation: Listenable.merge([_controller, _pulseController]),
       builder: (context, _) {
         return LayoutBuilder(
           builder: (context, constraints) {
@@ -343,14 +410,13 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
             const h = 300.0;
 
             return GestureDetector(
-              onLongPressStart: (details) {
+              onPanStart: (details) {
                 if (_controller.isCompleted) {
                   late final Offset dotPos;
                   if (_hasPreviewPoints) {
                     final pp = widget.previewPoints!;
                     dotPos = _previewPointToOffset(
-                      pp[widget.selectedPreviewPosition ??
-                          pp.length ~/ 2],
+                      pp[widget.selectedPreviewPosition ?? pp.length ~/ 2],
                       w,
                       h,
                       pp.map((p) => p.volatility).reduce(min),
@@ -367,7 +433,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                   }
                 }
               },
-              onLongPressMoveUpdate: (details) {
+              onPanUpdate: (details) {
                 if (_isDragging) {
                   if (_hasPreviewPoints) {
                     final previewPosition =
@@ -376,8 +442,6 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                         ? 0.45
                         : previewPosition / (widget.previewPoints!.length - 1);
                     setState(() => _dotT = nextDotT);
-                    // Preview mode uses the discrete frontier point callback as
-                    // the single source of truth for card values and selection.
                     widget.onPreviewPointChanged?.call(previewPosition);
                   } else {
                     setState(() {
@@ -387,13 +451,11 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                   }
                 }
               },
-              onLongPressEnd: (_) {
-                setState(() => _isDragging = false);
-                widget.onDragStateChanged?.call(false);
-              },
-              onLongPressCancel: () {
-                setState(() => _isDragging = false);
-                widget.onDragStateChanged?.call(false);
+              onPanEnd: (_) {
+                if (_isDragging) {
+                  setState(() => _isDragging = false);
+                  widget.onDragStateChanged?.call(false);
+                }
               },
               child: SizedBox(
                 width: double.infinity,
@@ -406,6 +468,7 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                       dotProgress: _dotAnimation.value,
                       dotT: _dotT,
                       isDragging: _isDragging,
+                      pulseValue: _pulseAnimation.value,
                       previewPoints: widget.previewPoints,
                       selectedPreviewPosition: widget.selectedPreviewPosition,
                       gridColor: tc.border,
@@ -427,21 +490,35 @@ class _FrontierPainter extends CustomPainter {
   final double dotProgress;
   final double dotT;
   final bool isDragging;
+  final double pulseValue;
   final List<MobileFrontierPreviewPoint>? previewPoints;
   final int? selectedPreviewPosition;
   final Color gridColor;
   final Color textTertiaryColor;
+
+  static const _zoneColors = [
+    Color(0xFF059669), // safe (green)
+    Color(0xFFFBBF24), // moderate (yellow)
+    Color(0xFFF97316), // growth (orange)
+  ];
 
   _FrontierPainter({
     required this.curveProgress,
     required this.dotProgress,
     required this.dotT,
     required this.isDragging,
+    required this.pulseValue,
     required this.previewPoints,
     required this.selectedPreviewPosition,
     required this.gridColor,
     required this.textTertiaryColor,
   });
+
+  int _activeZone(double t) {
+    if (t < 1 / 3) return 0;
+    if (t < 2 / 3) return 1;
+    return 2;
+  }
 
   Offset _tToPoint(double t, double w, double h) {
     final x = w * 0.15 + (w * 0.7) * t;
@@ -484,42 +561,18 @@ class _FrontierPainter extends CustomPainter {
       return;
     }
 
-    // Efficient frontier curve
+    // Efficient frontier curve with zone coloring
     if (curveProgress > 0) {
-      final curvePath = Path();
-      final points = <Offset>[];
-
+      final allPoints = <Offset>[];
       for (int i = 0; i <= 50; i++) {
         final t = i / 50.0;
         if (t > curveProgress) break;
-        points.add(_tToPoint(t, w, h));
+        allPoints.add(_tToPoint(t, w, h));
       }
 
-      if (points.isNotEmpty) {
-        curvePath.moveTo(points.first.dx, points.first.dy);
-        for (int i = 1; i < points.length; i++) {
-          if (i < points.length - 1) {
-            final cp = Offset(
-              (points[i].dx + points[i + 1].dx) / 2,
-              (points[i].dy + points[i + 1].dy) / 2,
-            );
-            curvePath.quadraticBezierTo(
-              points[i].dx,
-              points[i].dy,
-              cp.dx,
-              cp.dy,
-            );
-          } else {
-            curvePath.lineTo(points[i].dx, points[i].dy);
-          }
-        }
-
-        final curvePaint = Paint()
-          ..color = WeRoboColors.primary
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 3
-          ..strokeCap = StrokeCap.round;
-        canvas.drawPath(curvePath, curvePaint);
+      if (allPoints.isNotEmpty) {
+        final activeZone = _activeZone(dotT);
+        _drawZonedCurve(canvas, allPoints, 50, activeZone);
       }
     }
 
@@ -538,13 +591,16 @@ class _FrontierPainter extends CustomPainter {
 
       // Draggable dot on the curve
       final dotPos = _tToPoint(dotT, w, h);
-      final dotRadius = isDragging ? 14.0 : 10.0;
-      final glowRadius = isDragging ? 32.0 : 22.0;
+      final dotRadius = isDragging ? 12.0 : 8.0;
+      final pulseGlow = sin(pulseValue * 2 * pi) * 3.0;
+      final glowRadius = (isDragging ? 28.0 : 18.0) + pulseGlow;
+      final glowAlpha =
+          ((isDragging ? 0.3 : 0.2) + sin(pulseValue * 2 * pi) * 0.05) *
+              dotProgress;
 
       // Glow
       final glowPaint = Paint()
-        ..color = WeRoboColors.primary
-            .withValues(alpha: (isDragging ? 0.3 : 0.2) * dotProgress)
+        ..color = WeRoboColors.primary.withValues(alpha: glowAlpha)
         ..style = PaintingStyle.fill;
       canvas.drawCircle(dotPos, glowRadius * dotProgress, glowPaint);
 
@@ -569,15 +625,12 @@ class _FrontierPainter extends CustomPainter {
     final points = previewPoints!;
 
     // Use frontier-only range so the curve fills the canvas.
-    final minVolatility =
-        points.map((point) => point.volatility).reduce(min);
-    final maxVolatility =
-        points.map((point) => point.volatility).reduce(max);
+    final minVolatility = points.map((point) => point.volatility).reduce(min);
+    final maxVolatility = points.map((point) => point.volatility).reduce(max);
     final minExpectedReturn =
         points.map((point) => point.expectedReturn).reduce(min);
     final maxExpectedReturn =
         points.map((point) => point.expectedReturn).reduce(max);
-    final curvePath = Path();
     final pointOffsets = [
       for (final point in points)
         _previewPointToOffset(
@@ -596,17 +649,14 @@ class _FrontierPainter extends CustomPainter {
     );
     final visiblePoints = pointOffsets.take(visibleCount).toList();
 
-    if (visiblePoints.isNotEmpty) {
-      curvePath.moveTo(visiblePoints.first.dx, visiblePoints.first.dy);
-      for (int i = 1; i < visiblePoints.length; i++) {
-        curvePath.lineTo(visiblePoints[i].dx, visiblePoints[i].dy);
-      }
-      final curvePaint = Paint()
-        ..color = WeRoboColors.primary
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3
-        ..strokeCap = StrokeCap.round;
-      canvas.drawPath(curvePath, curvePaint);
+    if (visiblePoints.length >= 2) {
+      final activeZone = _activeZone(dotT);
+      _drawZonedCurve(
+        canvas,
+        visiblePoints,
+        points.length - 1,
+        activeZone,
+      );
     }
 
     final pointPaint = Paint()
@@ -639,12 +689,15 @@ class _FrontierPainter extends CustomPainter {
       return points.length ~/ 2;
     })();
     final selectedPoint = pointOffsets[selectedPosition];
-    final dotRadius = isDragging ? 14.0 : 10.0;
-    final glowRadius = isDragging ? 32.0 : 22.0;
+    final dotRadius = isDragging ? 12.0 : 8.0;
+    final pulseGlow = sin(pulseValue * 2 * pi) * 3.0;
+    final glowRadius = (isDragging ? 28.0 : 18.0) + pulseGlow;
+    final glowAlpha =
+        ((isDragging ? 0.3 : 0.2) + sin(pulseValue * 2 * pi) * 0.05) *
+            dotProgress;
 
     final glowPaint = Paint()
-      ..color = WeRoboColors.primary
-          .withValues(alpha: (isDragging ? 0.3 : 0.2) * dotProgress)
+      ..color = WeRoboColors.primary.withValues(alpha: glowAlpha)
       ..style = PaintingStyle.fill;
     canvas.drawCircle(selectedPoint, glowRadius * dotProgress, glowPaint);
 
@@ -673,48 +726,44 @@ class _FrontierPainter extends CustomPainter {
     }
 
     // Asset dots — positioned at fixed layout slots around the frontier.
-    // Appear when weight > 10%, sized by weight, with percentage labels.
+    // Keep low-weight assets visible so the frontier does not look incomplete.
     if (dotProgress > 0) {
-      final weights = _interpolateWeights(selectedPosition);
+      final visibleAssets = _weightedAssetsForPreviewPoint(
+        point: labelPoint,
+        selectedPosition: selectedPosition,
+        previewPointCount: points.length,
+      )
+        ..removeWhere((asset) => asset.weight <= 0.005)
+        ..sort((a, b) => a.weight.compareTo(b.weight));
 
-      // Fixed (x%, y%) positions for each asset, chosen to avoid
-      // overlapping the frontier curve or each other.
-      // Slots positioned well clear of the frontier curve which
-      // arcs from bottom-left (~0.15, 0.86) up to right (~0.85, 0.20).
-      const slotsByCode = <String, Offset>{
-        'short_term_bond': Offset(0.52, 0.72), // below curve, center
-        'cash_equivalents': Offset(0.72, 0.72), // below curve, right
-        'infra_bond': Offset(0.08, 0.14), // top-left corner
-        'gold': Offset(0.35, 0.10), // top, left-center
-        'us_value': Offset(0.62, 0.04), // top, right-center
-        'new_growth': Offset(0.92, 0.38), // far right, mid
-        'us_growth': Offset(0.92, 0.55), // far right, lower
-      };
-
-      for (final asset in _kAssetDots) {
-        final weight = weights[asset.code] ?? 0.0;
-        if (weight <= 0.10) continue;
-        final slot = slotsByCode[asset.code];
+      for (final weightedAsset in visibleAssets) {
+        final asset = weightedAsset.asset;
+        final weight = weightedAsset.weight;
+        final slot = _kAssetSlotsByCode[asset.code];
         if (slot == null) continue;
 
         final pos = Offset(w * slot.dx, h * slot.dy);
-        // Scale: 3px at 10% → 8px at 30%+.
+        // Scale: small but visible at 3% → prominent at 30%+.
+        final baseRadius = 4 + weight.clamp(0.0, 0.30) * 18;
         final radius =
-            (3 + (weight - 0.10).clamp(0.0, 0.20) * 25) * dotProgress;
+            (baseRadius + sin(pulseValue * 2 * pi) * 0.5) * dotProgress;
+        final alpha =
+            (0.62 + weight.clamp(0.0, 0.30) * 1.1).clamp(0.62, 0.95).toDouble();
         final assetPaint = Paint()
           ..style = PaintingStyle.fill
-          ..color = asset.color.withValues(alpha: 0.7 * dotProgress);
+          ..color = asset.color.withValues(alpha: alpha * dotProgress);
         canvas.drawCircle(pos, radius, assetPaint);
         // Border ring
         final assetRingPaint = Paint()
           ..style = PaintingStyle.stroke
-          ..color = asset.color.withValues(alpha: 0.9 * dotProgress)
+          ..color = asset.color.withValues(alpha: 1.0 * dotProgress)
           ..strokeWidth = 1.5;
         canvas.drawCircle(pos, radius, assetRingPaint);
 
         // Asset name
-        _drawText(
+        _drawBoundedText(
           canvas,
+          size,
           asset.name,
           Offset(pos.dx + radius + 4, pos.dy - 6),
           labelStyle.copyWith(
@@ -723,20 +772,272 @@ class _FrontierPainter extends CustomPainter {
             fontSize: 9,
           ),
         );
-        // Weight percentage (faint but readable)
+        // Weight percentage
         final pctText = '${(weight * 100).toStringAsFixed(0)}%';
-        _drawText(
+        _drawBoundedText(
           canvas,
+          size,
           pctText,
           Offset(pos.dx + radius + 4, pos.dy + 5),
           labelStyle.copyWith(
-            color: asset.color.withValues(alpha: 0.50 * dotProgress),
+            color: asset.color.withValues(alpha: 0.75 * dotProgress),
             fontWeight: FontWeight.w400,
             fontSize: 9,
           ),
         );
       }
+      _drawAllocationLegend(
+        canvas,
+        size,
+        visibleAssets,
+        labelStyle,
+        dotProgress,
+      );
     }
+  }
+
+  void _drawAllocationLegend(
+    Canvas canvas,
+    Size size,
+    List<_WeightedAsset> assets,
+    TextStyle labelStyle,
+    double opacity,
+  ) {
+    if (assets.isEmpty || opacity <= 0) return;
+    final sorted = [...assets]..sort((a, b) => b.weight.compareTo(a.weight));
+
+    const margin = 8.0;
+    const gap = 4.0;
+    const rowHeight = 17.0;
+    const rows = 2;
+    final chipWidth = (size.width - margin * 2 - gap * 3) / 4;
+    final legendHeight = rowHeight * rows + gap;
+    final startY = size.height - legendHeight - margin;
+
+    for (var i = 0; i < sorted.length; i++) {
+      final row = i ~/ 4;
+      if (row >= rows) break;
+      final itemsInRow = row == 0 ? min(4, sorted.length) : sorted.length - 4;
+      final rowCount = min(4, max(0, itemsInRow));
+      if (rowCount == 0) continue;
+      final rowWidth = chipWidth * rowCount + gap * (rowCount - 1);
+      final startX = (size.width - rowWidth) / 2;
+      final col = i % 4;
+      final asset = sorted[i];
+      final rect = Rect.fromLTWH(
+        startX + col * (chipWidth + gap),
+        startY + row * (rowHeight + gap),
+        chipWidth,
+        rowHeight,
+      );
+
+      final bgPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = WeRoboColors.black.withValues(alpha: 0.45 * opacity);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(8)),
+        bgPaint,
+      );
+
+      final dotPaint = Paint()
+        ..style = PaintingStyle.fill
+        ..color = asset.asset.color.withValues(alpha: 0.95 * opacity);
+      canvas.drawCircle(
+        Offset(rect.left + 8, rect.center.dy),
+        3.2,
+        dotPaint,
+      );
+
+      final text = '${asset.asset.name} ${(asset.weight * 100).round()}%';
+      final tp = TextPainter(
+        text: TextSpan(
+          text: text,
+          style: labelStyle.copyWith(
+            color: asset.asset.color.withValues(alpha: opacity),
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        maxLines: 1,
+        ellipsis: '…',
+        textDirection: TextDirection.ltr,
+      );
+      tp.layout(maxWidth: chipWidth - 16);
+      tp.paint(
+        canvas,
+        Offset(rect.left + 14, rect.top + (rowHeight - tp.height) / 2),
+      );
+    }
+  }
+
+  /// Draw the frontier curve split into 3 zones with coloring.
+  void _drawZonedCurve(
+    Canvas canvas,
+    List<Offset> pts,
+    int totalCount,
+    int activeZone,
+  ) {
+    if (pts.length < 2) return;
+    final n = pts.length;
+
+    for (int zone = 0; zone < 3; zone++) {
+      final zoneStart = zone / 3.0;
+      final zoneEnd = (zone + 1) / 3.0;
+
+      // Collect points in this zone (with overlap for
+      // continuity at boundaries).
+      final segPts = <Offset>[];
+      for (int i = 0; i < n; i++) {
+        final t = totalCount <= 0 ? 0.5 : i / totalCount.toDouble();
+        if (t >= zoneStart - 0.02 && t <= zoneEnd + 0.02) {
+          segPts.add(pts[i]);
+        }
+      }
+      if (segPts.length < 2) continue;
+
+      // Smooth the rendered curve while preserving the underlying preview
+      // points for hit-testing and selection.
+      final segPath = _buildSmoothPath(segPts);
+
+      final isActive = zone == activeZone;
+      final segColor = isActive ? _zoneColors[zone] : WeRoboColors.primary;
+
+      if (isActive) {
+        // Faint glow under active zone
+        final glowPaint = Paint()
+          ..color = segColor.withValues(alpha: 0.2)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 9
+          ..strokeCap = StrokeCap.round;
+        canvas.drawPath(segPath, glowPaint);
+      }
+
+      final segPaint = Paint()
+        ..color = segColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round;
+
+      // Gradient blend at zone boundaries
+      if (isActive && segPts.length >= 2) {
+        // Blend start boundary
+        if (zone > 0) {
+          final gradStart = segPts.first;
+          final gradEnd = segPts.length > 2 ? segPts[1] : segPts.last;
+          segPaint.shader = _blendShader(
+            WeRoboColors.primary,
+            segColor,
+            gradStart,
+            gradEnd,
+            segPts.first,
+            segPts.last,
+          );
+        }
+        // For single-segment approach, apply full gradient
+        // across the path from blue edges to colored center.
+        if (segPts.length >= 4) {
+          segPaint.shader = _zoneGradientShader(
+            segColor,
+            segPts.first,
+            segPts.last,
+            zone > 0,
+            zone < 2,
+          );
+        }
+      }
+
+      canvas.drawPath(segPath, segPaint);
+    }
+  }
+
+  Path _buildSmoothPath(List<Offset> points) {
+    final path = Path()..moveTo(points.first.dx, points.first.dy);
+    if (points.length == 2) {
+      path.lineTo(points.last.dx, points.last.dy);
+      return path;
+    }
+
+    for (int i = 0; i < points.length - 1; i++) {
+      final p0 = i > 0 ? points[i - 1] : points[i];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i + 2 < points.length ? points[i + 2] : p2;
+
+      final rawControl1 = Offset(
+        p1.dx + (p2.dx - p0.dx) / 6,
+        p1.dy + (p2.dy - p0.dy) / 6,
+      );
+      final rawControl2 = Offset(
+        p2.dx - (p3.dx - p1.dx) / 6,
+        p2.dy - (p3.dy - p1.dy) / 6,
+      );
+
+      final control1 = _clampOffsetToSegment(rawControl1, p1, p2);
+      final control2 = _clampOffsetToSegment(rawControl2, p1, p2);
+
+      path.cubicTo(
+        control1.dx,
+        control1.dy,
+        control2.dx,
+        control2.dy,
+        p2.dx,
+        p2.dy,
+      );
+    }
+
+    return path;
+  }
+
+  Offset _clampOffsetToSegment(Offset value, Offset start, Offset end) {
+    final minX = min(start.dx, end.dx);
+    final maxX = max(start.dx, end.dx);
+    final minY = min(start.dy, end.dy);
+    final maxY = max(start.dy, end.dy);
+    return Offset(
+      value.dx.clamp(minX, maxX).toDouble(),
+      value.dy.clamp(minY, maxY).toDouble(),
+    );
+  }
+
+  /// Create a gradient shader that blends from blue
+  /// at the edges to the zone color in the center.
+  Shader _zoneGradientShader(
+    Color zoneColor,
+    Offset start,
+    Offset end,
+    bool blendStart,
+    bool blendEnd,
+  ) {
+    final colors = <Color>[
+      if (blendStart) WeRoboColors.primary,
+      zoneColor,
+      zoneColor,
+      if (blendEnd) WeRoboColors.primary,
+    ];
+    final stops = <double>[
+      if (blendStart) 0.0,
+      blendStart ? 0.15 : 0.0,
+      blendEnd ? 0.85 : 1.0,
+      if (blendEnd) 1.0,
+    ];
+    return LinearGradient(
+      colors: colors,
+      stops: stops,
+    ).createShader(Rect.fromPoints(start, end));
+  }
+
+  Shader _blendShader(
+    Color from,
+    Color to,
+    Offset gradStart,
+    Offset gradEnd,
+    Offset pathStart,
+    Offset pathEnd,
+  ) {
+    return LinearGradient(
+      colors: [from, to, to, from],
+      stops: const [0.0, 0.15, 0.85, 1.0],
+    ).createShader(Rect.fromPoints(pathStart, pathEnd));
   }
 
   Offset _previewPointToOffset(
@@ -777,13 +1078,31 @@ class _FrontierPainter extends CustomPainter {
     tp.paint(canvas, offset);
   }
 
+  void _drawBoundedText(
+    Canvas canvas,
+    Size size,
+    String text,
+    Offset offset,
+    TextStyle style,
+  ) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+    );
+    tp.layout();
+    final dx = offset.dx.clamp(4.0, max(4.0, size.width - tp.width - 4.0));
+    final dy = offset.dy.clamp(4.0, max(4.0, size.height - tp.height - 4.0));
+    tp.paint(canvas, Offset(dx.toDouble(), dy.toDouble()));
+  }
+
   @override
-  bool shouldRepaint(covariant _FrontierPainter oldDelegate) {
-    return oldDelegate.curveProgress != curveProgress ||
-        oldDelegate.dotProgress != dotProgress ||
-        oldDelegate.dotT != dotT ||
-        oldDelegate.isDragging != isDragging ||
-        oldDelegate.selectedPreviewPosition != selectedPreviewPosition ||
-        oldDelegate.previewPoints != previewPoints;
+  bool shouldRepaint(covariant _FrontierPainter old) {
+    return old.curveProgress != curveProgress ||
+        old.dotProgress != dotProgress ||
+        old.dotT != dotT ||
+        old.isDragging != isDragging ||
+        old.pulseValue != pulseValue ||
+        old.selectedPreviewPosition != selectedPreviewPosition ||
+        old.previewPoints != previewPoints;
   }
 }

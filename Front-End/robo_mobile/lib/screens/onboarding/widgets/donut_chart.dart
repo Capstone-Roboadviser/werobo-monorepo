@@ -18,11 +18,11 @@ class _DonutChartState extends State<DonutChart>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: const Duration(milliseconds: 1200),
+      duration: WeRoboMotion.chartDraw,
       vsync: this,
     );
     _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+      CurvedAnimation(parent: _controller, curve: WeRoboMotion.chartReveal),
     );
     _controller.forward();
   }

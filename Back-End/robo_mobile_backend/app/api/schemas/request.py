@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel, Field, model_validator
 
 from app.core.config import TARGET_VOLATILITY_MAX, TARGET_VOLATILITY_MIN, TARGET_VOLATILITY_STEP
@@ -128,6 +130,18 @@ class ComparisonBacktestRequest(BaseModel):
         default=SimulationDataSource.MANAGED_UNIVERSE,
         description="가격 데이터 소스",
     )
+    stock_weights: dict[str, float] | None = Field(
+        default=None,
+        description="현재 선택 포트폴리오의 종목 비중 맵. 주어지면 이 비중을 고정한 과거 백테스트를 계산합니다.",
+    )
+    portfolio_code: str | None = Field(
+        default=None,
+        description="현재 선택 포트폴리오 코드. 없으면 `selected` 라인 키를 사용합니다.",
+    )
+    start_date: str | None = Field(
+        default=None,
+        description="비교 백테스트 시작일 (YYYY-MM-DD). 있으면 해당 날짜 이후 데이터만 사용합니다.",
+    )
 
 
 class RebalanceSimulationRequest(BaseModel):
@@ -143,9 +157,66 @@ class RebalanceSimulationRequest(BaseModel):
 class PriceRefreshRequest(BaseModel):
     version_id: int | None = Field(default=None, description="가격 갱신 대상 유니버스 버전. 없으면 active 버전 사용")
     refresh_mode: PriceRefreshMode = Field(default=PriceRefreshMode.INCREMENTAL, description="증분 갱신 또는 전체 백필")
-    full_lookback_years: int = Field(default=5, ge=1, le=20, description="full 모드에서 가져올 연수")
+    full_lookback_years: int = Field(default=20, ge=1, le=20, description="full 모드에서 가져올 연수")
 
 
 class ActivePriceRefreshRequest(BaseModel):
     refresh_mode: PriceRefreshMode = Field(default=PriceRefreshMode.INCREMENTAL, description="active 유니버스에 대한 증분 갱신 또는 전체 백필")
-    full_lookback_years: int = Field(default=5, ge=1, le=20, description="full 모드에서 가져올 연수")
+    full_lookback_years: int = Field(default=20, ge=1, le=20, description="full 모드에서 가져올 연수")
+
+
+class AccountSnapshotBackfillRequest(BaseModel):
+    dry_run: bool = Field(
+        default=True,
+        description="true면 대상 계정만 조회하고 실제 snapshot 재계산은 수행하지 않습니다.",
+    )
+    data_source: SimulationDataSource | None = Field(
+        default=SimulationDataSource.MANAGED_UNIVERSE,
+        description="대상 계정 데이터 소스. null이면 전체 데이터 소스를 포함합니다.",
+    )
+    account_ids: list[int] = Field(
+        default_factory=list,
+        description="특정 account_id만 대상으로 제한할 때 사용합니다.",
+    )
+    user_ids: list[int] = Field(
+        default_factory=list,
+        description="특정 user_id만 대상으로 제한할 때 사용합니다.",
+    )
+    started_from: str | None = Field(
+        default=None,
+        description="started_at 하한 (YYYY-MM-DD, inclusive)",
+    )
+    started_to: str | None = Field(
+        default=None,
+        description="started_at 상한 (YYYY-MM-DD, inclusive)",
+    )
+    limit: int | None = Field(
+        default=50,
+        ge=1,
+        le=500,
+        description="한 번에 처리할 최대 계정 수. null이면 제한 없이 전체 대상입니다.",
+    )
+    allow_all_matching: bool = Field(
+        default=False,
+        description="true면 별도 ID 필터 없이 매칭되는 전체 계정을 실제 backfill할 수 있습니다.",
+    )
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "AccountSnapshotBackfillRequest":
+        if self.started_from is not None:
+            date.fromisoformat(self.started_from)
+        if self.started_to is not None:
+            date.fromisoformat(self.started_to)
+        if (
+            not self.dry_run
+            and not self.allow_all_matching
+            and not self.account_ids
+            and not self.user_ids
+            and self.started_from is None
+            and self.started_to is None
+            and self.limit is None
+        ):
+            raise ValueError(
+                "실행 모드에서는 범위를 제한하거나 allow_all_matching=true 를 명시해야 합니다."
+            )
+        return self

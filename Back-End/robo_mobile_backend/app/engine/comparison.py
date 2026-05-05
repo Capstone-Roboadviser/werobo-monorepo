@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from app.engine.rebalance import DRIFT_THRESHOLD_DEFAULT, check_and_rebalance
+from app.engine.rebalance import DRIFT_THRESHOLD_DEFAULT, simulate_two_stage_rebalance
 
 
 @dataclass(frozen=True)
@@ -41,16 +41,24 @@ _PROFILE_LABELS = {
     "growth": "성장형",
 }
 
+# Comparison backtests only need relative return paths, but the rebalance engine
+# rounds time-series total_value to cents. Using a 1.0 base investment quantizes
+# the comparison lines into 1% jumps, so keep the simulation notional large.
+_COMPARISON_SIMULATION_BASE_INVESTMENT = 1_000_000.0
+
 
 def build_comparison(
     prices: pd.DataFrame,
     portfolios: dict[str, dict[str, float]],
     expected_returns: dict[str, float],
     benchmark_series: dict[str, pd.Series] | None = None,
+    extra_lines: list[ComparisonLine] | None = None,
     *,
     train_start_date: str,
     train_end_date: str,
     split_ratio: float = 0.9,
+    rebalance_enabled: bool = True,
+    max_sample_points: int | None = 250,
 ) -> ComparisonResult:
     """Build comparison backtest data.
 
@@ -75,37 +83,56 @@ def build_comparison(
         total_w = sum(w.values())
         w = {t: v / total_w for t, v in w.items()}
 
-        # Run drift-based rebalancing simulation
-        first_prices = prices.iloc[0]
-        holdings = {t: w[t] / first_prices[t] for t in available}
-        cash_balance = 0.0
-        inv_value = 1.0  # normalized to 1.0
-
-        return_points: list[tuple[str, float]] = []
-        for i in range(len(prices)):
-            current_prices = prices.iloc[i]
-            date = dates[i]
-            total_value = sum(holdings[t] * current_prices[t] for t in available) + cash_balance
-            return_pct = (total_value - inv_value) / inv_value * 100
-            return_points.append((date.strftime("%Y-%m-%d"), round(return_pct, 4)))
-
-            if i > 0:
-                price_dict = {t: float(current_prices[t]) for t in available}
-                holdings, cash_balance, trades = check_and_rebalance(
-                    holdings, price_dict, w, cash_balance, DRIFT_THRESHOLD_DEFAULT,
+        if rebalance_enabled:
+            simulation = simulate_two_stage_rebalance(
+                prices[available].copy(),
+                w,
+                _COMPARISON_SIMULATION_BASE_INVESTMENT,
+                drift_threshold=DRIFT_THRESHOLD_DEFAULT,
+                max_points=None,
+            )
+            rebalance_date_set.update(event.date for event in simulation.rebalance_events)
+            return_points = [
+                (
+                    point.date,
+                    round(
+                        (point.total_value - simulation.investment_amount)
+                        / simulation.investment_amount
+                        * 100,
+                        4,
+                    ),
                 )
-                if trades:
-                    rebalance_date_set.add(date.strftime("%Y-%m-%d"))
+                for point in simulation.time_series
+            ]
+        else:
+            aligned_prices = prices[available].astype(float).copy()
+            base_prices = aligned_prices.iloc[0].replace(0, np.nan)
+            relative_prices = aligned_prices.divide(base_prices).replace(
+                [np.inf, -np.inf],
+                np.nan,
+            )
+            portfolio_path = (
+                relative_prices.mul(pd.Series(w), axis=1).sum(axis=1).dropna()
+            )
+            return_points = [
+                (
+                    date.strftime("%Y-%m-%d"),
+                    round((float(value) - 1.0) * 100, 4),
+                )
+                for date, value in portfolio_path.items()
+            ]
 
         color = _PROFILE_COLORS.get(profile_name, "#64748B")
         label = _PROFILE_LABELS.get(profile_name, profile_name)
-        lines.append(ComparisonLine(
-            key=profile_name,
-            label=label,
-            color=color,
-            style="solid",
-            points=return_points,
-        ))
+        lines.append(
+            ComparisonLine(
+                key=profile_name,
+                label=label,
+                color=color,
+                style="solid",
+                points=return_points,
+            )
+        )
 
     rebalance_dates: list[str] = sorted(rebalance_date_set)
 
@@ -122,15 +149,19 @@ def build_comparison(
             days_elapsed = (dates[i] - start_date).days
             years_elapsed = days_elapsed / 365.25
             cumulative_return = ((1 + annual_er) ** years_elapsed - 1) * 100
-            expected_points.append((dates[i].strftime("%Y-%m-%d"), round(cumulative_return, 4)))
+            expected_points.append(
+                (dates[i].strftime("%Y-%m-%d"), round(cumulative_return, 4))
+            )
 
-        lines.append(ComparisonLine(
-            key=f"{profile_name}_expected",
-            label=label,
-            color=color,
-            style="dashed",
-            points=expected_points,
-        ))
+        lines.append(
+            ComparisonLine(
+                key=f"{profile_name}_expected",
+                label=label,
+                color=color,
+                style="dashed",
+                points=expected_points,
+            )
+        )
 
     # --- Benchmark lines ---
     benchmark_configs = {
@@ -150,31 +181,45 @@ def build_comparison(
             for i in range(len(dates)):
                 ret = (aligned.iloc[i] - base) / base * 100
                 bm_points.append((dates[i].strftime("%Y-%m-%d"), round(float(ret), 4)))
-            lines.append(ComparisonLine(
-                key=bm_key,
-                label=cfg["label"],
-                color=cfg["color"],
-                style="solid",
-                points=bm_points,
-            ))
+            lines.append(
+                ComparisonLine(
+                    key=bm_key,
+                    label=cfg["label"],
+                    color=cfg["color"],
+                    style="solid",
+                    points=bm_points,
+                )
+            )
 
-    # --- Subsample all lines to ~250 points ---
-    n = len(dates)
-    step = max(1, n // 250)
-    sampled_indices = list(range(0, n, step))
-    if sampled_indices[-1] != n - 1:
-        sampled_indices.append(n - 1)
+    if extra_lines:
+        lines.extend(extra_lines)
 
-    sampled_lines: list[ComparisonLine] = []
-    for line in lines:
-        sampled_pts = [line.points[i] for i in sampled_indices if i < len(line.points)]
-        sampled_lines.append(ComparisonLine(
-            key=line.key,
-            label=line.label,
-            color=line.color,
-            style=line.style,
-            points=sampled_pts,
-        ))
+    sampled_lines = lines
+    if (
+        max_sample_points is not None
+        and max_sample_points > 0
+        and len(dates) > max_sample_points
+    ):
+        n = len(dates)
+        step = max(1, n // max_sample_points)
+        sampled_indices = list(range(0, n, step))
+        if sampled_indices[-1] != n - 1:
+            sampled_indices.append(n - 1)
+
+        sampled_lines = []
+        for line in lines:
+            sampled_pts = [
+                line.points[i] for i in sampled_indices if i < len(line.points)
+            ]
+            sampled_lines.append(
+                ComparisonLine(
+                    key=line.key,
+                    label=line.label,
+                    color=line.color,
+                    style=line.style,
+                    points=sampled_pts,
+                )
+            )
 
     return ComparisonResult(
         train_start_date=train_start_date,

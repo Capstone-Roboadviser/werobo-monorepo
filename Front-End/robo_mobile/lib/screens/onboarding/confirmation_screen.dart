@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/comparison_backtest_chart_mapper.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
@@ -12,15 +13,11 @@ import 'widgets/portfolio_charts.dart';
 import 'widgets/vestor_pie_chart.dart';
 
 class ConfirmationScreen extends StatefulWidget {
-  final MobileRecommendationResponse recommendation;
-  final String selectedPortfolioCode;
-  final MobileFrontierSelectionResponse? frontierSelection;
+  final MobileFrontierSelectionResponse frontierSelection;
 
   const ConfirmationScreen({
     super.key,
-    required this.recommendation,
-    required this.selectedPortfolioCode,
-    this.frontierSelection,
+    required this.frontierSelection,
   });
 
   @override
@@ -29,6 +26,8 @@ class ConfirmationScreen extends StatefulWidget {
 
 class _ConfirmationScreenState extends State<ConfirmationScreen>
     with SingleTickerProviderStateMixin {
+  static const double _initialPrototypeCashAmount = 10000000.0;
+
   int? _selectedSector;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
@@ -40,28 +39,28 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   bool _isLoadingCharts = true;
   String? _chartError;
   List<ChartPoint>? _volatilityPoints;
-  List<ChartPoint>? _performancePoints;
   List<ChartLine>? _comparisonLines;
   List<DateTime>? _rebalanceDates;
   MobileComparisonBacktestResponse? _backtestResponse;
+  bool _isConfirming = false;
 
   @override
   void initState() {
     super.initState();
-    _portfolio = widget.frontierSelection?.portfolio ??
-        widget.recommendation.recommendedPortfolio;
+    _portfolio = widget.frontierSelection.portfolio;
     logPageEnter('ConfirmationScreen', {
-      'selected': widget.selectedPortfolioCode,
+      'selected': widget.frontierSelection.classificationCode,
+      'selected_point_index': widget.frontierSelection.selectedPointIndex,
       'portfolio': _portfolio.code,
     });
     _details = _portfolio.toCategoryDetails();
     _categories = _portfolio.toCategories();
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: WeRoboMotion.medium,
       vsync: this,
     );
     _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
+      CurvedAnimation(parent: _fadeController, curve: WeRoboMotion.enter),
     );
     _fadeController.forward();
     _loadChartData();
@@ -88,32 +87,32 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     try {
       volatilityHistory =
           await MobileBackendApi.instance.fetchVolatilityHistory(
-        riskProfile: widget.frontierSelection == null ? _portfolio.code : null,
+        riskProfile: widget.frontierSelection.classificationCode,
         investmentHorizon:
-            widget.recommendation.resolvedProfile.investmentHorizon,
-        targetVolatility: widget.frontierSelection?.selectedTargetVolatility,
-        selectedPointIndex: widget.frontierSelection?.selectedPointIndex,
-        preferredDataSource: widget.frontierSelection?.dataSource,
+            widget.frontierSelection.resolvedProfile.investmentHorizon,
+        preferredDataSource: widget.frontierSelection.dataSource,
+        stockWeights: _portfolio.stockWeights,
+        selectedPointIndex: widget.frontierSelection.selectedPointIndex,
+        targetVolatility: widget.frontierSelection.selectedTargetVolatility,
       );
     } catch (error) {
       errors.add(_friendlyError(error));
     }
 
-    // Card 7: selected frontier point backtest
-    final selection = widget.frontierSelection;
-    if (selection != null) {
-      try {
-        comparisonBacktest =
-            await MobileBackendApi.instance.fetchComparisonBacktest(
-          selectedPointIndex: selection.selectedPointIndex,
-          targetVolatility: selection.selectedTargetVolatility,
-          investmentHorizon:
-              widget.recommendation.resolvedProfile.investmentHorizon,
-          preferredDataSource: selection.dataSource,
-        );
-      } catch (error) {
-        errors.add(_friendlyError(error));
-      }
+    // Card 7: comparison-backtest
+    try {
+      comparisonBacktest =
+          await MobileBackendApi.instance.fetchComparisonBacktest(
+        preferredDataSource: widget.frontierSelection.dataSource,
+        investmentHorizon:
+            widget.frontierSelection.resolvedProfile.investmentHorizon,
+        selectedPointIndex: widget.frontierSelection.selectedPointIndex,
+        targetVolatility: widget.frontierSelection.selectedTargetVolatility,
+        stockWeights: _portfolio.stockWeights,
+        portfolioCode: _portfolio.code,
+      );
+    } catch (error) {
+      errors.add(_friendlyError(error));
     }
 
     if (!mounted) {
@@ -138,40 +137,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       if (comparisonBacktest != null) {
         _backtestResponse = comparisonBacktest;
         _rebalanceDates = comparisonBacktest.rebalanceDates;
-        _comparisonLines = comparisonBacktest.lines
-            .map(
-              (line) => ChartLine(
-                key: line.key,
-                label: line.label,
-                color: parseBackendHexColor(line.color),
-                dashed: line.style != 'solid',
-                points: line.points
-                    .map(
-                      (point) => ChartPoint(
-                        date: point.date,
-                        value: point.returnPct,
-                      ),
-                    )
-                    .toList(),
-              ),
-            )
-            .toList();
-
-        // Extract performance points from the portfolio's
-        // return line in comparison-backtest.
-        final code =
-            widget.frontierSelection == null ? _portfolio.code : 'selected';
-        for (final line in comparisonBacktest.lines) {
-          if (line.key == code) {
-            _performancePoints = line.points
-                .map((p) => ChartPoint(
-                      date: p.date,
-                      value: p.returnPct,
-                    ))
-                .toList();
-            break;
-          }
-        }
+        _comparisonLines = comparisonChartLinesFromResponse(comparisonBacktest);
       }
     });
   }
@@ -242,9 +208,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
       );
     }
 
-    if (_volatilityPoints == null &&
-        _performancePoints == null &&
-        _comparisonLines == null) {
+    if (_volatilityPoints == null && _comparisonLines == null) {
       return _ChartErrorState(
         message: _chartError ?? '차트 데이터를 불러오지 못했어요.',
         onRetry: _loadChartData,
@@ -275,9 +239,9 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
           child: PortfolioCharts(
             type: _portfolio.investmentType,
             volatilityPoints: _volatilityPoints,
-            performancePoints: _performancePoints,
             comparisonLines: _comparisonLines,
             rebalanceDates: _rebalanceDates,
+            expectedAnnualReturn: _portfolio.expectedReturn,
             useFallbackMock: false,
           ),
         ),
@@ -285,32 +249,56 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
     );
   }
 
-  void _confirmPortfolio() {
+  Future<void> _confirmPortfolio() async {
+    if (_isConfirming) {
+      return;
+    }
+    setState(() => _isConfirming = true);
     logAction('confirm portfolio selection', {
-      'selected': _portfolio.code,
+      'selected': widget.frontierSelection.classificationCode,
+      'selected_point_index': widget.frontierSelection.selectedPointIndex,
     });
     final state = PortfolioStateProvider.of(context);
-    final selectedType = widget.frontierSelection == null
-        ? _portfolio.investmentType
-        : investmentTypeFromRiskCode(
-            widget.frontierSelection!.representativeCode ??
-                widget.recommendation.recommendedPortfolioCode,
-          );
-    state.setTypeAndRecommendation(
-      selectedType,
-      widget.recommendation,
+    final selectedType = investmentTypeFromRiskCode(
+      widget.frontierSelection.classificationCode,
     );
+    state.setType(selectedType);
     state.setFrontierSelection(widget.frontierSelection);
     if (_backtestResponse != null) {
       state.setBacktest(_backtestResponse!);
     }
+    if (state.isLoggedIn) {
+      try {
+        logAction('create prototype account', {
+          'portfolio': _portfolio.code,
+          'initialCash': _initialPrototypeCashAmount.toInt(),
+        });
+        await state.createPrototypeAccount(
+          selection: widget.frontierSelection,
+          initialCashAmount: _initialPrototypeCashAmount,
+        );
+      } catch (error) {
+        if (!mounted) {
+          return;
+        }
+        setState(() => _isConfirming = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error is MobileBackendException
+                  ? error.message
+                  : '프로토타입 자산 계정을 만들지 못했어요.',
+            ),
+          ),
+        );
+        return;
+      }
+    }
+    if (!mounted) {
+      return;
+    }
     Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => const WelcomeScreen(),
-        transitionsBuilder: (_, anim, __, child) =>
-            FadeTransition(opacity: anim, child: child),
-        transitionDuration: const Duration(milliseconds: 400),
-      ),
+      WeRoboMotion.fadeRoute(const WelcomeScreen()),
     );
   }
 
@@ -318,7 +306,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -371,7 +359,7 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                     setState(() => _selectedSector = idx);
                   },
                   centerBuilder: (_) => AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 250),
+                    duration: WeRoboMotion.medium,
                     child: _buildPieCenter(),
                   ),
                 ),
@@ -383,8 +371,8 @@ class _ConfirmationScreenState extends State<ConfirmationScreen>
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: _confirmPortfolio,
-                    child: const Text('투자 확정'),
+                    onPressed: _isConfirming ? null : _confirmPortfolio,
+                    child: Text(_isConfirming ? '계정 생성 중...' : '투자 확정'),
                   ),
                 ),
               ),

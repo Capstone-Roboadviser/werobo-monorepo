@@ -143,6 +143,7 @@ cron 서비스 변수:
 - `ADMIN_REFRESH_SECRET=<웹 서비스와 동일한 secret>`
 - `REFRESH_MODE=incremental`
 - `FULL_LOOKBACK_YEARS=5`
+- `REFRESH_TIMEOUT_SECONDS=900`
 
 권장 스케줄:
 

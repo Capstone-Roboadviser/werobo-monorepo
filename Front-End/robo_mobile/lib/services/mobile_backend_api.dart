@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
 import '../app/debug_page_logger.dart';
 import '../models/mobile_backend_models.dart';
+import '../models/rebalance_insight.dart';
 
 class MobileBackendException implements Exception {
   final String message;
@@ -33,7 +35,7 @@ class MobileBackendApi {
 
   static const String baseUrl =
       'https://robomobilebackend-production.up.railway.app';
-  static const Duration _defaultTimeout = Duration(seconds: 45);
+  static const Duration _defaultTimeout = Duration(seconds: 75);
   static const List<String> _dataSources = <String>[
     'managed_universe',
     'stock_combination_demo',
@@ -45,13 +47,20 @@ class MobileBackendApi {
     required double propensityScore,
     String investmentHorizon = 'medium',
     String? preferredDataSource,
+    DateTime? asOfDate,
   }) {
     return _postWithFallback(
       path: '/portfolios/recommendation',
-      bodyForDataSource: (dataSource) => <String, dynamic>{
-        'propensity_score': propensityScore.clamp(0, 100),
-        'investment_horizon': investmentHorizon,
-        'data_source': dataSource,
+      bodyForDataSource: (dataSource) {
+        final body = <String, dynamic>{
+          'propensity_score': propensityScore.clamp(0, 100),
+          'investment_horizon': investmentHorizon,
+          'data_source': dataSource,
+        };
+        if (asOfDate != null) {
+          body['as_of_date'] = _formatDate(asOfDate);
+        }
+        return body;
       },
       parser: MobileRecommendationResponse.fromJson,
       timeout: _defaultTimeout,
@@ -62,8 +71,9 @@ class MobileBackendApi {
   Future<MobileFrontierPreviewResponse> fetchFrontierPreview({
     required double propensityScore,
     String investmentHorizon = 'medium',
-    int? samplePoints,
+    int samplePoints = 61,
     String? preferredDataSource,
+    DateTime? asOfDate,
   }) {
     return _postWithFallback(
       path: '/portfolios/frontier-preview',
@@ -72,9 +82,10 @@ class MobileBackendApi {
           'propensity_score': propensityScore.clamp(0, 100),
           'investment_horizon': investmentHorizon,
           'data_source': dataSource,
+          'sample_points': samplePoints,
         };
-        if (samplePoints != null) {
-          body['sample_points'] = samplePoints;
+        if (asOfDate != null) {
+          body['as_of_date'] = _formatDate(asOfDate);
         }
         return body;
       },
@@ -87,9 +98,10 @@ class MobileBackendApi {
   Future<MobileFrontierSelectionResponse> fetchFrontierSelection({
     required double propensityScore,
     double? targetVolatility,
-    int? selectedPointIndex,
+    int? pointIndex,
     String investmentHorizon = 'medium',
     String? preferredDataSource,
+    DateTime? asOfDate,
   }) {
     return _postWithFallback(
       path: '/portfolios/frontier-selection',
@@ -102,8 +114,11 @@ class MobileBackendApi {
         if (targetVolatility != null) {
           body['target_volatility'] = targetVolatility;
         }
-        if (selectedPointIndex != null) {
-          body['selected_point_index'] = selectedPointIndex;
+        if (pointIndex != null) {
+          body['selected_point_index'] = pointIndex;
+        }
+        if (asOfDate != null) {
+          body['as_of_date'] = _formatDate(asOfDate);
         }
         return body;
       },
@@ -114,29 +129,31 @@ class MobileBackendApi {
   }
 
   Future<MobileVolatilityHistoryResponse> fetchVolatilityHistory({
-    String? riskProfile,
+    required String riskProfile,
     String investmentHorizon = 'medium',
     int rollingWindow = 20,
-    double? targetVolatility,
+    Map<String, double>? stockWeights,
     int? selectedPointIndex,
+    double? targetVolatility,
     String? preferredDataSource,
   }) {
     return _postWithFallback(
       path: '/portfolios/volatility-history',
       bodyForDataSource: (dataSource) {
         final body = <String, dynamic>{
+          'risk_profile': riskProfile,
           'investment_horizon': investmentHorizon,
           'rolling_window': rollingWindow,
           'data_source': dataSource,
         };
-        if (riskProfile != null) {
-          body['risk_profile'] = riskProfile;
-        }
-        if (targetVolatility != null) {
-          body['target_volatility'] = targetVolatility;
+        if (stockWeights != null && stockWeights.isNotEmpty) {
+          body['stock_weights'] = stockWeights;
         }
         if (selectedPointIndex != null) {
           body['selected_point_index'] = selectedPointIndex;
+        }
+        if (targetVolatility != null) {
+          body['target_volatility'] = targetVolatility;
         }
         return body;
       },
@@ -201,18 +218,26 @@ class MobileBackendApi {
   }
 
   Future<MobileComparisonBacktestResponse> fetchComparisonBacktest({
-    required int selectedPointIndex,
-    required double targetVolatility,
-    String investmentHorizon = 'medium',
     String? preferredDataSource,
+    String investmentHorizon = 'medium',
+    int? selectedPointIndex,
+    double? targetVolatility,
+    Map<String, double>? stockWeights,
+    String? portfolioCode,
+    DateTime? startDate,
   }) {
     return _postWithFallback(
       path: '/portfolios/comparison-backtest',
       bodyForDataSource: (dataSource) => <String, dynamic>{
         'data_source': dataSource,
         'investment_horizon': investmentHorizon,
-        'selected_point_index': selectedPointIndex,
-        'target_volatility': targetVolatility,
+        if (selectedPointIndex != null)
+          'selected_point_index': selectedPointIndex,
+        if (targetVolatility != null) 'target_volatility': targetVolatility,
+        if (stockWeights != null) 'stock_weights': stockWeights,
+        if (portfolioCode != null && portfolioCode.isNotEmpty)
+          'portfolio_code': portfolioCode,
+        if (startDate != null) 'start_date': _formatDate(startDate),
       },
       parser: MobileComparisonBacktestResponse.fromJson,
       timeout: _defaultTimeout,
@@ -330,6 +355,184 @@ class MobileBackendApi {
     }
   }
 
+  Future<MobileAccountDashboard> fetchPortfolioAccountDashboard({
+    required String accessToken,
+  }) async {
+    logApi('start', 'fetchPortfolioAccountDashboard');
+    try {
+      final result = await _get(
+        path: '/account/dashboard',
+        parser: MobileAccountDashboard.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'fetchPortfolioAccountDashboard', {
+        'hasAccount': result.hasAccount,
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'fetchPortfolioAccountDashboard', {
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<MobileAccountDashboard> createPortfolioAccount({
+    required String accessToken,
+    required String dataSource,
+    required String investmentHorizon,
+    required MobilePortfolioRecommendation portfolio,
+    String? portfolioCode,
+    String? portfolioLabel,
+    required double initialCashAmount,
+    DateTime? startedAt,
+  }) async {
+    const path = '/account';
+    final body = <String, dynamic>{
+      'data_source': dataSource,
+      'investment_horizon': investmentHorizon,
+      'portfolio_code': portfolioCode ?? portfolio.code,
+      'portfolio_label': portfolioLabel ?? portfolio.label,
+      'portfolio_id': portfolio.portfolioId,
+      'target_volatility': portfolio.targetVolatility,
+      'expected_return': portfolio.expectedReturn,
+      'volatility': portfolio.volatility,
+      'sharpe_ratio': portfolio.sharpeRatio,
+      'initial_cash_amount': initialCashAmount,
+      'sector_allocations':
+          portfolio.sectorAllocations.map((item) => item.toJson()).toList(),
+      'stock_allocations':
+          portfolio.stockAllocations.map((item) => item.toJson()).toList(),
+    };
+    if (startedAt != null) {
+      body['started_at'] = _formatDate(startedAt);
+    }
+    logApi('start', 'createPortfolioAccount', {
+      'portfolio': portfolio.code,
+      'amount': initialCashAmount.toInt(),
+    });
+    try {
+      final result = await _post(
+        path: path,
+        body: body,
+        parser: MobileAccountDashboard.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'createPortfolioAccount', {
+        'portfolio': portfolio.code,
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'createPortfolioAccount', {
+        'portfolio': portfolio.code,
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<MobileAccountDashboard> cashInPortfolioAccount({
+    required String accessToken,
+    required double amount,
+  }) async {
+    logApi('start', 'cashInPortfolioAccount', {
+      'amount': amount.toInt(),
+    });
+    try {
+      final result = await _post(
+        path: '/account/cash-in',
+        body: <String, dynamic>{
+          'amount': amount,
+        },
+        parser: MobileAccountDashboard.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'cashInPortfolioAccount', {
+        'amount': amount.toInt(),
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'cashInPortfolioAccount', {
+        'amount': amount.toInt(),
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<RebalanceInsightsResponse> fetchRebalanceInsights({
+    required String accessToken,
+  }) async {
+    logApi('start', 'fetchRebalanceInsights');
+    try {
+      final result = await _get(
+        path: '/insights',
+        parser: RebalanceInsightsResponse.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'fetchRebalanceInsights', {
+        'count': result.insights.length,
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'fetchRebalanceInsights', {
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<RebalanceInsight> markInsightRead({
+    required String accessToken,
+    required int insightId,
+  }) async {
+    logApi('start', 'markInsightRead', {'id': insightId});
+    try {
+      final result = await _post(
+        path: '/insights/$insightId/read',
+        body: const <String, dynamic>{},
+        parser: RebalanceInsight.fromJson,
+        timeout: _defaultTimeout,
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'markInsightRead', {'id': insightId});
+      return result;
+    } catch (error) {
+      logApi('fail', 'markInsightRead', {
+        'id': insightId,
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
+  Future<MobileDigestResponse> fetchDigest({
+    required String accessToken,
+  }) async {
+    logApi('start', 'fetchDigest');
+    try {
+      final result = await _get(
+        path: '/account/digest',
+        parser: MobileDigestResponse.fromJson,
+        timeout: const Duration(seconds: 12),
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'fetchDigest', {
+        'degradation': result.degradationLevel,
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'fetchDigest', {
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
   Future<T> _postWithFallback<T>({
     required String path,
     required Map<String, dynamic> Function(String dataSource) bodyForDataSource,
@@ -394,6 +597,11 @@ class MobileBackendApi {
     );
   }
 
+  String _formatDate(DateTime date) {
+    final normalized = DateTime(date.year, date.month, date.day);
+    return normalized.toIso8601String().split('T').first;
+  }
+
   Future<T> _post<T>({
     required String path,
     required Map<String, dynamic> body,
@@ -401,20 +609,35 @@ class MobileBackendApi {
     required Duration timeout,
     Map<String, String> headers = const <String, String>{},
   }) async {
-    final response = await _client
-        .post(
-          Uri.parse('$baseUrl/api/v1$path'),
-          headers: <String, String>{
-            'Content-Type': 'application/json',
-            ...headers,
-          },
-          body: jsonEncode(body),
-        )
-        .timeout(timeout);
+    final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('$baseUrl/api/v1$path'),
+            headers: <String, String>{
+              'Content-Type': 'application/json',
+              ...headers,
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(timeout);
+    } on SocketException {
+      throw const MobileBackendException(
+        '네트워크 연결을 확인해주세요.',
+      );
+    }
     final responseBody = response.body;
-    final decoded = responseBody.isEmpty
-        ? const <String, dynamic>{}
-        : jsonDecode(responseBody);
+    final dynamic decoded;
+    try {
+      decoded = responseBody.isEmpty
+          ? const <String, dynamic>{}
+          : jsonDecode(responseBody);
+    } on FormatException {
+      throw MobileBackendException(
+        '서버 응답 오류가 발생했습니다.',
+        statusCode: response.statusCode,
+      );
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (decoded is! Map<String, dynamic>) {
@@ -437,17 +660,32 @@ class MobileBackendApi {
     required Duration timeout,
     Map<String, String> headers = const <String, String>{},
   }) async {
-    final response = await _client.get(
-      Uri.parse('$baseUrl/api/v1$path'),
-      headers: <String, String>{
-        'Content-Type': 'application/json',
-        ...headers,
-      },
-    ).timeout(timeout);
+    final http.Response response;
+    try {
+      response = await _client.get(
+        Uri.parse('$baseUrl/api/v1$path'),
+        headers: <String, String>{
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+      ).timeout(timeout);
+    } on SocketException {
+      throw const MobileBackendException(
+        '네트워크 연결을 확인해주세요.',
+      );
+    }
     final responseBody = response.body;
-    final decoded = responseBody.isEmpty
-        ? const <String, dynamic>{}
-        : jsonDecode(responseBody);
+    final dynamic decoded;
+    try {
+      decoded = responseBody.isEmpty
+          ? const <String, dynamic>{}
+          : jsonDecode(responseBody);
+    } on FormatException {
+      throw MobileBackendException(
+        '서버 응답 오류가 발생했습니다.',
+        statusCode: response.statusCode,
+      );
+    }
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       if (decoded is! Map<String, dynamic>) {
@@ -501,6 +739,14 @@ class MobileBackendApi {
         return 'fetchCurrentAuthSession';
       case '/auth/logout':
         return 'logout';
+      case '/account/dashboard':
+        return 'fetchPortfolioAccountDashboard';
+      case '/account':
+        return 'createPortfolioAccount';
+      case '/account/cash-in':
+        return 'cashInPortfolioAccount';
+      case '/insights':
+        return 'fetchRebalanceInsights';
       default:
         return path;
     }

@@ -1,12 +1,22 @@
 import 'dart:math';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
+import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
+import '../../models/rebalance_insight.dart';
+import 'activity_hub_page.dart';
+import 'digest_screen.dart';
+import 'insight_detail_page.dart';
+import 'portfolio_allocation_detail_page.dart';
+import 'widgets/glowing_border.dart';
+import 'projection_screen.dart';
+import 'widgets/insight_transition_chart.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
@@ -17,14 +27,14 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
-  bool _showWelcome = true;
+  bool _showAllocationAmounts = false;
 
   @override
   void initState() {
     super.initState();
     logPageEnter('HomeTab');
     _staggerCtrl = AnimationController(
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 500),
       vsync: this,
     )..forward();
   }
@@ -41,7 +51,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     final end = (start + 0.4).clamp(0.0, 1.0);
     return CurvedAnimation(
       parent: _staggerCtrl,
-      curve: Interval(start, end, curve: Curves.easeOut),
+      curve: Interval(start, end, curve: WeRoboMotion.enter),
     );
   }
 
@@ -53,7 +63,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       end: Offset.zero,
     ).animate(CurvedAnimation(
       parent: _staggerCtrl,
-      curve: Interval(start, end, curve: Curves.easeOut),
+      curve: Interval(start, end, curve: WeRoboMotion.enter),
     ));
   }
 
@@ -70,7 +80,17 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final type = PortfolioStateProvider.of(context).type;
+    final state = PortfolioStateProvider.of(context);
+    final type = state.type;
+    final activities = state.accountActivities;
+    final accountSummary = state.accountSummary;
+    final allocationDetails = state.categoryDetails;
+    final hasResolvedPortfolio =
+        state.selectedPortfolio != null || state.accountSummary != null;
+    final hasInsightBanner = state.unreadInsightCount > 0;
+    final hasDigestBanner =
+        state.isWeeklyDigestAvailable && !state.hasSeenCurrentDigest;
+    int staggerIdx = 0;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -79,58 +99,104 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 24),
+            const SizedBox(height: 12),
+
+            // Notification icon (persistent access)
+            Align(
+              alignment: Alignment.centerRight,
+              child: _NotificationIconButton(
+                hasUnread: state.unreadInsightCount > 0,
+              ),
+            ),
+            const SizedBox(height: 8),
 
             // Welcome banner (first visit only)
-            if (_showWelcome)
+            if (!state.welcomeBannerSeen)
               _stagger(
-                  0,
+                  staggerIdx,
                   _WelcomeBanner(
                     type: type,
-                    onDismiss: () => setState(() => _showWelcome = false),
-                  )),
-            if (_showWelcome) const SizedBox(height: 16),
+                    onDismiss: () => state.markWelcomeBannerSeen(),
+                  ))
+            else
+              const SizedBox.shrink(),
+            if (!state.welcomeBannerSeen)
+              const SizedBox(height: 16)
+            else
+              const SizedBox.shrink(),
 
             // Hero: value + chart + time range
             _stagger(
-              _showWelcome ? 1 : 0,
+              !state.welcomeBannerSeen ? ++staggerIdx : staggerIdx,
               _PortfolioHeroChart(type: type),
             ),
             const SizedBox(height: 28),
 
-            // Recent activity
+            // Insight banner (after rebalancing) — below chart
+            if (hasInsightBanner)
+              Divider(
+                color: tc.border.withValues(alpha: 0.3),
+                height: 1,
+              ),
+            if (hasInsightBanner) const SizedBox(height: 16),
+            if (hasInsightBanner)
+              _stagger(
+                ++staggerIdx,
+                _InsightBanner(
+                  latestInsight: state.unreadInsights.first,
+                  unreadCount: state.unreadInsightCount,
+                ),
+              ),
+            if (hasInsightBanner) const SizedBox(height: 20),
+
+            // Digest entry point (hidden after user has seen it)
+            if (hasDigestBanner)
+              _stagger(
+                ++staggerIdx,
+                _DigestBanner(
+                  onTap: () => Navigator.push(
+                    context,
+                    WeRoboMotion.fadeRoute<void>(const DigestScreen()),
+                  ),
+                ),
+              ),
+            if (hasDigestBanner) const SizedBox(height: 20),
+
             _stagger(
-                _showWelcome ? 2 : 1,
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('최근 활동',
-                        style: WeRoboTypography.heading3.themed(context)),
-                    const SizedBox(height: 12),
-                    _ActivityCard(
-                      icon: Icons.sync_alt_rounded,
-                      iconColor: WeRoboColors.primary,
-                      title: '리밸런싱 완료',
-                      date: '2026-04-01',
-                      value: '₩15,826,400',
-                    ),
-                    _ActivityCard(
-                      icon: Icons.arrow_downward_rounded,
-                      iconColor: tc.accent,
-                      title: '입금',
-                      date: '2026-03-15',
-                      value: '+₩500,000',
-                      valueColor: tc.accent,
-                    ),
-                    _ActivityCard(
-                      icon: Icons.sync_alt_rounded,
-                      iconColor: WeRoboColors.primary,
-                      title: '리밸런싱 완료',
-                      date: '2026-01-02',
-                      value: '₩15,120,000',
-                    ),
-                  ],
-                )),
+              ++staggerIdx,
+              _DepositsPanel(
+                activities: activities,
+                accountSummary: accountSummary,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Divider(
+              color:
+                  WeRoboThemeColors.of(context).border.withValues(alpha: 0.15),
+              height: 1,
+              thickness: 0.5,
+            ),
+            const SizedBox(height: 20),
+            _stagger(
+              ++staggerIdx,
+              _PortfolioAllocationPanel(
+                details: allocationDetails,
+                baseValue: _portfolioAllocationBaseValue(accountSummary),
+                showAmounts: _showAllocationAmounts,
+                hasResolvedPortfolio: hasResolvedPortfolio,
+                onValueModeChanged: (showAmounts) {
+                  setState(() => _showAllocationAmounts = showAmounts);
+                },
+              ),
+            ),
+            if (accountSummary != null) const SizedBox(height: 20),
+            if (accountSummary != null)
+              _stagger(
+                ++staggerIdx,
+                _ReserveCashPanel(
+                  reserveCashAmount: accountSummary.cashBalance,
+                ),
+              ),
             const SizedBox(height: 32),
           ],
         ),
@@ -150,18 +216,25 @@ class _PortfolioHeroChart extends StatefulWidget {
 }
 
 class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
-    with SingleTickerProviderStateMixin {
-  static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체'];
-  static const _rangeDays = [7, 90, 365, 1825, 99999];
+    with TickerProviderStateMixin {
+  static const _rangeLabels = ['1주', '3달', '1년', '5년', '전체', '미래'];
+  static const _rangeDays = [7, 90, 365, 1825, 99999, -1];
   static const _baseInvestment = 10000000.0;
 
   late AnimationController _drawCtrl;
+  late CurvedAnimation _drawCurve;
+  late AnimationController _glowCtrl;
   int _range = 4; // 전체
   int? _touchIndex;
 
   List<ChartPoint> get _allValue {
-    // Use backtest data if available, otherwise mock daily
-    // cumulative returns from Mar 3 (meeting requirement).
+    final accountHistory = PortfolioStateProvider.of(context).accountHistory;
+    if (accountHistory.isNotEmpty) {
+      return _ensureRenderable([
+        for (final point in accountHistory)
+          ChartPoint(date: point.date, value: point.portfolioValue),
+      ]);
+    }
     final backtest = PortfolioStateProvider.of(context)
         .portfolioValuePoints(baseInvestment: _baseInvestment);
     if (backtest.isNotEmpty) return backtest;
@@ -172,9 +245,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     );
   }
 
-  /// Flat cost basis at base investment (deposits tracked by API
-  /// when available; for now base investment is the floor).
-  List<ChartPoint> _costBasisFor(List<ChartPoint> valuePts) {
+  List<ChartPoint> get _allCostBasis {
+    final accountHistory = PortfolioStateProvider.of(context).accountHistory;
+    if (accountHistory.isNotEmpty) {
+      return _ensureRenderable([
+        for (final point in accountHistory)
+          ChartPoint(date: point.date, value: point.investedAmount),
+      ]);
+    }
+    final valuePts = _allValue;
     if (valuePts.isEmpty) return const [];
     return [
       ChartPoint(date: valuePts.first.date, value: _baseInvestment),
@@ -186,9 +265,17 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   void initState() {
     super.initState();
     _drawCtrl = AnimationController(
-      duration: const Duration(milliseconds: 1000),
+      duration: const Duration(milliseconds: 700),
       vsync: this,
     )..forward();
+    _drawCurve = CurvedAnimation(
+      parent: _drawCtrl,
+      curve: Curves.linear,
+    );
+    _glowCtrl = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
   }
 
   @override
@@ -202,6 +289,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 
   @override
   void dispose() {
+    _glowCtrl.dispose();
+    _drawCurve.dispose();
     _drawCtrl.dispose();
     super.dispose();
   }
@@ -213,7 +302,31 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     return filtered.isNotEmpty ? filtered : all;
   }
 
+  List<ChartPoint> _ensureRenderable(List<ChartPoint> points) {
+    if (points.length != 1) {
+      return points;
+    }
+    final point = points.first;
+    return [
+      ChartPoint(
+        date: point.date.subtract(const Duration(days: 1)),
+        value: point.value,
+      ),
+      point,
+    ];
+  }
+
   void _selectRange(int idx) {
+    // "미래" tab navigates to ProjectionScreen
+    if (idx == _rangeLabels.length - 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const ProjectionScreen(),
+        ),
+      );
+      return;
+    }
     if (idx == _range) return;
     setState(() {
       _range = idx;
@@ -225,32 +338,41 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final portfolioState = PortfolioStateProvider.of(context);
+    final accountSummary = portfolioState.accountSummary;
     final allValue = _allValue;
+    final allCost = _allCostBasis;
     final valuePts = _filterByRange(allValue);
-    final costPts = _costBasisFor(valuePts);
+    final costPts = _filterByRange(allCost);
 
     // Compute hero stats from filtered data
-    final currentValue = valuePts.isNotEmpty ? valuePts.last.value : 0.0;
+    final currentValue = accountSummary?.currentValue ??
+        (valuePts.isNotEmpty ? valuePts.last.value : 0.0);
     final startValue = valuePts.isNotEmpty ? valuePts.first.value : 0.0;
-    final change = currentValue - startValue;
-    final changePct = startValue > 0 ? (change / startValue) * 100 : 0.0;
-    final isPositive = change >= 0;
-
-    // Crosshair values
-    String? crosshairDate;
+    final change = accountSummary?.profitLoss ?? (currentValue - startValue);
+    final changePct = accountSummary != null
+        ? accountSummary.profitLossPct * 100
+        : (startValue > 0 ? (change / startValue) * 100 : 0.0);
+    // Compute drag-aware values from touch position
     double? crosshairValue;
     double? crosshairCost;
     if (_touchIndex != null && _touchIndex! < valuePts.length) {
-      final pt = valuePts[_touchIndex!];
-      crosshairDate =
-          '${pt.date.year}-${pt.date.month.toString().padLeft(2, '0')}-${pt.date.day.toString().padLeft(2, '0')}';
-      crosshairValue = pt.value;
+      crosshairValue = valuePts[_touchIndex!].value;
       if (_touchIndex! < costPts.length) {
         crosshairCost = costPts[_touchIndex!].value;
       }
     }
 
-    final rangeLabel = _range == 4 ? '전체' : '${_rangeLabels[_range]} 대비';
+    final displayChange = crosshairValue != null && crosshairCost != null
+        ? crosshairValue - crosshairCost
+        : change;
+    final displayChangePct =
+        crosshairValue != null && crosshairCost != null && crosshairCost > 0
+            ? ((crosshairValue - crosshairCost) / crosshairCost) * 100
+            : changePct;
+    final displayIsPositive = displayChange >= 0;
+    final displayInvested =
+        crosshairCost ?? accountSummary?.investedAmount ?? _baseInvestment;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,15 +387,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         ),
         const SizedBox(height: 6),
 
-        // Value (animated count-up or crosshair override)
+        // Value (animated count-up, updates on drag)
         TweenAnimationBuilder<double>(
           tween: Tween(begin: 0, end: currentValue),
           duration: const Duration(milliseconds: 1200),
           curve: Curves.easeOutCubic,
           builder: (context, val, _) {
-            final displayVal = crosshairValue ?? val;
+            final v = crosshairValue ?? val;
             return Text(
-              '₩${_formatCurrency(displayVal.toInt())}',
+              '₩${_formatCurrency(v.toInt())}',
               style: TextStyle(
                 fontFamily: WeRoboFonts.english,
                 fontSize: 34,
@@ -287,59 +409,94 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         ),
         const SizedBox(height: 8),
 
-        // Performance badge
-        if (crosshairDate != null)
-          // Crosshair mode: show date + cost basis
-          _CrosshairBadge(
-            date: crosshairDate,
-            portfolioValue: crosshairValue!,
-            costBasis: crosshairCost,
-          )
-        else
-          _PerformanceBadge(
-            changePct: changePct,
-            changeAmount: change,
-            label: rangeLabel,
-            isPositive: isPositive,
+        // Performance badge (always visible, values update on drag)
+        _PerformanceBadge(
+          changePct: displayChangePct,
+          changeAmount: displayChange,
+          isPositive: displayIsPositive,
+          rangeLabel: _rangeLabels[_range],
+        ),
+
+        // Net funding line (always visible, updates on drag)
+        const SizedBox(height: 4),
+        Text(
+          '— ₩${_formatCurrency(displayInvested.toInt())} 총 입금',
+          style: TextStyle(
+            fontFamily: WeRoboFonts.english,
+            fontSize: 13,
+            fontWeight: FontWeight.w400,
+            color: tc.textPrimary,
           ),
+        ),
 
         const SizedBox(height: 20),
 
-        // Chart
+        // Chart (edge-to-edge)
         LayoutBuilder(builder: (context, constraints) {
-          return GestureDetector(
-            onPanUpdate: (d) {
-              const padL = 12.0;
-              const padR = 12.0;
-              final chartW = constraints.maxWidth - padL - padR;
-              final x = d.localPosition.dx - padL;
-              final idx = ((x / chartW) * (valuePts.length - 1))
-                  .round()
-                  .clamp(0, valuePts.length - 1);
-              setState(() => _touchIndex = idx);
-            },
-            onPanEnd: (_) => setState(() => _touchIndex = null),
-            onTapUp: (_) => setState(() => _touchIndex = null),
-            child: AnimatedBuilder(
-              animation: _drawCtrl,
-              builder: (context, _) {
-                return CustomPaint(
-                  size: Size(constraints.maxWidth, 240),
-                  painter: _PortfolioValuePainter(
-                    valuePts: valuePts,
-                    costPts: costPts,
-                    progress: _drawCtrl.value,
-                    touchIndex: _touchIndex,
-                    primaryColor: WeRoboColors.primary,
-                    costColor: tc.border,
-                    gridColor: tc.border,
-                    textColor: tc.textTertiary,
-                    tooltipBg: tc.surface,
-                    tooltipBorder: tc.border,
-                    textPrimaryColor: tc.textPrimary,
+          final fullWidth = constraints.maxWidth + 48;
+          // Date label for drag position
+          final dateLabel =
+              _touchIndex != null && _touchIndex! < valuePts.length
+                  ? () {
+                      final d = valuePts[_touchIndex!].date;
+                      return '${d.year}년 ${d.month}월 ${d.day}일';
+                    }()
+                  : '';
+          return SizedBox(
+            height: 320,
+            child: OverflowBox(
+              maxWidth: fullWidth,
+              alignment: Alignment.centerLeft,
+              child: Transform.translate(
+                offset: const Offset(-24, 0),
+                child: GestureDetector(
+                  onPanDown: (d) {
+                    final x = d.localPosition.dx;
+                    final idx = ((x / fullWidth) * (valuePts.length - 1))
+                        .round()
+                        .clamp(0, valuePts.length - 1);
+                    _glowCtrl.repeat(reverse: true);
+                    setState(() => _touchIndex = idx);
+                  },
+                  onPanUpdate: (d) {
+                    final x = d.localPosition.dx;
+                    final idx = ((x / fullWidth) * (valuePts.length - 1))
+                        .round()
+                        .clamp(0, valuePts.length - 1);
+                    setState(() => _touchIndex = idx);
+                  },
+                  onPanEnd: (_) {
+                    _glowCtrl.stop();
+                    _glowCtrl.value = 0;
+                    setState(() => _touchIndex = null);
+                  },
+                  onPanCancel: () {
+                    _glowCtrl.stop();
+                    _glowCtrl.value = 0;
+                    setState(() => _touchIndex = null);
+                  },
+                  child: AnimatedBuilder(
+                    animation: Listenable.merge([_drawCurve, _glowCtrl]),
+                    builder: (context, _) {
+                      return CustomPaint(
+                        size: Size(fullWidth, 320),
+                        painter: _PortfolioValuePainter(
+                          valuePts: valuePts,
+                          costPts: costPts,
+                          progress: _drawCurve.value,
+                          touchIndex: _touchIndex,
+                          glowPhase: _glowCtrl.value,
+                          dateLabel: dateLabel,
+                          primaryColor: WeRoboColors.primary,
+                          glowColor: WeRoboColors.sky3,
+                          costColor: tc.textPrimary,
+                          gridColor: tc.border,
+                        ),
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ),
             ),
           );
         }),
@@ -351,32 +508,54 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           mainAxisAlignment: MainAxisAlignment.center,
           children: List.generate(_rangeLabels.length, (i) {
             final active = i == _range;
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: GestureDetector(
-                onTap: () => _selectRange(i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: active ? WeRoboColors.primary : Colors.transparent,
-                    borderRadius: BorderRadius.circular(8),
-                    border: active
-                        ? null
-                        : Border.all(color: tc.border, width: 0.5),
-                  ),
-                  child: Text(
-                    _rangeLabels[i],
-                    style: TextStyle(
-                      fontFamily: WeRoboFonts.body,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: active ? WeRoboColors.white : tc.textTertiary,
-                    ),
+            final isFuture = i == _rangeLabels.length - 1;
+
+            final chip = GestureDetector(
+              onTap: () => _selectRange(i),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: active && !isFuture
+                      ? WeRoboColors.white
+                      : active
+                          ? WeRoboColors.primary
+                          : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: isFuture
+                      ? [
+                          BoxShadow(
+                            color: WeRoboColors.primary.withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : null,
+                ),
+                child: Text(
+                  _rangeLabels[i],
+                  style: TextStyle(
+                    fontFamily: WeRoboFonts.body,
+                    fontSize: 12,
+                    fontWeight: isFuture ? FontWeight.w600 : FontWeight.w500,
+                    color: isFuture
+                        ? WeRoboColors.primary
+                        : active
+                            ? WeRoboColors.black
+                            : Colors.white.withValues(alpha: 0.45),
                   ),
                 ),
               ),
+            );
+
+            final child = isFuture
+                ? GlowingBorder(borderRadius: 8, shrinkWrap: true, child: chip)
+                : chip;
+
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: child,
             );
           }),
         ),
@@ -390,139 +569,29 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 class _PerformanceBadge extends StatelessWidget {
   final double changePct;
   final double changeAmount;
-  final String label;
   final bool isPositive;
+  final String rangeLabel;
 
   const _PerformanceBadge({
     required this.changePct,
     required this.changeAmount,
-    required this.label,
     required this.isPositive,
+    required this.rangeLabel,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final color = isPositive ? tc.accent : WeRoboColors.error;
-    final sign = isPositive ? '+' : '';
+    final arrow = isPositive ? '▲' : '▼';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            isPositive
-                ? Icons.trending_up_rounded
-                : Icons.trending_down_rounded,
-            size: 18,
-            color: color,
-          ),
-          const SizedBox(width: 6),
-          Text(
-            '$sign${changePct.toStringAsFixed(1)}%',
-            style: TextStyle(
-              fontFamily: WeRoboFonts.english,
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Text(
-            '(₩${_formatCurrency(changeAmount.abs().toInt())})',
-            style: TextStyle(
-              fontFamily: WeRoboFonts.english,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: color,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontFamily: WeRoboFonts.body,
-              fontSize: 12,
-              fontWeight: FontWeight.w400,
-              color: tc.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CrosshairBadge extends StatelessWidget {
-  final String date;
-  final double portfolioValue;
-  final double? costBasis;
-
-  const _CrosshairBadge({
-    required this.date,
-    required this.portfolioValue,
-    this.costBasis,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    final gain = costBasis != null ? portfolioValue - costBasis! : null;
-    final isPositive = gain != null && gain >= 0;
-    final color = isPositive ? tc.accent : WeRoboColors.error;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: tc.card,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            date,
-            style: TextStyle(
-              fontFamily: WeRoboFonts.english,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: tc.textSecondary,
-            ),
-          ),
-          if (gain != null) ...[
-            const SizedBox(width: 8),
-            Container(
-              width: 1,
-              height: 14,
-              color: tc.border,
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '원금 ₩${_formatCurrency(costBasis!.toInt())}',
-              style: TextStyle(
-                fontFamily: WeRoboFonts.english,
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                color: tc.textSecondary,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              '${isPositive ? '+' : ''}₩${_formatCurrency(gain.abs().toInt())}',
-              style: TextStyle(
-                fontFamily: WeRoboFonts.english,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
-        ],
+    return Text(
+      '$arrow ₩${_formatCurrency(changeAmount.abs().toInt())} (${changePct.abs().toStringAsFixed(1)}%) $rangeLabel',
+      style: TextStyle(
+        fontFamily: WeRoboFonts.english,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+        color: color,
       ),
     );
   }
@@ -535,26 +604,24 @@ class _PortfolioValuePainter extends CustomPainter {
   final List<ChartPoint> costPts;
   final double progress;
   final int? touchIndex;
+  final double glowPhase;
+  final String dateLabel;
   final Color primaryColor;
+  final Color glowColor;
   final Color costColor;
   final Color gridColor;
-  final Color textColor;
-  final Color tooltipBg;
-  final Color tooltipBorder;
-  final Color textPrimaryColor;
 
   _PortfolioValuePainter({
     required this.valuePts,
     required this.costPts,
     required this.progress,
     this.touchIndex,
+    this.glowPhase = 0,
+    required this.dateLabel,
     required this.primaryColor,
+    required this.glowColor,
     required this.costColor,
     required this.gridColor,
-    required this.textColor,
-    required this.tooltipBg,
-    required this.tooltipBorder,
-    required this.textPrimaryColor,
   });
 
   @override
@@ -563,12 +630,12 @@ class _PortfolioValuePainter extends CustomPainter {
 
     final w = size.width;
     final h = size.height;
-    const padL = 12.0;
-    const padR = 12.0;
-    const padT = 8.0;
-    const padB = 24.0;
-    final chartW = w - padL - padR;
-    final chartH = h - padT - padB;
+    final isDragging = touchIndex != null;
+    // Draggable line extends beyond graph area; graph is shorter
+    const lineTopPad = 16.0;
+    const graphTopPad = 36.0;
+    const graphBotPad = 50.0;
+    final chartH = h - graphTopPad - graphBotPad;
 
     // Y-range across both lines
     double minY = double.infinity;
@@ -581,150 +648,327 @@ class _PortfolioValuePainter extends CustomPainter {
       if (p.value < minY) minY = p.value;
       if (p.value > maxY) maxY = p.value;
     }
-    // Add 5% padding
     final range = (maxY - minY).clamp(1.0, double.infinity);
     minY -= range * 0.05;
     maxY += range * 0.05;
     final rangeY = maxY - minY;
 
-    double toX(int i, int total) => padL + chartW * i / (total - 1);
-    double toY(double val) => padT + chartH - ((val - minY) / rangeY) * chartH;
+    double toX(int i, int total) => w * i / (total - 1);
+    double toY(double val) =>
+        graphTopPad + chartH - ((val - minY) / rangeY) * chartH;
 
     // Grid lines (4 horizontal, very subtle)
     final gridPaint = Paint()
       ..color = gridColor.withValues(alpha: 0.15)
       ..strokeWidth = 0.5;
     for (int i = 0; i <= 4; i++) {
-      final y = padT + chartH * i / 4;
-      canvas.drawLine(Offset(padL, y), Offset(w - padR, y), gridPaint);
+      final y = graphTopPad + chartH * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
     }
 
-    final drawCount =
-        (valuePts.length * progress).ceil().clamp(2, valuePts.length);
+    // Fractional index for smooth interpolation between data points
+    final fIdx = (valuePts.length - 1) * progress.clamp(0.0, 1.0);
+    final complete = fIdx.floor();
+    final frac = fIdx - complete;
+    final drawCount = (complete + 1).clamp(2, valuePts.length);
+    final ti =
+        isDragging ? touchIndex!.clamp(0, valuePts.length - 1) : drawCount - 1;
 
-    // Cost basis line (draw first, behind portfolio)
+    // ── Cost basis line ──
     if (costPts.length >= 2) {
       final costCount = min(drawCount, costPts.length);
-      final costPath = Path();
-      for (int i = 0; i < costCount; i++) {
+      if (isDragging) {
+        // Left of drag: full opacity
+        final leftEnd = min(ti + 1, costCount);
+        final leftPath = Path();
+        for (int i = 0; i < leftEnd; i++) {
+          final x = toX(i, valuePts.length);
+          final y = toY(costPts[i].value);
+          if (i == 0) {
+            leftPath.moveTo(x, y);
+          } else {
+            leftPath.lineTo(x, y);
+          }
+        }
+        canvas.drawPath(
+            leftPath,
+            Paint()
+              ..color = costColor.withValues(alpha: 0.6)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.5
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round);
+        // Right of drag: fade out
+        if (ti < costCount - 1) {
+          _drawFadingSegment(
+            canvas,
+            costPts,
+            ti,
+            costCount,
+            valuePts.length,
+            toX,
+            toY,
+            costColor.withValues(alpha: 0.6),
+            1.5,
+          );
+        }
+      } else {
+        final costPath = Path();
+        for (int i = 0; i < costCount; i++) {
+          final x = toX(i, valuePts.length);
+          final y = toY(costPts[i].value);
+          if (i == 0) {
+            costPath.moveTo(x, y);
+          } else {
+            costPath.lineTo(x, y);
+          }
+        }
+        canvas.drawPath(
+            costPath,
+            Paint()
+              ..color = costColor.withValues(alpha: 0.6)
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 1.5
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round);
+      }
+    }
+
+    // ── Portfolio value line ──
+    if (isDragging) {
+      // Transition zone before touch
+      const transitionLen = 20;
+      final transStart = max(0, ti - transitionLen);
+
+      // Main segment (before transition)
+      final mainEnd = min(transStart + 1, drawCount);
+      final mainPath = Path();
+      for (int i = 0; i < mainEnd; i++) {
         final x = toX(i, valuePts.length);
-        final y = toY(costPts[i].value);
+        final y = toY(valuePts[i].value);
         if (i == 0) {
-          costPath.moveTo(x, y);
+          mainPath.moveTo(x, y);
         } else {
-          costPath.lineTo(x, y);
+          mainPath.lineTo(x, y);
         }
       }
       canvas.drawPath(
-        costPath,
-        Paint()
-          ..color = costColor.withValues(alpha: 0.6)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round,
-      );
-    }
+          mainPath,
+          Paint()
+            ..color = primaryColor
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round);
 
-    // Portfolio value line + gradient
-    final linePath = Path();
-    final areaPath = Path();
-    for (int i = 0; i < drawCount; i++) {
-      final x = toX(i, valuePts.length);
-      final y = toY(valuePts[i].value);
-      if (i == 0) {
-        linePath.moveTo(x, y);
-        areaPath.moveTo(x, padT + chartH);
-        areaPath.lineTo(x, y);
-      } else {
-        linePath.lineTo(x, y);
-        areaPath.lineTo(x, y);
+      // Transition segment (gradient to glow)
+      if (transStart < ti) {
+        final transPath = Path();
+        transPath.moveTo(
+          toX(transStart, valuePts.length),
+          toY(valuePts[transStart].value),
+        );
+        for (int i = transStart + 1; i <= ti && i < drawCount; i++) {
+          transPath.lineTo(
+            toX(i, valuePts.length),
+            toY(valuePts[i].value),
+          );
+        }
+        final shader = ui.Gradient.linear(
+          Offset(toX(transStart, valuePts.length), 0),
+          Offset(toX(ti, valuePts.length), 0),
+          [primaryColor, glowColor],
+        );
+        canvas.drawPath(
+            transPath,
+            Paint()
+              ..shader = shader
+              ..style = PaintingStyle.stroke
+              ..strokeWidth = 2
+              ..strokeCap = StrokeCap.round
+              ..strokeJoin = StrokeJoin.round);
       }
-    }
-    final lastX = toX(drawCount - 1, valuePts.length);
-    areaPath.lineTo(lastX, padT + chartH);
-    areaPath.close();
 
-    // Gradient area fill
-    final gradient = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: [
-        primaryColor.withValues(alpha: 0.18),
-        primaryColor.withValues(alpha: 0.0),
-      ],
-    );
-    canvas.drawPath(
-      areaPath,
-      Paint()..shader = gradient.createShader(Rect.fromLTWH(0, 0, w, h)),
-    );
-
-    // Portfolio line stroke
-    canvas.drawPath(
-      linePath,
-      Paint()
-        ..color = primaryColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2
-        ..strokeCap = StrokeCap.round
-        ..strokeJoin = StrokeJoin.round,
-    );
-
-    // End dot
-    if (drawCount > 0 && touchIndex == null) {
-      final lastY = toY(valuePts[drawCount - 1].value);
-      canvas.drawCircle(Offset(lastX, lastY), 4, Paint()..color = primaryColor);
-      canvas.drawCircle(Offset(lastX, lastY), 2, Paint()..color = tooltipBg);
-    }
-
-    // X-axis date labels (5 evenly spaced)
-    final labelStyle =
-        TextStyle(fontSize: 9, color: textColor, fontFamily: 'IBMPlexSans');
-    final totalPts = valuePts.length;
-    for (int i = 0; i < 5; i++) {
-      final idx = (totalPts - 1) * i ~/ 4;
-      if (idx >= totalPts) continue;
-      final d = valuePts[idx].date;
-      final label = '${d.year}-${d.month.toString().padLeft(2, '0')}';
-      final tp = TextPainter(
-        text: TextSpan(text: label, style: labelStyle),
-        textDirection: TextDirection.ltr,
-      )..layout();
-      final x = toX(idx, totalPts);
-      tp.paint(canvas, Offset(x - tp.width / 2, h - padB + 6));
+      // Right of drag: fade out
+      if (ti < drawCount - 1) {
+        _drawFadingSegment(
+          canvas,
+          valuePts,
+          ti,
+          drawCount,
+          valuePts.length,
+          toX,
+          toY,
+          primaryColor,
+          2,
+        );
+      }
+    } else {
+      // Not dragging: draw line with smooth interpolated tip
+      final fullPath = Path();
+      for (int i = 0; i <= complete; i++) {
+        final x = toX(i, valuePts.length);
+        final y = toY(valuePts[i].value);
+        if (i == 0) {
+          fullPath.moveTo(x, y);
+        } else {
+          fullPath.lineTo(x, y);
+        }
+      }
+      // Interpolate between complete and next point for smooth tip
+      if (frac > 0 && complete < valuePts.length - 1) {
+        final x0 = toX(complete, valuePts.length);
+        final y0 = toY(valuePts[complete].value);
+        final x1 = toX(complete + 1, valuePts.length);
+        final y1 = toY(valuePts[complete + 1].value);
+        fullPath.lineTo(
+          x0 + frac * (x1 - x0),
+          y0 + frac * (y1 - y0),
+        );
+      }
+      canvas.drawPath(
+          fullPath,
+          Paint()
+            ..color = primaryColor
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 2
+            ..strokeCap = StrokeCap.round
+            ..strokeJoin = StrokeJoin.round);
     }
 
-    // Crosshair
-    if (touchIndex != null && touchIndex! < drawCount) {
-      final ti = touchIndex!;
+    // ── Draggable line, date label, glow (only when dragging) ──
+    if (isDragging) {
       final tx = toX(ti, valuePts.length);
+      final lineTop = lineTopPad;
+      final lineBot = h - lineTopPad;
 
-      // Vertical line
+      // Vertical line: white center, gray at ends
+      final lineShader = ui.Gradient.linear(
+        Offset(tx, lineTop),
+        Offset(tx, lineBot),
+        [
+          gridColor.withValues(alpha: 0.12),
+          Colors.white.withValues(alpha: 0.7),
+          Colors.white.withValues(alpha: 0.7),
+          gridColor.withValues(alpha: 0.12),
+        ],
+        [0.0, 0.12, 0.88, 1.0],
+      );
       canvas.drawLine(
-        Offset(tx, padT),
-        Offset(tx, padT + chartH),
+        Offset(tx, lineTop),
+        Offset(tx, lineBot),
         Paint()
-          ..color = gridColor.withValues(alpha: 0.4)
-          ..strokeWidth = 0.5,
+          ..shader = lineShader
+          ..strokeWidth = 0.8,
       );
 
-      // Dots
-      final vy = toY(valuePts[ti].value);
-      canvas.drawCircle(Offset(tx, vy), 5, Paint()..color = primaryColor);
-      canvas.drawCircle(Offset(tx, vy), 3, Paint()..color = tooltipBg);
+      // Date label at top of line
+      if (dateLabel.isNotEmpty) {
+        final dateTp = TextPainter(
+          text: TextSpan(
+            text: dateLabel,
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.white.withValues(alpha: 0.7),
+              fontFamily: 'NotoSansKR',
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final dateX = (tx - dateTp.width / 2).clamp(4.0, w - dateTp.width - 4);
+        dateTp.paint(
+          canvas,
+          Offset(dateX, lineTop - dateTp.height - 2),
+        );
+      }
 
-      if (ti < costPts.length) {
-        final cy = toY(costPts[ti].value);
-        canvas.drawCircle(Offset(tx, cy), 4,
-            Paint()..color = costColor.withValues(alpha: 0.8));
-        canvas.drawCircle(Offset(tx, cy), 2, Paint()..color = tooltipBg);
+      // Glow dot at intersection
+      if (ti < drawCount) {
+        final vy = toY(valuePts[ti].value);
+        final glowRadius = 14 + 4 * glowPhase;
+        final glowAlpha = 0.25 + 0.15 * glowPhase;
+        // Outer pulsing glow
+        canvas.drawCircle(
+          Offset(tx, vy),
+          glowRadius,
+          Paint()
+            ..color = glowColor.withValues(alpha: glowAlpha)
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+        );
+        // Bright white center dot
+        canvas.drawCircle(
+          Offset(tx, vy),
+          4,
+          Paint()
+            ..color = Colors.white
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+        );
+        canvas.drawCircle(
+          Offset(tx, vy),
+          3,
+          Paint()..color = Colors.white,
+        );
       }
     }
   }
 
+  /// Draw a line segment that fades out over a short distance
+  /// then disappears. Uses a gradient shader on a single path
+  /// to avoid visible dots between segments.
+  void _drawFadingSegment(
+    Canvas canvas,
+    List<ChartPoint> pts,
+    int startIdx,
+    int endIdx,
+    int totalPts,
+    double Function(int, int) toX,
+    double Function(double) toY,
+    Color color,
+    double strokeWidth,
+  ) {
+    if (startIdx >= endIdx - 1) return;
+    // Fixed fade distance: always ~3 data points
+    final fadeCount = min(3, endIdx - startIdx);
+    final fadeEnd = min(startIdx + fadeCount, endIdx);
+
+    final fadePath = Path();
+    fadePath.moveTo(
+      toX(startIdx, totalPts),
+      toY(pts[startIdx].value),
+    );
+    for (int i = startIdx + 1; i < fadeEnd; i++) {
+      fadePath.lineTo(
+        toX(i, totalPts),
+        toY(pts[i].value),
+      );
+    }
+
+    final x0 = toX(startIdx, totalPts);
+    final x1 = toX(fadeEnd - 1, totalPts);
+    if ((x1 - x0).abs() < 1) return;
+
+    final shader = ui.Gradient.linear(
+      Offset(x0, 0),
+      Offset(x1, 0),
+      [color, color.withValues(alpha: 0)],
+    );
+    canvas.drawPath(
+      fadePath,
+      Paint()
+        ..shader = shader
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
   @override
   bool shouldRepaint(covariant _PortfolioValuePainter old) =>
-      old.progress != progress || old.touchIndex != touchIndex;
+      old.progress != progress ||
+      old.touchIndex != touchIndex ||
+      old.glowPhase != glowPhase;
 }
 
 // ─── Shared helpers ───────────────────────────────────────────
@@ -739,7 +983,179 @@ String _formatCurrency(int amount) {
   return buf.toString();
 }
 
+String _formatPercentLabel(double percentage) {
+  return '${percentage.toStringAsFixed(2)}%';
+}
+
+String _formatWonFromRatio(double? baseValue, double percentage) {
+  if (baseValue == null || baseValue <= 0) {
+    return '-';
+  }
+  final amount = (baseValue * percentage / 100).round();
+  return '₩${_formatCurrency(amount)}';
+}
+
+String _formatWonAmount(double? amount) {
+  if (amount == null) {
+    return '-';
+  }
+  return '₩${_formatCurrency(amount.round())}';
+}
+
+double? _portfolioAllocationBaseValue(MobileAccountSummary? summary) {
+  if (summary == null) {
+    return null;
+  }
+  final currentInvestedValue = summary.currentValue - summary.cashBalance;
+  if (currentInvestedValue > 0) {
+    return currentInvestedValue;
+  }
+  final investedPrincipalExcludingCash =
+      summary.investedAmount - summary.cashBalance;
+  if (investedPrincipalExcludingCash > 0) {
+    return investedPrincipalExcludingCash;
+  }
+  return null;
+}
+
+DateTime? _parseIsoDate(String? value) {
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+  return DateTime.tryParse(value);
+}
+
+DateTime _addOneMonth(DateTime date) {
+  final nextMonth = date.month == 12 ? 1 : date.month + 1;
+  final nextYear = date.month == 12 ? date.year + 1 : date.year;
+  final lastDayOfNextMonth = DateTime(nextYear, nextMonth + 1, 0).day;
+  final nextDay = min(date.day, lastDayOfNextMonth);
+  return DateTime(nextYear, nextMonth, nextDay);
+}
+
+String _formatKoreanMonthDay(DateTime date) {
+  return '${date.month}월 ${date.day}일';
+}
+
 // ─── Welcome banner ───────────────────────────────────────────
+
+// ─── Insight banner ──────────────────────────────────────────
+
+class _InsightBanner extends StatelessWidget {
+  final RebalanceInsight latestInsight;
+  final int unreadCount;
+
+  const _InsightBanner({
+    required this.latestInsight,
+    required this.unreadCount,
+  });
+
+  String _formatKoreanDate(String isoDate) {
+    final date = DateTime.tryParse(isoDate);
+    if (date == null) return isoDate;
+    return '${date.year}년 ${date.month}월';
+  }
+
+  String _summaryText() {
+    final allocs = latestInsight.allocations;
+    if (allocs.isEmpty) return '포트폴리오 비중을 조정했어요.';
+
+    // Find the allocation with the largest absolute display delta
+    RebalanceInsightAllocation biggest = allocs.first;
+    for (final a in allocs) {
+      if (a.displayDelta.abs() > biggest.displayDelta.abs()) {
+        biggest = a;
+      }
+    }
+
+    if (!biggest.hasChanged) {
+      return '포트폴리오 비중을 조정했어요.';
+    }
+
+    final pct = biggest.displayDelta.abs().toStringAsFixed(1);
+    if (biggest.displayDelta > 0) {
+      return '${biggest.displayName} 비중을 $pct% 늘렸어요.';
+    }
+    return '${biggest.displayName} 비중을 $pct% 줄였어요.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+
+    return Pressable(
+      onTap: () {
+        Navigator.push(
+          context,
+          WeRoboMotion.fadeRoute<void>(
+              InsightDetailPage(insight: latestInsight)),
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            // Icon
+            InsightDonutThumbnail(
+              allocations: latestInsight.allocations,
+              size: 40,
+            ),
+            const SizedBox(width: 12),
+
+            // Text
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'New · ${_formatKoreanDate(latestInsight.rebalanceDate)}',
+                        style: WeRoboTypography.caption.copyWith(
+                          color: tc.textTertiary,
+                        ),
+                      ),
+                      if (unreadCount > 1) ...[
+                        Text(
+                          '  ·  ',
+                          style: WeRoboTypography.caption.copyWith(
+                            color: tc.textTertiary,
+                          ),
+                        ),
+                        Text(
+                          '+${unreadCount - 1}개 더 보기',
+                          style: WeRoboTypography.caption.copyWith(
+                            color: tc.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    _summaryText(),
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Chevron
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: tc.textTertiary,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Welcome banner ─────────────────────────────────────────
 
 class _WelcomeBanner extends StatelessWidget {
   final InvestmentType type;
@@ -798,72 +1214,604 @@ class _WelcomeBanner extends StatelessWidget {
   }
 }
 
-// ─── Activity card ────────────────────────────────────────────
+class _DepositsPanel extends StatelessWidget {
+  final List<MobileAccountActivity> activities;
+  final MobileAccountSummary? accountSummary;
 
-class _ActivityCard extends StatelessWidget {
+  const _DepositsPanel({
+    required this.activities,
+    required this.accountSummary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final latestDeposit = _findLatestDeposit(activities);
+    final latestAmount = latestDeposit?.amount ??
+        ((accountSummary?.investedAmount ?? 0) > 0
+            ? accountSummary?.investedAmount
+            : null);
+    final latestDate = _parseIsoDate(
+      latestDeposit?.date ?? accountSummary?.startedAt,
+    );
+    const upcomingAmount = 100000.0;
+    final upcomingDate = latestDate == null ? null : _addOneMonth(latestDate);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '입금 현황',
+              style: WeRoboTypography.heading3.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: tc.textTertiary,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _DepositInfoRow(
+          label: '최근 입금',
+          valueText: latestAmount == null
+              ? '아직 입금 내역이 없어요'
+              : '₩${_formatCurrency(latestAmount.round())}'
+                  ' · ${_formatKoreanMonthDay(latestDate!)}',
+        ),
+        Divider(
+          color: tc.border.withValues(alpha: 0.4),
+          height: 1,
+          thickness: 0.5,
+        ),
+        _DepositInfoRow(
+          label: '예정 입금',
+          valueText: upcomingDate == null
+              ? '예정된 입금이 없어요'
+              : '₩${_formatCurrency(upcomingAmount.round())}'
+                  ' · ${_formatKoreanMonthDay(upcomingDate)}',
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: const [
+            Expanded(
+              child: _DepositActionButton(
+                icon: Icons.add_rounded,
+                label: '입금하기',
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: _DepositActionButton(
+                icon: Icons.event_repeat_rounded,
+                label: '정기 입금',
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  MobileAccountActivity? _findLatestDeposit(
+    List<MobileAccountActivity> items,
+  ) {
+    final deposits = items
+        .where(
+          (activity) =>
+              activity.type == 'cash_in' || activity.type == 'initial_deposit',
+        )
+        .toList()
+      ..sort((a, b) {
+        final aDate = _parseIsoDate(a.date) ?? DateTime(1970);
+        final bDate = _parseIsoDate(b.date) ?? DateTime(1970);
+        return bDate.compareTo(aDate);
+      });
+
+    if (deposits.isEmpty) {
+      return null;
+    }
+    return deposits.first;
+  }
+}
+
+class _DepositInfoRow extends StatelessWidget {
+  final String label;
+  final String valueText;
+
+  const _DepositInfoRow({
+    required this.label,
+    required this.valueText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textSecondary,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            valueText,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w500,
+              fontFamily: WeRoboFonts.english,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DepositActionButton extends StatelessWidget {
   final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String date;
-  final String value;
-  final Color? valueColor;
+  final String label;
 
-  const _ActivityCard({
+  const _DepositActionButton({
     required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.date,
-    required this.value,
-    this.valueColor,
+    required this.label,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Pressable(
+      onTap: () {},
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(14),
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
-          color: tc.card,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: tc.border.withValues(alpha: 0.3),
+          ),
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, size: 20, color: iconColor),
+            Icon(
+              icon,
+              size: 16,
+              color: tc.textPrimary,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: WeRoboTypography.bodySmall.copyWith(
-                          color: tc.textPrimary, fontWeight: FontWeight.w500)),
-                  Text(date,
-                      style: WeRoboTypography.caption
-                          .copyWith(fontFamily: WeRoboFonts.english)
-                          .themed(context)),
-                ],
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PortfolioAllocationPanel extends StatelessWidget {
+  final List<PortfolioCategoryDetail> details;
+  final double? baseValue;
+  final bool showAmounts;
+  final bool hasResolvedPortfolio;
+  final ValueChanged<bool> onValueModeChanged;
+
+  const _PortfolioAllocationPanel({
+    required this.details,
+    required this.baseValue,
+    required this.showAmounts,
+    required this.hasResolvedPortfolio,
+    required this.onValueModeChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
             Text(
-              value,
-              style: WeRoboTypography.bodySmall.copyWith(
+              '포트폴리오 구성',
+              style: WeRoboTypography.heading3.copyWith(
+                color: tc.textPrimary,
                 fontWeight: FontWeight.w600,
-                color: valueColor ?? tc.textPrimary,
+              ),
+            ),
+            const Spacer(),
+            _PortfolioValueToggle(
+              showAmounts: showAmounts,
+              onValueModeChanged: onValueModeChanged,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (details.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Text(
+              hasResolvedPortfolio
+                  ? '자산군 비중 데이터가 아직 없습니다.'
+                  : '포트폴리오 데이터를 불러오는 중입니다.',
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textSecondary,
+              ),
+            ),
+          )
+        else
+          ...List.generate(details.length, (index) {
+            final detail = details[index];
+            return Column(
+              children: [
+                _PortfolioAllocationRow(
+                  detail: detail,
+                  baseValue: baseValue,
+                  showAmounts: showAmounts,
+                  onTap: () => _openAllocationDetailPage(context, detail),
+                ),
+                Divider(
+                  color: tc.border.withValues(alpha: 0.4),
+                  height: 1,
+                  thickness: 0.5,
+                ),
+              ],
+            );
+          }),
+        const SizedBox(height: 16),
+        Pressable(
+          onTap: () {},
+          child: Text(
+            '포트폴리오 조정',
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _openAllocationDetailPage(
+    BuildContext context,
+    PortfolioCategoryDetail detail,
+  ) {
+    Navigator.push(
+      context,
+      WeRoboMotion.fadeRoute<void>(PortfolioAllocationDetailPage(
+        detail: detail,
+        baseValue: baseValue,
+        initialShowAmounts: showAmounts,
+      )),
+    );
+  }
+}
+
+class _ReserveCashPanel extends StatelessWidget {
+  final double reserveCashAmount;
+
+  const _ReserveCashPanel({
+    required this.reserveCashAmount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '예비 현금',
+          style: WeRoboTypography.heading3.copyWith(
+            color: tc.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '포트폴리오 구성 비중에는 포함되지 않아요.',
+          style: WeRoboTypography.bodySmall.copyWith(
+            color: tc.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '리밸런싱 시 별도로 보관됐다가 자동 사용돼요.',
+          style: WeRoboTypography.caption.copyWith(
+            color: tc.textTertiary,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Text(
+              '현재 보유',
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textSecondary,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              _formatWonAmount(reserveCashAmount),
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w600,
                 fontFamily: WeRoboFonts.english,
               ),
             ),
           ],
         ),
+      ],
+    );
+  }
+}
+
+class _PortfolioValueToggle extends StatelessWidget {
+  final bool showAmounts;
+  final ValueChanged<bool> onValueModeChanged;
+
+  const _PortfolioValueToggle({
+    required this.showAmounts,
+    required this.onValueModeChanged,
+  });
+
+  static const double _chipSize = 36.0;
+  static const double _padding = 3.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    const totalWidth = _chipSize * 2 + _padding * 2 + 4;
+    return Pressable(
+      onTap: () => onValueModeChanged(!showAmounts),
+      child: Container(
+        width: totalWidth,
+        height: _chipSize + _padding * 2,
+        padding: const EdgeInsets.all(_padding),
+        decoration: BoxDecoration(
+          color: tc.surface,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Stack(
+          children: [
+            AnimatedAlign(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              alignment:
+                  showAmounts ? Alignment.centerRight : Alignment.centerLeft,
+              child: Container(
+                width: _chipSize,
+                height: _chipSize,
+                decoration: BoxDecoration(
+                  color: tc.card,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                SizedBox(
+                  width: _chipSize + 2,
+                  child: Center(
+                    child: Text(
+                      '%',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: !showAmounts ? tc.textPrimary : tc.textTertiary,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: WeRoboFonts.english,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: _chipSize + 2,
+                  child: Center(
+                    child: Text(
+                      '₩',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: showAmounts ? tc.textPrimary : tc.textTertiary,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: WeRoboFonts.english,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PortfolioAllocationRow extends StatelessWidget {
+  final PortfolioCategoryDetail detail;
+  final double? baseValue;
+  final bool showAmounts;
+  final VoidCallback onTap;
+
+  const _PortfolioAllocationRow({
+    required this.detail,
+    required this.baseValue,
+    required this.showAmounts,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    detail.category.name,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _buildAllocationSubtitle(detail),
+                    style: WeRoboTypography.caption.copyWith(
+                      color: tc.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              showAmounts
+                  ? _formatWonFromRatio(baseValue, detail.category.percentage)
+                  : _formatPercentLabel(detail.category.percentage),
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w500,
+                fontFamily: WeRoboFonts.english,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: tc.textTertiary,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _buildAllocationSubtitle(PortfolioCategoryDetail detail) {
+    if (detail.tickers.isEmpty) {
+      return '세부 종목 정보 없음';
+    }
+    final symbols =
+        detail.tickers.take(3).map((ticker) => ticker.symbol).join(', ');
+    if (detail.tickers.length <= 3) {
+      return symbols;
+    }
+    return '$symbols 외 ${detail.tickers.length - 3}개';
+  }
+}
+
+// ─── Digest banner ──────────────────────────────────────────
+
+class _DigestBanner extends StatelessWidget {
+  final VoidCallback onTap;
+  const _DigestBanner({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return GlowingBorder(
+      borderRadius: WeRoboColors.radiusXL,
+      child: Pressable(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: WeRoboColors.primary.withValues(alpha: 0.08),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  color: WeRoboColors.primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '주간 다이제스트',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        fontWeight: FontWeight.w600,
+                        color: tc.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'AI가 분석한 이번 주 포트폴리오 리포트',
+                      style: WeRoboTypography.caption.copyWith(
+                        color: tc.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                color: tc.textTertiary,
+                size: 20,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Notification icon ──────────────────────────────────────
+
+class _NotificationIconButton extends StatelessWidget {
+  final bool hasUnread;
+  const _NotificationIconButton({this.hasUnread = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: () => Navigator.push(
+        context,
+        WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
+      ),
+      child: Icon(
+        hasUnread
+            ? Icons.notifications_rounded
+            : Icons.notifications_none_rounded,
+        size: 24,
+        color: tc.textSecondary,
       ),
     );
   }

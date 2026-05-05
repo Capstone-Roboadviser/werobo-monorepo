@@ -62,7 +62,7 @@ class MobilePortfolioService:
         explicit_profile: RiskProfile | None,
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
-        sample_points: int,
+        sample_points: int | None,
     ) -> dict[str, object]:
         resolved_profile = self.profile_service.resolve_risk_profile(
             propensity_score=propensity_score,
@@ -107,15 +107,17 @@ class MobilePortfolioService:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
         rolling_window: int,
-        target_volatility: float | None,
-        selected_point_index: int | None,
+        stock_weights: dict[str, float] | None = None,
+        target_volatility: float | None = None,
+        selected_point_index: int | None = None,
     ) -> dict[str, object]:
-        if target_volatility is not None or selected_point_index is not None:
+        if stock_weights or target_volatility is not None or selected_point_index is not None:
             return self.calculation_adapter.get_volatility_history(
                 risk_profile=None,
                 investment_horizon=investment_horizon,
                 data_source=data_source,
                 rolling_window=rolling_window,
+                stock_weights=stock_weights,
                 target_volatility=target_volatility,
                 selected_point_index=selected_point_index,
             )
@@ -129,6 +131,7 @@ class MobilePortfolioService:
             investment_horizon=investment_horizon,
             data_source=data_source,
             rolling_window=rolling_window,
+            stock_weights=None,
             target_volatility=None,
             selected_point_index=None,
         )
@@ -140,10 +143,16 @@ class MobilePortfolioService:
         investment_horizon: InvestmentHorizon,
         target_volatility: float | None,
         selected_point_index: int | None,
+        stock_weights: dict[str, float] | None = None,
+        portfolio_code: str | None = None,
+        start_date: str | None = None,
     ) -> dict[str, object]:
         return self.calculation_adapter.get_comparison_backtest(
             data_source=data_source,
             investment_horizon=investment_horizon,
             target_volatility=target_volatility,
             selected_point_index=selected_point_index,
+            stock_weights=stock_weights,
+            portfolio_code=portfolio_code,
+            start_date=start_date,
         )

@@ -145,6 +145,7 @@ def get_volatility_history(payload: VolatilityHistoryRequest) -> VolatilityHisto
             investment_horizon=payload.investment_horizon,
             data_source=payload.data_source,
             rolling_window=payload.rolling_window,
+            stock_weights=payload.stock_weights,
             target_volatility=payload.target_volatility,
             selected_point_index=payload.selected_point_index,
         )
@@ -169,6 +170,9 @@ def get_comparison_backtest(
             investment_horizon=payload.investment_horizon,
             target_volatility=payload.target_volatility,
             selected_point_index=payload.selected_point_index,
+            stock_weights=payload.stock_weights,
+            portfolio_code=payload.portfolio_code,
+            start_date=None if payload.start_date is None else payload.start_date.isoformat(),
         )
         return ComparisonBacktestResponse(**response)
     except Exception as exc:

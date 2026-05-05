@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+import hashlib
 import json
 
 import pandas as pd
@@ -8,6 +9,8 @@ import pandas as pd
 from app.core.config import DATABASE_URL
 from app.domain.enums import InvestmentHorizon, PriceRefreshMode, SimulationDataSource
 from app.domain.models import (
+    DividendYieldEstimate,
+    ManagedComparisonBacktestSnapshot,
     ManagedFrontierSnapshot,
     ManagedPriceRefreshJob,
     ManagedPriceRefreshJobItem,
@@ -152,12 +155,120 @@ class ManagedUniverseRepository:
                     )
                     """
                 )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS comparison_backtest_snapshots (
+                        id BIGSERIAL PRIMARY KEY,
+                        version_id BIGINT NOT NULL REFERENCES universe_versions(id) ON DELETE CASCADE,
+                        data_source TEXT NOT NULL,
+                        aligned_start_date DATE,
+                        aligned_end_date DATE,
+                        line_count INTEGER NOT NULL DEFAULT 0,
+                        source_refresh_job_id BIGINT REFERENCES refresh_jobs(id) ON DELETE SET NULL,
+                        payload JSONB NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE (version_id, data_source)
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS dividend_yield_estimates (
+                        ticker TEXT PRIMARY KEY,
+                        annualized_dividend DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        annual_yield DOUBLE PRECISION NOT NULL DEFAULT 0,
+                        payments_per_year INTEGER NOT NULL DEFAULT 0,
+                        frequency_label TEXT NOT NULL DEFAULT 'unknown',
+                        last_payment_date DATE,
+                        source TEXT NOT NULL DEFAULT 'unknown',
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS admin_comparison_snapshots (
+                        id BIGSERIAL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        folder TEXT,
+                        payload JSONB NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS admin_comparison_frontier_cache (
+                        id BIGSERIAL PRIMARY KEY,
+                        version_id BIGINT NOT NULL REFERENCES universe_versions(id) ON DELETE CASCADE,
+                        basis_date DATE,
+                        basis_date_key TEXT NOT NULL,
+                        investment_horizon TEXT NOT NULL,
+                        sample_points INTEGER NOT NULL,
+                        cache_version TEXT NOT NULL,
+                        price_signature TEXT NOT NULL,
+                        payload JSONB NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE (
+                            version_id,
+                            basis_date_key,
+                            investment_horizon,
+                            sample_points,
+                            cache_version,
+                            price_signature
+                        )
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS admin_comparison_basis_date_window_cache (
+                        id BIGSERIAL PRIMARY KEY,
+                        version_id BIGINT NOT NULL REFERENCES universe_versions(id) ON DELETE CASCADE,
+                        cache_version TEXT NOT NULL,
+                        price_signature TEXT NOT NULL,
+                        payload JSONB NOT NULL,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        UNIQUE (
+                            version_id,
+                            cache_version,
+                            price_signature
+                        )
+                    )
+                    """
+                )
+                cursor.execute(
+                    "ALTER TABLE admin_comparison_snapshots ADD COLUMN IF NOT EXISTS folder TEXT"
+                )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_items_version_sector ON universe_items(version_id, sector_code)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_universe_asset_roles_version ON universe_asset_roles(version_id)")
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_price_history_ticker_date ON price_history(ticker, date)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_price_history_upper_ticker_date "
+                    "ON price_history((UPPER(ticker)), date)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_universe_items_version_upper_ticker "
+                    "ON universe_items(version_id, (UPPER(ticker)))"
+                )
                 cursor.execute("CREATE INDEX IF NOT EXISTS idx_refresh_jobs_version_created_at ON refresh_jobs(version_id, created_at DESC)")
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_frontier_snapshots_version_horizon ON frontier_snapshots(version_id, investment_horizon)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_comparison_backtest_snapshots_version ON comparison_backtest_snapshots(version_id)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_admin_comparison_frontier_cache_lookup "
+                    "ON admin_comparison_frontier_cache(version_id, basis_date_key, investment_horizon, sample_points, cache_version)"
+                )
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_admin_comparison_basis_window_cache_lookup "
+                    "ON admin_comparison_basis_date_window_cache(version_id, cache_version)"
                 )
             connection.commit()
 
@@ -351,6 +462,11 @@ class ManagedUniverseRepository:
                 )
                 cursor.execute("DELETE FROM universe_price_windows WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM frontier_snapshots WHERE version_id = %s", (version_id,))
+                cursor.execute("DELETE FROM admin_comparison_frontier_cache WHERE version_id = %s", (version_id,))
+                cursor.execute(
+                    "DELETE FROM admin_comparison_basis_date_window_cache WHERE version_id = %s",
+                    (version_id,),
+                )
                 cursor.execute("DELETE FROM universe_items WHERE version_id = %s", (version_id,))
                 cursor.execute("DELETE FROM universe_asset_roles WHERE version_id = %s", (version_id,))
                 cursor.executemany(
@@ -813,6 +929,74 @@ class ManagedUniverseRepository:
                 row = cursor.fetchone()
         return None if row is None else self._refresh_job_from_row(row)
 
+    def get_running_refresh_job(self, version_id: int | None = None) -> ManagedPriceRefreshJob | None:
+        self._ensure_ready()
+        params: tuple[object, ...] = ()
+        where_parts = ["j.status = 'running'", "j.started_at > NOW() - INTERVAL '2 hours'"]
+        if version_id is not None:
+            where_parts.append("j.version_id = %s")
+            params = (version_id,)
+        where_clause = "WHERE " + " AND ".join(where_parts)
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    SELECT
+                        j.id,
+                        j.version_id,
+                        v.version_name,
+                        j.refresh_mode,
+                        j.status,
+                        j.ticker_count,
+                        COALESCE(SUM(CASE WHEN i.status = 'success' THEN 1 ELSE 0 END), 0) AS success_count,
+                        COALESCE(SUM(CASE WHEN i.status = 'failed' THEN 1 ELSE 0 END), 0) AS failure_count,
+                        j.message,
+                        TO_CHAR(j.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,
+                        TO_CHAR(j.started_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS started_at,
+                        CASE
+                            WHEN j.finished_at IS NULL THEN NULL
+                            ELSE TO_CHAR(j.finished_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"')
+                        END AS finished_at
+                    FROM refresh_jobs j
+                    JOIN universe_versions v ON v.id = j.version_id
+                    LEFT JOIN refresh_job_items i ON i.job_id = j.id
+                    {where_clause}
+                    GROUP BY j.id, v.version_name
+                    ORDER BY j.created_at DESC
+                    LIMIT 1
+                    """,
+                    params,
+                )
+                row = cursor.fetchone()
+        return None if row is None else self._refresh_job_from_row(row)
+
+    @contextmanager
+    def admin_comparison_frontier_calculation_lock(self, lock_name: str):
+        self._ensure_ready()
+        key1, key2 = self._advisory_lock_keys(lock_name)
+        connection = psycopg.connect(self.database_url, row_factory=dict_row)
+        locked = False
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT pg_try_advisory_lock(%s, %s) AS locked",
+                    (key1, key2),
+                )
+                row = cursor.fetchone()
+            locked = bool(row["locked"]) if row is not None else False
+            yield locked
+        finally:
+            try:
+                if locked:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            "SELECT pg_advisory_unlock(%s, %s)",
+                            (key1, key2),
+                        )
+            finally:
+                connection.close()
+
     def get_refresh_job_items(
         self,
         job_id: int,
@@ -851,6 +1035,97 @@ class ManagedUniverseRepository:
                 )
                 rows = cursor.fetchall()
         return [self._refresh_job_item_from_row(row) for row in rows]
+
+    def upsert_dividend_yield_estimate(
+        self,
+        estimate: DividendYieldEstimate,
+    ) -> DividendYieldEstimate:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO dividend_yield_estimates (
+                        ticker,
+                        annualized_dividend,
+                        annual_yield,
+                        payments_per_year,
+                        frequency_label,
+                        last_payment_date,
+                        source,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+                    ON CONFLICT (ticker) DO UPDATE
+                    SET annualized_dividend = EXCLUDED.annualized_dividend,
+                        annual_yield = EXCLUDED.annual_yield,
+                        payments_per_year = EXCLUDED.payments_per_year,
+                        frequency_label = EXCLUDED.frequency_label,
+                        last_payment_date = EXCLUDED.last_payment_date,
+                        source = EXCLUDED.source,
+                        updated_at = NOW()
+                    RETURNING
+                        ticker,
+                        annualized_dividend,
+                        annual_yield,
+                        payments_per_year,
+                        frequency_label,
+                        last_payment_date::TEXT AS last_payment_date,
+                        source,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    """,
+                    (
+                        estimate.ticker,
+                        estimate.annualized_dividend,
+                        estimate.annual_yield,
+                        estimate.payments_per_year,
+                        estimate.frequency_label,
+                        estimate.last_payment_date,
+                        estimate.source,
+                    ),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            raise RuntimeError("dividend yield estimate 저장 결과를 다시 읽지 못했습니다.")
+        return self._dividend_yield_estimate_from_row(row)
+
+    def get_dividend_yield_estimate(self, ticker: str) -> DividendYieldEstimate | None:
+        normalized = str(ticker).strip().upper()
+        return self.get_dividend_yield_estimates([normalized]).get(normalized)
+
+    def get_dividend_yield_estimates(
+        self,
+        tickers: list[str],
+    ) -> dict[str, DividendYieldEstimate]:
+        self._ensure_ready()
+        normalized_tickers = sorted({str(ticker).strip().upper() for ticker in tickers if str(ticker).strip()})
+        if not normalized_tickers:
+            return {}
+
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        ticker,
+                        annualized_dividend,
+                        annual_yield,
+                        payments_per_year,
+                        frequency_label,
+                        last_payment_date::TEXT AS last_payment_date,
+                        source,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    FROM dividend_yield_estimates
+                    WHERE ticker = ANY(%s)
+                    """,
+                    (normalized_tickers,),
+                )
+                rows = cursor.fetchall()
+        return {
+            estimate.ticker.upper(): estimate
+            for estimate in (self._dividend_yield_estimate_from_row(row) for row in rows)
+        }
 
     def upsert_frontier_snapshot(
         self,
@@ -960,6 +1235,338 @@ class ManagedUniverseRepository:
                 cursor.execute("DELETE FROM frontier_snapshots WHERE version_id = %s", (version_id,))
             connection.commit()
 
+    def upsert_comparison_backtest_snapshot(
+        self,
+        *,
+        version_id: int,
+        data_source: str,
+        aligned_start_date: str | None,
+        aligned_end_date: str | None,
+        line_count: int,
+        payload: dict[str, object],
+        source_refresh_job_id: int | None = None,
+    ) -> ManagedComparisonBacktestSnapshot:
+        self._ensure_ready()
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO comparison_backtest_snapshots (
+                        version_id,
+                        data_source,
+                        aligned_start_date,
+                        aligned_end_date,
+                        line_count,
+                        source_refresh_job_id,
+                        payload,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (version_id, data_source) DO UPDATE
+                    SET aligned_start_date = EXCLUDED.aligned_start_date,
+                        aligned_end_date = EXCLUDED.aligned_end_date,
+                        line_count = EXCLUDED.line_count,
+                        source_refresh_job_id = EXCLUDED.source_refresh_job_id,
+                        payload = EXCLUDED.payload,
+                        updated_at = NOW()
+                    RETURNING
+                        id,
+                        version_id,
+                        data_source,
+                        aligned_start_date::TEXT AS aligned_start_date,
+                        aligned_end_date::TEXT AS aligned_end_date,
+                        line_count,
+                        source_refresh_job_id,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
+                    """,
+                    (
+                        version_id,
+                        data_source,
+                        aligned_start_date,
+                        aligned_end_date,
+                        line_count,
+                        source_refresh_job_id,
+                        payload_json,
+                    ),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            raise RuntimeError("comparison backtest snapshot 저장 결과를 다시 읽지 못했습니다.")
+        return self._comparison_backtest_snapshot_from_row(row)
+
+    def get_comparison_backtest_snapshot(
+        self,
+        *,
+        version_id: int,
+        data_source: str,
+    ) -> ManagedComparisonBacktestSnapshot | None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        version_id,
+                        data_source,
+                        aligned_start_date::TEXT AS aligned_start_date,
+                        aligned_end_date::TEXT AS aligned_end_date,
+                        line_count,
+                        source_refresh_job_id,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS updated_at
+                    FROM comparison_backtest_snapshots
+                    WHERE version_id = %s
+                      AND data_source = %s
+                    """,
+                    (version_id, data_source),
+                )
+                row = cursor.fetchone()
+        return None if row is None else self._comparison_backtest_snapshot_from_row(row)
+
+    def delete_comparison_backtest_snapshots(self, version_id: int) -> None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("DELETE FROM comparison_backtest_snapshots WHERE version_id = %s", (version_id,))
+            connection.commit()
+
+    # ── Admin comparison frontier cache ──
+
+    def get_admin_comparison_frontier_price_signature(
+        self,
+        *,
+        version_id: int,
+        basis_date: str | None,
+    ) -> str:
+        """Return a stable signature for version prices used by a frontier request."""
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(*) AS total_rows,
+                        COUNT(DISTINCT UPPER(p.ticker)) AS ticker_count,
+                        MIN(p.date)::TEXT AS min_date,
+                        MAX(p.date)::TEXT AS max_date,
+                        TO_CHAR(MAX(p.ingested_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS max_ingested_at
+                    FROM price_history p
+                    INNER JOIN universe_items i
+                        ON UPPER(i.ticker) = UPPER(p.ticker)
+                    WHERE i.version_id = %s
+                      AND (%s::date IS NULL OR p.date <= %s::date)
+                    """,
+                    (version_id, basis_date, basis_date),
+                )
+                row = cursor.fetchone()
+        return (
+            f"rows={int(row['total_rows'] or 0)}"
+            f"|tickers={int(row['ticker_count'] or 0)}"
+            f"|min={row['min_date'] or ''}"
+            f"|max={row['max_date'] or ''}"
+            f"|ingested={row['max_ingested_at'] or ''}"
+        )
+
+    def get_admin_comparison_frontier_cache(
+        self,
+        *,
+        version_id: int,
+        basis_date: str | None,
+        investment_horizon: str,
+        sample_points: int,
+        cache_version: str,
+        price_signature: str,
+    ) -> dict[str, object] | None:
+        self._ensure_ready()
+        basis_date_key = self._admin_comparison_basis_date_key(basis_date)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT payload
+                    FROM admin_comparison_frontier_cache
+                    WHERE version_id = %s
+                      AND basis_date_key = %s
+                      AND investment_horizon = %s
+                      AND sample_points = %s
+                      AND cache_version = %s
+                      AND price_signature = %s
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    (
+                        version_id,
+                        basis_date_key,
+                        investment_horizon,
+                        sample_points,
+                        cache_version,
+                        price_signature,
+                    ),
+                )
+                row = cursor.fetchone()
+        if row is None:
+            return None
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return dict(payload) if isinstance(payload, dict) else None
+
+    def upsert_admin_comparison_frontier_cache(
+        self,
+        *,
+        version_id: int,
+        basis_date: str | None,
+        investment_horizon: str,
+        sample_points: int,
+        cache_version: str,
+        price_signature: str,
+        payload: dict[str, object],
+    ) -> None:
+        self._ensure_ready()
+        basis_date_key = self._admin_comparison_basis_date_key(basis_date)
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO admin_comparison_frontier_cache (
+                        version_id,
+                        basis_date,
+                        basis_date_key,
+                        investment_horizon,
+                        sample_points,
+                        cache_version,
+                        price_signature,
+                        payload,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (
+                        version_id,
+                        basis_date_key,
+                        investment_horizon,
+                        sample_points,
+                        cache_version,
+                        price_signature
+                    ) DO UPDATE
+                    SET basis_date = EXCLUDED.basis_date,
+                        payload = EXCLUDED.payload,
+                        updated_at = NOW()
+                    """,
+                    (
+                        version_id,
+                        basis_date,
+                        basis_date_key,
+                        investment_horizon,
+                        sample_points,
+                        cache_version,
+                        price_signature,
+                        payload_json,
+                    ),
+                )
+            connection.commit()
+
+    def delete_admin_comparison_frontier_cache(self, version_id: int) -> None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM admin_comparison_frontier_cache WHERE version_id = %s",
+                    (version_id,),
+                )
+            connection.commit()
+
+    # ── Admin comparison basis-date window cache ──
+
+    def get_admin_comparison_basis_date_window_cache(
+        self,
+        *,
+        version_id: int,
+        cache_version: str,
+        price_signature: str,
+    ) -> dict[str, object] | None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT payload
+                    FROM admin_comparison_basis_date_window_cache
+                    WHERE version_id = %s
+                      AND cache_version = %s
+                      AND price_signature = %s
+                    ORDER BY updated_at DESC
+                    LIMIT 1
+                    """,
+                    (version_id, cache_version, price_signature),
+                )
+                row = cursor.fetchone()
+        if row is None:
+            return None
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return dict(payload) if isinstance(payload, dict) else None
+
+    def upsert_admin_comparison_basis_date_window_cache(
+        self,
+        *,
+        version_id: int,
+        cache_version: str,
+        price_signature: str,
+        payload: dict[str, object],
+    ) -> None:
+        self._ensure_ready()
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO admin_comparison_basis_date_window_cache (
+                        version_id,
+                        cache_version,
+                        price_signature,
+                        payload,
+                        updated_at
+                    )
+                    VALUES (%s, %s, %s, %s::jsonb, NOW())
+                    ON CONFLICT (
+                        version_id,
+                        cache_version,
+                        price_signature
+                    ) DO UPDATE
+                    SET payload = EXCLUDED.payload,
+                        updated_at = NOW()
+                    """,
+                    (
+                        version_id,
+                        cache_version,
+                        price_signature,
+                        payload_json,
+                    ),
+                )
+            connection.commit()
+
+    def delete_admin_comparison_basis_date_window_cache(self, version_id: int) -> None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM admin_comparison_basis_date_window_cache WHERE version_id = %s",
+                    (version_id,),
+                )
+            connection.commit()
+
+    @staticmethod
+    def _admin_comparison_basis_date_key(basis_date: str | None) -> str:
+        return str(basis_date) if basis_date else "__none__"
+
     def is_empty(self) -> bool:
         if not self.is_configured():
             return True
@@ -990,6 +1597,14 @@ class ManagedUniverseRepository:
             raise RuntimeError("DATABASE_URL이 설정되지 않아 관리자 유니버스를 사용할 수 없습니다.")
         if psycopg is None or dict_row is None:
             raise RuntimeError("Postgres 연결을 위해 psycopg 패키지가 필요합니다. requirements.txt를 설치하세요.")
+
+    @staticmethod
+    def _advisory_lock_keys(lock_name: str) -> tuple[int, int]:
+        digest = hashlib.sha256(lock_name.encode("utf-8")).digest()
+        return (
+            int.from_bytes(digest[:4], byteorder="big", signed=True),
+            int.from_bytes(digest[4:8], byteorder="big", signed=True),
+        )
 
     def _version_from_row(self, row: dict) -> ManagedUniverseVersion:
         return ManagedUniverseVersion(
@@ -1029,6 +1644,18 @@ class ManagedUniverseRepository:
             finished_at=None if row["finished_at"] is None else str(row["finished_at"]),
         )
 
+    def _dividend_yield_estimate_from_row(self, row: dict) -> DividendYieldEstimate:
+        return DividendYieldEstimate(
+            ticker=str(row["ticker"]).upper(),
+            annualized_dividend=float(row["annualized_dividend"] or 0.0),
+            annual_yield=float(row["annual_yield"] or 0.0),
+            payments_per_year=int(row["payments_per_year"] or 0),
+            frequency_label=str(row["frequency_label"]),
+            last_payment_date=None if row["last_payment_date"] is None else str(row["last_payment_date"]),
+            source=str(row["source"]),
+            updated_at=None if row["updated_at"] is None else str(row["updated_at"]),
+        )
+
     def _price_window_from_row(self, row: dict) -> ManagedUniversePriceWindow:
         return ManagedUniversePriceWindow(
             version_id=int(row["version_id"]),
@@ -1051,6 +1678,25 @@ class ManagedUniverseRepository:
             aligned_start_date=None if row["aligned_start_date"] is None else str(row["aligned_start_date"]),
             aligned_end_date=None if row["aligned_end_date"] is None else str(row["aligned_end_date"]),
             total_point_count=int(row["total_point_count"] or 0),
+            source_refresh_job_id=None
+            if row["source_refresh_job_id"] is None
+            else int(row["source_refresh_job_id"]),
+            payload=dict(payload),
+            created_at=str(row["created_at"]),
+            updated_at=str(row["updated_at"]),
+        )
+
+    def _comparison_backtest_snapshot_from_row(self, row: dict) -> ManagedComparisonBacktestSnapshot:
+        payload = row["payload"]
+        if isinstance(payload, str):
+            payload = json.loads(payload)
+        return ManagedComparisonBacktestSnapshot(
+            snapshot_id=int(row["id"]),
+            version_id=int(row["version_id"]),
+            data_source=SimulationDataSource(str(row["data_source"])),
+            aligned_start_date=None if row["aligned_start_date"] is None else str(row["aligned_start_date"]),
+            aligned_end_date=None if row["aligned_end_date"] is None else str(row["aligned_end_date"]),
+            line_count=int(row["line_count"] or 0),
             source_refresh_job_id=None
             if row["source_refresh_job_id"] is None
             else int(row["source_refresh_job_id"]),
@@ -1089,3 +1735,158 @@ class ManagedUniverseRepository:
                 for item in asset_role_assignments
             ],
         )
+
+    # ── Admin comparison snapshots ──
+
+    def list_admin_comparison_snapshots(self) -> list[dict[str, object]]:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        name,
+                        folder,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    FROM admin_comparison_snapshots
+                    ORDER BY updated_at DESC
+                    """
+                )
+                rows = cursor.fetchall()
+        return [self._admin_comparison_snapshot_from_row(row) for row in rows]
+
+    def get_admin_comparison_snapshot(self, snapshot_id: int) -> dict[str, object] | None:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        name,
+                        folder,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    FROM admin_comparison_snapshots
+                    WHERE id = %s
+                    """,
+                    (snapshot_id,),
+                )
+                row = cursor.fetchone()
+        return None if row is None else self._admin_comparison_snapshot_from_row(row)
+
+    def create_admin_comparison_snapshot(
+        self,
+        *,
+        name: str,
+        payload: dict[str, object],
+        folder: str | None = None,
+    ) -> dict[str, object]:
+        self._ensure_ready()
+        payload_json = json.dumps(payload, ensure_ascii=False)
+        normalized_folder = folder.strip() if folder and folder.strip() else None
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    INSERT INTO admin_comparison_snapshots (name, folder, payload)
+                    VALUES (%s, %s, %s::jsonb)
+                    RETURNING
+                        id,
+                        name,
+                        folder,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    """,
+                    (name, normalized_folder, payload_json),
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        if row is None:
+            raise RuntimeError("admin comparison snapshot 저장 결과를 다시 읽지 못했습니다.")
+        return self._admin_comparison_snapshot_from_row(row)
+
+    def update_admin_comparison_snapshot(
+        self,
+        *,
+        snapshot_id: int,
+        name: str | None = None,
+        payload: dict[str, object] | None = None,
+        folder: str | None | object = ...,
+    ) -> dict[str, object] | None:
+        self._ensure_ready()
+        sets: list[str] = []
+        values: list[object] = []
+        if name is not None:
+            sets.append("name = %s")
+            values.append(name)
+        if payload is not None:
+            sets.append("payload = %s::jsonb")
+            values.append(json.dumps(payload, ensure_ascii=False))
+        if folder is not ...:
+            sets.append("folder = %s")
+            normalized_folder = (
+                folder.strip()
+                if isinstance(folder, str) and folder.strip()
+                else None
+            )
+            values.append(normalized_folder)
+        if not sets:
+            return self.get_admin_comparison_snapshot(snapshot_id)
+        sets.append("updated_at = NOW()")
+        values.append(snapshot_id)
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE admin_comparison_snapshots
+                    SET {', '.join(sets)}
+                    WHERE id = %s
+                    RETURNING
+                        id,
+                        name,
+                        folder,
+                        payload,
+                        TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at,
+                        TO_CHAR(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS updated_at
+                    """,
+                    values,
+                )
+                row = cursor.fetchone()
+            connection.commit()
+        return None if row is None else self._admin_comparison_snapshot_from_row(row)
+
+    def delete_admin_comparison_snapshot(self, snapshot_id: int) -> bool:
+        self._ensure_ready()
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "DELETE FROM admin_comparison_snapshots WHERE id = %s",
+                    (snapshot_id,),
+                )
+                deleted = cursor.rowcount or 0
+            connection.commit()
+        return deleted > 0
+
+    @staticmethod
+    def _admin_comparison_snapshot_from_row(row: dict[str, object]) -> dict[str, object]:
+        payload = row["payload"]
+        if isinstance(payload, str):
+            try:
+                payload = json.loads(payload)
+            except (TypeError, ValueError):
+                payload = {}
+        folder_value = row.get("folder")
+        return {
+            "id": int(row["id"]),
+            "name": str(row["name"]),
+            "folder": str(folder_value) if folder_value else None,
+            "payload": payload if isinstance(payload, dict) else {},
+            "created_at": str(row["created_at"]) if row.get("created_at") is not None else None,
+            "updated_at": str(row["updated_at"]) if row.get("updated_at") is not None else None,
+        }

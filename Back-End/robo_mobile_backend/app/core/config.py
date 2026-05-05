@@ -14,6 +14,12 @@ DEMO_STOCK_DATA_DIR = DATA_DIR / "demo"
 DEMO_STOCK_UNIVERSE_PATH = DEMO_STOCK_DATA_DIR / "demo_stock_universe.csv"
 DEMO_STOCK_PRICES_PATH = DEMO_STOCK_DATA_DIR / "demo_stock_prices.csv"
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+ENABLE_LIVE_MARKET_DATA_FETCH = os.getenv("ENABLE_LIVE_MARKET_DATA_FETCH", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 APP_NAME = "자산배분 시뮬레이터 데모 API"
 APP_DESCRIPTION = (
@@ -24,8 +30,36 @@ APP_VERSION = "0.4.0"
 
 RISK_FREE_RATE = 0.02
 BLACK_LITTERMAN_RISK_AVERSION = 2.5
-FRONTIER_POINT_COUNT = 80
+FRONTIER_POINT_COUNT = 160
 RANDOM_PORTFOLIO_COUNT = 12000
+FIXED_FIVE_PERCENT_ROLE_MARKET_RETURN_BASELINE = 0.06
+FIXED_FIVE_PERCENT_ROLE_SPREAD_CAPTURE_RATIO = 0.30
+FIXED_FIVE_PERCENT_ROLE_MAX_POSITIVE_SPREAD = 0.02
+FIXED_FIVE_PERCENT_ROLE_SCENARIO_WEIGHTS = {
+    "bear": 0.50,
+    "base": 0.35,
+    "bull": 0.15,
+}
+FIXED_FIVE_PERCENT_ROLE_SPREAD_SCENARIOS = {
+    "bear": {
+        "p_success": 0.25,
+        "return_success": 0.20,
+        "p_fail": 0.75,
+        "return_fail": 0.01,
+    },
+    "base": {
+        "p_success": 0.35,
+        "return_success": 0.25,
+        "p_fail": 0.65,
+        "return_fail": 0.00,
+    },
+    "bull": {
+        "p_success": 0.45,
+        "return_success": 0.30,
+        "p_fail": 0.55,
+        "return_fail": -0.01,
+    },
+}
 TARGET_VOLATILITY_MIN = 0.04
 TARGET_VOLATILITY_MAX = 0.22
 TARGET_VOLATILITY_STEP = 0.02

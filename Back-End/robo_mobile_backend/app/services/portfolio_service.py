@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from itertools import product
 from math import prod
 
@@ -59,6 +60,7 @@ from app.engine.returns import (
 )
 from app.services.explanation_service import ExplanationService
 from app.services.dividend_yield_service import DividendYieldService
+from app.services.fixed_five_percent_role_return_service import FixedFivePercentRoleReturnService
 from app.services.managed_universe_service import ManagedUniverseService
 from app.services.mapping_service import ProfileMappingService
 from app.services.portfolio_component_service import ComponentCandidateMapResult, PortfolioComponentService
@@ -103,12 +105,14 @@ class PortfolioSimulationService:
             periods_per_year=252,
             min_obs=MINIMUM_HISTORY_ROWS,
             risk_aversion=BLACK_LITTERMAN_RISK_AVERSION,
+            risk_free_rate=RISK_FREE_RATE,
             allow_equal_weight_fallback=True,
         )
         self.stock_return_model = self.black_litterman_stock_return_model
         self.managed_universe_service = ManagedUniverseService()
         self.component_service = PortfolioComponentService()
         self.dividend_yield_service = DividendYieldService()
+        self.fixed_five_percent_role_return_service = FixedFivePercentRoleReturnService()
         self.covariance_model = ShrinkageCovarianceModel()
         self.constraint_engine = ConstraintEngine()
         self.optimizer = EfficientFrontierOptimizer()
@@ -423,6 +427,27 @@ class PortfolioSimulationService:
             instruments=context.instruments,
         )
 
+    def build_engine_context(
+        self,
+        *,
+        risk_profile: RiskProfile,
+        investment_horizon: InvestmentHorizon,
+        data_source: SimulationDataSource,
+        as_of_date: date | None = None,
+        version_id: int | None = None,
+        include_random_portfolios: bool = True,
+    ) -> EngineContext:
+        return self._prepare_context(
+            UserProfile(
+                risk_profile=risk_profile,
+                investment_horizon=investment_horizon,
+                data_source=data_source,
+                as_of_date=as_of_date,
+            ),
+            version_id=version_id,
+            include_random_portfolios=include_random_portfolios,
+        )
+
     def get_all_profile_weights_for_price_window(
         self,
         *,
@@ -560,18 +585,30 @@ class PortfolioSimulationService:
             selected_combination=context.selected_combination,
         )
 
-    def _prepare_context(self, user_profile: UserProfile) -> EngineContext:
+    def _prepare_context(
+        self,
+        user_profile: UserProfile,
+        *,
+        version_id: int | None = None,
+        include_random_portfolios: bool = True,
+    ) -> EngineContext:
         if user_profile.data_source == SimulationDataSource.MANAGED_UNIVERSE:
-            return self._prepare_managed_universe_context()
+            return self._prepare_managed_universe_context(
+                as_of_date=user_profile.as_of_date,
+                version_id=version_id,
+                include_random_portfolios=include_random_portfolios,
+            )
         if user_profile.data_source == SimulationDataSource.STOCK_COMBINATION_DEMO:
-            return self._prepare_demo_stock_universe_context()
-        return self._prepare_assumption_context()
+            return self._prepare_demo_stock_universe_context(as_of_date=user_profile.as_of_date)
+        return self._prepare_assumption_context(as_of_date=user_profile.as_of_date)
 
-    def _prepare_assumption_context(self) -> EngineContext:
+    def _prepare_assumption_context(self, *, as_of_date: date | None = None) -> EngineContext:
         repository = StaticDataRepository()
         assets = repository.load_asset_universe()
         market_assumptions = repository.load_market_assumptions()
         returns = repository.load_sample_returns()
+        if as_of_date is not None:
+            returns = returns[returns.index <= pd.Timestamp(as_of_date).normalize()].copy()
         self._validate_returns(returns)
 
         asset_codes = [asset.code for asset in assets]
@@ -616,33 +653,46 @@ class PortfolioSimulationService:
             data_source_label="자산군 가정값",
         )
 
-    def _prepare_managed_universe_context(self) -> EngineContext:
-        active_version = self.managed_universe_service.get_active_version()
-        if active_version is None:
-            raise RuntimeError(
-                "활성 관리자 유니버스가 없습니다. /admin 에서 유니버스 버전을 active로 전환한 뒤 다시 시도해주세요."
-            )
+    def _prepare_managed_universe_context(
+        self,
+        *,
+        as_of_date: date | None = None,
+        version_id: int | None = None,
+        include_random_portfolios: bool = True,
+    ) -> EngineContext:
+        if version_id is None:
+            version = self.managed_universe_service.get_active_version()
+            if version is None:
+                raise RuntimeError(
+                    "활성 관리자 유니버스가 없습니다. /admin 에서 유니버스 버전을 active로 전환한 뒤 다시 시도해주세요."
+                )
+        else:
+            version = self.managed_universe_service.get_version(version_id)
+            if version is None:
+                raise RuntimeError(f"유니버스 버전 {version_id}를 찾을 수 없습니다.")
 
-        assets = self.list_assets(version_id=active_version.version_id)
-        instruments = self.managed_universe_service.get_active_instruments()
+        assets = self.list_assets(version_id=version.version_id)
+        instruments = self.managed_universe_service.get_instruments_for_version(version.version_id)
         if not instruments:
-            raise RuntimeError("활성 관리자 유니버스에 등록된 종목이 없습니다. /admin 에서 종목을 추가한 뒤 다시 시도해주세요.")
+            raise RuntimeError("관리자 유니버스 버전에 등록된 종목이 없습니다. /admin 에서 종목을 추가한 뒤 다시 시도해주세요.")
 
         prices = self.managed_universe_service.load_prices_for_instruments(
             instruments,
-            version_id=active_version.version_id,
+            version_id=version.version_id,
+            end_date=None if as_of_date is None else as_of_date.isoformat(),
         )
         if prices.empty:
             raise RuntimeError(
-                "활성 관리자 유니버스의 가격 데이터가 없습니다. /admin 에서 가격 갱신을 먼저 실행해주세요."
+                "관리자 유니버스 버전의 가격 데이터가 없습니다. /admin 에서 가격 갱신을 먼저 실행해주세요."
             )
 
         representative_context = self._select_sector_representatives(
             assets=assets,
             instruments=instruments,
             prices=prices,
-            combination_prefix=active_version.version_name,
+            combination_prefix=version.version_name,
             use_asset_min_weights=True,
+            include_random_portfolios=include_random_portfolios,
         )
         return EngineContext(
             assets=assets,
@@ -653,7 +703,7 @@ class PortfolioSimulationService:
             random_portfolios=representative_context.random_portfolios,
             used_fallback=False,
             data_source=SimulationDataSource.MANAGED_UNIVERSE,
-            data_source_label=f"관리자 대표 종목 유니버스 ({active_version.version_name})",
+            data_source_label=f"관리자 대표 종목 유니버스 ({version.version_name})",
             selected_combination=representative_context.selection_view,
         )
 
@@ -662,10 +712,13 @@ class PortfolioSimulationService:
         *,
         source: SimulationDataSource = SimulationDataSource.STOCK_COMBINATION_DEMO,
         label: str = "개별 종목 대표 유니버스",
+        as_of_date: date | None = None,
     ) -> EngineContext:
         assets = self.list_assets()
         instruments = self._load_demo_instruments()
         prices = StockDataRepository().load_stock_prices(str(DEMO_STOCK_PRICES_PATH))
+        if as_of_date is not None:
+            prices = prices[pd.to_datetime(prices["date"]).dt.normalize() <= pd.Timestamp(as_of_date).normalize()].copy()
         representative_context = self._select_sector_representatives(
             assets=assets,
             instruments=instruments,
@@ -776,6 +829,7 @@ class PortfolioSimulationService:
         prices: pd.DataFrame,
         combination_prefix: str,
         use_asset_min_weights: bool = False,
+        include_random_portfolios: bool = True,
     ) -> RepresentativeCombinationContext:
         stock_returns = StockDataRepository().build_stock_returns(prices)
         if stock_returns.empty:
@@ -885,6 +939,7 @@ class PortfolioSimulationService:
             stock_returns=selected_stock_returns,
             assets=assets,
             use_asset_min_weights=use_asset_min_weights,
+            include_random_portfolios=include_random_portfolios,
         )
         selection_view = CombinationSelectionView(
             combination_id=self._build_combination_id(combination_prefix, members_by_sector),
@@ -934,6 +989,7 @@ class PortfolioSimulationService:
         *,
         assets: list[AssetClass],
         use_asset_min_weights: bool = False,
+        include_random_portfolios: bool = True,
     ) -> tuple[pd.Series, pd.DataFrame, list[FrontierPoint], list[tuple[float, float, dict[str, float]]]]:
         asset_codes = list(stock_returns.columns)
         expected_returns = self._build_selected_stock_expected_returns(
@@ -954,11 +1010,15 @@ class PortfolioSimulationService:
             constraints=constraints,
             point_count=FRONTIER_POINT_COUNT,
         )
-        random_portfolios = self.optimizer.sample_random_portfolios(
-            expected_returns=expected_returns.reindex(constraints.asset_codes),
-            covariance=covariance.reindex(index=constraints.asset_codes, columns=constraints.asset_codes),
-            constraints=constraints,
-            sample_count=RANDOM_PORTFOLIO_COUNT,
+        random_portfolios = (
+            self.optimizer.sample_random_portfolios(
+                expected_returns=expected_returns.reindex(constraints.asset_codes),
+                covariance=covariance.reindex(index=constraints.asset_codes, columns=constraints.asset_codes),
+                constraints=constraints,
+                sample_count=RANDOM_PORTFOLIO_COUNT,
+            )
+            if include_random_portfolios
+            else []
         )
         return (
             expected_returns.reindex(asset_codes).astype(float),
@@ -1338,8 +1398,20 @@ class PortfolioSimulationService:
                 ticker_return_mode[ticker.upper()] = candidate.return_mode
 
         expected_returns: dict[str, float] = {}
+        fixed_total_tickers: set[str] = set()
+        for candidate in selected_candidates.values():
+            if candidate.return_mode != self.fixed_five_percent_role_return_service.RETURN_MODE:
+                continue
+            fixed_total_tickers.update(
+                ticker.upper() for ticker in candidate.member_tickers
+            )
         for ticker in stock_codes:
             return_mode = ticker_return_mode.get(ticker.upper(), "black_litterman")
+            if return_mode == self.fixed_five_percent_role_return_service.RETURN_MODE:
+                expected_returns[ticker] = (
+                    self.fixed_five_percent_role_return_service.conservative_expected_return()
+                )
+                continue
             if return_mode in {"historical_mean", "historical_mean_plus_dividend_yield"}:
                 if historical_expected_returns is None:
                     raise RuntimeError("historical_mean 기대수익률 계산 결과를 찾을 수 없습니다.")
@@ -1356,10 +1428,11 @@ class PortfolioSimulationService:
             stock_codes,
             selected_candidates,
         )
-        return (
+        return self.fixed_five_percent_role_return_service.assign_expected_returns(
             pd.Series(expected_returns, dtype=float)
             .add(dividend_overlay.reindex(stock_codes).fillna(0.0), fill_value=0.0)
-            .astype(float)
+            .astype(float),
+            target_codes=fixed_total_tickers,
         )
 
     def _build_stock_dividend_return_overlay(
@@ -1410,8 +1483,15 @@ class PortfolioSimulationService:
             )
 
         resolved_expected_returns: dict[str, float] = {}
+        fixed_total_asset_codes: set[str] = set()
         for asset_code in asset_codes:
             candidate = selected_candidates[asset_code]
+            if candidate.return_mode == self.fixed_five_percent_role_return_service.RETURN_MODE:
+                fixed_total_asset_codes.add(asset_code)
+                resolved_expected_returns[asset_code] = (
+                    self.fixed_five_percent_role_return_service.conservative_expected_return()
+                )
+                continue
             if candidate.return_mode in {"historical_mean", "historical_mean_plus_dividend_yield"}:
                 if historical_expected_returns is None:
                     raise RuntimeError("historical_mean 기대수익률 계산 결과를 찾을 수 없습니다.")
@@ -1431,7 +1511,13 @@ class PortfolioSimulationService:
             selected_candidates,
             stock_returns=stock_returns,
         )
-        return expected_returns.add(dividend_overlay.reindex(asset_codes).fillna(0.0), fill_value=0.0).astype(float)
+        return self.fixed_five_percent_role_return_service.assign_expected_returns(
+            expected_returns.add(
+                dividend_overlay.reindex(asset_codes).fillna(0.0),
+                fill_value=0.0,
+            ).astype(float),
+            target_codes=fixed_total_asset_codes,
+        )
 
     def _build_component_dividend_return_overlay(
         self,
@@ -1491,6 +1577,13 @@ class PortfolioSimulationService:
         instruments: list[StockInstrument],
     ) -> dict[str, float]:
         return {str(code).upper(): float(weight) for code, weight in weights.items()}
+
+    def weights_for_optimization(
+        self,
+        weights: dict[str, float],
+        instruments: list[StockInstrument],
+    ) -> dict[str, float]:
+        return self._weights_for_optimization(weights, instruments)
 
     def _build_individual_assets(self, context: EngineContext) -> list[IndividualAssetView]:
         instrument_by_ticker = {instrument.ticker.upper(): instrument for instrument in context.instruments}
@@ -1577,6 +1670,13 @@ class PortfolioSimulationService:
             aggregated[sector_code] = aggregated.get(sector_code, 0.0) + float(contribution)
         return aggregated
 
+    def aggregate_sector_risk_contributions(
+        self,
+        stock_contributions: dict[str, float],
+        instruments: list[StockInstrument],
+    ) -> dict[str, float]:
+        return self._aggregate_sector_risk_contributions(stock_contributions, instruments)
+
     def _build_sector_allocations(
         self,
         *,
@@ -1601,6 +1701,21 @@ class PortfolioSimulationService:
                 )
             )
         return allocations
+
+    def build_sector_allocations(
+        self,
+        *,
+        stock_weights: dict[str, float],
+        sector_risk_contributions: dict[str, float],
+        assets: list[AssetClass],
+        instruments: list[StockInstrument],
+    ) -> list[AllocationView]:
+        return self._build_sector_allocations(
+            stock_weights=stock_weights,
+            sector_risk_contributions=sector_risk_contributions,
+            assets=assets,
+            instruments=instruments,
+        )
 
     def _to_sector_frontier_point(
         self,

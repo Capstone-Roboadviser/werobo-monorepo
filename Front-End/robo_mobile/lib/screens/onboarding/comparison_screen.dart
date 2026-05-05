@@ -1,21 +1,20 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
+import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
+import '../../services/mobile_backend_api.dart';
 import 'confirmation_screen.dart';
 
 class ComparisonScreen extends StatefulWidget {
-  final MobileRecommendationResponse recommendation;
-  final String selectedPortfolioCode;
-  final MobileFrontierSelectionResponse? frontierSelection;
+  final MobileFrontierSelectionResponse frontierSelection;
 
   const ComparisonScreen({
     super.key,
-    required this.recommendation,
-    required this.selectedPortfolioCode,
-    this.frontierSelection,
+    required this.frontierSelection,
   });
 
   @override
@@ -24,81 +23,200 @@ class ComparisonScreen extends StatefulWidget {
 
 class _ComparisonScreenState extends State<ComparisonScreen>
     with TickerProviderStateMixin {
-  late String _selectedCode;
   late AnimationController _fadeController;
   late Animation<double> _fadeAnim;
+
+  // Slider state
+  double _sliderValue = 0.5;
+  MobileFrontierSelectionResponse? _currentSelection;
+  int _requestSeqNo = 0;
+  Timer? _debounceTimer;
+
+  // Frontier preview data (cached from onboarding)
+  MobileFrontierPreviewResponse? _frontierPreview;
+  late double _minVol;
+  late double _maxVol;
+
+  bool _didInit = false;
 
   @override
   void initState() {
     super.initState();
-    _selectedCode = widget.frontierSelection == null
-        ? widget.selectedPortfolioCode
-        : 'selected';
-    logPageEnter('ComparisonScreen', {
-      'selected': _selectedCode,
-    });
-    logAction('comparison initial selected', {
-      'portfolio': _selectedCode,
-    });
+    _currentSelection = widget.frontierSelection;
+
     _fadeController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: WeRoboMotion.medium,
       vsync: this,
     );
     _fadeAnim = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _fadeController, curve: Curves.easeOut),
+      CurvedAnimation(parent: _fadeController, curve: WeRoboMotion.enter),
     );
     _fadeController.forward();
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInit) {
+      _didInit = true;
+
+      // Read frontier preview from provider
+      _frontierPreview =
+          PortfolioStateProvider.of(context).frontierPreview;
+      _initSliderRange();
+
+      logPageEnter('ComparisonScreen', {
+        'selected': widget.frontierSelection.classificationCode,
+        'selected_point_index': widget.frontierSelection.selectedPointIndex,
+      });
+      logAction('comparison initial selected', {
+        'classification': widget.frontierSelection.classificationCode,
+        'selected_point_index': widget.frontierSelection.selectedPointIndex,
+      });
+    }
+  }
+
+  void _initSliderRange() {
+    final preview = _frontierPreview;
+    if (preview != null && preview.points.isNotEmpty) {
+      _minVol = _frontierPreview!.minVolatility;
+      _maxVol = _frontierPreview!.maxVolatility;
+      final initialPosition =
+          preview.positionForPointIndex(widget.frontierSelection.selectedPointIndex);
+      _sliderValue = preview.points.length <= 1
+          ? 0.5
+          : initialPosition / (preview.points.length - 1);
+    } else {
+      _minVol = widget.frontierSelection.selectedTargetVolatility;
+      _maxVol = widget.frontierSelection.selectedTargetVolatility;
+      _sliderValue = 0.5;
+    }
+  }
+
+  @override
   void dispose() {
     logPageExit('ComparisonScreen');
+    _debounceTimer?.cancel();
     _fadeController.dispose();
     super.dispose();
   }
 
-  String _portfolioSummary(String code) {
-    if (code == 'selected') {
-      final target = widget.frontierSelection?.selectedTargetVolatility ?? 0;
-      return '선택한 변동성 ${formatRatioPercent(target)}에 가장 가까운\n'
-          '프론티어 포인트를 그대로 반영했어요.';
+  double _sliderToVolatility(double t) =>
+      _minVol + t * (_maxVol - _minVol);
+
+  int _previewPositionForSlider(double value) {
+    final points = _frontierPreview?.points;
+    if (points == null || points.isEmpty) {
+      return 0;
     }
-    switch (code) {
-      case 'conservative':
-        return '채권 중심으로 변동이 적어요.\n'
-            '은행 예금보다 높은 수익을 기대할 수 있어요.';
-      case 'growth':
-        return '주식 비중이 높아 수익 가능성이 커요.\n'
-            '단기적으로 변동이 클 수 있지만 장기 성장을 추구해요.';
-      case 'balanced':
-      default:
-        return '주식과 채권을 균형 있게 배분해요.\n'
-            '적당한 수익과 안정성을 동시에 추구해요.';
+    final scaled = (value * (points.length - 1)).round();
+    return scaled.clamp(0, points.length - 1);
+  }
+
+  MobileFrontierPreviewPoint? _nearestPreviewPoint(double t) {
+    final points = _frontierPreview?.points;
+    if (points == null || points.isEmpty) return null;
+    final targetVol = _sliderToVolatility(t);
+    MobileFrontierPreviewPoint closest = points.first;
+    double minDist = (closest.volatility - targetVol).abs();
+    for (final p in points) {
+      final dist = (p.volatility - targetVol).abs();
+      if (dist < minDist) {
+        minDist = dist;
+        closest = p;
+      }
+    }
+    return closest;
+  }
+
+  void _onSliderChanged(double value) {
+    setState(() => _sliderValue = value);
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      _fetchSelection(_previewPositionForSlider(value));
+    });
+  }
+
+  Future<void> _fetchSelection(int previewPosition) async {
+    final preview = _frontierPreview;
+    if (preview == null || preview.points.isEmpty) {
+      return;
+    }
+    final selectedPreviewPoint = preview.points[previewPosition];
+    final mySeq = ++_requestSeqNo;
+    try {
+      final result =
+          await MobileBackendApi.instance.fetchFrontierSelection(
+        propensityScore:
+            widget.frontierSelection.resolvedProfile.propensityScore ?? 50,
+        pointIndex: selectedPreviewPoint.index,
+        targetVolatility: selectedPreviewPoint.volatility,
+        investmentHorizon:
+            widget.frontierSelection.resolvedProfile.investmentHorizon,
+        preferredDataSource: widget.frontierSelection.dataSource,
+        asOfDate: widget.frontierSelection.asOfDate,
+      );
+      if (!mounted || mySeq != _requestSeqNo) return;
+      setState(() {
+        _currentSelection = result;
+      });
+      logAction('slider selection loaded', {
+        'selected_point_index': result.selectedPointIndex,
+        'classification': result.classificationCode,
+        'volatility': result.selectedTargetVolatility.toStringAsFixed(4),
+      });
+    } on Exception catch (e) {
+      if (!mounted || mySeq != _requestSeqNo) return;
+      logAction('slider selection error', {
+        'error': e.toString(),
+      });
+      // Error handled silently — previous data stays visible
     }
   }
 
-  MobilePortfolioRecommendation _portfolioForCode(String code) {
-    final frontierSelection = widget.frontierSelection;
-    if (frontierSelection != null && code == 'selected') {
-      return frontierSelection.portfolio;
-    }
-    return widget.recommendation.recommendedPortfolio;
+  String _portfolioSummary(MobilePortfolioRecommendation portfolio) {
+    return '연 기대수익률 ${portfolio.expectedReturnLabel}, '
+        '연 변동성 ${portfolio.volatilityLabel} 수준의 조합입니다.\n'
+        '슬라이더를 움직이면 frontier 위의 다른 지점으로 바로 바꿀 수 있어요.';
   }
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final portfolios = <MobilePortfolioRecommendation>[
-      widget.frontierSelection?.portfolio ??
-          widget.recommendation.recommendedPortfolio,
-    ];
-    final selected = _portfolioForCode(_selectedCode);
-    final categories = selected.toCategories();
-    final risk = selected.volatilityLabel;
-    final returnRate = selected.expectedReturnLabel;
+
+    // Instant stats from preview point
+    final previewPoint = _nearestPreviewPoint(_sliderValue);
+    final displayPortfolio = _currentSelection?.portfolio ??
+        widget.frontierSelection.portfolio;
+    final instantReturn = previewPoint != null
+        ? formatRatioPercent(previewPoint.expectedReturn)
+        : displayPortfolio.expectedReturnLabel;
+
+    // Market-relative risk (instant from preview volatility)
+    final avg = _frontierPreview?.averageVolatility ?? displayPortfolio.volatility;
+    final previewVol = previewPoint?.volatility ?? displayPortfolio.volatility;
+    final riskDiff = avg > 0 ? (previewVol - avg) / avg : 0.0;
+    final riskPct = (riskDiff.abs() * 100).round();
+    final isRiskier = riskDiff >= 0;
+    final riskText = riskPct == 0
+        ? '0%'
+        : isRiskier
+            ? '+$riskPct%'
+            : '-$riskPct%';
+    final riskColor = riskPct == 0
+        ? tc.textPrimary
+        : isRiskier
+            ? WeRoboColors.warning
+            : tc.accent;
+
+    final categories = displayPortfolio.toCategories();
+    final donutLabel = displayPortfolio.label;
+
+    final previewCount = _frontierPreview?.points.length ?? 0;
+    final divisions = previewCount > 1 ? previewCount - 1 : null;
 
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnim,
@@ -115,7 +233,8 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                     ),
                     Expanded(
                       child: Text('포트폴리오 비교',
-                          style: WeRoboTypography.heading2.themed(context),
+                          style:
+                              WeRoboTypography.heading2.themed(context),
                           textAlign: TextAlign.center),
                     ),
                     const SizedBox(width: 48),
@@ -123,85 +242,94 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                 ),
               ),
               const SizedBox(height: 4),
-              Text('${widget.recommendation.resolvedProfile.label} 성향과 비교해 보세요',
-                  style: WeRoboTypography.bodySmall.themed(context)),
-              const SizedBox(height: 20),
-
-              // Portfolio selector chips
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: portfolios.asMap().entries.map((entry) {
-                    final index = entry.key;
-                    final portfolio = entry.value;
-                    final isSelected = portfolio.code == _selectedCode;
-                    return Expanded(
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          left: index == 0 ? 0 : 6,
-                          right: index == portfolios.length - 1 ? 0 : 6,
-                        ),
-                        child: GestureDetector(
-                          onTap: () {
-                            logAction('select comparison portfolio', {
-                              'portfolio': portfolio.code,
-                            });
-                            setState(() => _selectedCode = portfolio.code);
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 250),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color:
-                                  isSelected ? WeRoboColors.primary : tc.card,
-                              borderRadius: BorderRadius.circular(12),
-                              border: isSelected
-                                  ? null
-                                  : Border.all(color: tc.border, width: 1),
-                            ),
-                            child: Text(
-                              portfolio.label,
-                              textAlign: TextAlign.center,
-                              style: WeRoboTypography.bodySmall.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: isSelected
-                                    ? WeRoboColors.white
-                                    : tc.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
+              Text(
+                '${widget.frontierSelection.resolvedProfile.label}'
+                ' 성향과 비교해 보세요',
+                style: WeRoboTypography.bodySmall.themed(context),
               ),
               const SizedBox(height: 20),
 
-              // Stats with rolling number animation
+              // Slider with portfolio labels
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Column(
+                  children: [
+                    SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: WeRoboColors.primary,
+                        inactiveTrackColor: tc.border,
+                        thumbColor: WeRoboColors.primary,
+                        overlayColor: WeRoboColors.primary
+                            .withValues(alpha: 0.12),
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 10,
+                        ),
+                      ),
+                      child: Slider(
+                        value: _sliderValue,
+                        divisions: divisions,
+                        onChanged: _onSliderChanged,
+                        semanticFormatterCallback: (value) {
+                          final vol = _sliderToVolatility(value);
+                          return '변동성 ${(vol * 100).toStringAsFixed(1)}%';
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Row(
+                        children: [
+                          Text(
+                            '낮은 위험',
+                            style: WeRoboTypography.caption.copyWith(
+                              color: tc.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            '높은 기대수익',
+                            style: WeRoboTypography.caption.copyWith(
+                              color: tc.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Stats: 연 수익률 (left) + 시장 대비 위험도 (right)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 child: Row(
                   children: [
                     Expanded(
                       child: _AnimatedStatChip(
-                        label: '위험도',
-                        value: risk,
-                        color: WeRoboColors.warning,
+                        label: '연 수익률',
+                        value: instantReturn,
+                        labelColor: tc.textPrimary,
+                        valueColor: WeRoboColors.primary,
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: _AnimatedStatChip(
-                        label: '수익률',
-                        value: returnRate,
-                        color: tc.accent,
+                        label: '시장 대비 위험도',
+                        value: riskText,
+                        labelColor: tc.textPrimary,
+                        valueColor: riskColor,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 12),
+
               // Plain-language summary
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -209,11 +337,12 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                   width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: WeRoboColors.primary.withValues(alpha: 0.06),
+                    color: WeRoboColors.primary
+                        .withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
-                    _portfolioSummary(_selectedCode),
+                    _portfolioSummary(displayPortfolio),
                     style: WeRoboTypography.caption.copyWith(
                       color: tc.textSecondary,
                       height: 1.5,
@@ -227,16 +356,17 @@ class _ComparisonScreenState extends State<ComparisonScreen>
               // Animated donut chart
               _AnimatedDonut(
                 categories: categories,
-                label: selected.label,
+                label: donutLabel,
               ),
               const SizedBox(height: 20),
 
               // Sector list with fade
               Expanded(
                 child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 300),
+                  duration: WeRoboMotion.medium,
                   child: _SectorList(
-                    key: ValueKey(_selectedCode),
+                    key: ValueKey(
+                        '${displayPortfolio.code}_${_currentSelection?.selectedPointIndex ?? widget.frontierSelection.selectedPointIndex}'),
                     categories: categories,
                   ),
                 ),
@@ -248,22 +378,15 @@ class _ComparisonScreenState extends State<ComparisonScreen>
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {
+                      final selection = _currentSelection ?? widget.frontierSelection;
                       logAction('tap confirm portfolio', {
-                        'selected': _selectedCode,
+                        'selected': selection.classificationCode,
+                        'selected_point_index': selection.selectedPointIndex,
                       });
                       Navigator.of(context).push(
-                        PageRouteBuilder(
-                          pageBuilder: (_, __, ___) => ConfirmationScreen(
-                            recommendation: widget.recommendation,
-                            selectedPortfolioCode: _selectedCode,
-                            frontierSelection: _selectedCode == 'selected'
-                                ? widget.frontierSelection
-                                : null,
-                          ),
-                          transitionsBuilder: (_, anim, __, child) =>
-                              FadeTransition(opacity: anim, child: child),
-                          transitionDuration: const Duration(milliseconds: 400),
-                        ),
+                        WeRoboMotion.fadeRoute(ConfirmationScreen(
+                          frontierSelection: selection,
+                        )),
                       );
                     },
                     child: const Text('투자 성향 확정하기'),
@@ -282,12 +405,14 @@ class _ComparisonScreenState extends State<ComparisonScreen>
 class _AnimatedStatChip extends StatefulWidget {
   final String label;
   final String value;
-  final Color color;
+  final Color labelColor;
+  final Color valueColor;
 
   const _AnimatedStatChip({
     required this.label,
     required this.value,
-    required this.color,
+    required this.labelColor,
+    required this.valueColor,
   });
 
   @override
@@ -301,7 +426,7 @@ class _AnimatedStatChipState extends State<_AnimatedStatChip>
   double _currentValue = 0;
 
   static double _parseValue(String v) {
-    return double.tryParse(v.replaceAll('%', '')) ?? 0;
+    return double.tryParse(v.replaceAll(RegExp(r'[%+]'), '')) ?? 0;
   }
 
   @override
@@ -343,7 +468,8 @@ class _AnimatedStatChipState extends State<_AnimatedStatChip>
       child: Column(
         children: [
           Text(widget.label,
-              style: WeRoboTypography.caption.copyWith(color: widget.color)),
+              style: WeRoboTypography.caption
+                  .copyWith(color: widget.labelColor)),
           const SizedBox(height: 4),
           AnimatedBuilder(
             animation: _controller,
@@ -353,7 +479,7 @@ class _AnimatedStatChipState extends State<_AnimatedStatChip>
               return Text(
                 '${val.toStringAsFixed(1)}%',
                 style: WeRoboTypography.number.copyWith(
-                  color: tc.textPrimary,
+                  color: widget.valueColor,
                   fontFamily: WeRoboFonts.english,
                   fontFeatures: const [FontFeature.tabularFigures()],
                 ),

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.config import TARGET_VOLATILITY_MAX, TARGET_VOLATILITY_MIN
@@ -59,6 +61,10 @@ class FrontierSelectionRequest(CalculationContextRequest):
 
 class VolatilityHistoryRequest(CalculationContextRequest):
     rolling_window: int = Field(default=20, ge=5, le=60, description="롤링 변동성 계산 윈도우")
+    stock_weights: dict[str, float] | None = Field(
+        default=None,
+        description="선택 포트폴리오의 종목 비중 맵. 주어지면 이 비중으로 변동성 추이를 계산합니다.",
+    )
     target_volatility: float | None = Field(
         default=None,
         ge=TARGET_VOLATILITY_MIN,
@@ -75,9 +81,10 @@ class VolatilityHistoryRequest(CalculationContextRequest):
     def validate_history_selector(self) -> "VolatilityHistoryRequest":
         has_profile_bucket = self.propensity_score is not None or self.risk_profile is not None
         has_frontier_selector = self.target_volatility is not None or self.selected_point_index is not None
-        if not has_profile_bucket and not has_frontier_selector:
+        has_stock_weights = bool(self.stock_weights)
+        if not has_profile_bucket and not has_frontier_selector and not has_stock_weights:
             raise ValueError(
-                "propensity_score, risk_profile, target_volatility, selected_point_index 중 하나는 반드시 제공해야 합니다."
+                "propensity_score, risk_profile, target_volatility, selected_point_index, stock_weights 중 하나는 반드시 제공해야 합니다."
             )
         return self
 
@@ -94,11 +101,25 @@ class ComparisonBacktestRequest(CalculationContextRequest):
         ge=0,
         description="전체 frontier 목록 기준으로 사용자가 선택한 정확한 포인트 인덱스",
     )
+    stock_weights: dict[str, float] | None = Field(
+        default=None,
+        description="현재 선택 포트폴리오의 종목 비중 맵. 주어지면 이 비중을 고정한 과거 백테스트를 계산합니다.",
+    )
+    portfolio_code: str | None = Field(
+        default=None,
+        description="현재 선택 포트폴리오 코드. 없으면 `selected` 라인 키를 사용합니다.",
+    )
+    start_date: date | None = Field(
+        default=None,
+        description="비교 백테스트 시작일 (YYYY-MM-DD). 계정 성과 비교에서는 포트폴리오 시작일을 전달합니다.",
+    )
 
     @model_validator(mode="after")
     def validate_backtest_selector(self) -> "ComparisonBacktestRequest":
-        if self.target_volatility is None and self.selected_point_index is None:
-            raise ValueError("target_volatility 또는 selected_point_index 중 하나는 반드시 제공해야 합니다.")
+        has_frontier_selector = self.target_volatility is not None or self.selected_point_index is not None
+        has_stock_weights = bool(self.stock_weights)
+        if not has_frontier_selector and not has_stock_weights:
+            raise ValueError("target_volatility, selected_point_index, stock_weights 중 하나는 반드시 제공해야 합니다.")
         return self
 
 
