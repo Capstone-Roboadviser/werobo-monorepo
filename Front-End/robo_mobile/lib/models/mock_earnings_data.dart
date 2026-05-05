@@ -245,9 +245,24 @@ class MockEarningsData {
   /// base allocation of `assetSummary.weight * baseInvestment` with a
   /// daily return tuned by tier (defensive lower volatility, growth
   /// higher) and a deterministic seeded noise term.
+  ///
+  /// **Semantic note for backend integration:** `assetEarnings` here
+  /// stores **absolute portfolio value per asset** (base + cumulative
+  /// gain), so `(current - prior) / prior` directly yields the asset's
+  /// day-over-day return. The real backend's `asset_earnings` field is
+  /// expected to store **cumulative gain** instead (mirroring
+  /// `MobileAssetEarningSummary.earnings`). When wiring the live
+  /// endpoint, convert each point's gains to absolute values via
+  /// `base + gain` before passing to `PortfolioState.setEarningsHistory`,
+  /// or the day-over-day calculation will be ~13× off in magnitude.
+  ///
+  /// `asOf` overrides the end date used for the synthesis range. Tests
+  /// pass a fixed value to keep the determinism contract robust to
+  /// midnight boundaries.
   static List<MobileEarningsPoint> dailyAssetEarnings({
     required String riskCode,
     double baseInvestment = 100000000,
+    DateTime? asOf,
   }) {
     final summary = summaryFor(riskCode);
     if (summary.isEmpty) return const [];
@@ -277,7 +292,7 @@ class MockEarningsData {
     };
 
     final start = DateTime(2025, 3, 3);
-    final end = DateTime.now();
+    final end = asOf ?? DateTime.now();
     final points = <MobileEarningsPoint>[];
     final values = Map<String, double>.from(baseByCode);
 
@@ -289,6 +304,7 @@ class MockEarningsData {
           final annual = annualReturnByCode[code] ?? 0.07;
           final daily = annual / 252;
           final vol = volatilityByCode[code] ?? 0.005;
+          // LCG (glibc rand): mul 1103515245, inc 12345, mod 2^31.
           seed = ((seed * 1103515245 + 12345) & 0x7fffffff);
           final noise = ((seed % 1000) / 1000.0 - 0.5) * 2 * vol;
           values[code] = (values[code] ?? 0) * (1 + daily + noise);
@@ -313,10 +329,12 @@ class MockEarningsData {
   static MobileEarningsHistoryResponse mockEarningsHistoryResponse({
     required String riskCode,
     double baseInvestment = 100000000,
+    DateTime? asOf,
   }) {
     final points = dailyAssetEarnings(
       riskCode: riskCode,
       baseInvestment: baseInvestment,
+      asOf: asOf,
     );
     final start =
         points.isEmpty ? DateTime(2025, 3, 3) : points.first.date;

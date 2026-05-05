@@ -15,8 +15,17 @@ void main() {
     });
 
     test('is deterministic — same riskCode produces identical output', () {
-      final a = MockEarningsData.dailyAssetEarnings(riskCode: 'balanced');
-      final b = MockEarningsData.dailyAssetEarnings(riskCode: 'balanced');
+      // Inject a fixed end date so the test isn't sensitive to midnight
+      // boundaries when DateTime.now() advances between back-to-back calls.
+      final asOf = DateTime(2026, 4, 30);
+      final a = MockEarningsData.dailyAssetEarnings(
+        riskCode: 'balanced',
+        asOf: asOf,
+      );
+      final b = MockEarningsData.dailyAssetEarnings(
+        riskCode: 'balanced',
+        asOf: asOf,
+      );
       expect(a.length, b.length);
       for (var i = 0; i < a.length; i++) {
         expect(a[i].date, b[i].date);
@@ -40,9 +49,11 @@ void main() {
       final firstUs = points.first.assetEarnings['us_value']!;
       final lastUs = points.last.assetEarnings['us_value']!;
       expect(firstUs, greaterThan(0));
-      expect(lastUs, greaterThan(0));
-      // Over hundreds of business days the cumulative value should differ
-      expect(lastUs, isNot(equals(firstUs)));
+      // us_value summary returnPct is +7.8 (annualized), so over the
+      // multi-year synthesis window we expect cumulative growth well
+      // beyond the first-day value. A negative-drift bug or a
+      // disconnected loop would fail this bound.
+      expect(lastUs, greaterThan(firstUs * 1.05));
     });
   });
 
