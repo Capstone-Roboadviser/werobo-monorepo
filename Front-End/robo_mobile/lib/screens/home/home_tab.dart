@@ -1,4 +1,4 @@
-import 'dart:math';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
@@ -296,6 +296,19 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     ];
   }
 
+  /// Rebase a KRW-valued `ChartPoint` series to percent return from the
+  /// first point. The output's `value` field carries fractional return
+  /// (`0.0` = 0%, `0.05` = +5%). First point is always exactly `0.0`.
+  List<ChartPoint> _pctSeries(List<ChartPoint> krw) {
+    if (krw.isEmpty) return const [];
+    final base = krw.first.value;
+    if (base == 0) return const [];
+    return [
+      for (final p in krw)
+        ChartPoint(date: p.date, value: (p.value - base) / base),
+    ];
+  }
+
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -441,16 +454,20 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                       builder: (context, _) {
                         return CustomPaint(
                           size: Size(fullWidth, 320),
-                          painter: _PortfolioValuePainter(
-                            valuePts: valuePts,
-                            costPts: const [],
+                          painter: _HomePerformancePainter(
+                            lines: [
+                              ChartLine(
+                                key: 'portfolio',
+                                label: '포트폴리오',
+                                color: WeRoboColors.primary,
+                                points: _pctSeries(valuePts),
+                              ),
+                            ],
                             progress: _drawCurve.value,
                             touchIndex: _touchIndex,
                             glowPhase: _glowCtrl.value,
                             dateLabel: dateLabel,
-                            primaryColor: WeRoboColors.primary,
                             glowColor: WeRoboColors.assetTier3,
-                            costColor: tc.textPrimary,
                             gridColor: tc.border,
                             crosshairColor: tc.textSecondary,
                           ),
@@ -556,162 +573,180 @@ class _PerformanceBadge extends StatelessWidget {
   }
 }
 
-// ─── Dual-line chart painter ──────────────────────────────────
+// ─── Multi-line % return chart painter ───────────────────────
 
-class _PortfolioValuePainter extends CustomPainter {
-  final List<ChartPoint> valuePts;
-  final List<ChartPoint> costPts;
+class _HomePerformancePainter extends CustomPainter {
+  /// Lines to draw, in z-order (last drawn = on top). The portfolio line
+  /// is conventionally first; benchmarks/projections layer below it via
+  /// the order they appear in this list.
+  final List<ChartLine> lines;
   final double progress;
   final int? touchIndex;
   final double glowPhase;
   final String dateLabel;
-  final Color primaryColor;
   final Color glowColor;
-  final Color costColor;
   final Color gridColor;
-  // Color for the drag crosshair line + date label. Was hardcoded to
-  // Colors.white; that vanished against the warm-gray light theme.
   final Color crosshairColor;
 
-  _PortfolioValuePainter({
-    required this.valuePts,
-    required this.costPts,
+  _HomePerformancePainter({
+    required this.lines,
     required this.progress,
     this.touchIndex,
     this.glowPhase = 0,
     required this.dateLabel,
-    required this.primaryColor,
     required this.glowColor,
-    required this.costColor,
     required this.gridColor,
     required this.crosshairColor,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (valuePts.length < 2) return;
+    if (lines.isEmpty || lines.first.points.length < 2) return;
 
     final w = size.width;
     final h = size.height;
     final isDragging = touchIndex != null;
-    // Draggable line extends beyond graph area; graph is shorter
     const lineTopPad = 16.0;
     const graphTopPad = 36.0;
     const graphBotPad = 50.0;
     final chartH = h - graphTopPad - graphBotPad;
 
-    // Y-range across both lines
+    // Y-range across all lines (% space — symmetric padding).
     double minY = double.infinity;
     double maxY = double.negativeInfinity;
-    for (final p in valuePts) {
-      if (p.value < minY) minY = p.value;
-      if (p.value > maxY) maxY = p.value;
+    for (final line in lines) {
+      for (final p in line.points) {
+        if (p.value < minY) minY = p.value;
+        if (p.value > maxY) maxY = p.value;
+      }
     }
-    for (final p in costPts) {
-      if (p.value < minY) minY = p.value;
-      if (p.value > maxY) maxY = p.value;
-    }
-    final range = (maxY - minY).clamp(1.0, double.infinity);
+    if (minY == double.infinity) return;
+    final range = (maxY - minY).clamp(0.0001, double.infinity);
     minY -= range * 0.05;
     maxY += range * 0.05;
     final rangeY = maxY - minY;
 
+    final basePts = lines.first.points;
     double toX(int i, int total) => w * i / (total - 1);
     double toY(double val) =>
         graphTopPad + chartH - ((val - minY) / rangeY) * chartH;
 
-    // Grid lines (4 horizontal, very subtle)
+    // Grid lines — dimmed to 0.08 (was 0.15) so the chart reads
+    // "no Y axis" while keeping spatial reference.
     final gridPaint = Paint()
-      ..color = gridColor.withValues(alpha: 0.15)
+      ..color = gridColor.withValues(alpha: 0.08)
       ..strokeWidth = 0.5;
     for (int i = 0; i <= 4; i++) {
       final y = graphTopPad + chartH * i / 4;
       canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
     }
 
-    // Fractional index for smooth interpolation between data points
-    final fIdx = (valuePts.length - 1) * progress.clamp(0.0, 1.0);
+    final fIdx = (basePts.length - 1) * progress.clamp(0.0, 1.0);
     final complete = fIdx.floor();
     final frac = fIdx - complete;
-    final drawCount = (complete + 1).clamp(2, valuePts.length);
+    final drawCount = (complete + 1).clamp(2, basePts.length);
     final ti = isDragging
-        ? touchIndex!.clamp(0, valuePts.length - 1)
+        ? touchIndex!.clamp(0, basePts.length - 1)
         : drawCount - 1;
 
-    // ── Cost basis line ──
-    if (costPts.length >= 2) {
-      final costCount = min(drawCount, costPts.length);
-      if (isDragging) {
-        // Left of drag: full opacity
-        final leftEnd = min(ti + 1, costCount);
-        final leftPath = Path();
-        for (int i = 0; i < leftEnd; i++) {
-          final x = toX(i, valuePts.length);
-          final y = toY(costPts[i].value);
-          if (i == 0) {
-            leftPath.moveTo(x, y);
-          } else {
-            leftPath.lineTo(x, y);
-          }
-        }
-        canvas.drawPath(
-          leftPath,
-          Paint()
-            ..color = costColor.withValues(alpha: 0.6)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
-        // Right of drag: fade out
-        if (ti < costCount - 1) {
-          _drawFadingSegment(
-            canvas,
-            costPts,
-            ti,
-            costCount,
-            valuePts.length,
-            toX,
-            toY,
-            costColor.withValues(alpha: 0.6),
-            1.5,
-          );
-        }
-      } else {
-        final costPath = Path();
-        for (int i = 0; i < costCount; i++) {
-          final x = toX(i, valuePts.length);
-          final y = toY(costPts[i].value);
-          if (i == 0) {
-            costPath.moveTo(x, y);
-          } else {
-            costPath.lineTo(x, y);
-          }
-        }
-        canvas.drawPath(
-          costPath,
-          Paint()
-            ..color = costColor.withValues(alpha: 0.6)
-            ..style = PaintingStyle.stroke
-            ..strokeWidth = 1.5
-            ..strokeCap = StrokeCap.round
-            ..strokeJoin = StrokeJoin.round,
-        );
-      }
+    // Draw benchmarks first (behind portfolio).
+    for (var lineIdx = lines.length - 1; lineIdx >= 1; lineIdx--) {
+      _drawBenchmarkLine(
+        canvas,
+        lines[lineIdx],
+        basePts.length,
+        toX,
+        toY,
+        drawCount,
+      );
     }
 
-    // ── Portfolio value line ──
-    if (isDragging) {
-      // Transition zone before touch
-      const transitionLen = 20;
-      final transStart = max(0, ti - transitionLen);
+    // Portfolio line on top with the existing polish.
+    _drawPortfolioLine(
+      canvas,
+      lines.first.points,
+      lines.first.color,
+      basePts.length,
+      drawCount,
+      complete,
+      frac,
+      ti,
+      isDragging,
+      toX,
+      toY,
+    );
 
-      // Main segment (before transition)
-      final mainEnd = min(transStart + 1, drawCount);
+    // Crosshair + glow + date label (only when dragging).
+    if (isDragging) {
+      _drawCrosshair(
+        canvas,
+        size,
+        ti,
+        basePts.length,
+        toX,
+        toY,
+        lines.first.points,
+        drawCount,
+        lineTopPad,
+      );
+    }
+  }
+
+  void _drawBenchmarkLine(
+    Canvas canvas,
+    ChartLine line,
+    int totalPts,
+    double Function(int, int) toX,
+    double Function(double) toY,
+    int drawCount,
+  ) {
+    final pts = line.points;
+    if (pts.length < 2) return;
+    final count = math.min(drawCount, pts.length);
+    final path = Path();
+    for (var i = 0; i < count; i++) {
+      final x = toX(i, totalPts);
+      final y = toY(pts[i].value);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    final paint = Paint()
+      ..color = line.color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    if (line.dashed) {
+      _drawDashedPath(canvas, path, paint);
+    } else {
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  void _drawPortfolioLine(
+    Canvas canvas,
+    List<ChartPoint> pts,
+    Color color,
+    int totalPts,
+    int drawCount,
+    int complete,
+    double frac,
+    int ti,
+    bool isDragging,
+    double Function(int, int) toX,
+    double Function(double) toY,
+  ) {
+    if (isDragging) {
+      const transitionLen = 20;
+      final transStart = math.max(0, ti - transitionLen);
+      final mainEnd = math.min(transStart + 1, drawCount);
       final mainPath = Path();
       for (int i = 0; i < mainEnd; i++) {
-        final x = toX(i, valuePts.length);
-        final y = toY(valuePts[i].value);
+        final x = toX(i, totalPts);
+        final y = toY(pts[i].value);
         if (i == 0) {
           mainPath.moveTo(x, y);
         } else {
@@ -721,27 +756,25 @@ class _PortfolioValuePainter extends CustomPainter {
       canvas.drawPath(
         mainPath,
         Paint()
-          ..color = primaryColor
+          ..color = color
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round,
       );
-
-      // Transition segment (gradient to glow)
       if (transStart < ti) {
         final transPath = Path();
         transPath.moveTo(
-          toX(transStart, valuePts.length),
-          toY(valuePts[transStart].value),
+          toX(transStart, totalPts),
+          toY(pts[transStart].value),
         );
         for (int i = transStart + 1; i <= ti && i < drawCount; i++) {
-          transPath.lineTo(toX(i, valuePts.length), toY(valuePts[i].value));
+          transPath.lineTo(toX(i, totalPts), toY(pts[i].value));
         }
         final shader = ui.Gradient.linear(
-          Offset(toX(transStart, valuePts.length), 0),
-          Offset(toX(ti, valuePts.length), 0),
-          [primaryColor, glowColor],
+          Offset(toX(transStart, totalPts), 0),
+          Offset(toX(ti, totalPts), 0),
+          [color, glowColor],
         );
         canvas.drawPath(
           transPath,
@@ -753,125 +786,115 @@ class _PortfolioValuePainter extends CustomPainter {
             ..strokeJoin = StrokeJoin.round,
         );
       }
-
-      // Right of drag: fade out
       if (ti < drawCount - 1) {
-        _drawFadingSegment(
-          canvas,
-          valuePts,
-          ti,
-          drawCount,
-          valuePts.length,
-          toX,
-          toY,
-          primaryColor,
-          2,
-        );
+        _drawFadingSegment(canvas, pts, ti, drawCount, totalPts, toX, toY,
+            color, 2);
       }
     } else {
-      // Not dragging: draw line with smooth interpolated tip
       final fullPath = Path();
       for (int i = 0; i <= complete; i++) {
-        final x = toX(i, valuePts.length);
-        final y = toY(valuePts[i].value);
+        final x = toX(i, totalPts);
+        final y = toY(pts[i].value);
         if (i == 0) {
           fullPath.moveTo(x, y);
         } else {
           fullPath.lineTo(x, y);
         }
       }
-      // Interpolate between complete and next point for smooth tip
-      if (frac > 0 && complete < valuePts.length - 1) {
-        final x0 = toX(complete, valuePts.length);
-        final y0 = toY(valuePts[complete].value);
-        final x1 = toX(complete + 1, valuePts.length);
-        final y1 = toY(valuePts[complete + 1].value);
+      if (frac > 0 && complete < pts.length - 1) {
+        final x0 = toX(complete, totalPts);
+        final y0 = toY(pts[complete].value);
+        final x1 = toX(complete + 1, totalPts);
+        final y1 = toY(pts[complete + 1].value);
         fullPath.lineTo(x0 + frac * (x1 - x0), y0 + frac * (y1 - y0));
       }
       canvas.drawPath(
         fullPath,
         Paint()
-          ..color = primaryColor
+          ..color = color
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
           ..strokeCap = StrokeCap.round
           ..strokeJoin = StrokeJoin.round,
       );
     }
+  }
 
-    // ── Draggable line, date label, glow (only when dragging) ──
-    if (isDragging) {
-      final tx = toX(ti, valuePts.length);
-      final lineTop = lineTopPad;
-      final lineBot = h - lineTopPad;
+  void _drawCrosshair(
+    Canvas canvas,
+    Size size,
+    int ti,
+    int totalPts,
+    double Function(int, int) toX,
+    double Function(double) toY,
+    List<ChartPoint> portfolioPts,
+    int drawCount,
+    double lineTopPad,
+  ) {
+    final w = size.width;
+    final h = size.height;
+    final tx = toX(ti, totalPts);
+    final lineTop = lineTopPad;
+    final lineBot = h - lineTopPad;
+    final lineShader = ui.Gradient.linear(
+      Offset(tx, lineTop),
+      Offset(tx, lineBot),
+      [
+        gridColor.withValues(alpha: 0.12),
+        crosshairColor.withValues(alpha: 0.55),
+        crosshairColor.withValues(alpha: 0.55),
+        gridColor.withValues(alpha: 0.12),
+      ],
+      [0.0, 0.12, 0.88, 1.0],
+    );
+    canvas.drawLine(
+      Offset(tx, lineTop),
+      Offset(tx, lineBot),
+      Paint()
+        ..shader = lineShader
+        ..strokeWidth = 0.8,
+    );
 
-      // Vertical line: crosshair color in middle, fading to grid at ends.
-      final lineShader = ui.Gradient.linear(
-        Offset(tx, lineTop),
-        Offset(tx, lineBot),
-        [
-          gridColor.withValues(alpha: 0.12),
-          crosshairColor.withValues(alpha: 0.55),
-          crosshairColor.withValues(alpha: 0.55),
-          gridColor.withValues(alpha: 0.12),
-        ],
-        [0.0, 0.12, 0.88, 1.0],
-      );
-      canvas.drawLine(
-        Offset(tx, lineTop),
-        Offset(tx, lineBot),
-        Paint()
-          ..shader = lineShader
-          ..strokeWidth = 0.8,
-      );
-
-      // Date label at top of line
-      if (dateLabel.isNotEmpty) {
-        final dateTp = TextPainter(
-          text: TextSpan(
-            text: dateLabel,
-            style: TextStyle(
-              fontSize: 10,
-              color: crosshairColor.withValues(alpha: 0.85),
-              fontFamily: 'NotoSansKR',
-              fontWeight: FontWeight.w400,
-            ),
+    if (dateLabel.isNotEmpty) {
+      final dateTp = TextPainter(
+        text: TextSpan(
+          text: dateLabel,
+          style: TextStyle(
+            fontSize: 10,
+            color: crosshairColor.withValues(alpha: 0.85),
+            fontFamily: 'NotoSansKR',
+            fontWeight: FontWeight.w400,
           ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        final dateX = (tx - dateTp.width / 2).clamp(4.0, w - dateTp.width - 4);
-        dateTp.paint(canvas, Offset(dateX, lineTop - dateTp.height - 2));
-      }
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final dateX =
+          (tx - dateTp.width / 2).clamp(4.0, w - dateTp.width - 4);
+      dateTp.paint(canvas, Offset(dateX, lineTop - dateTp.height - 2));
+    }
 
-      // Glow dot at intersection
-      if (ti < drawCount) {
-        final vy = toY(valuePts[ti].value);
-        final glowRadius = 14 + 4 * glowPhase;
-        final glowAlpha = 0.25 + 0.15 * glowPhase;
-        // Outer pulsing glow
-        canvas.drawCircle(
-          Offset(tx, vy),
-          glowRadius,
-          Paint()
-            ..color = glowColor.withValues(alpha: glowAlpha)
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-        );
-        // Bright white center dot
-        canvas.drawCircle(
-          Offset(tx, vy),
-          4,
-          Paint()
-            ..color = Colors.white
-            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
-        );
-        canvas.drawCircle(Offset(tx, vy), 3, Paint()..color = Colors.white);
-      }
+    if (ti < drawCount && ti < portfolioPts.length) {
+      final vy = toY(portfolioPts[ti].value);
+      final glowRadius = 14 + 4 * glowPhase;
+      final glowAlpha = 0.25 + 0.15 * glowPhase;
+      canvas.drawCircle(
+        Offset(tx, vy),
+        glowRadius,
+        Paint()
+          ..color = glowColor.withValues(alpha: glowAlpha)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
+      canvas.drawCircle(
+        Offset(tx, vy),
+        4,
+        Paint()
+          ..color = Colors.white
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+      );
+      canvas.drawCircle(Offset(tx, vy), 3, Paint()..color = Colors.white);
     }
   }
 
-  /// Draw a line segment that fades out over a short distance
-  /// then disappears. Uses a gradient shader on a single path
-  /// to avoid visible dots between segments.
   void _drawFadingSegment(
     Canvas canvas,
     List<ChartPoint> pts,
@@ -884,9 +907,8 @@ class _PortfolioValuePainter extends CustomPainter {
     double strokeWidth,
   ) {
     if (startIdx >= endIdx - 1) return;
-    // Fixed fade distance: always ~3 data points
-    final fadeCount = min(3, endIdx - startIdx);
-    final fadeEnd = min(startIdx + fadeCount, endIdx);
+    final fadeCount = math.min(3, endIdx - startIdx);
+    final fadeEnd = math.min(startIdx + fadeCount, endIdx);
 
     final fadePath = Path();
     fadePath.moveTo(toX(startIdx, totalPts), toY(pts[startIdx].value));
@@ -913,11 +935,24 @@ class _PortfolioValuePainter extends CustomPainter {
     );
   }
 
+  void _drawDashedPath(Canvas canvas, Path path, Paint paint,
+      {double dashLen = 6, double gapLen = 10}) {
+    for (final metric in path.computeMetrics()) {
+      double dist = 0;
+      while (dist < metric.length) {
+        final end = (dist + dashLen).clamp(0.0, metric.length);
+        canvas.drawPath(metric.extractPath(dist, end), paint);
+        dist += dashLen + gapLen;
+      }
+    }
+  }
+
   @override
-  bool shouldRepaint(covariant _PortfolioValuePainter old) =>
+  bool shouldRepaint(covariant _HomePerformancePainter old) =>
       old.progress != progress ||
       old.touchIndex != touchIndex ||
-      old.glowPhase != glowPhase;
+      old.glowPhase != glowPhase ||
+      old.lines != lines;
 }
 
 // ─── Shared helpers ───────────────────────────────────────────
@@ -978,7 +1013,7 @@ DateTime _addOneMonth(DateTime date) {
   final nextMonth = date.month == 12 ? 1 : date.month + 1;
   final nextYear = date.month == 12 ? date.year + 1 : date.year;
   final lastDayOfNextMonth = DateTime(nextYear, nextMonth + 1, 0).day;
-  final nextDay = min(date.day, lastDayOfNextMonth);
+  final nextDay = math.min(date.day, lastDayOfNextMonth);
   return DateTime(nextYear, nextMonth, nextDay);
 }
 
