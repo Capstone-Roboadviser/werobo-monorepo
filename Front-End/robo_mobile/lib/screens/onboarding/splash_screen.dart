@@ -6,7 +6,7 @@ import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../home/home_shell.dart';
-import 'onboarding_screen.dart';
+import 'login_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -80,9 +80,9 @@ class _SplashScreenState extends State<SplashScreen>
         return;
       }
       final destination =
-          state.canAutoEnterHome ? const HomeShell() : const OnboardingScreen();
+          state.canAutoEnterHome ? const HomeShell() : const LoginScreen();
       logAction('route from splash', {
-        'target': state.canAutoEnterHome ? 'home' : 'onboarding',
+        'target': state.canAutoEnterHome ? 'home' : 'login',
         'loggedIn': state.isLoggedIn,
         'hasPortfolio': state.hasCompletedPortfolioSetup,
         'hasAccount': state.hasPrototypeAccount,
