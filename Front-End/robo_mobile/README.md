@@ -42,8 +42,9 @@ Flutter 기반 WeRobo 모바일 앱입니다.
 
 ```bash
 cd "/Users/yoonseungjae/Documents/code/RoboAdviser/werobo-monorepo/Front-End/robo_mobile"
-flutter pub get
-flutter run
+./tool/install_flutter_sdk
+./tool/flutterw pub get
+./tool/flutterw run
 ```
 
 ## 웹 배포

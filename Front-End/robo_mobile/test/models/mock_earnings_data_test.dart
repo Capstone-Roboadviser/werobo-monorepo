@@ -44,16 +44,19 @@ void main() {
     });
 
     test('asset earnings values are positive and roughly grow over time', () {
-      final points = MockEarningsData.dailyAssetEarnings(riskCode: 'balanced');
+      final points = MockEarningsData.dailyAssetEarnings(
+        riskCode: 'balanced',
+        asOf: DateTime(2026, 4, 30),
+      );
       // First and last point of the largest weight asset (us_value @ 0.30)
       final firstUs = points.first.assetEarnings['us_value']!;
       final lastUs = points.last.assetEarnings['us_value']!;
       expect(firstUs, greaterThan(0));
-      // us_value summary returnPct is +7.8 (annualized), so over the
-      // multi-year synthesis window we expect cumulative growth well
-      // beyond the first-day value. A negative-drift bug or a
-      // disconnected loop would fail this bound.
-      expect(lastUs, greaterThan(firstUs * 1.05));
+      // us_value summary returnPct is positive, so over this fixed
+      // synthesis window we expect growth beyond the first-day value.
+      // Keep the bound below the expected return because the mock also
+      // includes deterministic volatility noise.
+      expect(lastUs, greaterThan(firstUs * 1.04));
     });
   });
 

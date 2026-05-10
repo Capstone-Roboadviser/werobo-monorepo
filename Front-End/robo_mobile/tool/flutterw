@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+FLUTTER_BIN="$PROJECT_DIR/.flutter-sdk/flutter/bin/flutter"
+
+if [[ ! -x "$FLUTTER_BIN" ]]; then
+  echo "Project Flutter SDK is not installed at:" >&2
+  echo "  $PROJECT_DIR/.flutter-sdk/flutter" >&2
+  echo >&2
+  echo "Install it with:" >&2
+  echo "  $PROJECT_DIR/tool/install_flutter_sdk" >&2
+  exit 127
+fi
+
+exec "$FLUTTER_BIN" "$@"

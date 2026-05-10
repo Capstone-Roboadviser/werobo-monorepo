@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+VERSION="$(tr -d '[:space:]' < "$PROJECT_DIR/.flutter-version")"
+SDK_PARENT="$PROJECT_DIR/.flutter-sdk"
+SDK_DIR="$SDK_PARENT/flutter"
+DOWNLOAD_DIR="$SDK_PARENT/downloads"
+MANIFEST_URL="https://storage.googleapis.com/flutter_infra_release/releases/releases_macos.json"
+
+case "$(uname -m)" in
+  arm64) DART_ARCH="arm64" ;;
+  x86_64) DART_ARCH="x64" ;;
+  *)
+    echo "Unsupported macOS architecture: $(uname -m)" >&2
+    exit 1
+    ;;
+esac
+
+if [[ -x "$SDK_DIR/bin/flutter" ]] && "$SDK_DIR/bin/flutter" --version | head -n 1 | grep -q "Flutter $VERSION"; then
+  "$SDK_DIR/bin/flutter" --version
+  exit 0
+fi
+
+mkdir -p "$DOWNLOAD_DIR"
+
+RELEASE_INFO="$(
+  curl -fsSL "$MANIFEST_URL" | ruby -rjson -e '
+    manifest = JSON.parse(STDIN.read)
+    version = ARGV.fetch(0)
+    arch = ARGV.fetch(1)
+    release = manifest.fetch("releases").find do |item|
+      item["channel"] == "stable" &&
+        item["version"] == version &&
+        item["dart_sdk_arch"] == arch
+    end
+
+    abort("Flutter #{version} stable for macOS #{arch} was not found") unless release
+
+    puts manifest.fetch("base_url")
+    puts release.fetch("archive")
+    puts release.fetch("sha256")
+  ' "$VERSION" "$DART_ARCH"
+)"
+
+BASE_URL="$(printf '%s\n' "$RELEASE_INFO" | sed -n '1p')"
+ARCHIVE_PATH="$(printf '%s\n' "$RELEASE_INFO" | sed -n '2p')"
+EXPECTED_SHA="$(printf '%s\n' "$RELEASE_INFO" | sed -n '3p')"
+ARCHIVE_NAME="$(basename "$ARCHIVE_PATH")"
+ZIP_PATH="$DOWNLOAD_DIR/$ARCHIVE_NAME"
+
+curl -fL "$BASE_URL/$ARCHIVE_PATH" -o "$ZIP_PATH"
+
+ACTUAL_SHA="$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')"
+if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
+  echo "SHA256 mismatch for $ZIP_PATH" >&2
+  echo "Expected: $EXPECTED_SHA" >&2
+  echo "Actual:   $ACTUAL_SHA" >&2
+  exit 1
+fi
+
+rm -rf "$SDK_DIR"
+unzip -q "$ZIP_PATH" -d "$SDK_PARENT"
+
+"$SDK_DIR/bin/flutter" --version
