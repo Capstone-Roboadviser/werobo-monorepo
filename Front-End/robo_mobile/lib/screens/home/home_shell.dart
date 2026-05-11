@@ -7,6 +7,7 @@ import '../../services/mobile_backend_api.dart';
 import 'home_tab.dart';
 import 'portfolio_tab.dart';
 import 'community_tab.dart';
+import 'news_tab.dart';
 import 'settings_tab.dart';
 
 class HomeShell extends StatefulWidget {
@@ -64,6 +65,7 @@ class _HomeShellState extends State<HomeShell> {
     HomeTab(),
     PortfolioTab(),
     CommunityTab(),
+    NewsTab(),
     SettingsTab(),
   ];
 
@@ -161,43 +163,62 @@ class _HomeShellState extends State<HomeShell> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _NavItem(
-                  icon: Icons.home_rounded,
-                  label: '홈',
-                  isActive: _currentTab == 0,
-                  showAlertDot: PortfolioStateProvider.of(context)
-                      .hasUnreadEmergencyAlert,
-                  onTap: () {
-                    logAction('tab selected', {'tab': 'home'});
-                    setState(() => _currentTab = 0);
-                  },
+                Expanded(
+                  child: _NavItem(
+                    icon: Icons.home_rounded,
+                    label: '홈',
+                    isActive: _currentTab == 0,
+                    showAlertDot: PortfolioStateProvider.of(context)
+                        .hasUnreadEmergencyAlert,
+                    onTap: () {
+                      logAction('tab selected', {'tab': 'home'});
+                      setState(() => _currentTab = 0);
+                    },
+                  ),
                 ),
-                _NavItem(
-                  icon: Icons.pie_chart_rounded,
-                  label: '포트폴리오',
-                  isActive: _currentTab == 1,
-                  onTap: () {
-                    logAction('tab selected', {'tab': 'portfolio'});
-                    setState(() => _currentTab = 1);
-                  },
+                Expanded(
+                  child: _NavItem(
+                    icon: Icons.pie_chart_rounded,
+                    label: '포트폴리오',
+                    isActive: _currentTab == 1,
+                    onTap: () {
+                      logAction('tab selected', {'tab': 'portfolio'});
+                      setState(() => _currentTab = 1);
+                    },
+                  ),
                 ),
-                _NavItem(
-                  icon: Icons.forum_rounded,
-                  label: '커뮤니티',
-                  isActive: _currentTab == 2,
-                  onTap: () {
-                    logAction('tab selected', {'tab': 'community'});
-                    setState(() => _currentTab = 2);
-                  },
+                Expanded(
+                  child: _NavItem(
+                    icon: Icons.forum_rounded,
+                    label: '커뮤니티',
+                    isActive: _currentTab == 2,
+                    onTap: () {
+                      logAction('tab selected', {'tab': 'community'});
+                      setState(() => _currentTab = 2);
+                    },
+                  ),
                 ),
-                _NavItem(
-                  icon: Icons.settings_rounded,
-                  label: '설정',
-                  isActive: _currentTab == 3,
-                  onTap: () {
-                    logAction('tab selected', {'tab': 'settings'});
-                    setState(() => _currentTab = 3);
-                  },
+                Expanded(
+                  child: _NavItem(
+                    icon: Icons.article_rounded,
+                    label: '뉴스',
+                    isActive: _currentTab == 3,
+                    onTap: () {
+                      logAction('tab selected', {'tab': 'news'});
+                      setState(() => _currentTab = 3);
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: _NavItem(
+                    icon: Icons.settings_rounded,
+                    label: '설정',
+                    isActive: _currentTab == 4,
+                    onTap: () {
+                      logAction('tab selected', {'tab': 'settings'});
+                      setState(() => _currentTab = 4);
+                    },
+                  ),
                 ),
               ],
             ),
@@ -233,18 +254,37 @@ class _NavItem extends StatelessWidget {
       scale: 0.90,
       duration: const Duration(milliseconds: 100),
       child: SizedBox(
-        width: 64,
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.center,
+        height: 52,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 28, color: color),
-            if (showAlertDot)
-              const Positioned(
-                right: 14,
-                top: -2,
-                child: _AlertDot(),
+            Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Icon(icon, size: 24, color: color),
+                if (showAlertDot)
+                  const Positioned(
+                    right: -4,
+                    top: -2,
+                    child: _AlertDot(),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 3),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                maxLines: 1,
+                style: WeRoboTypography.caption.copyWith(
+                  color: color,
+                  fontSize: 11,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                  height: 1.1,
+                ),
               ),
+            ),
           ],
         ),
       ),
