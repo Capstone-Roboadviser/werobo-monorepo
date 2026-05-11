@@ -6,7 +6,8 @@ import 'package:robo_mobile/screens/home/activity_hub_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('does not show digest card in activity hub', (tester) async {
+  testWidgets('renders the filter pill and removes legacy sections',
+      (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = PortfolioState();
     addTearDown(state.dispose);
@@ -21,10 +22,15 @@ void main() {
       ),
     );
 
-    expect(find.text('알림 & 리포트'), findsOneWidget);
-    expect(find.text('리밸런싱 히스토리'), findsOneWidget);
-    expect(find.text('최근 활동'), findsOneWidget);
-    expect(find.text('주간 다이제스트'), findsNothing);
-    expect(find.textContaining('포트폴리오 리포트'), findsNothing);
+    // Filter pill defaults to 전체.
+    expect(find.text('전체'), findsOneWidget);
+
+    // Old sections must be gone.
+    expect(find.text('알림 & 리포트'), findsNothing);
+    expect(find.text('리밸런싱 히스토리'), findsNothing);
+    expect(find.text('최근 활동'), findsNothing);
+
+    // Empty state copy renders when there are no insights or derived data.
+    expect(find.text('아직 지난 알림이 없어요'), findsOneWidget);
   });
 }
