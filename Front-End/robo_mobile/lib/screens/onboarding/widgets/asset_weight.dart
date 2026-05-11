@@ -99,7 +99,22 @@ class _AssetWeightBarState extends State<AssetWeightBar> {
                   final width = constraints.maxWidth;
                   final pct =
                       (activeAsset.weight * 100).toStringAsFixed(2);
-                  // Center tooltip over the active segment.
+                  final text = '${activeAsset.label} $pct%';
+                  final textStyle = WeRoboTypography.caption.copyWith(
+                    color: tc.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  );
+                  // Measure rendered text width so the tooltip can be
+                  // clamped within the bar at both edges. Without this,
+                  // a tooltip over a right-end segment runs past the
+                  // right edge of the screen.
+                  const horizontalPadding = 6.0;
+                  final textPainter = TextPainter(
+                    text: TextSpan(text: text, style: textStyle),
+                    textDirection: TextDirection.ltr,
+                  )..layout();
+                  final tooltipWidth =
+                      textPainter.width + horizontalPadding * 2;
                   double leftEdge = 0;
                   for (var i = 0; i < activeIndex!; i++) {
                     leftEdge += (ordered[i].weight / total) * width;
@@ -107,32 +122,36 @@ class _AssetWeightBarState extends State<AssetWeightBar> {
                   final segmentWidth =
                       (activeAsset.weight / total) * width;
                   final tooltipCenter = leftEdge + segmentWidth / 2;
+                  final maxLeft = (width - tooltipWidth)
+                      .clamp(0.0, double.infinity);
+                  final clampedLeft = (tooltipCenter - tooltipWidth / 2)
+                      .clamp(0.0, maxLeft);
                   return Stack(
                     clipBehavior: Clip.none,
                     children: [
                       Positioned(
-                        left: tooltipCenter,
+                        left: clampedLeft,
                         top: 0,
-                        child: FractionalTranslation(
-                          translation: const Offset(-0.5, 0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              color: WeRoboColors.primaryLight,
-                              borderRadius: BorderRadius.circular(
-                                  WeRoboColors.radiusS),
-                            ),
-                            child: Text(
-                              '${activeAsset.label} $pct%',
-                              style: WeRoboTypography.caption.copyWith(
-                                color: tc.textPrimary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: horizontalPadding,
+                            vertical: 2,
                           ),
+                          decoration: BoxDecoration(
+                            color: tc.surface,
+                            borderRadius: BorderRadius.circular(
+                                WeRoboColors.radiusS),
+                            border: Border.all(
+                                color: tc.border, width: 0.5),
+                            boxShadow: const [
+                              BoxShadow(
+                                color: Color(0x14000000),
+                                blurRadius: 4,
+                                offset: Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: Text(text, style: textStyle),
                         ),
                       ),
                     ],
