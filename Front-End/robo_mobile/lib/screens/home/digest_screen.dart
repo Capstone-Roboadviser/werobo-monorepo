@@ -94,7 +94,7 @@ class _DigestScreenState extends State<DigestScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: tc.textSecondary),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: tc.textSecondary),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
