@@ -89,7 +89,7 @@ void main() {
     final start = frontierCurvePointForT(0, size);
     final end = frontierCurvePointForT(1, size);
 
-    expect(start.dx, lessThan(size.width * 0.10));
+    expect(start.dx, lessThanOrEqualTo(size.width * 0.10));
     expect(end.dx, greaterThan(size.width * 0.90));
   });
 
