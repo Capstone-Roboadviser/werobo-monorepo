@@ -192,7 +192,7 @@ class WeRoboMotion {
   static const Duration short = Duration(milliseconds: 150);
   static const Duration medium = Duration(milliseconds: 250);
   static const Duration long = Duration(milliseconds: 400);
-  static const Duration pageTransition = Duration(milliseconds: 300);
+  static const Duration pageTransition = Duration(milliseconds: 220);
   static const Duration stagger = Duration(milliseconds: 50);
   static const Duration chartDraw = Duration(milliseconds: 800);
 
@@ -203,15 +203,33 @@ class WeRoboMotion {
   static const Curve emphasize = Cubic(0.34, 1.56, 0.64, 1);
   static const Curve chartReveal = Cubic(0.65, 0, 0.35, 1);
 
-  /// Standard page route with curved fade transition.
+  /// Standard page route with iOS-style horizontal slide transition.
+  /// On push, the incoming page slides in from the right; on pop, it
+  /// slides back to the right. The outgoing page also slides slightly
+  /// left during push for a parallax feel.
+  ///
+  /// Uses the symmetric `move` curve (not `enter`) so push and pop
+  /// feel identical in speed — `enter` is decelerating, which on pop
+  /// would read as a slow start before a rush.
   static Route<T> fadeRoute<T>(Widget page) {
     return PageRouteBuilder<T>(
       pageBuilder: (_, __, ___) => page,
-      transitionsBuilder: (_, anim, __, child) => FadeTransition(
-        opacity: CurvedAnimation(parent: anim, curve: enter),
-        child: child,
-      ),
+      transitionsBuilder: (_, anim, secAnim, child) {
+        final inSlide = Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).chain(CurveTween(curve: move)).animate(anim);
+        final outSlide = Tween<Offset>(
+          begin: Offset.zero,
+          end: const Offset(-0.25, 0),
+        ).chain(CurveTween(curve: move)).animate(secAnim);
+        return SlideTransition(
+          position: outSlide,
+          child: SlideTransition(position: inSlide, child: child),
+        );
+      },
       transitionDuration: pageTransition,
+      reverseTransitionDuration: pageTransition,
     );
   }
 }

@@ -9,6 +9,7 @@ from mobile_backend.api.routes.digest import router as digest_router
 from mobile_backend.api.routes.health import router as health_router
 from mobile_backend.api.routes.insights import router as insights_router
 from mobile_backend.api.routes.mobile import router as mobile_router
+from mobile_backend.api.routes.news import router as news_router
 
 
 api_router = APIRouter()
@@ -19,5 +20,6 @@ api_router.include_router(auth_router)
 api_router.include_router(account_router)
 api_router.include_router(digest_router)
 api_router.include_router(insights_router)
+api_router.include_router(news_router)
 api_router.include_router(health_router)
 api_router.include_router(mobile_router)

@@ -4,7 +4,6 @@ import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/rebalance_insight.dart';
-import 'insight_history_page.dart';
 import 'widgets/insight_transition_chart.dart';
 
 class InsightDetailPage extends StatefulWidget {
@@ -111,46 +110,20 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Top bar: close + menu
+            // Top bar: back only.
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16,
                 vertical: 8,
               ),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Pressable(
                     onTap: () => Navigator.pop(context),
-                    child: Container(
+                    child: Padding(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: tc.card,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
                       child: Icon(
-                        Icons.close_rounded,
-                        size: 20,
-                        color: tc.textPrimary,
-                      ),
-                    ),
-                  ),
-                  Pressable(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        WeRoboMotion.fadeRoute<void>(
-                            const InsightHistoryPage()),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: tc.card,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.menu_rounded,
+                        Icons.arrow_back_ios_new_rounded,
                         size: 20,
                         color: tc.textPrimary,
                       ),

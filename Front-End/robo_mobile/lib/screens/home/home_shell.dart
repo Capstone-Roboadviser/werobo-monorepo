@@ -66,7 +66,7 @@ class _HomeShellState extends State<HomeShell> {
     PortfolioTab(),
     CommunityTab(),
     NewsTab(),
-    SettingsTab(),
+    MoreTab(),
   ];
 
   @override
@@ -211,11 +211,11 @@ class _HomeShellState extends State<HomeShell> {
                 ),
                 Expanded(
                   child: _NavItem(
-                    icon: Icons.settings_rounded,
-                    label: '설정',
+                    icon: Icons.menu_rounded,
+                    label: '전체',
                     isActive: _currentTab == 4,
                     onTap: () {
-                      logAction('tab selected', {'tab': 'settings'});
+                      logAction('tab selected', {'tab': 'more'});
                       setState(() => _currentTab = 4);
                     },
                   ),

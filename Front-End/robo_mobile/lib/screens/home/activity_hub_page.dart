@@ -3,21 +3,121 @@ import 'package:flutter/material.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
-import '../../models/mobile_backend_models.dart';
-import '../../models/rebalance_insight.dart';
 import 'insight_detail_page.dart';
-import 'widgets/insight_transition_chart.dart';
+import 'notification_settings_page.dart';
 
-class ActivityHubPage extends StatelessWidget {
+/// Categories that can be filtered on the notification history page.
+enum NotificationKind {
+  monthlySummary,
+  contribution,
+  algorithmSignal,
+  volatilityAlert,
+  assetNews,
+}
+
+String _notificationLabel(NotificationKind kind) {
+  switch (kind) {
+    case NotificationKind.monthlySummary:
+      return '월간 요약';
+    case NotificationKind.contribution:
+      return '기여도 알림';
+    case NotificationKind.algorithmSignal:
+      return '알고리즘 시그널';
+    case NotificationKind.volatilityAlert:
+      return '시장 변동성 경고';
+    case NotificationKind.assetNews:
+      return '자산군별 뉴스';
+  }
+}
+
+String _notificationIcon(NotificationKind kind) {
+  switch (kind) {
+    case NotificationKind.monthlySummary:
+      return 'assets/icons/calendar.png';
+    case NotificationKind.contribution:
+      return 'assets/icons/contribution-alarm.png';
+    case NotificationKind.algorithmSignal:
+      return 'assets/icons/algorithm-signal.png';
+    case NotificationKind.volatilityAlert:
+      return 'assets/icons/change-alert.png';
+    case NotificationKind.assetNews:
+      return 'assets/icons/asset-news.png';
+  }
+}
+
+DateTime? _parseIsoDate(String iso) {
+  if (iso.length < 10) return null;
+  final year = int.tryParse(iso.substring(0, 4));
+  final month = int.tryParse(iso.substring(5, 7));
+  final day = int.tryParse(iso.substring(8, 10));
+  if (year == null || month == null || day == null) return null;
+  return DateTime(year, month, day);
+}
+
+/// Friendly relative timestamp matching the Toss style.
+String _relativeTimestamp(DateTime when) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final whenDate = DateTime(when.year, when.month, when.day);
+  final diffDays = today.difference(whenDate).inDays;
+
+  if (diffDays == 0) {
+    // Same calendar day — show "N시간 전" when the timestamp is itself
+    // recent, otherwise just "오늘".
+    final diff = now.difference(when);
+    if (diff.inMinutes < 1) return '방금';
+    if (diff.inHours < 1) return '${diff.inMinutes}분 전';
+    if (diff.inHours < 24) return '${diff.inHours}시간 전';
+    return '오늘';
+  }
+  if (diffDays == 1) return '어제';
+  if (diffDays < 7) return '$diffDays일 전';
+  return '${when.month}월 ${when.day}일';
+}
+
+String _triggerSentence(String? trigger) {
+  switch (trigger) {
+    case 'scheduled':
+      return '정기 리밸런싱이 실행됐어요';
+    case 'drift_guard':
+      return '드리프트 가드가 작동했어요';
+    case 'threshold':
+      return '임계치 초과로 조정됐어요';
+    case null:
+      return '리밸런싱이 실행됐어요';
+    default:
+      return '리밸런싱이 실행됐어요';
+  }
+}
+
+class _NotificationItem {
+  final NotificationKind kind;
+  final String title;
+  final DateTime timestamp;
+  final VoidCallback onTap;
+  const _NotificationItem({
+    required this.kind,
+    required this.title,
+    required this.timestamp,
+    required this.onTap,
+  });
+}
+
+class ActivityHubPage extends StatefulWidget {
   const ActivityHubPage({super.key});
+
+  @override
+  State<ActivityHubPage> createState() => _ActivityHubPageState();
+}
+
+class _ActivityHubPageState extends State<ActivityHubPage> {
+  NotificationKind? _filter; // null = 전체
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final state = PortfolioStateProvider.of(context);
-    final insights = state.insights;
-    final activities = state.accountActivities;
-    final hasAccount = state.hasPrototypeAccount;
+    final items = _buildItems(state, context);
 
     return Scaffold(
       backgroundColor: tc.background,
@@ -25,7 +125,7 @@ class ActivityHubPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top bar
+            // Header: back chevron + 알림 설정 link.
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16,
@@ -35,185 +135,308 @@ class ActivityHubPage extends StatelessWidget {
                 children: [
                   Pressable(
                     onTap: () => Navigator.pop(context),
-                    child: Container(
+                    child: Padding(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: tc.card,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
                       child: Icon(
-                        Icons.arrow_back_rounded,
+                        Icons.arrow_back_ios_new_rounded,
                         size: 20,
                         color: tc.textPrimary,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    '알림 & 리포트',
-                    style: WeRoboTypography.heading2.themed(context),
+                  const Spacer(),
+                  Pressable(
+                    onTap: () => Navigator.of(context).push(
+                      WeRoboMotion.fadeRoute<void>(
+                        const NotificationSettingsPage(),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        '알림 설정',
+                        style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-
-            Expanded(
-              child: ListView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                ),
-                children: [
-                  // Insights section
-                  Text(
-                    '리밸런싱 히스토리',
-                    style: WeRoboTypography.heading3.themed(context),
-                  ),
-                  const SizedBox(height: 12),
-
-                  if (insights.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 40),
-                      child: Center(
-                        child: Text(
-                          '아직 리밸런싱 인사이트가 없습니다.',
-                          style: WeRoboTypography.body.copyWith(
-                            color: tc.textTertiary,
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    ...insights.map(
-                      (i) => _InsightCard(insight: i),
-                    ),
-
-                  const SizedBox(height: 24),
-
-                  // Activities section
-                  Text(
-                    '최근 활동',
-                    style: WeRoboTypography.heading3.themed(context),
-                  ),
-                  const SizedBox(height: 12),
-
-                  if (hasAccount && activities.isNotEmpty)
-                    ...activities.map(
-                      (a) => _buildActivityCard(context, a),
-                    )
-                  else ...[
-                    _ActivityCard(
-                      icon: Icons.sync_alt_rounded,
-                      iconColor: WeRoboColors.primary,
-                      title: '리밸런싱 완료',
-                      date: '2026-04-01',
-                      value: '₩15,826,400',
-                    ),
-                    _ActivityCard(
-                      icon: Icons.arrow_downward_rounded,
-                      iconColor: tc.accent,
-                      title: '입금',
-                      date: '2026-03-15',
-                      value: '+₩500,000',
-                      valueColor: tc.accent,
-                    ),
-                    _ActivityCard(
-                      icon: Icons.sync_alt_rounded,
-                      iconColor: WeRoboColors.primary,
-                      title: '리밸런싱 완료',
-                      date: '2026-01-02',
-                      value: '₩15,120,000',
-                    ),
-                  ],
-
-                  const SizedBox(height: 40),
-                ],
+            // Big filter label with chevron.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
+              child: _FilterLabel(
+                selected: _filter,
+                onPick: (picked) => setState(() => _filter = picked),
               ),
+            ),
+            Expanded(
+              child: items.isEmpty
+                  ? _EmptyState(filter: _filter)
+                  : ListView.separated(
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: items.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 4),
+                      itemBuilder: (_, i) => _HistoryRow(item: items[i]),
+                    ),
             ),
           ],
         ),
       ),
     );
   }
+
+  List<_NotificationItem> _buildItems(
+    PortfolioState state,
+    BuildContext context,
+  ) {
+    final filter = _filter;
+    final items = <_NotificationItem>[];
+    final now = DateTime.now();
+
+    bool show(NotificationKind k) => filter == null || filter == k;
+
+    void comingSoon(NotificationKind k) => Navigator.of(context).push(
+          WeRoboMotion.fadeRoute<void>(
+            _ComingSoonPage(title: _notificationLabel(k)),
+          ),
+        );
+
+    if (show(NotificationKind.monthlySummary)) {
+      final monthly = state.trailingMonthReturn;
+      if (monthly != null) {
+        final sign = monthly >= 0 ? '+' : '−';
+        final pct = (monthly.abs() * 100).toStringAsFixed(1);
+        items.add(_NotificationItem(
+          kind: NotificationKind.monthlySummary,
+          title: '지난 30일 포트폴리오 $sign$pct%',
+          timestamp: now,
+          onTap: () => comingSoon(NotificationKind.monthlySummary),
+        ));
+      }
+    }
+
+    if (show(NotificationKind.contribution)) {
+      final c = state.topContributorOver30d;
+      if (c != null) {
+        final pct = (c.weight * c.assetReturn * 100).abs().round();
+        items.add(_NotificationItem(
+          kind: NotificationKind.contribution,
+          title: '이번 달 ${c.label}이 수익의 $pct%를 기여했어요',
+          timestamp: now,
+          onTap: () => comingSoon(NotificationKind.contribution),
+        ));
+      }
+    }
+
+    if (show(NotificationKind.algorithmSignal)) {
+      for (final insight in state.insights) {
+        final rebalDate = _parseIsoDate(insight.rebalanceDate) ?? now;
+        items.add(_NotificationItem(
+          kind: NotificationKind.algorithmSignal,
+          title: _triggerSentence(insight.trigger),
+          timestamp: rebalDate,
+          onTap: () => Navigator.of(context).push(
+            WeRoboMotion.fadeRoute<void>(
+              InsightDetailPage(insight: insight),
+            ),
+          ),
+        ));
+      }
+    }
+
+    if (show(NotificationKind.volatilityAlert)) {
+      final spike = state.portfolioVolatilitySpike;
+      if (spike != null) {
+        final pct = (spike.percentAboveAverage * 100).round();
+        items.add(_NotificationItem(
+          kind: NotificationKind.volatilityAlert,
+          title: '포트폴리오 변동성 +$pct% 주의 구간이에요',
+          timestamp: now,
+          onTap: () => comingSoon(NotificationKind.volatilityAlert),
+        ));
+      }
+    }
+
+    // Asset news isn't persisted in state — only fetched by the dropdown.
+    return items;
+  }
 }
 
-class _InsightCard extends StatelessWidget {
-  final RebalanceInsight insight;
-  const _InsightCard({required this.insight});
+class _FilterLabel extends StatelessWidget {
+  final NotificationKind? selected;
+  final ValueChanged<NotificationKind?> onPick;
+  const _FilterLabel({required this.selected, required this.onPick});
+
+  // PopupMenuButton.onSelected does NOT fire when the value is null — Flutter
+  // intentionally skips the callback in that case. Use String sentinels
+  // ('all' for 전체, enum names for specific kinds) so every choice fires.
+  static const _allValue = '__all__';
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final explanation = insight.generatedExplanation;
-    final text = explanation.length > 60
-        ? '${explanation.substring(0, 60)}...'
-        : explanation;
-
-    return Pressable(
-      onTap: () => Navigator.push(
-        context,
-        WeRoboMotion.fadeRoute<void>(
-          InsightDetailPage(insight: insight),
-        ),
+    return PopupMenuButton<String>(
+      tooltip: '알림 종류 선택',
+      offset: const Offset(0, 36),
+      color: tc.surface,
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
       ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: tc.card,
-          borderRadius: BorderRadius.circular(12),
+      onSelected: (value) {
+        if (value == _allValue) {
+          onPick(null);
+        } else {
+          onPick(NotificationKind.values.firstWhere((k) => k.name == value));
+        }
+      },
+      itemBuilder: (ctx) => <PopupMenuEntry<String>>[
+        _menuItem(ctx, value: _allValue, kind: null, label: '전체'),
+        ...NotificationKind.values.map(
+          (k) => _menuItem(ctx, value: k.name, kind: k, label: _notificationLabel(k)),
         ),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            selected == null ? '알림' : _notificationLabel(selected!),
+            style: WeRoboTypography.heading2.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(
+            Icons.expand_more_rounded,
+            size: 24,
+            color: tc.textSecondary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuEntry<String> _menuItem(
+    BuildContext ctx, {
+    required String value,
+    required NotificationKind? kind,
+    required String label,
+  }) {
+    final tc = WeRoboThemeColors.of(ctx);
+    final isSelected = kind == selected;
+    return PopupMenuItem<String>(
+      value: value,
+      height: 44,
+      child: Row(
+        children: [
+          _filterIcon(kind, size: 20),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textPrimary,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _filterIcon(NotificationKind? kind, {double size = 20}) {
+  if (kind == null) {
+    return Icon(
+      Icons.menu_rounded,
+      size: size,
+      color: WeRoboColors.primary,
+    );
+  }
+  return SizedBox(
+    width: size,
+    height: size,
+    child: Image.asset(_notificationIcon(kind), fit: BoxFit.contain),
+  );
+}
+
+/// Row used on the notification history page and the today dropdown.
+/// Toss-style: rounded-square tinted icon container on the left,
+/// category caption + title in the middle, timestamp on the right.
+class NotificationListRow extends StatelessWidget {
+  final NotificationKind kind;
+  final String title;
+  final DateTime? timestamp;
+  final VoidCallback? onTap;
+
+  const NotificationListRow({
+    super.key,
+    required this.kind,
+    required this.title,
+    this.timestamp,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (insight.allocations.isEmpty)
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: WeRoboColors.primary.withValues(alpha: 0.08),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.sync_alt_rounded,
-                  color: WeRoboColors.primary,
-                  size: 20,
-                ),
-              )
-            else
-              InsightDonutThumbnail(
-                allocations: insight.allocations,
-                size: 48,
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: tc.card,
+                borderRadius: BorderRadius.circular(10),
               ),
-            const SizedBox(width: 14),
+              padding: const EdgeInsets.all(7),
+              child: Image.asset(_notificationIcon(kind), fit: BoxFit.contain),
+            ),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (!insight.isRead)
-                        Container(
-                          width: 8,
-                          height: 8,
-                          margin: const EdgeInsets.only(right: 6),
-                          decoration: const BoxDecoration(
-                            color: WeRoboColors.primary,
-                            shape: BoxShape.circle,
+                      Expanded(
+                        child: Text(
+                          _notificationLabel(kind),
+                          style: WeRoboTypography.bodySmall.copyWith(
+                            color: tc.textPrimary,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                      Text(
-                        insight.rebalanceDate,
-                        style: WeRoboTypography.caption.copyWith(
-                          color: WeRoboColors.primary,
-                          fontWeight: FontWeight.w500,
-                        ),
                       ),
+                      if (timestamp != null) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          _relativeTimestamp(timestamp!),
+                          style: WeRoboTypography.caption.copyWith(
+                            color: tc.textTertiary,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 2),
                   Text(
-                    text,
+                    title,
                     style: WeRoboTypography.bodySmall.copyWith(
                       color: tc.textSecondary,
                     ),
@@ -223,11 +446,6 @@ class _InsightCard extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: tc.textTertiary,
-            ),
           ],
         ),
       ),
@@ -235,121 +453,101 @@ class _InsightCard extends StatelessWidget {
   }
 }
 
-// ─── Activity helpers ─────────────────────────────────────────
+class _HistoryRow extends StatelessWidget {
+  final _NotificationItem item;
+  const _HistoryRow({required this.item});
 
-Widget _buildActivityCard(
-  BuildContext context,
-  MobileAccountActivity activity,
-) {
-  final tc = WeRoboThemeColors.of(context);
-  IconData icon = Icons.account_balance_wallet_rounded;
-  Color iconColor = WeRoboColors.primary;
-  String value = activity.description ?? '';
-  Color? valueColor;
-
-  if (activity.type == 'cash_in' || activity.type == 'initial_deposit') {
-    icon = Icons.arrow_downward_rounded;
-    iconColor = tc.accent;
-    final amount = activity.amount ?? 0;
-    value = '+₩${_formatCurrency(amount.round())}';
-    valueColor = tc.accent;
-  } else if (activity.type == 'rebalance_cash') {
-    icon = Icons.sync_alt_rounded;
-    iconColor = WeRoboColors.primary;
-    final amount = activity.amount ?? 0;
-    value = '₩${_formatCurrency(amount.round())}';
-  } else if (activity.type == 'portfolio_created') {
-    icon = Icons.pie_chart_rounded;
-    iconColor = WeRoboColors.primary;
-    value = '추적 시작';
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListRow(
+      kind: item.kind,
+      title: item.title,
+      timestamp: item.timestamp,
+      onTap: item.onTap,
+    );
   }
-
-  return _ActivityCard(
-    icon: icon,
-    iconColor: iconColor,
-    title: activity.title,
-    date: activity.date,
-    value: value,
-    valueColor: valueColor,
-  );
 }
 
-String _formatCurrency(int amount) {
-  final str = amount.abs().toString();
-  final buf = StringBuffer();
-  for (int i = 0; i < str.length; i++) {
-    if (i > 0 && (str.length - i) % 3 == 0) buf.write(',');
-    buf.write(str[i]);
-  }
-  return buf.toString();
-}
-
-class _ActivityCard extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String date;
-  final String value;
-  final Color? valueColor;
-
-  const _ActivityCard({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.date,
-    required this.value,
-    this.valueColor,
-  });
+class _EmptyState extends StatelessWidget {
+  final NotificationKind? filter;
+  const _EmptyState({required this.filter});
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    return Pressable(
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: tc.card,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: iconColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, size: 20, color: iconColor),
+    final message = filter == null
+        ? '아직 받은 알림이 없어요'
+        : '${_notificationLabel(filter!)} 알림이 없어요';
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.sticky_note_2_outlined,
+            size: 56,
+            color: tc.textTertiary.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textTertiary,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ComingSoonPage extends StatelessWidget {
+  final String title;
+  const _ComingSoonPage({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Scaffold(
+      backgroundColor: tc.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              child: Row(
                 children: [
-                  Text(
-                    title,
-                    style: WeRoboTypography.bodySmall.copyWith(
-                      color: tc.textPrimary,
-                      fontWeight: FontWeight.w500,
+                  Pressable(
+                    onTap: () => Navigator.pop(context),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 20,
+                        color: tc.textPrimary,
+                      ),
                     ),
                   ),
+                  const SizedBox(width: 8),
                   Text(
-                    date,
-                    style: WeRoboTypography.caption
-                        .copyWith(fontFamily: WeRoboFonts.english)
-                        .themed(context),
+                    title,
+                    style: WeRoboTypography.heading2.themed(context),
                   ),
                 ],
               ),
             ),
-            Text(
-              value,
-              style: WeRoboTypography.bodySmall.copyWith(
-                fontWeight: FontWeight.w600,
-                color: valueColor ?? tc.textPrimary,
-                fontFamily: WeRoboFonts.english,
+            Expanded(
+              child: Center(
+                child: Text(
+                  '준비중입니다',
+                  style: WeRoboTypography.body.copyWith(
+                    color: tc.textTertiary,
+                  ),
+                ),
               ),
             ),
           ],
@@ -358,3 +556,4 @@ class _ActivityCard extends StatelessWidget {
     );
   }
 }
+
