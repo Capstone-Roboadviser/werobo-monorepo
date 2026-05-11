@@ -732,7 +732,7 @@ class _FrontierBodyState extends State<_FrontierBody> {
           Expanded(
             child: Center(
               child: AspectRatio(
-                aspectRatio: 1.2,
+                aspectRatio: 1.6,
                 child: EfficientFrontierChart(
                   previewPoints: _preview.points,
                   selectedPreviewPosition: _selectedPreviewPosition,
