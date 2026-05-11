@@ -195,12 +195,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.text('최근 한 달 다이제스트가 도착했어요'), findsOneWidget);
-    // '영향을 줬어요' appears in both the feed item and the contribution
-    // one-liners below the chart, so allow more than one match.
+    expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
+    expect(find.text('AI 요약 · 최근 한 달'), findsOneWidget);
+    expect(find.text('왜 내려갔을까?'), findsOneWidget);
     expect(find.textContaining('영향을 줬어요'), findsAtLeastNWidgets(1));
-    expect(find.textContaining('시장 변동성이 평소보다'), findsOneWidget);
+    expect(find.textContaining('시장 변동성이 평소보다'), findsNothing);
     expect(find.text('이번 주 다이제스트가 도착했어요'), findsNothing);
   });
 
@@ -224,13 +223,14 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.text('최근 한 달 다이제스트가 도착했어요'), findsOneWidget);
-    // '영향을 줬어요' shows in the feed and in the contribution one-liners
-    // beneath the chart, so accept either or both.
+    expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
+    expect(find.text('AI 요약 · 최근 한 달'), findsOneWidget);
+    expect(find.text('왜 내려갔을까?'), findsOneWidget);
     expect(find.textContaining('영향을 줬어요'), findsAtLeastNWidgets(1));
-    expect(find.textContaining('시장 변동성이 평소보다'), findsOneWidget);
-    expect(find.text('더 보기'), findsOneWidget);
+    expect(find.textContaining('시장 변동성이 평소보다'), findsNothing);
+    expect(find.text('더 보기'), findsNothing);
+    expect(find.text('구간분석'), findsOneWidget);
+    expect(find.text('이 구간 분석'), findsNothing);
   });
 
   testWidgets('digest banner hidden when already seen', (tester) async {
@@ -279,8 +279,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('주간 다이제스트'), findsNothing);
-    expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.text('최근 7일 다이제스트가 도착했어요'), findsOneWidget);
+    expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
+    expect(find.text('AI 요약 · 최근 7일'), findsOneWidget);
+    expect(find.text('왜 올랐을까?'), findsOneWidget);
   });
 
   testWidgets('labels monthly fallback digest by response period',
@@ -308,7 +309,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('최근 한 달 다이제스트가 도착했어요'), findsOneWidget);
+    expect(find.text('AI 요약 · 최근 한 달'), findsOneWidget);
   });
 
   testWidgets('folds unread algorithm signal into issue timeline only',
@@ -333,13 +334,8 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    // With the feed cap at 3, the insight item sits in the "더 보기"
-    // overflow rather than the visible rows. The point of this test is
-    // that the standalone "New ·" banner is suppressed once a feed
-    // exists. The presence of the more-items row signals the insight
-    // got folded in.
-    expect(find.text('더 보기'), findsOneWidget);
+    expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
+    expect(find.text('더 보기'), findsNothing);
     expect(find.textContaining('New ·'), findsNothing);
   });
 
@@ -378,9 +374,12 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.textContaining('미국 가치주가 +₩600,000 기여했어요'), findsOneWidget);
-    expect(find.textContaining('시장 변동성이 평소보다 2.4배 컸어요'), findsOneWidget);
+    expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
+    expect(find.text('왜 올랐을까?'), findsOneWidget);
+    expect(
+      find.textContaining('미국 가치주가 +₩600,000 기여했어요'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('hero chart no longer shows the deposit total text',
@@ -520,6 +519,7 @@ void main() {
     // U+2212 minus or '+' sign — neither legend nor any other widget on
     // this screen produces a string ending in "%" inside the chart area.
     expect(find.textContaining('%'), findsAtLeastNWidgets(1));
+    expect(find.byKey(const Key('drag_context_asset_divider')), findsOneWidget);
 
     await gesture.up();
     await tester.pump();
@@ -527,6 +527,127 @@ void main() {
     // After release, _touchIndex resets to null and the card disappears,
     // so only the legend's '포트폴리오' remains.
     expect(find.text('포트폴리오'), findsOneWidget);
+  });
+
+  testWidgets('drag context card shows ticker-based contribution rows',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    final start = DateTime(2026, 3, 1);
+    state.setAccountDashboard(
+      MobileAccountDashboard(
+        hasAccount: true,
+        summary: accountDashboard().summary,
+        history: List.generate(
+          60,
+          (i) => MobileAccountHistoryPoint(
+            date: start.add(Duration(days: i)),
+            portfolioValue: 10000000 + (i * 5000),
+            investedAmount: 10000000,
+            profitLoss: i * 5000,
+            profitLossPct: (i * 5000) / 10000000,
+          ),
+        ),
+        recentActivity: const [],
+      ),
+    );
+    state.setEarningsHistory(
+      MobileEarningsHistoryResponse(
+        points: [
+          for (var i = 0; i < 60; i++)
+            MobileEarningsPoint(
+              date: start.add(Duration(days: i)),
+              totalEarnings: 150000 + (i * 1500),
+              totalReturnPct: 0,
+              assetEarnings: {
+                'BIL': 100000 + (i * 1000),
+                'AGG': 50000 + (i * 500),
+              },
+            ),
+        ],
+        investmentAmount: 10000000,
+        startDate: '2026-03-01',
+        endDate: '2026-04-29',
+        totalReturnPct: 0,
+        totalEarnings: 0,
+        assetSummary: const [],
+      ),
+    );
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    final chart = find.byType(CustomPaint).first;
+    final center = tester.getCenter(chart);
+    final gesture = await tester.startGesture(center);
+    await gesture.moveBy(const Offset(20, 0));
+    await tester.pump();
+
+    expect(find.byKey(const Key('drag_context_asset_divider')), findsOneWidget);
+    expect(find.text('BIL'), findsAtLeastNWidgets(1));
+    expect(find.text('AGG'), findsAtLeastNWidgets(1));
+
+    await gesture.up();
+  });
+
+  testWidgets('long press does not enter two-point compare mode',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(
+      MobileAccountDashboard(
+        hasAccount: true,
+        summary: accountDashboard().summary,
+        history: List.generate(
+          60,
+          (i) => MobileAccountHistoryPoint(
+            date: DateTime(2026, 3, 1).add(Duration(days: i)),
+            portfolioValue: 10000000 + (i * 5000),
+            investedAmount: 10000000,
+            profitLoss: i * 5000,
+            profitLossPct: (i * 5000) / 10000000,
+          ),
+        ),
+        recentActivity: const [],
+      ),
+    );
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final chart = find.byType(CustomPaint).first;
+    final center = tester.getCenter(chart);
+    final gesture = await tester.startGesture(center);
+    await tester.pump(const Duration(milliseconds: 650));
+    await gesture.moveBy(const Offset(40, 0));
+    await tester.pump();
+
+    expect(find.text('→'), findsNothing);
+
+    await gesture.up();
   });
 
   testWidgets('range analysis mode enters from issue feed and exits cleanly',
@@ -550,9 +671,9 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    await tester.ensureVisible(find.text('이 구간 분석'));
+    await tester.ensureVisible(find.text('구간분석'));
     await tester.pump();
-    await tester.tap(find.text('이 구간 분석'));
+    await tester.tap(find.text('구간분석'));
     await tester.pump();
 
     expect(find.text('구간을 드래그해서 선택하세요'), findsOneWidget);
@@ -563,7 +684,7 @@ void main() {
     await tester.tap(find.byKey(const Key('range_digest_exit')));
     await tester.pump();
 
-    expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
+    expect(find.text('AI 요약 · 최근 7일'), findsOneWidget);
     expect(find.text('구간을 드래그해서 선택하세요'), findsNothing);
   });
 
@@ -604,9 +725,9 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    await tester.ensureVisible(find.text('이 구간 분석'));
+    await tester.ensureVisible(find.text('구간분석'));
     await tester.pump();
-    await tester.tap(find.text('이 구간 분석'));
+    await tester.tap(find.text('구간분석'));
     await tester.pump();
 
     final chart = find.byKey(const Key('home_performance_chart_gesture'));

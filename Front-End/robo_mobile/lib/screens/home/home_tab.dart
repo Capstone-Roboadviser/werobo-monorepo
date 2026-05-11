@@ -279,15 +279,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                               const DigestScreen(),
                             ),
                           ),
-                  onInsightTap:
-                      issueData.usesPlaceholderInsight || issueInsight == null
-                          ? null
-                          : () => Navigator.push(
-                                context,
-                                WeRoboMotion.fadeRoute<void>(
-                                  InsightDetailPage(insight: issueInsight),
-                                ),
-                              ),
                 ),
               ),
             SizedBox(height: hasIssueFeed ? 24 : 28),
@@ -367,13 +358,11 @@ class _HomeIssueFeedData {
   final MobileDigestResponse? digest;
   final RebalanceInsight? latestInsight;
   final bool usesPlaceholderDigest;
-  final bool usesPlaceholderInsight;
 
   const _HomeIssueFeedData({
     required this.digest,
     required this.latestInsight,
     required this.usesPlaceholderDigest,
-    required this.usesPlaceholderInsight,
   });
 }
 
@@ -440,7 +429,6 @@ class _HomeIssueFeedDataSource {
         digest: null,
         latestInsight: null,
         usesPlaceholderDigest: false,
-        usesPlaceholderInsight: false,
       );
     }
 
@@ -450,7 +438,6 @@ class _HomeIssueFeedDataSource {
       digest: usePlaceholderDigest ? _placeholderDigest : liveDigest,
       latestInsight: liveInsight ?? _placeholderInsight,
       usesPlaceholderDigest: usePlaceholderDigest,
-      usesPlaceholderInsight: liveInsight == null,
     );
   }
 }
@@ -495,10 +482,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   Timer? _drawDelayTimer;
   int _range = 4; // 전체
   int? _touchIndex;
-  // Long-press anchor for two-point compare. When set, the chart shows a
-  // dashed vertical line at this index and the drag card switches to
-  // anchor-vs-touch compare mode.
-  int? _anchorIndex;
   int? _rangeStartIndex;
   int? _rangeEndIndex;
   // Cache of cumulative asset returns since the start of the visible
@@ -571,14 +554,12 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.type != widget.type) {
       _touchIndex = null;
-      _anchorIndex = null;
       _rangeStartIndex = null;
       _rangeEndIndex = null;
       _drawCtrl.forward(from: 0);
     }
     if (oldWidget.rangeDigestMode != widget.rangeDigestMode) {
       _touchIndex = null;
-      _anchorIndex = null;
       _glowCtrl.stop();
       _glowCtrl.value = 0;
       if (!widget.rangeDigestMode) {
@@ -675,6 +656,36 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
       );
     }
     return result;
+  }
+
+  Map<String, String> _assetReturnLabels(PortfolioState state) {
+    final labels = <String, String>{};
+
+    void addLabel(String code, String label) {
+      final trimmedCode = code.trim();
+      if (trimmedCode.isEmpty) return;
+      final trimmedLabel = label.trim();
+      final display = trimmedLabel.isEmpty ? trimmedCode : trimmedLabel;
+      labels.putIfAbsent(trimmedCode, () => display);
+      labels.putIfAbsent(trimmedCode.toUpperCase(), () => display);
+    }
+
+    final portfolio = state.selectedPortfolio;
+    for (final sector
+        in portfolio?.sectorAllocations ?? const <MobileSectorAllocation>[]) {
+      addLabel(sector.assetCode, sector.assetName);
+    }
+    for (final stock
+        in portfolio?.stockAllocations ?? const <MobileStockAllocation>[]) {
+      final ticker = stock.ticker.trim().toUpperCase();
+      addLabel(ticker, ticker);
+    }
+    for (final summary in state.earningsHistory?.assetSummary ??
+        const <MobileAssetEarningSummary>[]) {
+      addLabel(summary.assetCode, summary.assetName);
+    }
+
+    return labels;
   }
 
   /// 채권 수익률 — drawn as a 2-point dashed line from the start of the
@@ -837,14 +848,12 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     // TODO: move to PortfolioState.cumulativeAssetReturnsUpTo for shared
     // caching across screens.
     final assetReturns = _cumulativeAssetReturnsLocal(valuePts, ti);
-    final names = <String, String>{
-      for (final s in (state.selectedPortfolio?.sectorAllocations ??
-          const <MobileSectorAllocation>[]))
-        s.assetCode: s.assetName,
-    };
+    final labels = _assetReturnLabels(state);
     final entries = assetReturns.entries
-        .where((e) => names.containsKey(e.key))
-        .map((e) => (name: names[e.key]!, pct: e.value))
+        .map((e) => (
+              name: labels[e.key] ?? labels[e.key.toUpperCase()] ?? e.key,
+              pct: e.value,
+            ))
         .toList();
     // Highest contribution first either way. In up days these are the
     // top gainers. In down days these are the assets that defended best
@@ -937,91 +946,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     );
   }
 
-  ({
-    double x,
-    double y,
-    DateTime anchorDate,
-    DateTime touchDate,
-    ({double anchorPct, double touchPct}) portfolio,
-    List<({String name, double anchorPct, double touchPct})> assetRows,
-  })? _buildCompareCardData(
-    List<ChartPoint> valuePts, {
-    required double fullWidth,
-    required double stackWidth,
-  }) {
-    final ai = _anchorIndex;
-    final ti = _touchIndex;
-    if (ai == null || ti == null || ai == ti) return null;
-    if (ai < 0 || ai >= valuePts.length) return null;
-    if (ti < 0 || ti >= valuePts.length) return null;
-    final base = valuePts.first.value;
-    if (base == 0) return null;
-    final anchorPortfolioPct = (valuePts[ai].value - base) / base;
-    final touchPortfolioPct = (valuePts[ti].value - base) / base;
-
-    final state = PortfolioStateProvider.of(context);
-    final names = <String, String>{
-      for (final s in (state.selectedPortfolio?.sectorAllocations ??
-          const <MobileSectorAllocation>[]))
-        s.assetCode: s.assetName,
-    };
-    final anchorReturns =
-        ai >= 1 ? _cumulativeAssetReturnsLocal(valuePts, ai) : const {};
-    final touchReturns =
-        ti >= 1 ? _cumulativeAssetReturnsLocal(valuePts, ti) : const {};
-
-    final codes = <String>{
-      ...anchorReturns.keys,
-      ...touchReturns.keys,
-    }.where(names.containsKey);
-    final candidates =
-        <({String name, double anchorPct, double touchPct, double delta})>[];
-    for (final code in codes) {
-      final a = anchorReturns[code] ?? 0.0;
-      final t = touchReturns[code] ?? 0.0;
-      candidates.add(
-        (name: names[code]!, anchorPct: a, touchPct: t, delta: t - a),
-      );
-    }
-    candidates.sort((a, b) => b.delta.abs().compareTo(a.delta.abs()));
-    final assetRows = candidates
-        .take(2)
-        .map((c) => (
-              name: c.name,
-              anchorPct: c.anchorPct,
-              touchPct: c.touchPct,
-            ))
-        .toList();
-
-    // Position: center between anchor and touch x positions, clamped.
-    // Sit the compare card near the top of the chart canvas so it stays
-    // clear of the two vertical lines below it.
-    const padX = 8.0;
-    const cardWidth = _CompareCard.width;
-    const cardHeight = _CompareCard.height;
-    const chartTotalH = 320.0;
-    final anchorX = (ai / (valuePts.length - 1)) * fullWidth - 24;
-    final touchX = (ti / (valuePts.length - 1)) * fullWidth - 24;
-    final mid = (anchorX + touchX) / 2;
-    final x = (mid - cardWidth / 2)
-        .clamp(padX, stackWidth - cardWidth - padX)
-        .toDouble();
-    const padY = 8.0;
-    final y = padY.clamp(padY, chartTotalH - cardHeight - padY).toDouble();
-
-    return (
-      x: x,
-      y: y.toDouble(),
-      anchorDate: valuePts[ai].date,
-      touchDate: valuePts[ti].date,
-      portfolio: (
-        anchorPct: anchorPortfolioPct,
-        touchPct: touchPortfolioPct,
-      ),
-      assetRows: assetRows,
-    );
-  }
-
   int _indexForChartX(double x, double fullWidth, int pointCount) {
     if (pointCount <= 1) return 0;
     return ((x / fullWidth) * (pointCount - 1))
@@ -1039,7 +963,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final idx = _indexForChartX(x, fullWidth, valuePts.length);
     setState(() {
       _touchIndex = null;
-      _anchorIndex = null;
       _rangeStartIndex = idx;
       _rangeEndIndex = idx;
     });
@@ -1107,7 +1030,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     setState(() {
       _range = idx;
       _touchIndex = null;
-      _anchorIndex = null;
       _rangeStartIndex = null;
       _rangeEndIndex = null;
     });
@@ -1222,26 +1144,10 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                         return '${d.year}년 ${d.month}월 ${d.day}일';
                       }()
                     : '';
-            // Compute card data when dragging at a non-zero index.
-            // When an anchor is set and the touch is at a different
-            // index, switch to compare mode so the card shows the gap
-            // between the two points instead of a single snapshot.
-            final isCompareMode = !widget.rangeDigestMode &&
-                _anchorIndex != null &&
-                _touchIndex != null &&
-                _anchorIndex != _touchIndex;
             final cardData = !widget.rangeDigestMode &&
-                    !isCompareMode &&
                     _touchIndex != null &&
                     _touchIndex! >= 1
                 ? _buildCardData(
-                    valuePts,
-                    fullWidth: fullWidth,
-                    stackWidth: constraints.maxWidth,
-                  )
-                : null;
-            final compareData = isCompareMode
-                ? _buildCompareCardData(
                     valuePts,
                     fullWidth: fullWidth,
                     stackWidth: constraints.maxWidth,
@@ -1309,12 +1215,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                           }
                           _glowCtrl.stop();
                           _glowCtrl.value = 0;
-                          // Keep the touch index pinned when an anchor is
-                          // set, so the compare card stays visible after
-                          // the user lifts their finger.
-                          if (_anchorIndex == null) {
-                            setState(() => _touchIndex = null);
-                          }
+                          setState(() => _touchIndex = null);
                         },
                         onPanCancel: () {
                           if (widget.rangeDigestMode) {
@@ -1323,30 +1224,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                           }
                           _glowCtrl.stop();
                           _glowCtrl.value = 0;
-                          if (_anchorIndex == null) {
-                            setState(() => _touchIndex = null);
-                          }
-                        },
-                        onLongPressStart: (d) {
-                          if (widget.rangeDigestMode) return;
-                          final idx = _indexForChartX(
-                            d.localPosition.dx,
-                            fullWidth,
-                            valuePts.length,
-                          );
-                          setState(() {
-                            _anchorIndex = idx;
-                            _touchIndex = idx;
-                          });
-                        },
-                        onLongPressMoveUpdate: (d) {
-                          if (widget.rangeDigestMode) return;
-                          final idx = _indexForChartX(
-                            d.localPosition.dx,
-                            fullWidth,
-                            valuePts.length,
-                          );
-                          setState(() => _touchIndex = idx);
+                          setState(() => _touchIndex = null);
                         },
                         child: AnimatedBuilder(
                           animation: Listenable.merge([_drawCurve, _glowCtrl]),
@@ -1405,7 +1283,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                 ],
                                 progress: _drawCurve.value,
                                 touchIndex: _touchIndex,
-                                anchorIndex: _anchorIndex,
                                 selectedRangeStartIndex: widget.rangeDigestMode
                                     ? _rangeStartIndex
                                     : null,
@@ -1432,23 +1309,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                         portfolioPct: cardData.portfolioPct,
                         marketPct: cardData.marketPct,
                         assetRows: cardData.assetRows,
-                      ),
-                    ),
-                  if (compareData != null)
-                    Positioned(
-                      left: compareData.x,
-                      top: compareData.y,
-                      child: _CompareCard(
-                        anchorDate: compareData.anchorDate,
-                        touchDate: compareData.touchDate,
-                        portfolio: compareData.portfolio,
-                        assetRows: compareData.assetRows,
-                        onClose: () {
-                          setState(() {
-                            _anchorIndex = null;
-                            _touchIndex = null;
-                          });
-                        },
                       ),
                     ),
                 ],
@@ -1715,8 +1575,6 @@ class _SkeletonBar extends StatelessWidget {
 // ─── Portfolio issue feed ──────────────────────────────────────
 
 class _PortfolioIssueFeed extends StatelessWidget {
-  static const _maxItems = 3;
-
   final MobileDigestResponse? digest;
   final RebalanceInsight? latestInsight;
   final bool rangeDigestMode;
@@ -1724,7 +1582,6 @@ class _PortfolioIssueFeed extends StatelessWidget {
   final VoidCallback onEnterRangeDigestMode;
   final VoidCallback onExitRangeDigestMode;
   final VoidCallback? onDigestTap;
-  final VoidCallback? onInsightTap;
 
   const _PortfolioIssueFeed({
     required this.digest,
@@ -1734,7 +1591,6 @@ class _PortfolioIssueFeed extends StatelessWidget {
     required this.onEnterRangeDigestMode,
     required this.onExitRangeDigestMode,
     this.onDigestTap,
-    this.onInsightTap,
   });
 
   static bool hasItems({
@@ -1753,148 +1609,78 @@ class _PortfolioIssueFeed extends StatelessWidget {
       );
     }
 
-    final allItems = _buildItems();
-    if (allItems.isEmpty) return const SizedBox.shrink();
-    final visibleItems = allItems.take(_maxItems).toList();
-    final hasMore = allItems.length > _maxItems;
-
     final tc = WeRoboThemeColors.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '포트폴리오 주요 이슈 알림',
-          style: WeRoboTypography.bodySmall.copyWith(
-            color: tc.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          decoration: BoxDecoration(
-            color: tc.surface,
-            borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
-            border: Border.all(color: tc.border, width: 1),
-          ),
-          child: Column(
-            children: [
-              for (int i = 0; i < visibleItems.length; i++) ...[
-                _PortfolioIssueRow(item: visibleItems[i]),
-                if (i < visibleItems.length - 1 || hasMore)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 16),
-                    child: Container(
-                      height: 1,
-                      color: tc.border.withValues(alpha: 0.3),
+    final summary = _DigestAiSummary.from(
+      digest: digest,
+      latestInsight: latestInsight,
+    );
+
+    return Container(
+      key: const Key('portfolio_digest_ai_summary'),
+      decoration: BoxDecoration(
+        color: tc.surface,
+        borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
+        border: Border.all(color: tc.border, width: 1),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Pressable(
+            onTap: onDigestTap,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.auto_awesome_rounded,
+                        size: 18,
+                        color: WeRoboColors.primary,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        summary.meta,
+                        style: WeRoboTypography.caption.copyWith(
+                          color: tc.textTertiary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    summary.title,
+                    style: WeRoboTypography.heading3.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
-              ],
-              if (hasMore)
-                _MoreItemsRow(
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('준비 중')),
-                    );
-                  },
-                ),
-              Padding(
-                padding: const EdgeInsets.only(left: 16),
-                child: Container(
-                  height: 1,
-                  color: tc.border.withValues(alpha: 0.3),
-                ),
+                  const SizedBox(height: 8),
+                  Text(
+                    summary.body,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textSecondary,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
               ),
-              _RangeDigestEntryRow(onTap: onEnterRangeDigestMode),
-            ],
+            ),
           ),
-        ),
-      ],
-    );
-  }
-
-  List<_PortfolioIssueItem> _buildItems() {
-    final items = <_PortfolioIssueItem>[];
-    if (digest != null) {
-      items.add(_digestStatusItem(digest!, onDigestTap));
-    }
-
-    final contribution = _topContribution(digest);
-    if (contribution != null) {
-      final isPositive = contribution.contributionWon >= 0;
-      final periodLabel = _digestPeriodLabel(digest!);
-      final name = contribution.nameKo.isNotEmpty
-          ? contribution.nameKo
-          : contribution.ticker;
-      final josa = _josaSubject(name);
-      final won = _formatSignedWon(contribution.contributionWon);
-      final title =
-          isPositive ? '$name$josa $won 기여했어요' : '$name$josa $won 영향을 줬어요';
-      items.add(
-        _PortfolioIssueItem(
-          icon: isPositive
-              ? Icons.trending_up_rounded
-              : Icons.trending_down_rounded,
-          iconColor: isPositive ? WeRoboColors.accent : WeRoboColors.error,
-          eyebrow: periodLabel,
-          title: title,
-          onTap: onDigestTap,
-        ),
-      );
-    }
-
-    if (_hasVolatilitySignal(digest)) {
-      final multiple = digest!.triggerSigmaMultiple!;
-      items.add(
-        _PortfolioIssueItem(
-          icon: Icons.show_chart_rounded,
-          iconColor: WeRoboColors.warning,
-          eyebrow: '변동성 감지',
-          title: '시장 변동성이 평소보다 ${multiple.toStringAsFixed(1)}배 컸어요',
-          onTap: onDigestTap,
-        ),
-      );
-    }
-
-    if (latestInsight != null) {
-      items.add(
-        _PortfolioIssueItem(
-          icon: Icons.auto_graph_rounded,
-          iconColor: WeRoboColors.primary,
-          eyebrow: _issueDateLabel(latestInsight!.rebalanceDate),
-          title: '신규 알고리즘 시그널이 발생했어요',
-          onTap: onInsightTap,
-        ),
-      );
-    }
-
-    if (_hasNewsSignal(digest)) {
-      final sources = digest!.sourcesUsed.take(2).join(', ');
-      items.add(
-        _PortfolioIssueItem(
-          icon: Icons.article_outlined,
-          iconColor: WeRoboColors.assetTier3,
-          eyebrow: '최근 뉴스',
-          title: '$sources 뉴스가 다이제스트에 반영됐어요',
-          onTap: onDigestTap,
-        ),
-      );
-    }
-
-    return items;
-  }
-
-  static _PortfolioIssueItem _digestStatusItem(
-    MobileDigestResponse digest,
-    VoidCallback? onDigestTap,
-  ) {
-    final available = digest.available;
-    final periodLabel = _digestPeriodLabel(digest);
-    return _PortfolioIssueItem(
-      icon: available ? Icons.summarize_rounded : Icons.hourglass_empty_rounded,
-      iconColor: available ? WeRoboColors.primary : WeRoboColors.textTertiary,
-      eyebrow: periodLabel,
-      title: available ? '$periodLabel 다이제스트가 도착했어요' : '이번 주는 평소 변동 범위 안이에요',
-      onTap: available ? onDigestTap : null,
+          Padding(
+            padding: const EdgeInsets.only(left: 16),
+            child: Container(
+              height: 1,
+              color: tc.border.withValues(alpha: 0.3),
+            ),
+          ),
+          _RangeDigestEntryRow(onTap: onEnterRangeDigestMode),
+        ],
+      ),
     );
   }
 
@@ -1908,30 +1694,15 @@ class _PortfolioIssueFeed extends StatelessWidget {
     return '최근 7일';
   }
 
-  static DigestDriver? _topContribution(MobileDigestResponse? digest) {
-    if (digest?.available != true) return null;
+  static List<DigestDriver> _topContributions(MobileDigestResponse? digest) {
+    if (digest?.available != true) return const [];
     final items = [
       ...digest!.drivers,
       ...digest.detractors,
     ]..sort(
         (a, b) => b.contributionWon.abs().compareTo(a.contributionWon.abs()),
       );
-    return items.isEmpty ? null : items.first;
-  }
-
-  static bool _hasVolatilitySignal(MobileDigestResponse? digest) {
-    final multiple = digest?.triggerSigmaMultiple;
-    return digest?.available == true && multiple != null && multiple >= 2;
-  }
-
-  static bool _hasNewsSignal(MobileDigestResponse? digest) {
-    return digest?.available == true && digest!.sourcesUsed.isNotEmpty;
-  }
-
-  static String _issueDateLabel(String isoDate) {
-    final parsed = DateTime.tryParse(isoDate);
-    if (parsed == null) return '최근 신호';
-    return '${parsed.month}월 ${parsed.day}일';
+    return items.take(2).toList();
   }
 
   static String _josaSubject(String name) {
@@ -1941,6 +1712,71 @@ class _PortfolioIssueFeed extends StatelessWidget {
       return (code - 0xAC00) % 28 == 0 ? '가' : '이';
     }
     return '가';
+  }
+}
+
+class _DigestAiSummary {
+  final String title;
+  final String meta;
+  final String body;
+
+  const _DigestAiSummary({
+    required this.title,
+    required this.meta,
+    required this.body,
+  });
+
+  factory _DigestAiSummary.from({
+    required MobileDigestResponse? digest,
+    required RebalanceInsight? latestInsight,
+  }) {
+    final periodLabel = digest == null
+        ? '최근 변화'
+        : _PortfolioIssueFeed._digestPeriodLabel(digest);
+    final returnPct = digest?.totalReturnPct ?? 0;
+    final title = returnPct > 0.1
+        ? '왜 올랐을까?'
+        : returnPct < -0.1
+            ? '왜 내려갔을까?'
+            : '왜 큰 변화가 없었을까?';
+    return _DigestAiSummary(
+      title: title,
+      meta: 'AI 요약 · $periodLabel',
+      body: _bodyFor(digest: digest, latestInsight: latestInsight),
+    );
+  }
+
+  static String _bodyFor({
+    required MobileDigestResponse? digest,
+    required RebalanceInsight? latestInsight,
+  }) {
+    final contributions = _PortfolioIssueFeed._topContributions(digest);
+    if (contributions.isNotEmpty) {
+      return contributions.map(_driverSentence).join(' ');
+    }
+
+    final narrative = digest?.narrativeKo?.trim();
+    if (digest?.hasNarrative == true &&
+        narrative != null &&
+        narrative.isNotEmpty) {
+      return narrative;
+    }
+
+    final insightText = latestInsight?.explanationText?.trim();
+    if (insightText != null && insightText.isNotEmpty) {
+      return insightText;
+    }
+
+    return '이 기간 특별한 요인이 없었어요. 포트폴리오는 평소 변동 범위 안에서 움직였어요.';
+  }
+
+  static String _driverSentence(DigestDriver driver) {
+    final name = driver.nameKo.isNotEmpty ? driver.nameKo : driver.ticker;
+    final josa = _PortfolioIssueFeed._josaSubject(name);
+    final won = _formatSignedWon(driver.contributionWon);
+    return driver.contributionWon >= 0
+        ? '$name$josa $won 기여했어요.'
+        : '$name$josa $won 영향을 줬어요.';
   }
 }
 
@@ -1968,7 +1804,7 @@ class _RangeDigestEntryRow extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  '이 구간 분석',
+                  '구간분석',
                   style: WeRoboTypography.bodySmall.copyWith(
                     color: tc.textPrimary,
                     fontWeight: FontWeight.w700,
@@ -2136,97 +1972,6 @@ String _formatDateRange(DateTime start, DateTime end) {
   return '${start.month}월 ${start.day}일-${end.month}월 ${end.day}일';
 }
 
-class _PortfolioIssueItem {
-  final IconData icon;
-  final Color iconColor;
-  final String eyebrow;
-  final String title;
-  final VoidCallback? onTap;
-
-  const _PortfolioIssueItem({
-    required this.icon,
-    required this.iconColor,
-    required this.eyebrow,
-    required this.title,
-    this.onTap,
-  });
-}
-
-class _PortfolioIssueRow extends StatelessWidget {
-  final _PortfolioIssueItem item;
-
-  const _PortfolioIssueRow({required this.item});
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    final row = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: SizedBox(
-        height: 32,
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(item.icon, size: 20, color: item.iconColor),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                item.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: WeRoboTypography.bodySmall.copyWith(
-                  color: tc.textPrimary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              item.eyebrow,
-              style: WeRoboTypography.caption.copyWith(
-                color: tc.textTertiary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    if (item.onTap == null) return row;
-    return Pressable(onTap: item.onTap!, child: row);
-  }
-}
-
-class _MoreItemsRow extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _MoreItemsRow({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Pressable(
-      onTap: onTap,
-      child: const Padding(
-        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: SizedBox(
-          height: 32,
-          child: Center(
-            child: Text(
-              '더 보기',
-              style: TextStyle(
-                fontFamily: WeRoboFonts.body,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: WeRoboColors.primary,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ─── Invested vs current value row ────────────────────────────
 
 class _InvestedVsCurrentRow extends StatelessWidget {
@@ -2274,7 +2019,6 @@ class _HomePerformancePainter extends CustomPainter {
   final List<ChartLine> lines;
   final double progress;
   final int? touchIndex;
-  final int? anchorIndex;
   final int? selectedRangeStartIndex;
   final int? selectedRangeEndIndex;
   final double glowPhase;
@@ -2287,7 +2031,6 @@ class _HomePerformancePainter extends CustomPainter {
     required this.lines,
     required this.progress,
     this.touchIndex,
-    this.anchorIndex,
     this.selectedRangeStartIndex,
     this.selectedRangeEndIndex,
     this.glowPhase = 0,
@@ -2388,14 +2131,6 @@ class _HomePerformancePainter extends CustomPainter {
       toY,
     );
 
-    // Anchor: dashed vertical line at the long-pressed point. Drawn
-    // before the touch crosshair so the live crosshair sits on top.
-    if (anchorIndex != null &&
-        anchorIndex! >= 0 &&
-        anchorIndex! < basePts.length) {
-      _drawAnchorLine(canvas, size, anchorIndex!, basePts.length, toX);
-    }
-
     // Crosshair + glow + date label (only when dragging).
     if (isDragging) {
       _drawCrosshair(
@@ -2452,30 +2187,6 @@ class _HomePerformancePainter extends CustomPainter {
       Offset(right, graphTopPad + chartH),
       handlePaint,
     );
-  }
-
-  void _drawAnchorLine(
-    Canvas canvas,
-    Size size,
-    int idx,
-    int totalPts,
-    double Function(int, int) toX,
-  ) {
-    const lineTopPad = 16.0;
-    final h = size.height;
-    final tx = toX(idx, totalPts);
-    final paint = Paint()
-      ..color = crosshairColor.withValues(alpha: 0.5)
-      ..strokeWidth = 1;
-    const dashLen = 4.0;
-    const gapLen = 4.0;
-    double y = lineTopPad;
-    final bottom = h - lineTopPad;
-    while (y < bottom) {
-      final end = math.min(y + dashLen, bottom);
-      canvas.drawLine(Offset(tx, y), Offset(tx, end), paint);
-      y = end + gapLen;
-    }
   }
 
   void _drawBenchmarkLine(
@@ -2676,7 +2387,6 @@ class _HomePerformancePainter extends CustomPainter {
   bool shouldRepaint(covariant _HomePerformancePainter old) =>
       old.progress != progress ||
       old.touchIndex != touchIndex ||
-      old.anchorIndex != anchorIndex ||
       old.selectedRangeStartIndex != selectedRangeStartIndex ||
       old.selectedRangeEndIndex != selectedRangeEndIndex ||
       old.glowPhase != glowPhase;
@@ -2821,7 +2531,15 @@ class _DragContextCard extends StatelessWidget {
               _DragContextRow(label: '포트폴리오', pct: portfolioPct),
               if (marketPct != null)
                 _DragContextRow(label: '시장', pct: marketPct!),
-              if (assetRows.isNotEmpty) const SizedBox(height: 4),
+              if (assetRows.isNotEmpty) ...[
+                const SizedBox(height: 5),
+                Container(
+                  key: const Key('drag_context_asset_divider'),
+                  height: 1,
+                  color: tc.border.withValues(alpha: 0.3),
+                ),
+                const SizedBox(height: 5),
+              ],
               for (final row in assetRows)
                 _DragContextRow(label: row.name, pct: row.pct),
             ],
@@ -2871,210 +2589,6 @@ class _DragContextRow extends StatelessWidget {
               fontWeight: FontWeight.w500,
               color: color,
               fontFeatures: const [ui.FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Two-point compare card ───────────────────────────────────
-
-class _CompareCard extends StatelessWidget {
-  final DateTime anchorDate;
-  final DateTime touchDate;
-  final ({double anchorPct, double touchPct}) portfolio;
-  final List<({String name, double anchorPct, double touchPct})> assetRows;
-  final VoidCallback onClose;
-
-  const _CompareCard({
-    required this.anchorDate,
-    required this.touchDate,
-    required this.portfolio,
-    required this.assetRows,
-    required this.onClose,
-  });
-
-  static const double width = 240.0;
-  static const double height = 152.0;
-
-  String _formatShortDate(DateTime d) => '${d.month}월 ${d.day}일';
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          width: width,
-          color: tc.surface.withValues(alpha: 0.62),
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      '${_formatShortDate(anchorDate)} → '
-                      '${_formatShortDate(touchDate)}',
-                      style: WeRoboTypography.caption.copyWith(
-                        color: tc.textTertiary,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ),
-                  SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      iconSize: 12,
-                      icon: Icon(Icons.close, color: tc.textTertiary),
-                      onPressed: onClose,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Container(
-                height: 1,
-                color: tc.border.withValues(alpha: 0.3),
-              ),
-              const SizedBox(height: 6),
-              _CompareRow(
-                label: '포트폴리오',
-                anchorPct: portfolio.anchorPct,
-                touchPct: portfolio.touchPct,
-              ),
-              for (final row in assetRows)
-                _CompareRow(
-                  label: row.name,
-                  anchorPct: row.anchorPct,
-                  touchPct: row.touchPct,
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _CompareRow extends StatelessWidget {
-  final String label;
-  final double? anchorPct;
-  final double? touchPct;
-
-  const _CompareRow({
-    required this.label,
-    required this.anchorPct,
-    required this.touchPct,
-  });
-
-  String _formatPct(double? pct) {
-    if (pct == null) return '--%';
-    final sign = pct >= 0 ? '+' : '-';
-    return '$sign${(pct * 100).abs().toStringAsFixed(1)}%';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    final hasData = anchorPct != null && touchPct != null;
-    final delta = hasData ? touchPct! - anchorPct! : null;
-    final deltaColor = delta == null
-        ? tc.textTertiary
-        : (delta >= 0 ? _gainColor : _lossColor);
-    final glyph = delta == null ? '' : (delta >= 0 ? '▲' : '▼');
-    return SizedBox(
-      height: 28,
-      child: Row(
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: WeRoboTypography.caption.copyWith(
-                color: tc.textPrimary,
-                fontSize: 12,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 48,
-            child: Text(
-              _formatPct(anchorPct),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontFamily: WeRoboFonts.english,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: tc.textSecondary,
-                fontFeatures: const [ui.FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              '→',
-              style: TextStyle(
-                fontSize: 12,
-                color: tc.textTertiary,
-              ),
-            ),
-          ),
-          SizedBox(
-            width: 48,
-            child: Text(
-              _formatPct(touchPct),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontFamily: WeRoboFonts.english,
-                fontSize: 13,
-                fontWeight: FontWeight.w500,
-                color: tc.textPrimary,
-                fontFeatures: const [ui.FontFeature.tabularFigures()],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(left: 6),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    delta == null
-                        ? ''
-                        : '${delta >= 0 ? '+' : '-'}${(delta * 100).abs().toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      fontFamily: WeRoboFonts.english,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: deltaColor,
-                      fontFeatures: const [ui.FontFeature.tabularFigures()],
-                    ),
-                  ),
-                  if (glyph.isNotEmpty) ...[
-                    const SizedBox(width: 2),
-                    Text(
-                      glyph,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: deltaColor,
-                      ),
-                    ),
-                  ],
-                ],
-              ),
             ),
           ),
         ],

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
+import '../../models/mobile_backend_models.dart';
+import '../../services/mobile_backend_api.dart';
 import 'frontier_selection_resolver.dart';
 import 'onboarding_screen.dart' show OnboardingFrontierSelection;
 import 'widgets/asset_weight.dart';
@@ -28,6 +32,9 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
   late final TabController _tabController;
   late final List<AssetWeight> _assets;
   late final List<DonutSegment> _segments;
+  MobileComparisonBacktestResponse? _comparisonBacktest;
+  bool _didRequestComparisonBacktest = false;
+  bool _isLoadingComparisonBacktest = false;
 
   @override
   void initState() {
@@ -62,8 +69,27 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didRequestComparisonBacktest) {
+      return;
+    }
+    _didRequestComparisonBacktest = true;
+    final state = PortfolioStateProvider.of(context);
+    final existingBacktest = state.backtest;
+    if (existingBacktest != null) {
+      _comparisonBacktest = existingBacktest;
+      return;
+    }
+    _isLoadingComparisonBacktest = true;
+    unawaited(_fetchComparisonBacktest(state));
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final state = PortfolioStateProvider.of(context);
+    final comparisonBacktest = _comparisonBacktest ?? state.backtest;
     return Scaffold(
       appBar: AppBar(
         backgroundColor: tc.background,
@@ -87,6 +113,8 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
               _CompareVolatilityTabs(
                 controller: _tabController,
                 selection: widget.selection,
+                comparisonBacktest: comparisonBacktest,
+                isLoadingComparisonBacktest: _isLoadingComparisonBacktest,
               ),
               const SizedBox(height: 100), // bottom CTA clearance
             ],
@@ -109,6 +137,35 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
     final state = PortfolioStateProvider.of(context);
     state.recordFrontierSelection(widget.selection);
     Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+  }
+
+  Future<void> _fetchComparisonBacktest(PortfolioState state) async {
+    try {
+      final response = await MobileBackendApi.instance.fetchComparisonBacktest(
+        preferredDataSource: widget.selection.dataSource,
+        investmentHorizon:
+            widget.selection.preview?.resolvedProfile.investmentHorizon ??
+                state.recommendation?.resolvedProfile.investmentHorizon ??
+                'medium',
+        selectedPointIndex: widget.selection.selectedPointIndex,
+        targetVolatility: widget.selection.targetVolatility,
+      );
+      if (!mounted) {
+        return;
+      }
+      state.setBacktest(response);
+      setState(() {
+        _comparisonBacktest = response;
+        _isLoadingComparisonBacktest = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoadingComparisonBacktest = false;
+      });
+    }
   }
 }
 
@@ -139,9 +196,13 @@ class _DonutAndListColumn extends StatelessWidget {
 class _CompareVolatilityTabs extends StatelessWidget {
   final TabController controller;
   final OnboardingFrontierSelection selection;
+  final MobileComparisonBacktestResponse? comparisonBacktest;
+  final bool isLoadingComparisonBacktest;
   const _CompareVolatilityTabs({
     required this.controller,
     required this.selection,
+    required this.comparisonBacktest,
+    required this.isLoadingComparisonBacktest,
   });
 
   @override
@@ -177,7 +238,10 @@ class _CompareVolatilityTabs extends StatelessWidget {
           child: TabBarView(
             controller: controller,
             children: [
-              _CompareTabBody(selection: selection),
+              _CompareTabBody(
+                comparisonBacktest: comparisonBacktest,
+                isLoading: isLoadingComparisonBacktest,
+              ),
               _VolatilityTabBody(selection: selection),
             ],
           ),
@@ -190,24 +254,29 @@ class _CompareVolatilityTabs extends StatelessWidget {
 /// First tab: multi-line time-series comparing the user's portfolio
 /// against the market and other benchmarks.
 ///
-/// The frontier preview only carries scalar volatility/expected-return
-/// values — it has no time-series. Real series need a follow-up call to
-/// `fetchComparisonBacktest` (or equivalent) which Task 3.5 will wire.
-/// For now we render `PortfolioComparisonChart`'s empty state so the tab
-/// reads honestly instead of showing fabricated data.
+/// The frontier preview only carries scalar volatility/expected-return values,
+/// so the parent screen fetches comparison-backtest data before this body draws
+/// the chart.
 class _CompareTabBody extends StatelessWidget {
-  final OnboardingFrontierSelection selection;
-  const _CompareTabBody({required this.selection});
+  final MobileComparisonBacktestResponse? comparisonBacktest;
+  final bool isLoading;
+  const _CompareTabBody({
+    required this.comparisonBacktest,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final series = _seriesFromPreview(selection);
-    final timeAxis = _timeAxisFromPreview(selection);
+    if (isLoading) {
+      return const _ChartLoadingState(message: '비교 데이터를 불러오는 중이에요');
+    }
+    final chartData = _comparisonChartData(comparisonBacktest);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: PortfolioComparisonChart(
-        seriesData: series,
-        timeAxis: timeAxis,
+        seriesData: chartData.seriesData,
+        timeAxis: chartData.timeAxis,
+        seriesLabels: chartData.labels,
         initialRange: TimeRange.threeYear,
         enablePinchZoom: true,
         enableHorizontalDrag: true,
@@ -215,18 +284,94 @@ class _CompareTabBody extends StatelessWidget {
     );
   }
 
-  // TODO(backend): wire via fetchComparisonBacktest (or equivalent).
-  // The frontier preview itself has no time-series, so until the backtest
-  // API is reused on this screen the chart shows its empty state.
-  List<List<double>> _seriesFromPreview(
-    OnboardingFrontierSelection selection,
-  ) =>
-      const <List<double>>[];
+  ({
+    List<List<double>> seriesData,
+    List<DateTime> timeAxis,
+    List<String> labels,
+  }) _comparisonChartData(MobileComparisonBacktestResponse? response) {
+    if (response == null || response.lines.isEmpty) {
+      return (
+        seriesData: const <List<double>>[],
+        timeAxis: const <DateTime>[],
+        labels: const <String>[],
+      );
+    }
 
-  List<DateTime> _timeAxisFromPreview(
-    OnboardingFrontierSelection selection,
-  ) =>
-      const <DateTime>[];
+    MobileComparisonLine? axisLine;
+    for (final line in response.lines) {
+      if (line.points.isNotEmpty) {
+        axisLine = line;
+        break;
+      }
+    }
+    if (axisLine == null) {
+      return (
+        seriesData: const <List<double>>[],
+        timeAxis: const <DateTime>[],
+        labels: const <String>[],
+      );
+    }
+    final timeAxis = [for (final point in axisLine.points) point.date];
+    final seriesData = <List<double>>[];
+    final labels = <String>[];
+    for (final line in response.lines) {
+      if (!_lineMatchesAxis(line, timeAxis)) {
+        continue;
+      }
+      seriesData.add([for (final point in line.points) point.returnPct]);
+      labels.add(line.label);
+    }
+    return (
+      seriesData: seriesData,
+      timeAxis: timeAxis,
+      labels: labels,
+    );
+  }
+
+  bool _lineMatchesAxis(MobileComparisonLine line, List<DateTime> timeAxis) {
+    if (line.points.length != timeAxis.length) {
+      return false;
+    }
+    for (var i = 0; i < timeAxis.length; i++) {
+      if (line.points[i].date != timeAxis[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+}
+
+class _ChartLoadingState extends StatelessWidget {
+  final String message;
+
+  const _ChartLoadingState({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: WeRoboColors.primary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            message,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Second tab: portfolio rolling 60d σ overlaid against the market's
