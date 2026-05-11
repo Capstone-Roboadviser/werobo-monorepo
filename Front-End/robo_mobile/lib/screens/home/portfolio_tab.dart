@@ -346,8 +346,7 @@ class _PortfolioStatsCard extends StatelessWidget {
           _statDivider(tc),
           _StatItem(
             label: '시장 대비 위험도',
-            value: '$score',
-            subtitle: riskLabel,
+            value: '$score ($riskLabel)',
             valueColor: riskColor,
           ),
           _statDivider(tc),
@@ -374,13 +373,11 @@ class _PortfolioStatsCard extends StatelessWidget {
 class _StatItem extends StatelessWidget {
   final String label;
   final String value;
-  final String? subtitle;
   final Color valueColor;
 
   const _StatItem({
     required this.label,
     required this.value,
-    this.subtitle,
     required this.valueColor,
   });
 
@@ -402,15 +399,6 @@ class _StatItem extends StatelessWidget {
               color: valueColor,
             ),
           ),
-          if (subtitle != null)
-            Text(
-              subtitle!,
-              style: WeRoboTypography.caption.copyWith(
-                color: valueColor,
-                fontWeight: FontWeight.w600,
-                fontSize: 10,
-              ),
-            ),
         ],
       ),
     );
