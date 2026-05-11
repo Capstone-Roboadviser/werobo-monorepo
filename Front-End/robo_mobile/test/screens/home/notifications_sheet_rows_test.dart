@@ -68,13 +68,51 @@ void main() {
     expect(find.text('월간 요약'), findsNothing);
   });
 
-  testWidgets('algorithm signal row shows latest insight trigger',
+  testWidgets('algorithm signal row shows today\'s insight trigger',
       (tester) async {
     final state = PortfolioState();
+    final today = DateTime.now();
+    final todayIso = '${today.year.toString().padLeft(4, '0')}-'
+        '${today.month.toString().padLeft(2, '0')}-'
+        '${today.day.toString().padLeft(2, '0')}';
     state.debugSetInsights([
       RebalanceInsight(
         id: 1,
-        rebalanceDate: '2026-05-10',
+        rebalanceDate: todayIso,
+        allocations: const [],
+        tradeDetails: const [],
+        trigger: 'drift_guard',
+        tradeCount: 1,
+        cashBefore: 0,
+        cashFromSales: 0,
+        cashToBuys: 0,
+        cashAfter: 0,
+        netCashChange: 0,
+        explanationText: 'test',
+        isRead: false,
+        createdAt: today.toIso8601String(),
+      ),
+    ]);
+
+    await tester.pumpWidget(_wrap(state));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('알고리즘 시그널'), findsOneWidget);
+    expect(find.textContaining('드리프트 가드가 작동했어요'), findsOneWidget);
+  });
+
+  testWidgets('algorithm signal row hides yesterday\'s insight',
+      (tester) async {
+    final state = PortfolioState();
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    final yesterdayIso = '${yesterday.year.toString().padLeft(4, '0')}-'
+        '${yesterday.month.toString().padLeft(2, '0')}-'
+        '${yesterday.day.toString().padLeft(2, '0')}';
+    state.debugSetInsights([
+      RebalanceInsight(
+        id: 1,
+        rebalanceDate: yesterdayIso,
         allocations: const [],
         tradeDetails: const [],
         trigger: 'drift_guard',
@@ -94,7 +132,6 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(find.text('알고리즘 시그널'), findsOneWidget);
-    expect(find.textContaining('드리프트 가드가 작동했어요'), findsOneWidget);
+    expect(find.textContaining('드리프트 가드'), findsNothing);
   });
 }

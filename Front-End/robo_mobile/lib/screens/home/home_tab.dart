@@ -3803,14 +3803,15 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     PortfolioState state,
     BuildContext context,
   ) sync* {
-    // "오늘의 알림" is by definition today's signals only. Older insights
-    // are reachable via the "지난 알림 모두 보기" row at the bottom of the
-    // sheet, which pushes the full ActivityHubPage history.
+    // "오늘의 알림" is by definition today's signals only. Filter on the
+    // rebalanceDate (the actual event date), not createdAt — createdAt
+    // may be a metadata timestamp that's always recent. Older insights
+    // are reachable via "지난 알림 모두 보기" at the bottom of the sheet.
     final now = DateTime.now();
-    final cutoff = now.subtract(const Duration(hours: 24));
+    final today = DateTime(now.year, now.month, now.day);
     for (final insight in state.insights) {
-      final created = DateTime.tryParse(insight.createdAt);
-      if (created == null || created.isBefore(cutoff)) continue;
+      final rebalDate = _parseIsoDate(insight.rebalanceDate);
+      if (rebalDate == null || rebalDate.isBefore(today)) continue;
 
       final dateLabel = _formatKoreanDate(insight.rebalanceDate);
       final triggerSentence = _triggerSentence(insight.trigger);
@@ -3839,6 +3840,15 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     final day = int.tryParse(iso.substring(8, 10));
     if (month == null || day == null) return null;
     return '$month월 $day일';
+  }
+
+  DateTime? _parseIsoDate(String iso) {
+    if (iso.length < 10) return null;
+    final year = int.tryParse(iso.substring(0, 4));
+    final month = int.tryParse(iso.substring(5, 7));
+    final day = int.tryParse(iso.substring(8, 10));
+    if (year == null || month == null || day == null) return null;
+    return DateTime(year, month, day);
   }
 
   String _triggerSentence(String? trigger) {
