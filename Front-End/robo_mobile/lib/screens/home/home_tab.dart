@@ -3668,16 +3668,14 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
 
     return Align(
       alignment: Alignment.topCenter,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-        child: Material(
-          color: Colors.transparent,
-          child: Container(
-            decoration: BoxDecoration(
-              color: tc.surface,
-              borderRadius: const BorderRadius.vertical(
-                bottom: Radius.circular(20),
-              ),
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: tc.surface,
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(20),
+            ),
               boxShadow: [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.08),
@@ -3729,7 +3727,6 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
             ),
           ),
         ),
-      ),
     );
   }
 
