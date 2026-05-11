@@ -142,10 +142,23 @@ class _AssetWeightBarState extends State<AssetWeightBar> {
       ),
     );
 
+    final endLabelStyle = WeRoboTypography.caption.copyWith(
+      color: tc.textSecondary,
+    );
+    final endLabels = Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text('저위험', style: endLabelStyle),
+        Text('고위험', style: endLabelStyle),
+      ],
+    );
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         tooltipRow,
+        endLabels,
+        const SizedBox(height: 4),
         ClipRRect(
           borderRadius: BorderRadius.circular(WeRoboColors.radiusS),
           child: AnimatedSize(
