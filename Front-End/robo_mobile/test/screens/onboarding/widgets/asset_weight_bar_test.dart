@@ -18,10 +18,10 @@ void main() {
     ])));
     final containers = tester.widgetList<AnimatedContainer>(find.byType(AnimatedContainer));
     final colors = containers.map((c) => (c.decoration as BoxDecoration?)?.color).toList();
-    // Leftmost segment must be cash tier (#FFC091).
-    expect(colors.first, WeRoboColors.assetTier5);
-    // Rightmost segment must be growth tier (#FE9337).
-    expect(colors.last, WeRoboColors.assetTier1);
+    // Leftmost segment must be cash color.
+    expect(colors.first, WeRoboColors.assetCash);
+    // Rightmost segment must be 미국성장주 color (highest-risk class in this fixture).
+    expect(colors.last, WeRoboColors.assetUSGrowth);
   });
 
   testWidgets('AssetWeightBar — empty/zero weights renders an empty fixed-height SizedBox', (tester) async {

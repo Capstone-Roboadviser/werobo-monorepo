@@ -7,7 +7,7 @@ class WeRoboColors {
   // Primary — Neon Carrot (#FE9337), main brand color (capstone 2026-05-04).
   static const Color primary = Color(0xFFFE9337);
   static const Color primaryDark = Color(0xFFE07A1F);    // 8% darker, pressed
-  static const Color primaryLight = Color(0xFFFFC091);   // = assetTier5
+  static const Color primaryLight = Color(0xFFFFC091);   // lighter primary tint
 
   // 부 색상 — warm-tinted neutrals to harmonize with orange.
   static const Color white = Color(0xFFFFFFFF);
@@ -30,28 +30,42 @@ class WeRoboColors {
   static const Color warning = Color(0xFFFBBF24);
   static const Color error = Color(0xFFEF4444);
 
-  // Asset tonal palette — 5-tier monochromatic orange (DESIGN.md §Color System).
-  // Conveys portfolio character (defensive ↔ aggressive) at a glance.
-  static const Color assetTier5 = Color(0xFFFFC091); // 현금성자산
-  static const Color assetTier4 = Color(0xFFFFB57D); // 단기채권
-  static const Color assetTier3 = Color(0xFFFFAA69); // 인프라채권, 금
-  static const Color assetTier2 = Color(0xFFFF9F52); // 미국가치주
-  static const Color assetTier1 = Color(0xFFFE9337); // 미국성장주, 신성장주
+  // Asset class colors. One distinct hue per asset class so users learn
+  // each color over time. Order matches AssetClass enum (defensive to
+  // aggressive). Cash sits at near-black as a baseline; the rest use
+  // distinct hues so segments are easy to tell apart.
+  static const Color assetCash = Color(0xFF2A2A2A);       // 현금성자산, near-black baseline
+  static const Color assetShortBond = Color(0xFF4A7FB8);  // 단기채권, calm blue
+  static const Color assetInfraBond = Color(0xFF2C5F8D);  // 인프라채권, deeper blue
+  static const Color assetGold = Color(0xFFD4A24A);       // 금, warm gold
+  static const Color assetUSValue = Color(0xFF6FA66A);    // 미국가치주, muted green
+  static const Color assetUSGrowth = primary;             // 미국성장주, brand orange
+  static const Color assetNewGrowth = Color(0xFFC85A4A);  // 신성장주, deeper red
+
+  // Orange brand shade aliases (legacy). Used by a few visual treatments
+  // outside the asset palette (glow color, gradient backgrounds, benchmark
+  // line). Kept for backward compatibility; new code should prefer primary
+  // or primaryLight, or one of the asset class colors above.
+  static const Color assetTier5 = Color(0xFFFFC091);
+  static const Color assetTier4 = Color(0xFFFFB57D);
+  static const Color assetTier3 = Color(0xFFFFAA69);
+  static const Color assetTier2 = Color(0xFFFF9F52);
+  static const Color assetTier1 = Color(0xFFFE9337);
 
   /// Ordered palette indexed by AssetClass. Use `assetColor(AssetClass)`
   /// for ergonomic lookup.
-  static const List<Color> assetTonalPalette = [
-    assetTier5, // index 0 — 현금성자산
-    assetTier4, // index 1 — 단기채권
-    assetTier3, // index 2 — 인프라채권
-    assetTier3, // index 3 — 금 (tier-shared with 인프라채권)
-    assetTier2, // index 4 — 미국가치주
-    assetTier1, // index 5 — 미국성장주
-    assetTier1, // index 6 — 신성장주 (tier-shared with 미국성장주)
+  static const List<Color> _assetPalette = [
+    assetCash,        // index 0, 현금성자산
+    assetShortBond,   // index 1, 단기채권
+    assetInfraBond,   // index 2, 인프라채권
+    assetGold,        // index 3, 금
+    assetUSValue,     // index 4, 미국가치주
+    assetUSGrowth,    // index 5, 미국성장주
+    assetNewGrowth,   // index 6, 신성장주
   ];
 
   static Color assetColor(AssetClass cls) =>
-      assetTonalPalette[cls.index];
+      _assetPalette[cls.index];
 
   // Social auth brand colors
   static const Color kakaoYellow = Color(0xFFFEE500);
