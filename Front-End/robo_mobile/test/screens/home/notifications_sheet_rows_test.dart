@@ -94,10 +94,7 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // Caption now carries the trigger label; title carries the
-    // AI-generated rebalance summary.
-    expect(find.textContaining('알고리즘 시그널'), findsOneWidget);
-    expect(find.textContaining('드리프트 가드'), findsOneWidget);
-    expect(find.textContaining('리밸런싱'), findsAtLeastNWidgets(1));
+    expect(find.text('알고리즘 시그널'), findsOneWidget);
+    expect(find.textContaining('드리프트 가드가 작동했어요'), findsOneWidget);
   });
 }

@@ -3781,17 +3781,14 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
       if (insight.isRead && ageDays > 30) continue;
 
       final dateLabel = _formatKoreanDate(insight.rebalanceDate);
-      final triggerLabel = _triggerLabel(insight.trigger);
-      // Caption pulls the date + trigger label so each row is identifiable
-      // at a glance; title pulls the AI-generated historySummary so each
-      // insight carries real context, not a generic "signal detected" line.
-      final caption = dateLabel == null
-          ? '알고리즘 시그널 · $triggerLabel'
-          : '알고리즘 시그널 · $dateLabel · $triggerLabel';
+      final triggerSentence = _triggerSentence(insight.trigger);
+      final title = dateLabel == null
+          ? triggerSentence
+          : '$dateLabel $triggerSentence';
       yield _NotificationRow(
         kind: _NotificationKind.algorithmSignal,
-        category: caption,
-        title: insight.historySummary,
+        category: _categoryLabel(_NotificationKind.algorithmSignal),
+        title: title,
         onTap: () {
           Navigator.of(context).push(
             WeRoboMotion.fadeRoute<void>(
@@ -3812,19 +3809,19 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     return '$month월 $day일';
   }
 
-  String _triggerLabel(String? trigger) {
+  String _triggerSentence(String? trigger) {
     // Backend trigger codes (see account_service._rebalance_activity_title).
     switch (trigger) {
       case 'scheduled':
-        return '정기 리밸런싱';
+        return '정기 리밸런싱이 실행됐어요';
       case 'drift_guard':
-        return '드리프트 가드';
+        return '드리프트 가드가 작동했어요';
       case 'threshold':
-        return '임계치 초과';
+        return '임계치 초과로 조정됐어요';
       case null:
-        return '리밸런싱';
+        return '리밸런싱이 실행됐어요';
       default:
-        return '리밸런싱';
+        return '리밸런싱이 실행됐어요';
     }
   }
 }
