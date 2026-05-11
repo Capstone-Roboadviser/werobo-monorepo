@@ -1014,7 +1014,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final sign = isGain ? '+' : '-';
     final formattedPnl =
         '$sign₩${_formatCurrency(displayChange.abs().toInt())}';
-    final formattedPct = '$sign${displayChangePct.abs().toStringAsFixed(2)}%';
+    final formattedPct = '($sign${displayChangePct.abs().toStringAsFixed(2)}%)';
     final investedAmount =
         accountSummary?.investedAmount ?? startValue;
     final headerCurrentValue = crosshairValue ?? currentValue;
