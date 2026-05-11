@@ -129,7 +129,7 @@ class _InsightDetailPageState extends State<InsightDetailPage> {
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Icon(
-                        Icons.close_rounded,
+                        Icons.arrow_back_rounded,
                         size: 20,
                         color: tc.textPrimary,
                       ),

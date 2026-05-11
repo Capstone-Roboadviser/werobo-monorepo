@@ -203,14 +203,27 @@ class WeRoboMotion {
   static const Curve emphasize = Cubic(0.34, 1.56, 0.64, 1);
   static const Curve chartReveal = Cubic(0.65, 0, 0.35, 1);
 
-  /// Standard page route with curved fade transition.
+  /// Standard page route with iOS-style horizontal slide transition.
+  /// On push, the incoming page slides in from the right; on pop, it
+  /// slides back to the right. The outgoing page also slides slightly
+  /// left during push for a parallax feel.
   static Route<T> fadeRoute<T>(Widget page) {
     return PageRouteBuilder<T>(
       pageBuilder: (_, __, ___) => page,
-      transitionsBuilder: (_, anim, __, child) => FadeTransition(
-        opacity: CurvedAnimation(parent: anim, curve: enter),
-        child: child,
-      ),
+      transitionsBuilder: (_, anim, secAnim, child) {
+        final inSlide = Tween<Offset>(
+          begin: const Offset(1, 0),
+          end: Offset.zero,
+        ).chain(CurveTween(curve: enter)).animate(anim);
+        final outSlide = Tween<Offset>(
+          begin: Offset.zero,
+          end: const Offset(-0.25, 0),
+        ).chain(CurveTween(curve: enter)).animate(secAnim);
+        return SlideTransition(
+          position: outSlide,
+          child: SlideTransition(position: inSlide, child: child),
+        );
+      },
       transitionDuration: pageTransition,
     );
   }
