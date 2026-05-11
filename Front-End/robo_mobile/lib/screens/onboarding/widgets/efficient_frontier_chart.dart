@@ -25,6 +25,12 @@ const Map<AssetClass, Offset> _kAssetBubbleSlots = {
   AssetClass.newGrowth: Offset(0.82, 0.22),
 };
 
+const double _kFrontierCurveStartX = 0.06;
+const double _kFrontierCurveEndX = 0.94;
+const double _kFrontierBubbleLabelFontSize = 10.5;
+const double _kFrontierBubbleLabelMargin = 4.0;
+const double _kFrontierBubbleLabelGap = 2.0;
+
 const Map<int, Map<AssetClass, double>> _kFallbackWeightsAtPosition = {
   0: {
     AssetClass.shortBond: 0.30,
@@ -82,6 +88,22 @@ const Map<int, Map<AssetClass, double>> _kFallbackWeightsAtPosition = {
   },
 };
 
+Offset frontierCurvePointForT(double t, Size size) {
+  final clampedT = t.clamp(0.0, 1.0).toDouble();
+  final x = size.width *
+      (_kFrontierCurveStartX +
+          (_kFrontierCurveEndX - _kFrontierCurveStartX) * clampedT);
+  final normalizedY = 0.85 - 0.7 * sqrt(clampedT) + 0.15 * clampedT;
+  final y = size.height * normalizedY;
+  return Offset(x, y);
+}
+
+double _frontierTForX(double x, double width) {
+  final t = (x / width - _kFrontierCurveStartX) /
+      (_kFrontierCurveEndX - _kFrontierCurveStartX);
+  return t.clamp(0.0, 1.0);
+}
+
 class FrontierAssetBubbleSpec {
   final AssetClass cls;
   final double weight;
@@ -94,6 +116,29 @@ class FrontierAssetBubbleSpec {
     required this.anchor,
     required this.radius,
   });
+}
+
+class FrontierAssetBubbleLabelLayout {
+  final AssetClass cls;
+  final Offset anchor;
+  final Rect rect;
+  final bool labelOnLeft;
+
+  const FrontierAssetBubbleLabelLayout({
+    required this.cls,
+    required this.anchor,
+    required this.rect,
+    required this.labelOnLeft,
+  });
+
+  FrontierAssetBubbleLabelLayout copyWith({Rect? rect}) {
+    return FrontierAssetBubbleLabelLayout(
+      cls: cls,
+      anchor: anchor,
+      rect: rect ?? this.rect,
+      labelOnLeft: labelOnLeft,
+    );
+  }
 }
 
 List<FrontierAssetBubbleSpec> frontierAssetBubbleSpecs({
@@ -122,6 +167,94 @@ List<FrontierAssetBubbleSpec> frontierAssetBubbleSpecs({
     );
   }
   return specs..sort((a, b) => a.radius.compareTo(b.radius));
+}
+
+List<FrontierAssetBubbleLabelLayout> frontierAssetBubbleLabelLayouts({
+  required List<FrontierAssetBubbleSpec> bubbleSpecs,
+  required Size size,
+}) {
+  final rawLayouts = <FrontierAssetBubbleLabelLayout>[];
+  for (final spec in bubbleSpecs) {
+    final text = frontierAssetBubbleLabel(spec.cls);
+    final labelSize = _frontierBubbleLabelSize(text);
+    final labelOnLeft = spec.anchor.dx > size.width * 0.70;
+    final rawDx = labelOnLeft
+        ? spec.anchor.dx - spec.radius - labelSize.width - 6
+        : spec.anchor.dx + spec.radius + 6;
+    final rawDy = spec.anchor.dy - labelSize.height / 2;
+    final dx = rawDx.clamp(
+      _kFrontierBubbleLabelMargin,
+      max(
+        _kFrontierBubbleLabelMargin,
+        size.width - labelSize.width - _kFrontierBubbleLabelMargin,
+      ),
+    );
+    final dy = rawDy.clamp(
+      _kFrontierBubbleLabelMargin,
+      max(
+        _kFrontierBubbleLabelMargin,
+        size.height - labelSize.height - _kFrontierBubbleLabelMargin,
+      ),
+    );
+    rawLayouts.add(
+      FrontierAssetBubbleLabelLayout(
+        cls: spec.cls,
+        anchor: spec.anchor,
+        rect: Offset(dx.toDouble(), dy.toDouble()) & labelSize,
+        labelOnLeft: labelOnLeft,
+      ),
+    );
+  }
+
+  final layouts = [...rawLayouts]
+    ..sort((a, b) => a.rect.top.compareTo(b.rect.top));
+  final adjusted = <FrontierAssetBubbleLabelLayout>[];
+  var nextTop = _kFrontierBubbleLabelMargin;
+  for (final layout in layouts) {
+    final maxTop = max(
+      _kFrontierBubbleLabelMargin,
+      size.height - layout.rect.height - _kFrontierBubbleLabelMargin,
+    );
+    final top = max(layout.rect.top, nextTop)
+        .clamp(_kFrontierBubbleLabelMargin, maxTop)
+        .toDouble();
+    final rect = Rect.fromLTWH(
+      layout.rect.left,
+      top,
+      layout.rect.width,
+      layout.rect.height,
+    );
+    adjusted.add(layout.copyWith(rect: rect));
+    nextTop = rect.bottom + _kFrontierBubbleLabelGap;
+  }
+
+  if (adjusted.isEmpty) return adjusted;
+  final overflow =
+      adjusted.last.rect.bottom - (size.height - _kFrontierBubbleLabelMargin);
+  if (overflow <= 0) return adjusted;
+  return adjusted
+      .map(
+        (layout) => layout.copyWith(
+          rect: layout.rect.shift(Offset(0, -overflow)),
+        ),
+      )
+      .toList();
+}
+
+Size _frontierBubbleLabelSize(String text) {
+  final tp = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: const TextStyle(
+        fontFamily: WeRoboFonts.body,
+        fontSize: _kFrontierBubbleLabelFontSize,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+    textDirection: TextDirection.ltr,
+    textAlign: TextAlign.center,
+  )..layout();
+  return tp.size;
 }
 
 Map<AssetClass, double> _weightsForFrontierPoint({
@@ -284,17 +417,12 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
 
   /// Convert a t value (0..1) to canvas coordinates
   Offset _tToPoint(double t, double w, double h) {
-    final x = w * 0.15 + (w * 0.7) * t;
-    final normalizedY = 0.85 - 0.7 * sqrt(t) + 0.15 * t;
-    final y = h * normalizedY;
-    return Offset(x, y);
+    return frontierCurvePointForT(t, Size(w, h));
   }
 
   /// Map screen x position directly to t for smooth dragging
   double _screenToT(Offset localPos, double w, double h) {
-    // x = w*0.15 + w*0.7*t  =>  t = (x - w*0.15) / (w*0.7)
-    final t = (localPos.dx - w * 0.15) / (w * 0.7);
-    return t.clamp(0.0, 1.0);
+    return _frontierTForX(localPos.dx, w);
   }
 
   /// Map a touch x position to the nearest preview index. Since both
@@ -370,20 +498,19 @@ class _EfficientFrontierChartState extends State<EfficientFrontierChart>
                   widget.onDragStateChanged?.call(false);
                 }
               },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: CustomPaint(
-                  painter: _FrontierPainter(
-                    curveProgress: _curveAnimation.value,
-                    dotProgress: _dotAnimation.value,
-                    dotT: _dotT,
-                    isDragging: _isDragging,
-                    pulseValue: _pulseAnimation.value,
-                    previewPoints: widget.previewPoints,
-                    selectedPreviewPosition: widget.selectedPreviewPosition,
-                    gridColor: tc.border,
-                    textTertiaryColor: tc.textTertiary,
-                  ),
+              child: CustomPaint(
+                painter: _FrontierPainter(
+                  curveProgress: _curveAnimation.value,
+                  dotProgress: _dotAnimation.value,
+                  dotT: _dotT,
+                  isDragging: _isDragging,
+                  pulseValue: _pulseAnimation.value,
+                  previewPoints: widget.previewPoints,
+                  selectedPreviewPosition: widget.selectedPreviewPosition,
+                  gridColor: tc.border,
+                  textPrimaryColor: tc.textPrimary,
+                  textTertiaryColor: tc.textTertiary,
+                  labelBackgroundColor: tc.background,
                 ),
               ),
             );
@@ -403,7 +530,9 @@ class _FrontierPainter extends CustomPainter {
   final List<MobileFrontierPreviewPoint>? previewPoints;
   final int? selectedPreviewPosition;
   final Color gridColor;
+  final Color textPrimaryColor;
   final Color textTertiaryColor;
+  final Color labelBackgroundColor;
 
   _FrontierPainter({
     required this.curveProgress,
@@ -414,14 +543,13 @@ class _FrontierPainter extends CustomPainter {
     required this.previewPoints,
     required this.selectedPreviewPosition,
     required this.gridColor,
+    required this.textPrimaryColor,
     required this.textTertiaryColor,
+    required this.labelBackgroundColor,
   });
 
   Offset _tToPoint(double t, double w, double h) {
-    final x = w * 0.15 + (w * 0.7) * t;
-    final normalizedY = 0.85 - 0.7 * sqrt(t) + 0.15 * t;
-    final y = h * normalizedY;
-    return Offset(x, y);
+    return frontierCurvePointForT(t, Size(w, h));
   }
 
   @override
@@ -457,8 +585,11 @@ class _FrontierPainter extends CustomPainter {
     if (curveProgress > 0) {
       _drawSmoothFrontier(canvas, size, curveProgress);
     }
+    var occupiedLabelRects = const <Rect>[];
     if (dotProgress > 0) {
-      _drawAssetBubbles(canvas, size, dotProgress);
+      occupiedLabelRects = _drawAssetBubbles(canvas, size, dotProgress)
+          .map((layout) => layout.rect.inflate(3))
+          .toList();
     }
     if (dotProgress > 0) {
       final tSelected = _selectedDotT();
@@ -473,14 +604,16 @@ class _FrontierPainter extends CustomPainter {
       if (pp != null && pos >= 0 && pos < pp.length) {
         final label = pp[pos].representativeLabel;
         if (label != null) {
-          _drawText(
+          _drawSelectedLabel(
             canvas,
+            size,
             label,
-            Offset(dotPos.dx + 10, max(8, dotPos.dy - 22)),
+            dotPos,
             labelStyle.copyWith(
               color: WeRoboColors.primary,
               fontWeight: FontWeight.w600,
             ),
+            occupiedLabelRects,
           );
         }
       }
@@ -549,8 +682,12 @@ class _FrontierPainter extends CustomPainter {
   /// Draws allocation bubbles for the currently-selected frontier point.
   /// Radius is data-driven: as the selected point changes, the backend
   /// sector weights resize these circles.
-  void _drawAssetBubbles(Canvas canvas, Size size, double opacity) {
-    if (opacity <= 0) return;
+  List<FrontierAssetBubbleLabelLayout> _drawAssetBubbles(
+    Canvas canvas,
+    Size size,
+    double opacity,
+  ) {
+    if (opacity <= 0) return const [];
     final pp = previewPoints;
     final specs = frontierAssetBubbleSpecs(
       point: _selectedPreviewPoint(),
@@ -576,38 +713,110 @@ class _FrontierPainter extends CustomPainter {
         ..color = WeRoboColors.white.withValues(alpha: opacity)
         ..strokeWidth = 1.5;
       canvas.drawCircle(spec.anchor, radius, ringPaint);
-      _drawBubbleLabel(canvas, size, spec, opacity);
     }
+    final layouts = frontierAssetBubbleLabelLayouts(
+      bubbleSpecs: specs,
+      size: size,
+    );
+    for (final layout in layouts) {
+      _drawBubbleLabel(canvas, layout, opacity);
+    }
+    return layouts;
   }
 
   void _drawBubbleLabel(
     Canvas canvas,
-    Size size,
-    FrontierAssetBubbleSpec spec,
+    FrontierAssetBubbleLabelLayout layout,
     double opacity,
   ) {
-    final text = frontierAssetBubbleLabel(spec.cls);
+    final labelEdge = Offset(
+      layout.labelOnLeft ? layout.rect.right : layout.rect.left,
+      layout.rect.center.dy,
+    );
+    final leaderPaint = Paint()
+      ..color = textTertiaryColor.withValues(alpha: 0.24 * opacity)
+      ..strokeWidth = 0.8;
+    canvas.drawLine(layout.anchor, labelEdge, leaderPaint);
+
+    final bgPaint = Paint()
+      ..color = labelBackgroundColor.withValues(alpha: 0.82 * opacity);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        layout.rect.inflate(3),
+        const Radius.circular(5),
+      ),
+      bgPaint,
+    );
+
+    final text = frontierAssetBubbleLabel(layout.cls);
     final tp = TextPainter(
       text: TextSpan(
         text: text,
         style: TextStyle(
           fontFamily: WeRoboFonts.body,
-          fontSize: 11,
-          fontWeight: FontWeight.w500,
-          color: WeRoboColors.textPrimary.withValues(alpha: opacity),
+          fontSize: _kFrontierBubbleLabelFontSize,
+          fontWeight: FontWeight.w600,
+          color: textPrimaryColor.withValues(alpha: opacity),
         ),
       ),
       textDirection: TextDirection.ltr,
       textAlign: TextAlign.center,
     )..layout();
-    final labelOnLeft = spec.anchor.dx > size.width * 0.72;
-    final rawDx = labelOnLeft
-        ? spec.anchor.dx - spec.radius - tp.width - 5
-        : spec.anchor.dx + spec.radius + 5;
-    final rawDy = spec.anchor.dy - tp.height / 2;
-    final dx = rawDx.clamp(4.0, max(4.0, size.width - tp.width - 4.0));
-    final dy = rawDy.clamp(4.0, max(4.0, size.height - tp.height - 4.0));
-    tp.paint(canvas, Offset(dx.toDouble(), dy.toDouble()));
+    tp.paint(canvas, layout.rect.topLeft);
+  }
+
+  void _drawSelectedLabel(
+    Canvas canvas,
+    Size size,
+    String text,
+    Offset dotPos,
+    TextStyle style,
+    List<Rect> occupiedRects,
+  ) {
+    final tp = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    final candidateOffsets = [
+      Offset(dotPos.dx + 10, dotPos.dy - tp.height - 12),
+      Offset(dotPos.dx + 10, dotPos.dy + 12),
+      Offset(dotPos.dx - tp.width - 10, dotPos.dy - tp.height - 12),
+      Offset(dotPos.dx - tp.width - 10, dotPos.dy + 12),
+    ];
+    Rect selectedRect = Rect.zero;
+    for (final offset in candidateOffsets) {
+      final dx = offset.dx.clamp(
+        _kFrontierBubbleLabelMargin,
+        max(
+          _kFrontierBubbleLabelMargin,
+          size.width - tp.width - _kFrontierBubbleLabelMargin,
+        ),
+      );
+      final dy = offset.dy.clamp(
+        _kFrontierBubbleLabelMargin,
+        max(
+          _kFrontierBubbleLabelMargin,
+          size.height - tp.height - _kFrontierBubbleLabelMargin,
+        ),
+      );
+      final rect = Offset(dx.toDouble(), dy.toDouble()) & tp.size;
+      selectedRect = rect;
+      if (!occupiedRects
+          .any((occupied) => occupied.overlaps(rect.inflate(3)))) {
+        break;
+      }
+    }
+
+    final bgPaint = Paint()
+      ..color = labelBackgroundColor.withValues(alpha: 0.86 * dotProgress);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        selectedRect.inflate(4),
+        const Radius.circular(6),
+      ),
+      bgPaint,
+    );
+    tp.paint(canvas, selectedRect.topLeft);
   }
 
   /// Selected (draggable) dot with pulse glow — preserved from previous
@@ -656,6 +865,9 @@ class _FrontierPainter extends CustomPainter {
         old.isDragging != isDragging ||
         old.pulseValue != pulseValue ||
         old.selectedPreviewPosition != selectedPreviewPosition ||
-        old.previewPoints != previewPoints;
+        old.previewPoints != previewPoints ||
+        old.textPrimaryColor != textPrimaryColor ||
+        old.textTertiaryColor != textTertiaryColor ||
+        old.labelBackgroundColor != labelBackgroundColor;
   }
 }

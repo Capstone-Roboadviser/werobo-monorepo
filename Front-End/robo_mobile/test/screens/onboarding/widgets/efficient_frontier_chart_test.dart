@@ -83,6 +83,45 @@ void main() {
     expect(growthGrowth.anchor.dx, greaterThan(size.width * 0.70));
   });
 
+  test('frontier curve uses most of the chart width', () {
+    const size = Size(320, 360);
+
+    final start = frontierCurvePointForT(0, size);
+    final end = frontierCurvePointForT(1, size);
+
+    expect(start.dx, lessThan(size.width * 0.10));
+    expect(end.dx, greaterThan(size.width * 0.90));
+  });
+
+  test('frontier bubble label layout avoids overlap in compact charts', () {
+    const size = Size(260, 220);
+    final specs = frontierAssetBubbleSpecs(
+      point: null,
+      size: size,
+      selectedPosition: 60,
+      previewPointCount: 61,
+    );
+
+    final labels = frontierAssetBubbleLabelLayouts(
+      bubbleSpecs: specs,
+      size: size,
+    );
+
+    for (var i = 0; i < labels.length; i++) {
+      expect(labels[i].rect.left, greaterThanOrEqualTo(0));
+      expect(labels[i].rect.right, lessThanOrEqualTo(size.width));
+      expect(labels[i].rect.top, greaterThanOrEqualTo(0));
+      expect(labels[i].rect.bottom, lessThanOrEqualTo(size.height));
+      for (var j = i + 1; j < labels.length; j++) {
+        expect(
+          labels[i].rect.overlaps(labels[j].rect),
+          isFalse,
+          reason: '${labels[i].cls.koLabel} overlaps ${labels[j].cls.koLabel}',
+        );
+      }
+    }
+  });
+
   testWidgets('EfficientFrontierChart repaints weighted bubbles on selection',
       (tester) async {
     final points = [

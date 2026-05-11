@@ -711,16 +711,12 @@ class _FrontierBodyState extends State<_FrontierBody> {
           const SizedBox(height: 12),
 
           // Chart fills the leftover vertical space, but capped by
-          // a 4:5 (w:h) aspect ratio so the idealized concave curve
-          // still reads as curved. Without the cap the chart goes so
-          // portrait that the curve looks like a vertical line — same
-          // bounding-box math, but Δy ≫ Δx flattens the perceived
-          // curvature. Center vertically so any leftover headroom
-          // becomes balanced whitespace, not a top-anchored block.
+          // a wide aspect ratio so the curve uses the available screen width
+          // without leaving a narrow graph floating in the middle.
           Expanded(
             child: Center(
               child: AspectRatio(
-                aspectRatio: 0.8,
+                aspectRatio: 1.2,
                 child: EfficientFrontierChart(
                   previewPoints: _preview.points,
                   selectedPreviewPosition: _selectedPreviewPosition,
