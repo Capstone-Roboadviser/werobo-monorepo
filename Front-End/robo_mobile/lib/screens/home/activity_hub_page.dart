@@ -44,21 +44,6 @@ String _notificationIcon(NotificationKind kind) {
   }
 }
 
-Color _notificationTint(NotificationKind kind) {
-  switch (kind) {
-    case NotificationKind.monthlySummary:
-      return const Color(0xFF3B82F6);
-    case NotificationKind.contribution:
-      return const Color(0xFF10B981);
-    case NotificationKind.algorithmSignal:
-      return const Color(0xFF8B5CF6);
-    case NotificationKind.volatilityAlert:
-      return const Color(0xFFF59E0B);
-    case NotificationKind.assetNews:
-      return const Color(0xFF1E3A8A);
-  }
-}
-
 DateTime? _parseIsoDate(String iso) {
   if (iso.length < 10) return null;
   final year = int.tryParse(iso.substring(0, 4));
@@ -402,7 +387,6 @@ class NotificationListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final tint = _notificationTint(kind);
     return Pressable(
       onTap: onTap,
       child: Padding(
@@ -414,7 +398,7 @@ class NotificationListRow extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: tint.withValues(alpha: 0.12),
+                color: tc.card,
                 borderRadius: BorderRadius.circular(10),
               ),
               padding: const EdgeInsets.all(7),

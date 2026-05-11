@@ -3956,7 +3956,6 @@ class _NotificationRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final tint = _iconTint(kind);
     return Pressable(
       onTap: onTap,
       child: Padding(
@@ -3968,7 +3967,7 @@ class _NotificationRow extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: tint.withValues(alpha: 0.12),
+                color: tc.card,
                 borderRadius: BorderRadius.circular(10),
               ),
               padding: const EdgeInsets.all(7),
@@ -4003,21 +4002,6 @@ class _NotificationRow extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-Color _iconTint(_NotificationKind kind) {
-  switch (kind) {
-    case _NotificationKind.monthlySummary:
-      return const Color(0xFF3B82F6);
-    case _NotificationKind.contribution:
-      return const Color(0xFF10B981);
-    case _NotificationKind.algorithmSignal:
-      return const Color(0xFF8B5CF6);
-    case _NotificationKind.volatilityAlert:
-      return const Color(0xFFF59E0B);
-    case _NotificationKind.assetNews:
-      return const Color(0xFF1E3A8A);
   }
 }
 
