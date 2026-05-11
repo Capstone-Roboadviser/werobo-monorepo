@@ -3611,9 +3611,8 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
       ));
     }
 
-    // 3. Algorithm signal — sources from existing rebalance insights.
-    final algoRow = _buildAlgorithmSignalRow(state, context);
-    if (algoRow != null) rows.add(algoRow);
+    // 3. Algorithm signal — one row per rebalance insight, most recent first.
+    rows.addAll(_buildAlgorithmSignalRows(state, context));
 
     // 4. Volatility row — appears only after _ready and only if a spike exists.
     final spike = state.portfolioVolatilitySpike;
@@ -3650,19 +3649,25 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
             ),
           ]
         : <Widget>[
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              itemCount: rows.length,
-              separatorBuilder: (_, __) => Divider(
-                height: 1,
-                thickness: 1,
-                color: tc.card,
-                indent: 20,
-                endIndent: 20,
+            // Cap height at 60% of the screen so a long insight history
+            // doesn't push the sheet off the bottom of the device.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.6,
               ),
-              itemBuilder: (_, i) => rows[i],
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemCount: rows.length,
+                separatorBuilder: (_, __) => Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: tc.card,
+                  indent: 20,
+                  endIndent: 20,
+                ),
+                itemBuilder: (_, i) => rows[i],
+              ),
             ),
           ];
 
@@ -3737,30 +3742,30 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  _NotificationRow? _buildAlgorithmSignalRow(
+  Iterable<_NotificationRow> _buildAlgorithmSignalRows(
     PortfolioState state,
     BuildContext context,
-  ) {
-    final insights = state.insights;
-    if (insights.isEmpty) return null;
-    final latest = insights.first;
-    final created = DateTime.tryParse(latest.createdAt);
-    final ageDays = created == null
-        ? 0
-        : DateTime.now().difference(created).inDays;
-    if (latest.isRead && ageDays > 30) return null;
+  ) sync* {
+    final now = DateTime.now();
+    for (final insight in state.insights) {
+      // Hide read insights older than 30 days — they're stale signals.
+      final created = DateTime.tryParse(insight.createdAt);
+      final ageDays =
+          created == null ? 0 : now.difference(created).inDays;
+      if (insight.isRead && ageDays > 30) continue;
 
-    final dateLabel = _formatKoreanDate(latest.rebalanceDate);
-    final triggerLabel = _triggerLabel(latest.trigger);
-    final title = dateLabel == null
-        ? '$triggerLabel 시그널이 감지됐어요'
-        : '$dateLabel $triggerLabel 시그널이 감지됐어요';
-    return _NotificationRow(
-      kind: _NotificationKind.algorithmSignal,
-      category: _categoryLabel(_NotificationKind.algorithmSignal),
-      title: title,
-      onTap: () => Navigator.of(context).pop(),
-    );
+      final dateLabel = _formatKoreanDate(insight.rebalanceDate);
+      final triggerLabel = _triggerLabel(insight.trigger);
+      final title = dateLabel == null
+          ? '$triggerLabel 시그널이 감지됐어요'
+          : '$dateLabel $triggerLabel 시그널이 감지됐어요';
+      yield _NotificationRow(
+        kind: _NotificationKind.algorithmSignal,
+        category: _categoryLabel(_NotificationKind.algorithmSignal),
+        title: title,
+        onTap: () => Navigator.of(context).pop(),
+      );
+    }
   }
 
   String? _formatKoreanDate(String iso) {
