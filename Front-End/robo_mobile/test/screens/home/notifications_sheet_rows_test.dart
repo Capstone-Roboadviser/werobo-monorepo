@@ -77,7 +77,7 @@ void main() {
         rebalanceDate: '2026-05-10',
         allocations: const [],
         tradeDetails: const [],
-        trigger: 'drift',
+        trigger: 'drift_guard',
         tradeCount: 1,
         cashBefore: 0,
         cashFromSales: 0,
@@ -95,6 +95,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('알고리즘 시그널'), findsOneWidget);
-    expect(find.textContaining('비중 드리프트'), findsOneWidget);
+    expect(find.textContaining('드리프트 가드'), findsOneWidget);
+    expect(find.textContaining('감지됐어요'), findsOneWidget);
   });
 }

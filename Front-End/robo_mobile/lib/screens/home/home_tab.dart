@@ -3668,26 +3668,26 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
 
     return Align(
       alignment: Alignment.topCenter,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-          child: Material(
-            color: Colors.transparent,
-            child: Container(
-              decoration: BoxDecoration(
-                color: tc.surface,
-                borderRadius: const BorderRadius.vertical(
-                  bottom: Radius.circular(20),
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.08),
-                    blurRadius: 24,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            decoration: BoxDecoration(
+              color: tc.surface,
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(20),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              bottom: false,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -3753,30 +3753,41 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
         : DateTime.now().difference(created).inDays;
     if (latest.isRead && ageDays > 30) return null;
 
-    final dateLabel = latest.rebalanceDate.length >= 10
-        ? latest.rebalanceDate.substring(5).replaceAll('-', '/')
-        : latest.rebalanceDate;
+    final dateLabel = _formatKoreanDate(latest.rebalanceDate);
     final triggerLabel = _triggerLabel(latest.trigger);
+    final title = dateLabel == null
+        ? '$triggerLabel 시그널이 감지됐어요'
+        : '$dateLabel $triggerLabel 시그널이 감지됐어요';
     return _NotificationRow(
       kind: _NotificationKind.algorithmSignal,
       category: _categoryLabel(_NotificationKind.algorithmSignal),
-      title: '$dateLabel $triggerLabel',
+      title: title,
       onTap: () => Navigator.of(context).pop(),
     );
   }
 
+  String? _formatKoreanDate(String iso) {
+    // Expects "YYYY-MM-DD"; returns "M월 D일".
+    if (iso.length < 10) return null;
+    final month = int.tryParse(iso.substring(5, 7));
+    final day = int.tryParse(iso.substring(8, 10));
+    if (month == null || day == null) return null;
+    return '$month월 $day일';
+  }
+
   String _triggerLabel(String? trigger) {
+    // Backend trigger codes (see account_service._rebalance_activity_title).
     switch (trigger) {
       case 'scheduled':
-        return '정기 리밸런싱 시그널';
-      case 'drift':
-        return '비중 드리프트 감지';
+        return '정기 리밸런싱';
+      case 'drift_guard':
+        return '드리프트 가드';
       case 'threshold':
-        return '임계치 초과 감지';
+        return '임계치 초과';
       case null:
-        return '리밸런싱 시그널 감지';
+        return '리밸런싱';
       default:
-        return trigger;
+        return '리밸런싱';
     }
   }
 }
