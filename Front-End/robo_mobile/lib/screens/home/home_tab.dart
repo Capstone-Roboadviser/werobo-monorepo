@@ -21,6 +21,11 @@ import 'widgets/glowing_border.dart';
 import 'projection_screen.dart';
 import 'widgets/insight_transition_chart.dart';
 
+// Korean convention (per Eugene): red for gain, blue for loss. This is the
+// opposite of the Korean stock sign convention but matches the meeting spec.
+const Color _gainColor = Color(0xFFE5455F);
+const Color _lossColor = Color(0xFF3182F6);
+
 Map<String, double> earningsHistoryWeightsFor(
   MobilePortfolioRecommendation portfolio,
 ) {
@@ -861,14 +866,22 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final displayChangePct = crosshairValue != null && startValue > 0
         ? ((crosshairValue - startValue) / startValue) * 100
         : changePct;
-    final displayIsPositive = displayChange >= 0;
+    final isGain = displayChange >= 0;
+    final pnlColor = isGain ? _gainColor : _lossColor;
+    final sign = isGain ? '+' : '-';
+    final formattedPnl =
+        '$sign₩${_formatCurrency(displayChange.abs().toInt())}';
+    final formattedPct = '$sign${displayChangePct.abs().toStringAsFixed(2)}%';
+    final investedAmount =
+        accountSummary?.investedAmount ?? startValue;
+    final headerCurrentValue = crosshairValue ?? currentValue;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Label
+        // 총손익 label
         Text(
-          '현재 자산',
+          '총손익',
           style: WeRoboTypography.caption.copyWith(
             color: tc.textSecondary,
             fontSize: 13,
@@ -876,34 +889,41 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         ),
         const SizedBox(height: 6),
 
-        // Value (animated count-up, updates on drag)
-        TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: currentValue),
-          duration: const Duration(milliseconds: 1200),
-          curve: Curves.easeOutCubic,
-          builder: (context, val, _) {
-            final v = crosshairValue ?? val;
-            return Text(
-              '₩${_formatCurrency(v.toInt())}',
+        // Total return (won) + percent, baseline aligned
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              formattedPnl,
               style: TextStyle(
                 fontFamily: WeRoboFonts.english,
                 fontSize: 34,
                 fontWeight: FontWeight.w700,
-                color: tc.textPrimary,
+                color: pnlColor,
                 letterSpacing: -0.5,
                 height: 1.2,
               ),
-            );
-          },
+            ),
+            const SizedBox(width: 8),
+            Text(
+              formattedPct,
+              style: TextStyle(
+                fontFamily: WeRoboFonts.english,
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                color: pnlColor,
+                height: 1.2,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
 
-        // Performance badge (always visible, values update on drag)
-        _PerformanceBadge(
-          changePct: displayChangePct,
-          changeAmount: displayChange,
-          isPositive: displayIsPositive,
-          rangeLabel: _rangeLabels[_range],
+        // Invested vs current value row
+        _InvestedVsCurrentRow(
+          invested: investedAmount,
+          current: headerCurrentValue,
         ),
 
         const SizedBox(height: 20),
@@ -1472,35 +1492,40 @@ class _PortfolioIssueRow extends StatelessWidget {
   }
 }
 
-// ─── Performance badge ────────────────────────────────────────
+// ─── Invested vs current value row ────────────────────────────
 
-class _PerformanceBadge extends StatelessWidget {
-  final double changePct;
-  final double changeAmount;
-  final bool isPositive;
-  final String rangeLabel;
+class _InvestedVsCurrentRow extends StatelessWidget {
+  final double invested;
+  final double current;
 
-  const _PerformanceBadge({
-    required this.changePct,
-    required this.changeAmount,
-    required this.isPositive,
-    required this.rangeLabel,
+  const _InvestedVsCurrentRow({
+    required this.invested,
+    required this.current,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final color = isPositive ? tc.accent : WeRoboColors.error;
-    final arrow = isPositive ? '▲' : '▼';
-
-    return Text(
-      '$arrow ₩${_formatCurrency(changeAmount.abs().toInt())} (${changePct.abs().toStringAsFixed(1)}%) $rangeLabel',
-      style: TextStyle(
-        fontFamily: WeRoboFonts.english,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: color,
-      ),
+    final labelStyle = WeRoboTypography.bodySmall.copyWith(
+      color: tc.textSecondary,
+    );
+    final amountStyle = WeRoboTypography.bodySmall.copyWith(
+      color: tc.textPrimary,
+      fontWeight: FontWeight.w600,
+      fontFamily: WeRoboFonts.english,
+    );
+    return Row(
+      children: [
+        Text('투자금액', style: labelStyle),
+        const SizedBox(width: 4),
+        Text('₩${_formatCurrency(invested.toInt())}', style: amountStyle),
+        const SizedBox(width: 12),
+        Container(width: 1, height: 12, color: tc.border),
+        const SizedBox(width: 12),
+        Text('평가금액', style: labelStyle),
+        const SizedBox(width: 4),
+        Text('₩${_formatCurrency(current.toInt())}', style: amountStyle),
+      ],
     );
   }
 }
