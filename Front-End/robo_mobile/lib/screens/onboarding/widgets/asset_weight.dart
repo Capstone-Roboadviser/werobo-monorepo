@@ -20,6 +20,8 @@ class AssetWeight {
 
 /// Stacked horizontal bar showing asset proportions.
 /// Used by the efficient frontier (segments resize live as user drags).
+/// Renders as a thin band (14px tall by default) with 저위험 / 고위험
+/// labels above so the bar reads as a risk dimension.
 /// Tapping or long-pressing a segment shows a small tooltip just above
 /// the bar with the asset label + percentage; the tooltip auto-dismisses
 /// after ~1.5s. Asset order follows AssetClass enum (defensive →
@@ -32,7 +34,7 @@ class AssetWeightBar extends StatefulWidget {
   const AssetWeightBar({
     super.key,
     required this.assets,
-    this.height = 28,
+    this.height = 14,
   });
 
   @override
