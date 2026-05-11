@@ -477,14 +477,20 @@ class _FrontierBodyState extends State<_FrontierBody> {
   }
 
   /// Returns the risk-comparison card payload. The card shares the
-  /// `_StatCard` shape with 연 기대수익률, so the data is split into
-  /// a static `value` (e.g. "약 30% 더 안전한") and `color` so the
-  /// label "시장대비" can sit muted above it just like 연 기대수익률.
-  ({String value, Color color}) get _riskComparison {
+  /// `_StatCard` shape with 연 기대수익률, but the percentage itself uses
+  /// the same large number style as the return card.
+  ({
+    String? emphasis,
+    String suffix,
+    String plainText,
+    Color color,
+  }) get _riskComparison {
     final points = _preview.points;
     if (points.isEmpty) {
       return (
-        value: '시장 평균 수준',
+        emphasis: null,
+        suffix: '시장 평균 수준',
+        plainText: '시장 평균 수준',
         color: WeRoboColors.accent,
       );
     }
@@ -493,7 +499,9 @@ class _FrontierBodyState extends State<_FrontierBody> {
     final selected = _selectedPreviewPoint;
     if (selected == null || averageVol == 0) {
       return (
-        value: '시장 평균 수준',
+        emphasis: null,
+        suffix: '시장 평균 수준',
+        plainText: '시장 평균 수준',
         color: WeRoboColors.accent,
       );
     }
@@ -502,7 +510,9 @@ class _FrontierBodyState extends State<_FrontierBody> {
     final isRiskier = diff > 0;
     if (percentDiff == 0) {
       return (
-        value: '시장 평균 수준',
+        emphasis: null,
+        suffix: '시장 평균 수준',
+        plainText: '시장 평균 수준',
         color: WeRoboColors.accent,
       );
     }
@@ -513,8 +523,14 @@ class _FrontierBodyState extends State<_FrontierBody> {
       const Color(0xFFF97316),
       lerpT,
     )!;
-    final value = '약 $percentDiff% ${isRiskier ? '더 위험한' : '더 안전한'}';
-    return (value: value, color: color);
+    final emphasis = '$percentDiff%';
+    final suffix = isRiskier ? '더 위험한' : '더 안전한';
+    return (
+      emphasis: emphasis,
+      suffix: suffix,
+      plainText: '약 $emphasis $suffix',
+      color: color,
+    );
   }
 
   @override
@@ -698,10 +714,10 @@ class _FrontierBodyState extends State<_FrontierBody> {
                 Expanded(
                   child: _StatCard(
                     label: '시장대비',
-                    value: _riskComparison.value,
+                    value: _riskComparison.plainText,
                     color: _riskComparison.color,
-                    valueStyle: WeRoboTypography.bodySmall.copyWith(
-                      fontWeight: FontWeight.w600,
+                    valueChild: _RiskComparisonValue(
+                      comparison: _riskComparison,
                     ),
                   ),
                 ),
@@ -792,25 +808,19 @@ class _StatCard extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
-
-  /// Optional override for the value's text style. Defaults to the
-  /// large Numbers style used by 연 기대수익률; the 시장대비 card
-  /// passes a bodySmall style because its value is multi-word Korean
-  /// rather than a single number.
-  final TextStyle? valueStyle;
+  final Widget? valueChild;
 
   const _StatCard({
     required this.label,
     required this.value,
     required this.color,
-    this.valueStyle,
+    this.valueChild,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final resolvedValueStyle =
-        (valueStyle ?? WeRoboTypography.number).copyWith(color: color);
+    final resolvedValueStyle = WeRoboTypography.number.copyWith(color: color);
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
@@ -828,10 +838,62 @@ class _StatCard extends StatelessWidget {
             duration: const Duration(milliseconds: 300),
             style: resolvedValueStyle,
             textAlign: TextAlign.center,
-            child: Text(value, textAlign: TextAlign.center),
+            child: valueChild ?? Text(value, textAlign: TextAlign.center),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RiskComparisonValue extends StatelessWidget {
+  final ({
+    String? emphasis,
+    String suffix,
+    String plainText,
+    Color color,
+  }) comparison;
+
+  const _RiskComparisonValue({required this.comparison});
+
+  @override
+  Widget build(BuildContext context) {
+    final emphasis = comparison.emphasis;
+    if (emphasis == null) {
+      return Text(
+        comparison.suffix,
+        textAlign: TextAlign.center,
+        style: WeRoboTypography.bodySmall.copyWith(
+          color: comparison.color,
+          fontWeight: FontWeight.w600,
+        ),
+      );
+    }
+    return Text.rich(
+      TextSpan(
+        children: [
+          TextSpan(
+            text: '약 ',
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: comparison.color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          TextSpan(
+            text: emphasis,
+            style: WeRoboTypography.number.copyWith(color: comparison.color),
+          ),
+          TextSpan(
+            text: ' ${comparison.suffix}',
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: comparison.color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+      textAlign: TextAlign.center,
+      softWrap: true,
     );
   }
 }
