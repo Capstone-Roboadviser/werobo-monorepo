@@ -14,6 +14,7 @@ import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
 import '../../models/rebalance_insight.dart';
+import 'activity_hub_page.dart';
 import 'digest_screen.dart';
 import 'insight_detail_page.dart';
 import 'portfolio_allocation_detail_page.dart';
@@ -3747,7 +3748,37 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                   ),
                   Divider(height: 1, thickness: 1, color: tc.card),
                   ...body,
-                  const SizedBox(height: 8),
+                  Divider(height: 1, thickness: 1, color: tc.card),
+                  Pressable(
+                    onTap: () => Navigator.of(context).push(
+                      WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 14,
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '지난 알림 모두 보기',
+                              style: WeRoboTypography.bodySmall.copyWith(
+                                color: tc.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            Icons.chevron_right_rounded,
+                            size: 20,
+                            color: tc.textTertiary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
                 ],
               ),
             ),
@@ -3772,13 +3803,14 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     PortfolioState state,
     BuildContext context,
   ) sync* {
+    // "오늘의 알림" is by definition today's signals only. Older insights
+    // are reachable via the "지난 알림 모두 보기" row at the bottom of the
+    // sheet, which pushes the full ActivityHubPage history.
     final now = DateTime.now();
+    final cutoff = now.subtract(const Duration(hours: 24));
     for (final insight in state.insights) {
-      // Hide read insights older than 30 days — they're stale signals.
       final created = DateTime.tryParse(insight.createdAt);
-      final ageDays =
-          created == null ? 0 : now.difference(created).inDays;
-      if (insight.isRead && ageDays > 30) continue;
+      if (created == null || created.isBefore(cutoff)) continue;
 
       final dateLabel = _formatKoreanDate(insight.rebalanceDate);
       final triggerSentence = _triggerSentence(insight.trigger);
