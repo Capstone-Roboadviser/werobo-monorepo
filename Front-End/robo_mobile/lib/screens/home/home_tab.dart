@@ -3593,7 +3593,10 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
         kind: _NotificationKind.monthlySummary,
         category: _categoryLabel(_NotificationKind.monthlySummary),
         title: '지난 30일 포트폴리오 $sign$pct%',
-        onTap: () => Navigator.of(context).pop(),
+        onTap: () => _navigateToComingSoon(
+          context,
+          _categoryLabel(_NotificationKind.monthlySummary),
+        ),
       ));
     }
 
@@ -3607,7 +3610,10 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
         kind: _NotificationKind.contribution,
         category: _categoryLabel(_NotificationKind.contribution),
         title: '이번 달 ${contributor.label}이 수익의 $pct%를 기여했어요',
-        onTap: () => Navigator.of(context).pop(),
+        onTap: () => _navigateToComingSoon(
+          context,
+          _categoryLabel(_NotificationKind.contribution),
+        ),
       ));
     }
 
@@ -3622,7 +3628,10 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
         kind: _NotificationKind.volatilityAlert,
         category: _categoryLabel(_NotificationKind.volatilityAlert),
         title: '포트폴리오 변동성 +$pct% 주의 구간이에요',
-        onTap: () => Navigator.of(context).pop(),
+        onTap: () => _navigateToComingSoon(
+          context,
+          _categoryLabel(_NotificationKind.volatilityAlert),
+        ),
       ));
     }
 
@@ -3742,6 +3751,14 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  void _navigateToComingSoon(BuildContext context, String title) {
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    navigator.push(
+      WeRoboMotion.fadeRoute<void>(_ComingSoonPage(title: title)),
+    );
+  }
+
   Iterable<_NotificationRow> _buildAlgorithmSignalRows(
     PortfolioState state,
     BuildContext context,
@@ -3840,18 +3857,63 @@ String _iconAsset(_NotificationKind kind) {
   }
 }
 
-Color _iconTint(_NotificationKind kind) {
-  switch (kind) {
-    case _NotificationKind.monthlySummary:
-      return const Color(0xFF3B82F6);
-    case _NotificationKind.contribution:
-      return const Color(0xFF10B981);
-    case _NotificationKind.algorithmSignal:
-      return const Color(0xFF8B5CF6);
-    case _NotificationKind.volatilityAlert:
-      return const Color(0xFFF59E0B);
-    case _NotificationKind.assetNews:
-      return const Color(0xFF1E3A8A);
+class _ComingSoonPage extends StatelessWidget {
+  final String title;
+  const _ComingSoonPage({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Scaffold(
+      backgroundColor: tc.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              child: Row(
+                children: [
+                  Pressable(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: tc.card,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_rounded,
+                        size: 20,
+                        color: tc.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    title,
+                    style: WeRoboTypography.heading2.themed(context),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: Text(
+                  '준비중입니다',
+                  style: WeRoboTypography.body.copyWith(
+                    color: tc.textTertiary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -3871,21 +3933,15 @@ class _NotificationRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final tint = _iconTint(kind);
     return Pressable(
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         child: Row(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: tint.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
-              ),
-              padding: const EdgeInsets.all(8),
+            SizedBox(
+              width: 32,
+              height: 32,
               child: Image.asset(_iconAsset(kind), fit: BoxFit.contain),
             ),
             const SizedBox(width: 14),
