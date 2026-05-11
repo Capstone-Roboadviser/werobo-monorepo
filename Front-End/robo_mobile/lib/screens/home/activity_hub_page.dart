@@ -6,8 +6,6 @@ import '../../app/theme.dart';
 import 'insight_detail_page.dart';
 
 /// Categories that can be filtered on the notification history page.
-/// Mirrors the dropdown sheet's `_NotificationKind` (kept separate so the
-/// history page can be edited without touching the sheet).
 enum NotificationKind {
   monthlySummary,
   contribution,
@@ -46,12 +44,49 @@ String _notificationIcon(NotificationKind kind) {
   }
 }
 
-String? _formatKoreanDate(String iso) {
+Color _notificationTint(NotificationKind kind) {
+  switch (kind) {
+    case NotificationKind.monthlySummary:
+      return const Color(0xFF3B82F6);
+    case NotificationKind.contribution:
+      return const Color(0xFF10B981);
+    case NotificationKind.algorithmSignal:
+      return const Color(0xFF8B5CF6);
+    case NotificationKind.volatilityAlert:
+      return const Color(0xFFF59E0B);
+    case NotificationKind.assetNews:
+      return const Color(0xFF1E3A8A);
+  }
+}
+
+DateTime? _parseIsoDate(String iso) {
   if (iso.length < 10) return null;
+  final year = int.tryParse(iso.substring(0, 4));
   final month = int.tryParse(iso.substring(5, 7));
   final day = int.tryParse(iso.substring(8, 10));
-  if (month == null || day == null) return null;
-  return '$month월 $day일';
+  if (year == null || month == null || day == null) return null;
+  return DateTime(year, month, day);
+}
+
+/// Friendly relative timestamp matching the Toss style.
+String _relativeTimestamp(DateTime when) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final whenDate = DateTime(when.year, when.month, when.day);
+  final diffDays = today.difference(whenDate).inDays;
+
+  if (diffDays == 0) {
+    // Same calendar day — show "N시간 전" when the timestamp is itself
+    // recent, otherwise just "오늘".
+    final diff = now.difference(when);
+    if (diff.inMinutes < 1) return '방금';
+    if (diff.inHours < 1) return '${diff.inMinutes}분 전';
+    if (diff.inHours < 24) return '${diff.inHours}시간 전';
+    return '오늘';
+  }
+  if (diffDays == 1) return '어제';
+  if (diffDays < 7) return '$diffDays일 전';
+  return '${when.month}월 ${when.day}일';
 }
 
 String _triggerSentence(String? trigger) {
@@ -72,11 +107,13 @@ String _triggerSentence(String? trigger) {
 class _NotificationItem {
   final NotificationKind kind;
   final String title;
-  final VoidCallback? onTap;
+  final DateTime timestamp;
+  final VoidCallback onTap;
   const _NotificationItem({
     required this.kind,
     required this.title,
-    this.onTap,
+    required this.timestamp,
+    required this.onTap,
   });
 }
 
@@ -102,7 +139,7 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: back arrow on left, 알림 설정 link on right.
+            // Header: back chevron + 알림 설정 link.
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16,
@@ -145,8 +182,7 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
                 ],
               ),
             ),
-            // Filter label — big, left-aligned, with a chevron. Tapping
-            // opens a popup menu anchored beneath it.
+            // Big filter label with chevron.
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
               child: _FilterLabel(
@@ -177,8 +213,15 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
   ) {
     final filter = _filter;
     final items = <_NotificationItem>[];
+    final now = DateTime.now();
 
     bool show(NotificationKind k) => filter == null || filter == k;
+
+    void comingSoon(NotificationKind k) => Navigator.of(context).push(
+          WeRoboMotion.fadeRoute<void>(
+            _ComingSoonPage(title: _notificationLabel(k)),
+          ),
+        );
 
     if (show(NotificationKind.monthlySummary)) {
       final monthly = state.trailingMonthReturn;
@@ -188,6 +231,8 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
         items.add(_NotificationItem(
           kind: NotificationKind.monthlySummary,
           title: '지난 30일 포트폴리오 $sign$pct%',
+          timestamp: now,
+          onTap: () => comingSoon(NotificationKind.monthlySummary),
         ));
       }
     }
@@ -199,20 +244,19 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
         items.add(_NotificationItem(
           kind: NotificationKind.contribution,
           title: '이번 달 ${c.label}이 수익의 $pct%를 기여했어요',
+          timestamp: now,
+          onTap: () => comingSoon(NotificationKind.contribution),
         ));
       }
     }
 
     if (show(NotificationKind.algorithmSignal)) {
       for (final insight in state.insights) {
-        final dateLabel = _formatKoreanDate(insight.rebalanceDate);
-        final sentence = _triggerSentence(insight.trigger);
-        final title = dateLabel == null
-            ? sentence
-            : '$dateLabel $sentence';
+        final rebalDate = _parseIsoDate(insight.rebalanceDate) ?? now;
         items.add(_NotificationItem(
           kind: NotificationKind.algorithmSignal,
-          title: title,
+          title: _triggerSentence(insight.trigger),
+          timestamp: rebalDate,
           onTap: () => Navigator.of(context).push(
             WeRoboMotion.fadeRoute<void>(
               InsightDetailPage(insight: insight),
@@ -229,12 +273,13 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
         items.add(_NotificationItem(
           kind: NotificationKind.volatilityAlert,
           title: '포트폴리오 변동성 +$pct% 주의 구간이에요',
+          timestamp: now,
+          onTap: () => comingSoon(NotificationKind.volatilityAlert),
         ));
       }
     }
 
-    // Asset news isn't persisted in state — only fetched by the dropdown
-    // on open — so this page leaves the category empty.
+    // Asset news isn't persisted in state — only fetched by the dropdown.
     return items;
   }
 }
@@ -244,10 +289,15 @@ class _FilterLabel extends StatelessWidget {
   final ValueChanged<NotificationKind?> onPick;
   const _FilterLabel({required this.selected, required this.onPick});
 
+  // PopupMenuButton.onSelected does NOT fire when the value is null — Flutter
+  // intentionally skips the callback in that case. Use String sentinels
+  // ('all' for 전체, enum names for specific kinds) so every choice fires.
+  static const _allValue = '__all__';
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    return PopupMenuButton<NotificationKind?>(
+    return PopupMenuButton<String>(
       tooltip: '알림 종류 선택',
       offset: const Offset(0, 36),
       color: tc.surface,
@@ -255,11 +305,17 @@ class _FilterLabel extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
       ),
-      onSelected: onPick,
-      itemBuilder: (ctx) => <PopupMenuEntry<NotificationKind?>>[
-        _menuItem(ctx, value: null, label: '전체'),
+      onSelected: (value) {
+        if (value == _allValue) {
+          onPick(null);
+        } else {
+          onPick(NotificationKind.values.firstWhere((k) => k.name == value));
+        }
+      },
+      itemBuilder: (ctx) => <PopupMenuEntry<String>>[
+        _menuItem(ctx, value: _allValue, kind: null, label: '전체'),
         ...NotificationKind.values.map(
-          (k) => _menuItem(ctx, value: k, label: _notificationLabel(k)),
+          (k) => _menuItem(ctx, value: k.name, kind: k, label: _notificationLabel(k)),
         ),
       ],
       child: Row(
@@ -283,24 +339,26 @@ class _FilterLabel extends StatelessWidget {
     );
   }
 
-  PopupMenuEntry<NotificationKind?> _menuItem(
+  PopupMenuEntry<String> _menuItem(
     BuildContext ctx, {
-    required NotificationKind? value,
+    required String value,
+    required NotificationKind? kind,
     required String label,
   }) {
     final tc = WeRoboThemeColors.of(ctx);
-    return PopupMenuItem<NotificationKind?>(
+    final isSelected = kind == selected;
+    return PopupMenuItem<String>(
       value: value,
       height: 44,
       child: Row(
         children: [
-          _filterIcon(value, size: 20),
+          _filterIcon(kind, size: 20),
           const SizedBox(width: 12),
           Text(
             label,
             style: WeRoboTypography.bodySmall.copyWith(
               color: tc.textPrimary,
-              fontWeight: value == selected ? FontWeight.w700 : FontWeight.w500,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
             ),
           ),
         ],
@@ -324,41 +382,76 @@ Widget _filterIcon(NotificationKind? kind, {double size = 20}) {
   );
 }
 
-class _HistoryRow extends StatelessWidget {
-  final _NotificationItem item;
-  const _HistoryRow({required this.item});
+/// Row used on the notification history page and the today dropdown.
+/// Toss-style: rounded-square tinted icon container on the left,
+/// category caption + title in the middle, timestamp on the right.
+class NotificationListRow extends StatelessWidget {
+  final NotificationKind kind;
+  final String title;
+  final DateTime? timestamp;
+  final VoidCallback? onTap;
+
+  const NotificationListRow({
+    super.key,
+    required this.kind,
+    required this.title,
+    this.timestamp,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final tint = _notificationTint(kind);
     return Pressable(
-      onTap: item.onTap,
+      onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
+            Container(
               width: 36,
               height: 36,
-              child: Image.asset(_notificationIcon(item.kind), fit: BoxFit.contain),
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.all(7),
+              child: Image.asset(_notificationIcon(kind), fit: BoxFit.contain),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    _notificationLabel(item.kind),
-                    style: WeRoboTypography.bodySmall.copyWith(
-                      color: tc.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _notificationLabel(kind),
+                          style: WeRoboTypography.bodySmall.copyWith(
+                            color: tc.textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (timestamp != null) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          _relativeTimestamp(timestamp!),
+                          style: WeRoboTypography.caption.copyWith(
+                            color: tc.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    item.title,
+                    title,
                     style: WeRoboTypography.bodySmall.copyWith(
                       color: tc.textSecondary,
                     ),
@@ -371,6 +464,21 @@ class _HistoryRow extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HistoryRow extends StatelessWidget {
+  final _NotificationItem item;
+  const _HistoryRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    return NotificationListRow(
+      kind: item.kind,
+      title: item.title,
+      timestamp: item.timestamp,
+      onTap: item.onTap,
     );
   }
 }
@@ -403,6 +511,62 @@ class _EmptyState extends StatelessWidget {
             textAlign: TextAlign.center,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _ComingSoonPage extends StatelessWidget {
+  final String title;
+  const _ComingSoonPage({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Scaffold(
+      backgroundColor: tc.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              child: Row(
+                children: [
+                  Pressable(
+                    onTap: () => Navigator.pop(context),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 20,
+                        color: tc.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    title,
+                    style: WeRoboTypography.heading2.themed(context),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: Text(
+                  '준비중입니다',
+                  style: WeRoboTypography.body.copyWith(
+                    color: tc.textTertiary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

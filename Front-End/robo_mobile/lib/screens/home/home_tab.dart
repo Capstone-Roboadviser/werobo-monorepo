@@ -3672,7 +3672,10 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
           ]
         : <Widget>[
             // Cap height at 60% of the screen so a long insight history
-            // doesn't push the sheet off the bottom of the device.
+            // doesn't push the sheet off the bottom of the device. The
+            // "지난 알림 모두 보기" link is appended as the final list item
+            // so it scrolls with the content rather than sticking at the
+            // bottom of the sheet.
             ConstrainedBox(
               constraints: BoxConstraints(
                 maxHeight: MediaQuery.of(context).size.height * 0.6,
@@ -3680,15 +3683,16 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
               child: ListView.separated(
                 shrinkWrap: true,
                 padding: const EdgeInsets.symmetric(vertical: 4),
-                itemCount: rows.length,
-                separatorBuilder: (_, __) => Divider(
-                  height: 1,
-                  thickness: 1,
-                  color: tc.card,
-                  indent: 20,
-                  endIndent: 20,
-                ),
-                itemBuilder: (_, i) => rows[i],
+                itemCount: rows.length + 1,
+                separatorBuilder: (_, __) => const SizedBox(height: 4),
+                itemBuilder: (_, i) {
+                  if (i < rows.length) return rows[i];
+                  return _SeeAllRow(
+                    onTap: () => Navigator.of(context).push(
+                      WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
+                    ),
+                  );
+                },
               ),
             ),
           ];
@@ -3748,37 +3752,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                   ),
                   Divider(height: 1, thickness: 1, color: tc.card),
                   ...body,
-                  Divider(height: 1, thickness: 1, color: tc.card),
-                  Pressable(
-                    onTap: () => Navigator.of(context).push(
-                      WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 14,
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '지난 알림 모두 보기',
-                              style: WeRoboTypography.bodySmall.copyWith(
-                                color: tc.textSecondary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                          Icon(
-                            Icons.chevron_right_rounded,
-                            size: 20,
-                            color: tc.textTertiary,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
@@ -3982,18 +3956,25 @@ class _NotificationRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final tint = _iconTint(kind);
     return Pressable(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
-              width: 32,
-              height: 32,
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.all(7),
               child: Image.asset(_iconAsset(kind), fit: BoxFit.contain),
             ),
-            const SizedBox(width: 14),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -4001,21 +3982,65 @@ class _NotificationRow extends StatelessWidget {
                 children: [
                   Text(
                     category,
-                    style: WeRoboTypography.caption.copyWith(
-                      color: tc.textTertiary,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     title,
                     style: WeRoboTypography.bodySmall.copyWith(
-                      color: tc.textPrimary,
-                      fontWeight: FontWeight.w600,
+                      color: tc.textSecondary,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Color _iconTint(_NotificationKind kind) {
+  switch (kind) {
+    case _NotificationKind.monthlySummary:
+      return const Color(0xFF3B82F6);
+    case _NotificationKind.contribution:
+      return const Color(0xFF10B981);
+    case _NotificationKind.algorithmSignal:
+      return const Color(0xFF8B5CF6);
+    case _NotificationKind.volatilityAlert:
+      return const Color(0xFFF59E0B);
+    case _NotificationKind.assetNews:
+      return const Color(0xFF1E3A8A);
+  }
+}
+
+class _SeeAllRow extends StatelessWidget {
+  final VoidCallback onTap;
+  const _SeeAllRow({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '지난 알림 모두 보기',
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             Icon(
