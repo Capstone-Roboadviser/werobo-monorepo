@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'comparison_backtest_chart_mapper.dart';
 import 'debug_page_logger.dart';
-import 'theme.dart' show AssetClass;
+import 'theme.dart' show AssetClass, AssetClassLabel;
 import '../models/chart_data.dart';
 import '../models/mobile_backend_models.dart';
 import '../models/portfolio_data.dart';
@@ -81,6 +81,23 @@ class ContributionEntry {
   });
 }
 
+/// Portfolio volatility spike value object. Populated by
+/// [PortfolioState.portfolioVolatilitySpike] when the most-recent rolling
+/// volatility exceeds 1.5x the trailing-30-day average.
+class VolatilitySpike {
+  final double currentVolatility;
+  final double averageVolatility;
+
+  /// (current / avg) - 1, e.g. 1.0 = 100% above average.
+  final double percentAboveAverage;
+
+  const VolatilitySpike({
+    required this.currentVolatility,
+    required this.averageVolatility,
+    required this.percentAboveAverage,
+  });
+}
+
 /// App-level state holder for auth, onboarding bootstrap state, and portfolio data.
 class PortfolioState extends ChangeNotifier {
   static const String _authSessionStorageKey = 'werobo.auth_session';
@@ -95,6 +112,7 @@ class PortfolioState extends ChangeNotifier {
   MobileRecommendationResponse? _recommendation;
   MobileComparisonBacktestResponse? _backtest;
   MobileEarningsHistoryResponse? _earningsHistory;
+  MobileVolatilityHistoryResponse? _portfolioVolatility;
   MobileFrontierPreviewResponse? _frontierPreview;
   MobileFrontierSelectionResponse? _frontierSelection;
   // Captured at 투자 확정 from the post-frontier review screen so the home
@@ -141,6 +159,145 @@ class PortfolioState extends ChangeNotifier {
   bool get isWeeklyDigestAvailable => _weeklyDigest?.available == true;
   AlertFrequency get alertFrequency => _alertFrequency;
   bool get hasUnreadEmergencyAlert => _hasUnreadEmergencyAlert;
+
+  // ─── Notification-row derived getters ─────────────────────────────────────
+
+  /// Trailing-30-day portfolio return as a fraction (e.g. 0.042 = +4.2%).
+  /// Returns null when fewer than 20 daily points exist in the window.
+  double? get trailingMonthReturn {
+    final history = accountHistory;
+    if (history.length < 20) return null;
+    final now = DateTime.now();
+    final cutoff = now.subtract(const Duration(days: 30));
+    final window = history.where((p) => !p.date.isBefore(cutoff)).toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    if (window.length < 20) return null;
+    final start = window.first.portfolioValue;
+    final end = window.last.portfolioValue;
+    if (start <= 0) return null;
+    return (end / start) - 1.0;
+  }
+
+  /// Top contributor by |weight * cumulative return| over the last 30 days.
+  /// Returns null when earnings history is unavailable or no asset clears the
+  /// 0.5% absolute-contribution threshold.
+  ContributionEntry? get topContributorOver30d {
+    final history = _earningsHistory;
+    final portfolio = selectedPortfolio;
+    if (history == null || portfolio == null) return null;
+    if (history.points.length < 2) return null;
+
+    final weights = <AssetClass, double>{};
+    for (final alloc in portfolio.sectorAllocations) {
+      final cls = _assetCodeToAssetClass(alloc.assetCode);
+      if (cls == null) continue;
+      weights[cls] = (weights[cls] ?? 0.0) + alloc.weight;
+    }
+    if (weights.isEmpty) return null;
+
+    final start = history.points.first;
+    final end = history.points.last;
+    final cutoff = end.date.subtract(const Duration(days: 30));
+    final startWindow = history.points.lastWhere(
+      (p) => !p.date.isAfter(cutoff),
+      orElse: () => start,
+    );
+
+    ContributionEntry? best;
+    weights.forEach((cls, weight) {
+      final code = cls.koLabel; // earnings keys are Korean labels in fixtures
+      final endValue = end.assetEarnings[code];
+      final startValue = startWindow.assetEarnings[code];
+      if (endValue == null || startValue == null || startValue == 0) return;
+      final assetReturn = (endValue / startValue) - 1.0;
+      final impact = weight * assetReturn;
+      if (impact.abs() < 0.005) return; // 0.5% threshold
+      final entry = ContributionEntry(
+        cls: cls,
+        label: cls.koLabel,
+        weight: weight,
+        assetReturn: assetReturn,
+        krwImpact: impact,
+      );
+      if (best == null || impact.abs() > best!.krwImpact.abs()) {
+        best = entry;
+      }
+    });
+    return best;
+  }
+
+  /// Portfolio volatility spike: most-recent point >= 1.5x trailing-30d avg.
+  /// Returns null when no spike, no data, or insufficient history.
+  VolatilitySpike? get portfolioVolatilitySpike {
+    final vol = _portfolioVolatility;
+    if (vol == null || vol.points.length < 21) return null;
+    final sorted = [...vol.points]..sort((a, b) => a.date.compareTo(b.date));
+    final current = sorted.last.volatility;
+    final cutoff =
+        sorted.last.date.subtract(const Duration(days: 30));
+    final window = sorted
+        .where(
+          (p) =>
+              !p.date.isBefore(cutoff) &&
+              p.date.isBefore(sorted.last.date),
+        )
+        .toList();
+    if (window.length < 20) return null;
+    final avg =
+        window.map((p) => p.volatility).reduce((a, b) => a + b) /
+            window.length;
+    if (avg <= 0) return null;
+    final ratio = current / avg;
+    if (ratio < 1.5) return null;
+    return VolatilitySpike(
+      currentVolatility: current,
+      averageVolatility: avg,
+      percentAboveAverage: ratio - 1.0,
+    );
+  }
+
+  /// Public setter used by the notification dropdown's on-open volatility
+  /// fetch (Task 8).
+  void setPortfolioVolatilityHistory(
+    MobileVolatilityHistoryResponse? value,
+  ) {
+    _portfolioVolatility = value;
+    notifyListeners();
+  }
+
+  // ─── Notification-row internal helpers ────────────────────────────────────
+
+  AssetClass? _assetCodeToAssetClass(String assetCode) {
+    switch (assetCode) {
+      case 'cash':
+      case 'cash_equivalent':
+      case 'cash_equivalents':
+        return AssetClass.cash;
+      case 'short_term_bond':
+      case 'bond':
+      case 'treasury':
+        return AssetClass.shortBond;
+      case 'infra':
+      case 'infra_bond':
+      case 'infrastructure':
+      case 'infrastructure_bond':
+        return AssetClass.infraBond;
+      case 'gold':
+      case 'commodity_gold':
+        return AssetClass.gold;
+      case 'us_value':
+      case 'value_stock':
+        return AssetClass.usValue;
+      case 'us_growth':
+      case 'growth_stock':
+        return AssetClass.usGrowth;
+      case 'new_growth':
+      case 'innovation':
+        return AssetClass.newGrowth;
+      default:
+        return null;
+    }
+  }
 
   bool get isLoggedIn => _authSession != null;
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
@@ -762,6 +919,26 @@ class PortfolioState extends ChangeNotifier {
       _portfolioBootstrapStorageKey,
       jsonEncode(payload),
     );
+  }
+
+  // ─── Test-only setters ────────────────────────────────────────────────────
+
+  @visibleForTesting
+  void debugSetAccountDashboard(MobileAccountDashboard dashboard) {
+    _accountDashboard = dashboard;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void debugSetVolatilityHistory(MobileVolatilityHistoryResponse value) {
+    _portfolioVolatility = value;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void debugSetInsights(List<RebalanceInsight> insights) {
+    _insights = insights;
+    notifyListeners();
   }
 }
 
