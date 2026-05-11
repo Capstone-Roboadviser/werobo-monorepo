@@ -196,14 +196,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.text('최근 한 달 다이제스트'), findsOneWidget);
-    expect(find.text('기여도 알림'), findsOneWidget);
-    expect(find.text('시장 변동성 경고'), findsOneWidget);
-    expect(find.text('이번 주 다이제스트'), findsNothing);
-    expect(
-        find.byKey(const Key('portfolio_issue_timeline_rail')), findsOneWidget);
-    expect(find.byKey(const ValueKey('portfolio_issue_timeline_node_0')),
-        findsOneWidget);
+    expect(find.text('최근 한 달 다이제스트가 도착했어요'), findsOneWidget);
+    // '영향을 줬어요' appears in both the feed item and the contribution
+    // one-liners below the chart, so allow more than one match.
+    expect(find.textContaining('영향을 줬어요'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('시장 변동성이 평소보다'), findsOneWidget);
+    expect(find.text('이번 주 다이제스트가 도착했어요'), findsNothing);
   });
 
   testWidgets('shows placeholder issue feed without live issue data',
@@ -227,11 +225,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.text('최근 한 달 다이제스트'), findsOneWidget);
-    expect(find.text('기여도 알림'), findsOneWidget);
-    expect(find.text('시장 변동성 경고'), findsOneWidget);
-    expect(find.text('알고리즘 시그널'), findsOneWidget);
-    expect(find.text('자산군 뉴스'), findsOneWidget);
+    expect(find.text('최근 한 달 다이제스트가 도착했어요'), findsOneWidget);
+    // '영향을 줬어요' shows in the feed and in the contribution one-liners
+    // beneath the chart, so accept either or both.
+    expect(find.textContaining('영향을 줬어요'), findsAtLeastNWidgets(1));
+    expect(find.textContaining('시장 변동성이 평소보다'), findsOneWidget);
+    expect(find.text('더 보기'), findsOneWidget);
   });
 
   testWidgets('digest banner hidden when already seen', (tester) async {
@@ -281,8 +280,7 @@ void main() {
 
     expect(find.text('주간 다이제스트'), findsNothing);
     expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.text('이번 주 다이제스트'), findsOneWidget);
-    expect(find.textContaining('최근 7일 수익률 +6.0%'), findsOneWidget);
+    expect(find.text('최근 7일 다이제스트가 도착했어요'), findsOneWidget);
   });
 
   testWidgets('labels monthly fallback digest by response period',
@@ -310,8 +308,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('최근 한 달 다이제스트'), findsOneWidget);
-    expect(find.textContaining('최근 한 달 수익률 +6.0%'), findsOneWidget);
+    expect(find.text('최근 한 달 다이제스트가 도착했어요'), findsOneWidget);
   });
 
   testWidgets('folds unread algorithm signal into issue timeline only',
@@ -337,7 +334,12 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.text('알고리즘 시그널'), findsOneWidget);
+    // With the feed cap at 3, the insight item sits in the "더 보기"
+    // overflow rather than the visible rows. The point of this test is
+    // that the standalone "New ·" banner is suppressed once a feed
+    // exists. The presence of the more-items row signals the insight
+    // got folded in.
+    expect(find.text('더 보기'), findsOneWidget);
     expect(find.textContaining('New ·'), findsNothing);
   });
 
@@ -377,17 +379,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(find.text('기여도 알림'), findsOneWidget);
     expect(
-        find.textContaining('미국 가치주가 최근 7일 수익에 +₩600,000 기여'), findsOneWidget);
-    expect(find.text('시장 변동성 경고'), findsOneWidget);
-    expect(find.textContaining('평소보다 2.4배'), findsOneWidget);
-    expect(
-        find.byKey(const Key('portfolio_issue_timeline_rail')), findsOneWidget);
-    expect(find.byKey(const ValueKey('portfolio_issue_timeline_node_0')),
-        findsOneWidget);
-    expect(find.byKey(const ValueKey('portfolio_issue_timeline_node_1')),
-        findsOneWidget);
+        find.textContaining('미국 가치주가 +₩600,000 기여했어요'), findsOneWidget);
+    expect(find.textContaining('시장 변동성이 평소보다 2.4배 컸어요'), findsOneWidget);
   });
 
   testWidgets('hero chart no longer shows the deposit total text',

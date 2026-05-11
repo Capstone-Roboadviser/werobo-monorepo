@@ -21,6 +21,11 @@ import 'widgets/glowing_border.dart';
 import 'projection_screen.dart';
 import 'widgets/insight_transition_chart.dart';
 
+// Korean convention (per Eugene): red for gain, blue for loss. This is the
+// opposite of the Korean stock sign convention but matches the meeting spec.
+const Color _gainColor = Color(0xFFE5455F);
+const Color _lossColor = Color(0xFF3182F6);
+
 Map<String, double> earningsHistoryWeightsFor(
   MobilePortfolioRecommendation portfolio,
 ) {
@@ -226,7 +231,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             // Hero: value + chart + time range
             _stagger(
               !state.welcomeBannerSeen ? ++staggerIdx : staggerIdx,
-              _PortfolioHeroChart(type: type),
+              _PortfolioHeroChart(type: type, digest: issueDigest),
             ),
             if (hasIssueFeed) const SizedBox(height: 16),
             if (hasIssueFeed)
@@ -423,7 +428,12 @@ class _HomeIssueFeedDataSource {
 
 class _PortfolioHeroChart extends StatefulWidget {
   final InvestmentType type;
-  const _PortfolioHeroChart({required this.type});
+  final MobileDigestResponse? digest;
+
+  const _PortfolioHeroChart({
+    required this.type,
+    this.digest,
+  });
 
   @override
   State<_PortfolioHeroChart> createState() => _PortfolioHeroChartState();
@@ -446,6 +456,17 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   Timer? _drawDelayTimer;
   int _range = 4; // 전체
   int? _touchIndex;
+  // Long-press anchor for two-point compare. When set, the chart shows a
+  // dashed vertical line at this index and the drag card switches to
+  // anchor-vs-touch compare mode.
+  int? _anchorIndex;
+  // Cache of cumulative asset returns since the start of the visible
+  // range, keyed by date. Rebuilt when the range changes or the earnings
+  // history reference changes.
+  int? _cumulativeCacheRange;
+  Object? _cumulativeCacheHistoryRef;
+  DateTime? _cumulativeCacheStartDate;
+  List<MapEntry<DateTime, Map<String, double>>>? _cumulativeCache;
 
   List<ChartPoint> get _allValue {
     final accountHistory = PortfolioStateProvider.of(context).accountHistory;
@@ -631,6 +652,74 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     ];
   }
 
+  /// Cumulative per-asset returns from the start of the visible range up
+  /// to [valuePts]\[ti], computed by compounding the day-over-day values
+  /// from the earnings history. Cached per range and per history snapshot
+  /// so the cost is paid once per visible range, not per drag frame.
+  Map<String, double> _cumulativeAssetReturnsLocal(
+    List<ChartPoint> valuePts,
+    int ti,
+  ) {
+    if (valuePts.isEmpty || ti < 1 || ti >= valuePts.length) {
+      return const {};
+    }
+    final state = PortfolioStateProvider.of(context);
+    final history = state.earningsHistory;
+    if (history == null || history.points.length < 2) return const {};
+    final startDate = valuePts.first.date;
+    final needsRebuild = _cumulativeCache == null ||
+        _cumulativeCacheRange != _range ||
+        !identical(_cumulativeCacheHistoryRef, history) ||
+        _cumulativeCacheStartDate != startDate;
+    if (needsRebuild) {
+      _cumulativeCacheRange = _range;
+      _cumulativeCacheHistoryRef = history;
+      _cumulativeCacheStartDate = startDate;
+      _cumulativeCache = _buildCumulativeCache(history.points, startDate);
+    }
+    final cache = _cumulativeCache!;
+    if (cache.isEmpty) return const {};
+    final targetDate = valuePts[ti].date;
+    // Find the last cache entry with date <= targetDate. Binary search
+    // would be tidier; the cache is small (one entry per trading day in
+    // the visible range) so a linear scan is fine.
+    Map<String, double>? best;
+    for (final entry in cache) {
+      if (entry.key.isAfter(targetDate)) break;
+      best = entry.value;
+    }
+    return best ?? const {};
+  }
+
+  List<MapEntry<DateTime, Map<String, double>>> _buildCumulativeCache(
+    List<MobileEarningsPoint> points,
+    DateTime startDate,
+  ) {
+    // Locate the first earnings-history point at or after the visible
+    // range's start date.
+    var startIdx = points.indexWhere((p) => !p.date.isBefore(startDate));
+    if (startIdx < 0) return const [];
+    // Use that point's values as the baseline. Each subsequent point's
+    // cumulative return is the compound product of day-over-day returns
+    // from the prior point, which equals (current - base) / base when
+    // base is the starting value. Direct subtraction is cheaper and is
+    // mathematically equivalent.
+    final baseValues = points[startIdx].assetEarnings;
+    final result = <MapEntry<DateTime, Map<String, double>>>[];
+    result.add(MapEntry(points[startIdx].date, const {}));
+    for (var i = startIdx + 1; i < points.length; i++) {
+      final current = points[i].assetEarnings;
+      final cumulative = <String, double>{};
+      current.forEach((code, value) {
+        final baseValue = baseValues[code];
+        if (baseValue == null || baseValue == 0) return;
+        cumulative[code] = (value - baseValue) / baseValue;
+      });
+      result.add(MapEntry(points[i].date, cumulative));
+    }
+    return result;
+  }
+
   /// 연 기대수익률 — 2-point dashed line from the start of the visible
   /// range (0%) to `expectedReturn × elapsedYears`. Returns empty when
   /// `expectedReturn` is null or the visible range is empty.
@@ -664,56 +753,30 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final ti = _touchIndex;
     if (ti == null || ti < 1 || ti >= valuePts.length) return null;
 
-    // Day-over-day portfolio %.
-    final curr = valuePts[ti].value;
-    final prev = valuePts[ti - 1].value;
-    if (prev == 0) return null;
-    final portfolioPct = (curr - prev) / prev;
+    // Cumulative portfolio % since the start of the visible range. Matches
+    // the hero numbers above the chart so the drag card never tells a
+    // different story than the headline.
+    final base = valuePts.first.value;
+    if (base == 0) return null;
+    final portfolioPct = (valuePts[ti].value - base) / base;
 
-    // Day-over-day market %, if benchmark data exists.
-    double? marketPct;
+    // Cumulative market % at the touched date. _marketSeries already
+    // rebases to 0% at the first visible point, so we read directly.
     final state = PortfolioStateProvider.of(context);
-    final marketLine = state.comparisonLines.firstWhere(
-      (l) => l.key == 'benchmark_avg',
-      orElse: () => const ChartLine(
-        key: '',
-        label: '',
-        color: Colors.transparent,
-        points: [],
-      ),
-    );
-    if (marketLine.points.length >= 2) {
+    double? marketPct;
+    final mPts = _marketSeries(valuePts);
+    if (mPts.isNotEmpty) {
       final touchDate = valuePts[ti].date;
-      final mIdx = marketLine.points.indexWhere(
-        (p) =>
-            p.date.year == touchDate.year &&
-            p.date.month == touchDate.month &&
-            p.date.day == touchDate.day,
-      );
-      if (mIdx >= 1) {
-        // comparisonLines values are cumulative returns (e.g. 0.12 = +12%
-        // from backtest start). The day-over-day rate is NOT the raw
-        // subtraction — that would only be correct for small mPrev. The
-        // exact conversion from cumulative-return space to daily-return
-        // space is (mCurr - mPrev) / (1 + mPrev), which equals the asset
-        // value's actual day-over-day percent change.
-        final mCurr = marketLine.points[mIdx].value;
-        final mPrev = marketLine.points[mIdx - 1].value;
-        final denom = 1 + mPrev;
-        if (denom != 0) {
-          marketPct = (mCurr - mPrev) / denom;
-        }
-      }
-      // If the touch date isn't in the market series (typically a non-
-      // trading day — weekend/holiday — where the portfolio value also
-      // didn't change), show 0% rather than dropping the row entirely.
-      // The portfolio row will read +0.00% on the same day, so the two
-      // rows stay consistent.
-      marketPct ??= 0.0;
+      final mIdx = mPts.indexWhere((p) => !p.date.isBefore(touchDate));
+      marketPct = mIdx >= 0 ? mPts[mIdx].value : mPts.last.value;
     }
 
-    // Top 2 asset gainers/losers based on portfolio direction.
-    final assetReturns = state.dayOverDayAssetReturns(valuePts[ti].date);
+    // Cumulative asset returns since the start of the visible range,
+    // computed by compounding day-over-day returns from the earnings
+    // history up to the touched date.
+    // TODO: move to PortfolioState.cumulativeAssetReturnsUpTo for shared
+    // caching across screens.
+    final assetReturns = _cumulativeAssetReturnsLocal(valuePts, ti);
     final names = <String, String>{
       for (final s in (state.selectedPortfolio?.sectorAllocations ??
           const <MobileSectorAllocation>[]))
@@ -723,16 +786,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         .where((e) => names.containsKey(e.key))
         .map((e) => (name: names[e.key]!, pct: e.value))
         .toList();
-    if (portfolioPct >= 0) {
-      entries.sort((a, b) => b.pct.compareTo(a.pct));
-    } else {
-      entries.sort((a, b) => a.pct.compareTo(b.pct));
-    }
-    // When portfolio is exactly 0%, the underlying account history likely
-    // repeated yesterday's snapshot (non-trading day or sparse backend
-    // data). Showing per-asset movement for the same date contradicts the
-    // 0% portfolio number and confuses readers — drop the asset rows so
-    // the card reads consistently as "no movement on this date."
+    // Highest contribution first either way. In up days these are the
+    // top gainers. In down days these are the assets that defended best
+    // (least negative, sometimes positive), surfacing strength rather
+    // than dwelling on the biggest losses.
+    entries.sort((a, b) => b.pct.compareTo(a.pct));
+    // When the portfolio is exactly flat at this point, the underlying
+    // account history likely repeated yesterday's snapshot (non-trading
+    // day or sparse backend data). Showing per-asset movement on the same
+    // day contradicts the 0% portfolio number and confuses readers.
     final assetRows = portfolioPct == 0
         ? const <({String name, double pct})>[]
         : entries.take(2).toList();
@@ -815,6 +877,91 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     );
   }
 
+  ({
+    double x,
+    double y,
+    DateTime anchorDate,
+    DateTime touchDate,
+    ({double anchorPct, double touchPct}) portfolio,
+    List<({String name, double anchorPct, double touchPct})> assetRows,
+  })? _buildCompareCardData(
+    List<ChartPoint> valuePts, {
+    required double fullWidth,
+    required double stackWidth,
+  }) {
+    final ai = _anchorIndex;
+    final ti = _touchIndex;
+    if (ai == null || ti == null || ai == ti) return null;
+    if (ai < 0 || ai >= valuePts.length) return null;
+    if (ti < 0 || ti >= valuePts.length) return null;
+    final base = valuePts.first.value;
+    if (base == 0) return null;
+    final anchorPortfolioPct = (valuePts[ai].value - base) / base;
+    final touchPortfolioPct = (valuePts[ti].value - base) / base;
+
+    final state = PortfolioStateProvider.of(context);
+    final names = <String, String>{
+      for (final s in (state.selectedPortfolio?.sectorAllocations ??
+          const <MobileSectorAllocation>[]))
+        s.assetCode: s.assetName,
+    };
+    final anchorReturns =
+        ai >= 1 ? _cumulativeAssetReturnsLocal(valuePts, ai) : const {};
+    final touchReturns =
+        ti >= 1 ? _cumulativeAssetReturnsLocal(valuePts, ti) : const {};
+
+    final codes = <String>{
+      ...anchorReturns.keys,
+      ...touchReturns.keys,
+    }.where(names.containsKey);
+    final candidates =
+        <({String name, double anchorPct, double touchPct, double delta})>[];
+    for (final code in codes) {
+      final a = anchorReturns[code] ?? 0.0;
+      final t = touchReturns[code] ?? 0.0;
+      candidates.add(
+        (name: names[code]!, anchorPct: a, touchPct: t, delta: t - a),
+      );
+    }
+    candidates.sort((a, b) => b.delta.abs().compareTo(a.delta.abs()));
+    final assetRows = candidates
+        .take(2)
+        .map((c) => (
+              name: c.name,
+              anchorPct: c.anchorPct,
+              touchPct: c.touchPct,
+            ))
+        .toList();
+
+    // Position: center between anchor and touch x positions, clamped.
+    // Sit the compare card near the top of the chart canvas so it stays
+    // clear of the two vertical lines below it.
+    const padX = 8.0;
+    const cardWidth = _CompareCard.width;
+    const cardHeight = _CompareCard.height;
+    const chartTotalH = 320.0;
+    final anchorX = (ai / (valuePts.length - 1)) * fullWidth - 24;
+    final touchX = (ti / (valuePts.length - 1)) * fullWidth - 24;
+    final mid = (anchorX + touchX) / 2;
+    final x = (mid - cardWidth / 2)
+        .clamp(padX, stackWidth - cardWidth - padX)
+        .toDouble();
+    const padY = 8.0;
+    final y = padY.clamp(padY, chartTotalH - cardHeight - padY).toDouble();
+
+    return (
+      x: x,
+      y: y.toDouble(),
+      anchorDate: valuePts[ai].date,
+      touchDate: valuePts[ti].date,
+      portfolio: (
+        anchorPct: anchorPortfolioPct,
+        touchPct: touchPortfolioPct,
+      ),
+      assetRows: assetRows,
+    );
+  }
+
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -828,6 +975,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     setState(() {
       _range = idx;
       _touchIndex = null;
+      _anchorIndex = null;
     });
     _drawCtrl.forward(from: 0);
   }
@@ -861,14 +1009,22 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final displayChangePct = crosshairValue != null && startValue > 0
         ? ((crosshairValue - startValue) / startValue) * 100
         : changePct;
-    final displayIsPositive = displayChange >= 0;
+    final isGain = displayChange >= 0;
+    final pnlColor = isGain ? _gainColor : _lossColor;
+    final sign = isGain ? '+' : '-';
+    final formattedPnl =
+        '$sign₩${_formatCurrency(displayChange.abs().toInt())}';
+    final formattedPct = '$sign${displayChangePct.abs().toStringAsFixed(2)}%';
+    final investedAmount =
+        accountSummary?.investedAmount ?? startValue;
+    final headerCurrentValue = crosshairValue ?? currentValue;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Label
+        // 총손익 label
         Text(
-          '현재 자산',
+          '총손익',
           style: WeRoboTypography.caption.copyWith(
             color: tc.textSecondary,
             fontSize: 13,
@@ -876,34 +1032,41 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         ),
         const SizedBox(height: 6),
 
-        // Value (animated count-up, updates on drag)
-        TweenAnimationBuilder<double>(
-          tween: Tween(begin: 0, end: currentValue),
-          duration: const Duration(milliseconds: 1200),
-          curve: Curves.easeOutCubic,
-          builder: (context, val, _) {
-            final v = crosshairValue ?? val;
-            return Text(
-              '₩${_formatCurrency(v.toInt())}',
+        // Total return (won) + percent, baseline aligned
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              formattedPnl,
               style: TextStyle(
                 fontFamily: WeRoboFonts.english,
                 fontSize: 34,
                 fontWeight: FontWeight.w700,
-                color: tc.textPrimary,
+                color: pnlColor,
                 letterSpacing: -0.5,
                 height: 1.2,
               ),
-            );
-          },
+            ),
+            const SizedBox(width: 8),
+            Text(
+              formattedPct,
+              style: TextStyle(
+                fontFamily: WeRoboFonts.english,
+                fontSize: 22,
+                fontWeight: FontWeight.w600,
+                color: pnlColor,
+                height: 1.2,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
 
-        // Performance badge (always visible, values update on drag)
-        _PerformanceBadge(
-          changePct: displayChangePct,
-          changeAmount: displayChange,
-          isPositive: displayIsPositive,
-          rangeLabel: _rangeLabels[_range],
+        // Invested vs current value row
+        _InvestedVsCurrentRow(
+          invested: investedAmount,
+          current: headerCurrentValue,
         ),
 
         const SizedBox(height: 20),
@@ -920,9 +1083,24 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                         return '${d.year}년 ${d.month}월 ${d.day}일';
                       }()
                     : '';
-            // Compute card data when dragging at a non-zero index
-            final cardData = _touchIndex != null && _touchIndex! >= 1
+            // Compute card data when dragging at a non-zero index.
+            // When an anchor is set and the touch is at a different
+            // index, switch to compare mode so the card shows the gap
+            // between the two points instead of a single snapshot.
+            final isCompareMode = _anchorIndex != null &&
+                _touchIndex != null &&
+                _anchorIndex != _touchIndex;
+            final cardData = !isCompareMode &&
+                    _touchIndex != null &&
+                    _touchIndex! >= 1
                 ? _buildCardData(
+                    valuePts,
+                    fullWidth: fullWidth,
+                    stackWidth: constraints.maxWidth,
+                  )
+                : null;
+            final compareData = isCompareMode
+                ? _buildCompareCardData(
                     valuePts,
                     fullWidth: fullWidth,
                     stackWidth: constraints.maxWidth,
@@ -957,12 +1135,36 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                         onPanEnd: (_) {
                           _glowCtrl.stop();
                           _glowCtrl.value = 0;
-                          setState(() => _touchIndex = null);
+                          // Keep the touch index pinned when an anchor is
+                          // set, so the compare card stays visible after
+                          // the user lifts their finger.
+                          if (_anchorIndex == null) {
+                            setState(() => _touchIndex = null);
+                          }
                         },
                         onPanCancel: () {
                           _glowCtrl.stop();
                           _glowCtrl.value = 0;
-                          setState(() => _touchIndex = null);
+                          if (_anchorIndex == null) {
+                            setState(() => _touchIndex = null);
+                          }
+                        },
+                        onLongPressStart: (d) {
+                          final x = d.localPosition.dx;
+                          final idx = ((x / fullWidth) * (valuePts.length - 1))
+                              .round()
+                              .clamp(0, valuePts.length - 1);
+                          setState(() {
+                            _anchorIndex = idx;
+                            _touchIndex = idx;
+                          });
+                        },
+                        onLongPressMoveUpdate: (d) {
+                          final x = d.localPosition.dx;
+                          final idx = ((x / fullWidth) * (valuePts.length - 1))
+                              .round()
+                              .clamp(0, valuePts.length - 1);
+                          setState(() => _touchIndex = idx);
                         },
                         child: AnimatedBuilder(
                           animation: Listenable.merge([_drawCurve, _glowCtrl]),
@@ -1021,6 +1223,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                 ],
                                 progress: _drawCurve.value,
                                 touchIndex: _touchIndex,
+                                anchorIndex: _anchorIndex,
                                 glowPhase: _glowCtrl.value,
                                 dateLabel: dateLabel,
                                 glowColor: WeRoboColors.assetTier3,
@@ -1041,6 +1244,23 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                         portfolioPct: cardData.portfolioPct,
                         marketPct: cardData.marketPct,
                         assetRows: cardData.assetRows,
+                      ),
+                    ),
+                  if (compareData != null)
+                    Positioned(
+                      left: compareData.x,
+                      top: compareData.y,
+                      child: _CompareCard(
+                        anchorDate: compareData.anchorDate,
+                        touchDate: compareData.touchDate,
+                        portfolio: compareData.portfolio,
+                        assetRows: compareData.assetRows,
+                        onClose: () {
+                          setState(() {
+                            _anchorIndex = null;
+                            _touchIndex = null;
+                          });
+                        },
                       ),
                     ),
                 ],
@@ -1134,7 +1354,120 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
             );
           }),
         ),
+
+        // Top contributor one-liners. Always rendered, even when not
+        // dragging, so the hero answers "which asset moved the needle?"
+        // at a glance.
+        _ContributionOneLiners(digest: widget.digest),
       ],
+    );
+  }
+}
+
+class _ContributionOneLiners extends StatelessWidget {
+  final MobileDigestResponse? digest;
+
+  const _ContributionOneLiners({required this.digest});
+
+  List<DigestDriver> _topTwo() {
+    final d = digest;
+    if (d == null || !d.available) return const [];
+    final items = [...d.drivers, ...d.detractors]
+      ..sort(
+        (a, b) => b.contributionWon.abs().compareTo(a.contributionWon.abs()),
+      );
+    return items.take(2).toList();
+  }
+
+  String _josa(String name) {
+    if (name.isEmpty) return '가';
+    final code = name.codeUnitAt(name.length - 1);
+    if (code >= 0xAC00 && code <= 0xD7A3) {
+      return (code - 0xAC00) % 28 == 0 ? '가' : '이';
+    }
+    return '가';
+  }
+
+  String _line(DigestDriver d, {required bool isPrimary}) {
+    final name = d.nameKo.isNotEmpty ? d.nameKo : d.ticker;
+    final josa = _josa(name);
+    final won = _formatSignedWon(d.contributionWon);
+    if (isPrimary) {
+      return d.contributionWon >= 0
+          ? '$name$josa 이번 기간 수익에 $won 기여했어요.'
+          : '$name$josa 이번 기간 수익에 $won 영향을 줬어요.';
+    }
+    return d.contributionWon >= 0
+        ? '$name$josa $won 기여했어요.'
+        : '$name$josa $won 영향을 줬어요.';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final top = _topTwo();
+    if (top.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: WeRoboSpacing.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _SkeletonBar(
+              widthFactor: 0.6,
+              color: tc.border.withValues(alpha: 0.3),
+            ),
+            const SizedBox(height: 6),
+            _SkeletonBar(
+              widthFactor: 0.5,
+              color: tc.border.withValues(alpha: 0.3),
+            ),
+          ],
+        ),
+      );
+    }
+    final lines = <String>[
+      _line(top[0], isPrimary: true),
+      if (top.length > 1) _line(top[1], isPrimary: false),
+    ];
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: WeRoboSpacing.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var i = 0; i < lines.length; i++) ...[
+            if (i > 0) const SizedBox(height: 4),
+            Text(
+              lines[i],
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textSecondary,
+                height: 1.5,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SkeletonBar extends StatelessWidget {
+  final double widthFactor;
+  final Color color;
+
+  const _SkeletonBar({required this.widthFactor, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return FractionallySizedBox(
+      alignment: Alignment.centerLeft,
+      widthFactor: widthFactor,
+      child: Container(
+        height: 12,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(4),
+        ),
+      ),
     );
   }
 }
@@ -1142,7 +1475,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
 // ─── Portfolio issue feed ──────────────────────────────────────
 
 class _PortfolioIssueFeed extends StatelessWidget {
-  static const _maxItems = 5;
+  static const _maxItems = 3;
 
   final MobileDigestResponse? digest;
   final RebalanceInsight? latestInsight;
@@ -1165,8 +1498,10 @@ class _PortfolioIssueFeed extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = _buildItems();
-    if (items.isEmpty) return const SizedBox.shrink();
+    final allItems = _buildItems();
+    if (allItems.isEmpty) return const SizedBox.shrink();
+    final visibleItems = allItems.take(_maxItems).toList();
+    final hasMore = allItems.length > _maxItems;
 
     final tc = WeRoboThemeColors.of(context);
     return Column(
@@ -1181,15 +1516,31 @@ class _PortfolioIssueFeed extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Container(
-          key: const Key('portfolio_issue_timeline_rail'),
+          decoration: BoxDecoration(
+            color: tc.surface,
+            borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
+            border: Border.all(color: tc.border, width: 1),
+          ),
           child: Column(
             children: [
-              for (int i = 0; i < items.length; i++)
-                _PortfolioIssueRow(
-                  item: items[i],
-                  index: i,
-                  isFirst: i == 0,
-                  isLast: i == items.length - 1,
+              for (int i = 0; i < visibleItems.length; i++) ...[
+                _PortfolioIssueRow(item: visibleItems[i]),
+                if (i < visibleItems.length - 1 || hasMore)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Container(
+                      height: 1,
+                      color: tc.border.withValues(alpha: 0.3),
+                    ),
+                  ),
+              ],
+              if (hasMore)
+                _MoreItemsRow(
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('준비 중')),
+                    );
+                  },
                 ),
             ],
           ),
@@ -1208,6 +1559,14 @@ class _PortfolioIssueFeed extends StatelessWidget {
     if (contribution != null) {
       final isPositive = contribution.contributionWon >= 0;
       final periodLabel = _digestPeriodLabel(digest!);
+      final name = contribution.nameKo.isNotEmpty
+          ? contribution.nameKo
+          : contribution.ticker;
+      final josa = _josaSubject(name);
+      final won = _formatSignedWon(contribution.contributionWon);
+      final title = isPositive
+          ? '$name$josa $won 기여했어요'
+          : '$name$josa $won 영향을 줬어요';
       items.add(
         _PortfolioIssueItem(
           icon: isPositive
@@ -1215,8 +1574,7 @@ class _PortfolioIssueFeed extends StatelessWidget {
               : Icons.trending_down_rounded,
           iconColor: isPositive ? WeRoboColors.accent : WeRoboColors.error,
           eyebrow: periodLabel,
-          title: '기여도 알림',
-          body: _contributionBody(contribution, periodLabel),
+          title: title,
           onTap: onDigestTap,
         ),
       );
@@ -1224,14 +1582,12 @@ class _PortfolioIssueFeed extends StatelessWidget {
 
     if (_hasVolatilitySignal(digest)) {
       final multiple = digest!.triggerSigmaMultiple!;
-      final periodLabel = _digestPeriodLabel(digest!);
       items.add(
         _PortfolioIssueItem(
           icon: Icons.show_chart_rounded,
           iconColor: WeRoboColors.warning,
           eyebrow: '변동성 감지',
-          title: '시장 변동성 경고',
-          body: '$periodLabel 움직임이 평소보다 ${multiple.toStringAsFixed(1)}배 컸어요.',
+          title: '시장 변동성이 평소보다 ${multiple.toStringAsFixed(1)}배 컸어요',
           onTap: onDigestTap,
         ),
       );
@@ -1243,8 +1599,7 @@ class _PortfolioIssueFeed extends StatelessWidget {
           icon: Icons.auto_graph_rounded,
           iconColor: WeRoboColors.primary,
           eyebrow: _issueDateLabel(latestInsight!.rebalanceDate),
-          title: '알고리즘 시그널',
-          body: latestInsight!.historySummary,
+          title: '신규 알고리즘 시그널이 발생했어요',
           onTap: onInsightTap,
         ),
       );
@@ -1257,14 +1612,13 @@ class _PortfolioIssueFeed extends StatelessWidget {
           icon: Icons.article_outlined,
           iconColor: WeRoboColors.assetTier3,
           eyebrow: '최근 뉴스',
-          title: '자산군 뉴스',
-          body: '$sources 기반 주요 뉴스가 다이제스트에 반영됐어요.',
+          title: '$sources 뉴스가 다이제스트에 반영됐어요',
           onTap: onDigestTap,
         ),
       );
     }
 
-    return items.take(_maxItems).toList();
+    return items;
   }
 
   static _PortfolioIssueItem _digestStatusItem(
@@ -1273,26 +1627,15 @@ class _PortfolioIssueFeed extends StatelessWidget {
   ) {
     final available = digest.available;
     final periodLabel = _digestPeriodLabel(digest);
-    final pct = _formatSignedPercent(digest.totalReturnPct);
-    final won = _formatSignedWon(digest.totalReturnWon);
     return _PortfolioIssueItem(
       icon: available ? Icons.summarize_rounded : Icons.hourglass_empty_rounded,
       iconColor: available ? WeRoboColors.primary : WeRoboColors.textTertiary,
       eyebrow: periodLabel,
-      title: _digestTitle(digest),
-      body: available
-          ? '$periodLabel 수익률 $pct, $won 움직임이 감지됐어요.'
-          : '이번 주는 평소 변동 범위 안이라 주요 이슈만 모니터링 중이에요.',
+      title: available
+          ? '$periodLabel 다이제스트가 도착했어요'
+          : '이번 주는 평소 변동 범위 안이에요',
       onTap: available ? onDigestTap : null,
     );
-  }
-
-  static String _digestTitle(MobileDigestResponse digest) {
-    final periodLabel = _digestPeriodLabel(digest);
-    if (periodLabel == '최근 한 달') {
-      return '최근 한 달 다이제스트';
-    }
-    return '이번 주 다이제스트';
   }
 
   static String _digestPeriodLabel(MobileDigestResponse digest) {
@@ -1325,19 +1668,19 @@ class _PortfolioIssueFeed extends StatelessWidget {
     return digest?.available == true && digest!.sourcesUsed.isNotEmpty;
   }
 
-  static String _contributionBody(DigestDriver driver, String periodLabel) {
-    final name = driver.nameKo.isNotEmpty ? driver.nameKo : driver.ticker;
-    final won = _formatSignedWon(driver.contributionWon);
-    if (driver.contributionWon >= 0) {
-      return '$name가 $periodLabel 수익에 $won 기여했어요.';
-    }
-    return '$name가 $periodLabel 수익에 $won 영향을 줬어요.';
-  }
-
   static String _issueDateLabel(String isoDate) {
     final parsed = DateTime.tryParse(isoDate);
     if (parsed == null) return '최근 신호';
     return '${parsed.month}월 ${parsed.day}일';
+  }
+
+  static String _josaSubject(String name) {
+    if (name.isEmpty) return '가';
+    final code = name.codeUnitAt(name.length - 1);
+    if (code >= 0xAC00 && code <= 0xD7A3) {
+      return (code - 0xAC00) % 28 == 0 ? '가' : '이';
+    }
+    return '가';
   }
 }
 
@@ -1346,7 +1689,6 @@ class _PortfolioIssueItem {
   final Color iconColor;
   final String eyebrow;
   final String title;
-  final String body;
   final VoidCallback? onTap;
 
   const _PortfolioIssueItem({
@@ -1354,114 +1696,45 @@ class _PortfolioIssueItem {
     required this.iconColor,
     required this.eyebrow,
     required this.title,
-    required this.body,
     this.onTap,
   });
 }
 
 class _PortfolioIssueRow extends StatelessWidget {
   final _PortfolioIssueItem item;
-  final int index;
-  final bool isFirst;
-  final bool isLast;
 
-  const _PortfolioIssueRow({
-    required this.item,
-    required this.index,
-    required this.isFirst,
-    required this.isLast,
-  });
+  const _PortfolioIssueRow({required this.item});
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: IntrinsicHeight(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: SizedBox(
+        height: 32,
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            SizedBox(
-              width: 34,
-              child: Stack(
-                alignment: Alignment.topCenter,
-                children: [
-                  Positioned(
-                    top: isFirst ? 18 : 0,
-                    bottom: isLast ? 42 : 0,
-                    child: Container(
-                      width: 1,
-                      color: tc.border.withValues(alpha: 0.30),
-                    ),
-                  ),
-                  Positioned(
-                    top: 6,
-                    child: Container(
-                      key: ValueKey('portfolio_issue_timeline_node_$index'),
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: item.iconColor.withValues(alpha: 0.12),
-                        border: Border.all(
-                          color: item.iconColor.withValues(alpha: 0.34),
-                          width: 1,
-                        ),
-                      ),
-                      child: Icon(item.icon, size: 15, color: item.iconColor),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
+            Icon(item.icon, size: 20, color: item.iconColor),
+            const SizedBox(width: 12),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 5, bottom: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.eyebrow,
-                      style: WeRoboTypography.caption.copyWith(
-                        color: tc.textTertiary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.title,
-                      style: WeRoboTypography.bodySmall.copyWith(
-                        color: tc.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      item.body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: WeRoboTypography.caption.copyWith(
-                        color: tc.textSecondary,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
+              child: Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textPrimary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            if (item.onTap != null) ...[
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: tc.textTertiary,
-                ),
+            const SizedBox(width: 8),
+            Text(
+              item.eyebrow,
+              style: WeRoboTypography.caption.copyWith(
+                color: tc.textTertiary,
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -1472,35 +1745,70 @@ class _PortfolioIssueRow extends StatelessWidget {
   }
 }
 
-// ─── Performance badge ────────────────────────────────────────
+class _MoreItemsRow extends StatelessWidget {
+  final VoidCallback onTap;
 
-class _PerformanceBadge extends StatelessWidget {
-  final double changePct;
-  final double changeAmount;
-  final bool isPositive;
-  final String rangeLabel;
+  const _MoreItemsRow({required this.onTap});
 
-  const _PerformanceBadge({
-    required this.changePct,
-    required this.changeAmount,
-    required this.isPositive,
-    required this.rangeLabel,
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: onTap,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: SizedBox(
+          height: 32,
+          child: Center(
+            child: Text(
+              '더 보기',
+              style: TextStyle(
+                fontFamily: WeRoboFonts.body,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: WeRoboColors.primary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Invested vs current value row ────────────────────────────
+
+class _InvestedVsCurrentRow extends StatelessWidget {
+  final double invested;
+  final double current;
+
+  const _InvestedVsCurrentRow({
+    required this.invested,
+    required this.current,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final color = isPositive ? tc.accent : WeRoboColors.error;
-    final arrow = isPositive ? '▲' : '▼';
-
-    return Text(
-      '$arrow ₩${_formatCurrency(changeAmount.abs().toInt())} (${changePct.abs().toStringAsFixed(1)}%) $rangeLabel',
-      style: TextStyle(
-        fontFamily: WeRoboFonts.english,
-        fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: color,
-      ),
+    final labelStyle = WeRoboTypography.bodySmall.copyWith(
+      color: tc.textSecondary,
+    );
+    final amountStyle = WeRoboTypography.bodySmall.copyWith(
+      color: tc.textPrimary,
+      fontWeight: FontWeight.w600,
+      fontFamily: WeRoboFonts.english,
+    );
+    return Row(
+      children: [
+        Text('투자금액', style: labelStyle),
+        const SizedBox(width: 4),
+        Text('₩${_formatCurrency(invested.toInt())}', style: amountStyle),
+        const SizedBox(width: 12),
+        Container(width: 1, height: 12, color: tc.border),
+        const SizedBox(width: 12),
+        Text('평가금액', style: labelStyle),
+        const SizedBox(width: 4),
+        Text('₩${_formatCurrency(current.toInt())}', style: amountStyle),
+      ],
     );
   }
 }
@@ -1514,6 +1822,7 @@ class _HomePerformancePainter extends CustomPainter {
   final List<ChartLine> lines;
   final double progress;
   final int? touchIndex;
+  final int? anchorIndex;
   final double glowPhase;
   final String dateLabel;
   final Color glowColor;
@@ -1524,6 +1833,7 @@ class _HomePerformancePainter extends CustomPainter {
     required this.lines,
     required this.progress,
     this.touchIndex,
+    this.anchorIndex,
     this.glowPhase = 0,
     required this.dateLabel,
     required this.glowColor,
@@ -1620,6 +1930,14 @@ class _HomePerformancePainter extends CustomPainter {
       toY,
     );
 
+    // Anchor: dashed vertical line at the long-pressed point. Drawn
+    // before the touch crosshair so the live crosshair sits on top.
+    if (anchorIndex != null &&
+        anchorIndex! >= 0 &&
+        anchorIndex! < basePts.length) {
+      _drawAnchorLine(canvas, size, anchorIndex!, basePts.length, toX);
+    }
+
     // Crosshair + glow + date label (only when dragging).
     if (isDragging) {
       _drawCrosshair(
@@ -1633,6 +1951,30 @@ class _HomePerformancePainter extends CustomPainter {
         drawCount,
         lineTopPad,
       );
+    }
+  }
+
+  void _drawAnchorLine(
+    Canvas canvas,
+    Size size,
+    int idx,
+    int totalPts,
+    double Function(int, int) toX,
+  ) {
+    const lineTopPad = 16.0;
+    final h = size.height;
+    final tx = toX(idx, totalPts);
+    final paint = Paint()
+      ..color = crosshairColor.withValues(alpha: 0.5)
+      ..strokeWidth = 1;
+    const dashLen = 4.0;
+    const gapLen = 4.0;
+    double y = lineTopPad;
+    final bottom = h - lineTopPad;
+    while (y < bottom) {
+      final end = math.min(y + dashLen, bottom);
+      canvas.drawLine(Offset(tx, y), Offset(tx, end), paint);
+      y = end + gapLen;
     }
   }
 
@@ -1834,9 +2176,10 @@ class _HomePerformancePainter extends CustomPainter {
   bool shouldRepaint(covariant _HomePerformancePainter old) =>
       old.progress != progress ||
       old.touchIndex != touchIndex ||
+      old.anchorIndex != anchorIndex ||
       old.glowPhase != glowPhase;
   // `lines` is freshly constructed every build (new list, new ChartLine
-  // instances) so reference equality is always false — we'd always
+  // instances) so reference equality is always false. We'd always
   // repaint. Range/data changes already trigger a setState that
   // unconditionally rebuilds, so omitting `lines` here is safe.
 }
@@ -1949,7 +2292,7 @@ class _DragContextCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     // Frosted-glass annotation. The BackdropFilter blurs the chart lines
-    // visible behind the card so they read as soft ghosts — the card
+    // visible behind the card so they read as soft ghosts. The card
     // never opaquely blocks them, while still giving the numbers enough
     // contrast to scan. No explicit border: the blur edge + alpha
     // surface implies the boundary without adding chrome.
@@ -1965,6 +2308,14 @@ class _DragContextCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              Text(
+                '누적 (시작 대비)',
+                style: WeRoboTypography.caption.copyWith(
+                  color: tc.textTertiary,
+                  fontSize: 10,
+                ),
+              ),
+              const SizedBox(height: 4),
               _DragContextRow(label: '포트폴리오', pct: portfolioPct),
               if (marketPct != null)
                 _DragContextRow(label: '시장', pct: marketPct!),
@@ -2026,6 +2377,210 @@ class _DragContextRow extends StatelessWidget {
   }
 }
 
+// ─── Two-point compare card ───────────────────────────────────
+
+class _CompareCard extends StatelessWidget {
+  final DateTime anchorDate;
+  final DateTime touchDate;
+  final ({double anchorPct, double touchPct}) portfolio;
+  final List<({String name, double anchorPct, double touchPct})> assetRows;
+  final VoidCallback onClose;
+
+  const _CompareCard({
+    required this.anchorDate,
+    required this.touchDate,
+    required this.portfolio,
+    required this.assetRows,
+    required this.onClose,
+  });
+
+  static const double width = 240.0;
+  static const double height = 152.0;
+
+  String _formatShortDate(DateTime d) => '${d.month}월 ${d.day}일';
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          width: width,
+          color: tc.surface.withValues(alpha: 0.62),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_formatShortDate(anchorDate)} → '
+                      '${_formatShortDate(touchDate)}',
+                      style: WeRoboTypography.caption.copyWith(
+                        color: tc.textTertiary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      iconSize: 12,
+                      icon: Icon(Icons.close, color: tc.textTertiary),
+                      onPressed: onClose,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Container(
+                height: 1,
+                color: tc.border.withValues(alpha: 0.3),
+              ),
+              const SizedBox(height: 6),
+              _CompareRow(
+                label: '포트폴리오',
+                anchorPct: portfolio.anchorPct,
+                touchPct: portfolio.touchPct,
+              ),
+              for (final row in assetRows)
+                _CompareRow(
+                  label: row.name,
+                  anchorPct: row.anchorPct,
+                  touchPct: row.touchPct,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompareRow extends StatelessWidget {
+  final String label;
+  final double? anchorPct;
+  final double? touchPct;
+
+  const _CompareRow({
+    required this.label,
+    required this.anchorPct,
+    required this.touchPct,
+  });
+
+  String _formatPct(double? pct) {
+    if (pct == null) return '--%';
+    final sign = pct >= 0 ? '+' : '-';
+    return '$sign${(pct * 100).abs().toStringAsFixed(1)}%';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final hasData = anchorPct != null && touchPct != null;
+    final delta = hasData ? touchPct! - anchorPct! : null;
+    final deltaColor = delta == null
+        ? tc.textTertiary
+        : (delta >= 0 ? _gainColor : _lossColor);
+    final glyph = delta == null ? '' : (delta >= 0 ? '▲' : '▼');
+    return SizedBox(
+      height: 28,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: WeRoboTypography.caption.copyWith(
+                color: tc.textPrimary,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 48,
+            child: Text(
+              _formatPct(anchorPct),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontFamily: WeRoboFonts.english,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: tc.textSecondary,
+                fontFeatures: const [ui.FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              '→',
+              style: TextStyle(
+                fontSize: 12,
+                color: tc.textTertiary,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 48,
+            child: Text(
+              _formatPct(touchPct),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontFamily: WeRoboFonts.english,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: tc.textPrimary,
+                fontFeatures: const [ui.FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    delta == null
+                        ? ''
+                        : '${delta >= 0 ? '+' : '-'}${(delta * 100).abs().toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontFamily: WeRoboFonts.english,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: deltaColor,
+                      fontFeatures: const [ui.FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  if (glyph.isNotEmpty) ...[
+                    const SizedBox(width: 2),
+                    Text(
+                      glyph,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: deltaColor,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // ─── Shared helpers ───────────────────────────────────────────
 
 String _formatCurrency(int amount) {
@@ -2041,11 +2596,6 @@ String _formatCurrency(int amount) {
 String _formatSignedWon(double amount) {
   final sign = amount >= 0 ? '+' : '-';
   return '$sign₩${_formatCurrency(amount.abs().round())}';
-}
-
-String _formatSignedPercent(double percentage) {
-  final sign = percentage >= 0 ? '+' : '-';
-  return '$sign${percentage.abs().toStringAsFixed(1)}%';
 }
 
 String _formatPercentLabel(double percentage) {
