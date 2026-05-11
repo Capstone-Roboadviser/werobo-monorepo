@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
@@ -3418,6 +3419,18 @@ class _NotificationIconButton extends StatelessWidget {
 
 // ─── Notification dropdown sheet ────────────────────────────
 
+typedef NotificationsApiOverride = ({
+  Future<MobileVolatilityHistoryResponse> Function() fetchVolatility,
+  Future<MobileAssetClassNewsResponse> Function(AssetClass cls) fetchNews,
+});
+
+NotificationsApiOverride? _notificationsApiOverride;
+
+@visibleForTesting
+void debugSetNotificationsApiOverride(NotificationsApiOverride? override) {
+  _notificationsApiOverride = override;
+}
+
 /// Public entry point so widget tests can drive the sheet without going
 /// through the bell icon's GestureDetector.
 void showNotificationsSheet(BuildContext context) {
@@ -3452,6 +3465,118 @@ class _NotificationsSheet extends StatefulWidget {
 }
 
 class _NotificationsSheetState extends State<_NotificationsSheet> {
+  MobileAssetClassNewsResponse? _news;
+  bool _newsErrored = false;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadAsync());
+  }
+
+  Future<void> _loadAsync() async {
+    final state = PortfolioStateProvider.of(context);
+    final override = _notificationsApiOverride;
+    final fetchVolatility = override?.fetchVolatility ??
+        () {
+          final portfolio = state.selectedPortfolio;
+          final riskProfile = portfolio?.code ?? state.type.riskCode;
+          return MobileBackendApi.instance.fetchVolatilityHistory(
+            riskProfile: riskProfile,
+            stockWeights: portfolio?.stockWeights,
+          );
+        };
+    final topAsset = _topWeightedAssetClass(state);
+    final fetchNews = override?.fetchNews ??
+        (AssetClass cls) =>
+            MobileBackendApi.instance.fetchAssetClassNews(cls);
+
+    final volFuture = _safeVoid(() async {
+      final vol = await fetchVolatility();
+      if (!mounted) return;
+      state.setPortfolioVolatilityHistory(vol);
+    });
+
+    final newsFuture = topAsset == null
+        ? Future<void>.value()
+        : _safeVoid(
+            () async {
+              final news = await fetchNews(topAsset);
+              if (!mounted) return;
+              setState(() {
+                _news = news;
+              });
+            },
+            onError: () {
+              if (!mounted) return;
+              setState(() => _newsErrored = true);
+            },
+          );
+
+    await Future.wait<void>([volFuture, newsFuture]);
+    if (!mounted) return;
+    setState(() {
+      _ready = true;
+    });
+  }
+
+  Future<void> _safeVoid(
+    Future<void> Function() body, {
+    VoidCallback? onError,
+  }) async {
+    try {
+      await body();
+    } catch (_) {
+      onError?.call();
+    }
+  }
+
+  AssetClass? _topWeightedAssetClass(PortfolioState state) {
+    final portfolio = state.selectedPortfolio;
+    if (portfolio == null) return null;
+    final weights = <AssetClass, double>{};
+    for (final alloc in portfolio.sectorAllocations) {
+      final cls = _sectorCodeToAssetClass(alloc.assetCode);
+      if (cls == null) continue;
+      weights[cls] = (weights[cls] ?? 0.0) + alloc.weight;
+    }
+    if (weights.isEmpty) return null;
+    final sorted = weights.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return sorted.first.key;
+  }
+
+  AssetClass? _sectorCodeToAssetClass(String code) {
+    switch (code) {
+      case 'cash':
+      case 'cash_equivalent':
+      case 'cash_equivalents':
+        return AssetClass.cash;
+      case 'short_term_bond':
+      case 'bond':
+      case 'treasury':
+        return AssetClass.shortBond;
+      case 'infra':
+      case 'infra_bond':
+      case 'infrastructure':
+      case 'infrastructure_bond':
+        return AssetClass.infraBond;
+      case 'gold':
+      case 'commodity_gold':
+        return AssetClass.gold;
+      case 'us_value':
+      case 'value_stock':
+        return AssetClass.usValue;
+      case 'us_growth':
+      case 'growth_stock':
+        return AssetClass.usGrowth;
+      case 'new_growth':
+        return AssetClass.newGrowth;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
@@ -3487,30 +3612,35 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     }
 
     // 3. Algorithm signal — sources from existing rebalance insights.
-    final insightRow = _buildAlgorithmSignalRow(state, context);
-    if (insightRow != null) rows.add(insightRow);
+    final algoRow = _buildAlgorithmSignalRow(state, context);
+    if (algoRow != null) rows.add(algoRow);
 
-    // 4-5. Volatility and news land in Task 8.
-    rows.add(_NotificationRow(
-      kind: _NotificationKind.volatilityAlert,
-      category: _categoryLabel(_NotificationKind.volatilityAlert),
-      title: '(데이터 연결 예정)',
-      onTap: () => Navigator.of(context).pop(),
-    ));
-    rows.add(_NotificationRow(
-      kind: _NotificationKind.assetNews,
-      category: _categoryLabel(_NotificationKind.assetNews),
-      title: '(데이터 연결 예정)',
-      onTap: () => Navigator.of(context).pop(),
-    ));
+    // 4. Volatility row — appears only after _ready and only if a spike exists.
+    final spike = state.portfolioVolatilitySpike;
+    if (_ready && spike != null) {
+      final pct = (spike.percentAboveAverage * 100).round();
+      rows.add(_NotificationRow(
+        kind: _NotificationKind.volatilityAlert,
+        category: _categoryLabel(_NotificationKind.volatilityAlert),
+        title: '포트폴리오 변동성 +$pct% 주의 구간이에요',
+        onTap: () => Navigator.of(context).pop(),
+      ));
+    }
 
-    final body = rows.isEmpty
+    // 5. News row — appears only after _ready, when fetch succeeded.
+    if (_ready && _news != null && !_newsErrored) {
+      rows.add(_NotificationRow(
+        kind: _NotificationKind.assetNews,
+        category: _categoryLabel(_NotificationKind.assetNews),
+        title: _news!.title,
+        onTap: () => _openNewsLink(_news!.link),
+      ));
+    }
+
+    final body = rows.isEmpty && _ready
         ? <Widget>[
             Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 24,
-                vertical: 24,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
               child: Text(
                 '오늘은 새로운 알림이 없어요',
                 style: WeRoboTypography.bodySmall.copyWith(
@@ -3601,6 +3731,13 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
         ),
       ),
     );
+  }
+
+  Future<void> _openNewsLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (mounted) Navigator.of(context).pop();
   }
 
   _NotificationRow? _buildAlgorithmSignalRow(
