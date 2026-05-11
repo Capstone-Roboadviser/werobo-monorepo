@@ -29,7 +29,7 @@ void main() {
     await tester.pumpWidget(buildSubject());
     await tester.pump();
 
-    for (final label in ['홈', '포트폴리오', '커뮤니티', '뉴스', '더보기']) {
+    for (final label in ['홈', '포트폴리오', '커뮤니티', '뉴스', '전체']) {
       expect(find.widgetWithText(Pressable, label), findsOneWidget);
     }
   });

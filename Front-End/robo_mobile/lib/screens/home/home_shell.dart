@@ -212,7 +212,7 @@ class _HomeShellState extends State<HomeShell> {
                 Expanded(
                   child: _NavItem(
                     icon: Icons.menu_rounded,
-                    label: '더보기',
+                    label: '전체',
                     isActive: _currentTab == 4,
                     onTap: () {
                       logAction('tab selected', {'tab': 'more'});
