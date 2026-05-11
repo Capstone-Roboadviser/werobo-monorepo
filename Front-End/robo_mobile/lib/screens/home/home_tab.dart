@@ -451,6 +451,17 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   Timer? _drawDelayTimer;
   int _range = 4; // 전체
   int? _touchIndex;
+  // Long-press anchor for two-point compare. When set, the chart shows a
+  // dashed vertical line at this index and the drag card switches to
+  // anchor-vs-touch compare mode.
+  int? _anchorIndex;
+  // Cache of cumulative asset returns since the start of the visible
+  // range, keyed by date. Rebuilt when the range changes or the earnings
+  // history reference changes.
+  int? _cumulativeCacheRange;
+  Object? _cumulativeCacheHistoryRef;
+  DateTime? _cumulativeCacheStartDate;
+  List<MapEntry<DateTime, Map<String, double>>>? _cumulativeCache;
 
   List<ChartPoint> get _allValue {
     final accountHistory = PortfolioStateProvider.of(context).accountHistory;
@@ -636,6 +647,74 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     ];
   }
 
+  /// Cumulative per-asset returns from the start of the visible range up
+  /// to [valuePts]\[ti], computed by compounding the day-over-day values
+  /// from the earnings history. Cached per range and per history snapshot
+  /// so the cost is paid once per visible range, not per drag frame.
+  Map<String, double> _cumulativeAssetReturnsLocal(
+    List<ChartPoint> valuePts,
+    int ti,
+  ) {
+    if (valuePts.isEmpty || ti < 1 || ti >= valuePts.length) {
+      return const {};
+    }
+    final state = PortfolioStateProvider.of(context);
+    final history = state.earningsHistory;
+    if (history == null || history.points.length < 2) return const {};
+    final startDate = valuePts.first.date;
+    final needsRebuild = _cumulativeCache == null ||
+        _cumulativeCacheRange != _range ||
+        !identical(_cumulativeCacheHistoryRef, history) ||
+        _cumulativeCacheStartDate != startDate;
+    if (needsRebuild) {
+      _cumulativeCacheRange = _range;
+      _cumulativeCacheHistoryRef = history;
+      _cumulativeCacheStartDate = startDate;
+      _cumulativeCache = _buildCumulativeCache(history.points, startDate);
+    }
+    final cache = _cumulativeCache!;
+    if (cache.isEmpty) return const {};
+    final targetDate = valuePts[ti].date;
+    // Find the last cache entry with date <= targetDate. Binary search
+    // would be tidier; the cache is small (one entry per trading day in
+    // the visible range) so a linear scan is fine.
+    Map<String, double>? best;
+    for (final entry in cache) {
+      if (entry.key.isAfter(targetDate)) break;
+      best = entry.value;
+    }
+    return best ?? const {};
+  }
+
+  List<MapEntry<DateTime, Map<String, double>>> _buildCumulativeCache(
+    List<MobileEarningsPoint> points,
+    DateTime startDate,
+  ) {
+    // Locate the first earnings-history point at or after the visible
+    // range's start date.
+    var startIdx = points.indexWhere((p) => !p.date.isBefore(startDate));
+    if (startIdx < 0) return const [];
+    // Use that point's values as the baseline. Each subsequent point's
+    // cumulative return is the compound product of day-over-day returns
+    // from the prior point, which equals (current - base) / base when
+    // base is the starting value. Direct subtraction is cheaper and is
+    // mathematically equivalent.
+    final baseValues = points[startIdx].assetEarnings;
+    final result = <MapEntry<DateTime, Map<String, double>>>[];
+    result.add(MapEntry(points[startIdx].date, const {}));
+    for (var i = startIdx + 1; i < points.length; i++) {
+      final current = points[i].assetEarnings;
+      final cumulative = <String, double>{};
+      current.forEach((code, value) {
+        final baseValue = baseValues[code];
+        if (baseValue == null || baseValue == 0) return;
+        cumulative[code] = (value - baseValue) / baseValue;
+      });
+      result.add(MapEntry(points[i].date, cumulative));
+    }
+    return result;
+  }
+
   /// 연 기대수익률 — 2-point dashed line from the start of the visible
   /// range (0%) to `expectedReturn × elapsedYears`. Returns empty when
   /// `expectedReturn` is null or the visible range is empty.
@@ -669,56 +748,30 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final ti = _touchIndex;
     if (ti == null || ti < 1 || ti >= valuePts.length) return null;
 
-    // Day-over-day portfolio %.
-    final curr = valuePts[ti].value;
-    final prev = valuePts[ti - 1].value;
-    if (prev == 0) return null;
-    final portfolioPct = (curr - prev) / prev;
+    // Cumulative portfolio % since the start of the visible range. Matches
+    // the hero numbers above the chart so the drag card never tells a
+    // different story than the headline.
+    final base = valuePts.first.value;
+    if (base == 0) return null;
+    final portfolioPct = (valuePts[ti].value - base) / base;
 
-    // Day-over-day market %, if benchmark data exists.
-    double? marketPct;
+    // Cumulative market % at the touched date. _marketSeries already
+    // rebases to 0% at the first visible point, so we read directly.
     final state = PortfolioStateProvider.of(context);
-    final marketLine = state.comparisonLines.firstWhere(
-      (l) => l.key == 'benchmark_avg',
-      orElse: () => const ChartLine(
-        key: '',
-        label: '',
-        color: Colors.transparent,
-        points: [],
-      ),
-    );
-    if (marketLine.points.length >= 2) {
+    double? marketPct;
+    final mPts = _marketSeries(valuePts);
+    if (mPts.isNotEmpty) {
       final touchDate = valuePts[ti].date;
-      final mIdx = marketLine.points.indexWhere(
-        (p) =>
-            p.date.year == touchDate.year &&
-            p.date.month == touchDate.month &&
-            p.date.day == touchDate.day,
-      );
-      if (mIdx >= 1) {
-        // comparisonLines values are cumulative returns (e.g. 0.12 = +12%
-        // from backtest start). The day-over-day rate is NOT the raw
-        // subtraction — that would only be correct for small mPrev. The
-        // exact conversion from cumulative-return space to daily-return
-        // space is (mCurr - mPrev) / (1 + mPrev), which equals the asset
-        // value's actual day-over-day percent change.
-        final mCurr = marketLine.points[mIdx].value;
-        final mPrev = marketLine.points[mIdx - 1].value;
-        final denom = 1 + mPrev;
-        if (denom != 0) {
-          marketPct = (mCurr - mPrev) / denom;
-        }
-      }
-      // If the touch date isn't in the market series (typically a non-
-      // trading day — weekend/holiday — where the portfolio value also
-      // didn't change), show 0% rather than dropping the row entirely.
-      // The portfolio row will read +0.00% on the same day, so the two
-      // rows stay consistent.
-      marketPct ??= 0.0;
+      final mIdx = mPts.indexWhere((p) => !p.date.isBefore(touchDate));
+      marketPct = mIdx >= 0 ? mPts[mIdx].value : mPts.last.value;
     }
 
-    // Top 2 asset gainers/losers based on portfolio direction.
-    final assetReturns = state.dayOverDayAssetReturns(valuePts[ti].date);
+    // Cumulative asset returns since the start of the visible range,
+    // computed by compounding day-over-day returns from the earnings
+    // history up to the touched date.
+    // TODO: move to PortfolioState.cumulativeAssetReturnsUpTo for shared
+    // caching across screens.
+    final assetReturns = _cumulativeAssetReturnsLocal(valuePts, ti);
     final names = <String, String>{
       for (final s in (state.selectedPortfolio?.sectorAllocations ??
           const <MobileSectorAllocation>[]))
@@ -728,16 +781,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         .where((e) => names.containsKey(e.key))
         .map((e) => (name: names[e.key]!, pct: e.value))
         .toList();
-    if (portfolioPct >= 0) {
-      entries.sort((a, b) => b.pct.compareTo(a.pct));
-    } else {
-      entries.sort((a, b) => a.pct.compareTo(b.pct));
-    }
-    // When portfolio is exactly 0%, the underlying account history likely
-    // repeated yesterday's snapshot (non-trading day or sparse backend
-    // data). Showing per-asset movement for the same date contradicts the
-    // 0% portfolio number and confuses readers — drop the asset rows so
-    // the card reads consistently as "no movement on this date."
+    // Highest contribution first either way. In up days these are the
+    // top gainers. In down days these are the assets that defended best
+    // (least negative, sometimes positive), surfacing strength rather
+    // than dwelling on the biggest losses.
+    entries.sort((a, b) => b.pct.compareTo(a.pct));
+    // When the portfolio is exactly flat at this point, the underlying
+    // account history likely repeated yesterday's snapshot (non-trading
+    // day or sparse backend data). Showing per-asset movement on the same
+    // day contradicts the 0% portfolio number and confuses readers.
     final assetRows = portfolioPct == 0
         ? const <({String name, double pct})>[]
         : entries.take(2).toList();
@@ -1974,7 +2026,7 @@ class _DragContextCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     // Frosted-glass annotation. The BackdropFilter blurs the chart lines
-    // visible behind the card so they read as soft ghosts — the card
+    // visible behind the card so they read as soft ghosts. The card
     // never opaquely blocks them, while still giving the numbers enough
     // contrast to scan. No explicit border: the blur edge + alpha
     // surface implies the boundary without adding chrome.
@@ -1990,6 +2042,14 @@ class _DragContextCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
+              Text(
+                '누적 (시작 대비)',
+                style: WeRoboTypography.caption.copyWith(
+                  color: tc.textTertiary,
+                  fontSize: 10,
+                ),
+              ),
+              const SizedBox(height: 4),
               _DragContextRow(label: '포트폴리오', pct: portfolioPct),
               if (marketPct != null)
                 _DragContextRow(label: '시장', pct: marketPct!),
