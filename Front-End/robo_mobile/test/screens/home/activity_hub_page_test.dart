@@ -22,8 +22,11 @@ void main() {
       ),
     );
 
-    // Filter pill defaults to 전체.
-    expect(find.text('전체'), findsOneWidget);
+    // Filter label defaults to "알림" (all-categories view).
+    expect(find.text('알림'), findsOneWidget);
+
+    // 알림 설정 link present in the header.
+    expect(find.text('알림 설정'), findsOneWidget);
 
     // Old sections must be gone.
     expect(find.text('알림 & 리포트'), findsNothing);
@@ -31,6 +34,6 @@ void main() {
     expect(find.text('최근 활동'), findsNothing);
 
     // Empty state copy renders when there are no insights or derived data.
-    expect(find.text('아직 지난 알림이 없어요'), findsOneWidget);
+    expect(find.text('아직 받은 알림이 없어요'), findsOneWidget);
   });
 }

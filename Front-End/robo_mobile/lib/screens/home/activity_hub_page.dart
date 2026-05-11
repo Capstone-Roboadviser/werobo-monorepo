@@ -102,7 +102,7 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: back + filter pill
+            // Header: back arrow on left, 알림 설정 link on right.
             Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 16,
@@ -112,28 +112,48 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
                 children: [
                   Pressable(
                     onTap: () => Navigator.pop(context),
-                    child: Container(
+                    child: Padding(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: tc.card,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
                       child: Icon(
-                        Icons.arrow_back_rounded,
+                        Icons.arrow_back_ios_new_rounded,
                         size: 20,
                         color: tc.textPrimary,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  _FilterPill(
-                    selected: _filter,
-                    onTap: _showFilterPicker,
+                  const Spacer(),
+                  Pressable(
+                    onTap: () => Navigator.of(context).push(
+                      WeRoboMotion.fadeRoute<void>(
+                        const _NotificationSettingsPage(),
+                      ),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        '알림 설정',
+                        style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 8),
+            // Filter label — big, left-aligned, with a chevron. Tapping
+            // opens a popup menu anchored beneath it.
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 4, 24, 16),
+              child: _FilterLabel(
+                selected: _filter,
+                onPick: (picked) => setState(() => _filter = picked),
+              ),
+            ),
             Expanded(
               child: items.isEmpty
                   ? _EmptyState(filter: _filter)
@@ -141,13 +161,7 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
                       physics: const BouncingScrollPhysics(),
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       itemCount: items.length,
-                      separatorBuilder: (_, __) => Divider(
-                        height: 1,
-                        thickness: 1,
-                        color: tc.card,
-                        indent: 20,
-                        endIndent: 20,
-                      ),
+                      separatorBuilder: (_, __) => const SizedBox(height: 4),
                       itemBuilder: (_, i) => _HistoryRow(item: items[i]),
                     ),
             ),
@@ -166,7 +180,6 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
 
     bool show(NotificationKind k) => filter == null || filter == k;
 
-    // Monthly summary — single current item if data is available.
     if (show(NotificationKind.monthlySummary)) {
       final monthly = state.trailingMonthReturn;
       if (monthly != null) {
@@ -179,7 +192,6 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
       }
     }
 
-    // Contribution — single current item.
     if (show(NotificationKind.contribution)) {
       final c = state.topContributorOver30d;
       if (c != null) {
@@ -191,7 +203,6 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
       }
     }
 
-    // Algorithm signal — full history of insights.
     if (show(NotificationKind.algorithmSignal)) {
       for (final insight in state.insights) {
         final dateLabel = _formatKoreanDate(insight.rebalanceDate);
@@ -211,7 +222,6 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
       }
     }
 
-    // Volatility — single current item if data is in state.
     if (show(NotificationKind.volatilityAlert)) {
       final spike = state.portfolioVolatilitySpike;
       if (spike != null) {
@@ -223,89 +233,88 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
       }
     }
 
-    // Asset news — not persisted in state, so the history page leaves
-    // this category empty (the dropdown is the only surface that fetches).
+    // Asset news isn't persisted in state — only fetched by the dropdown
+    // on open — so this page leaves the category empty.
     return items;
   }
+}
 
-  Future<void> _showFilterPicker() async {
+class _FilterLabel extends StatelessWidget {
+  final NotificationKind? selected;
+  final ValueChanged<NotificationKind?> onPick;
+  const _FilterLabel({required this.selected, required this.onPick});
+
+  @override
+  Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final picked = await showModalBottomSheet<NotificationKind?>(
-      context: context,
-      backgroundColor: tc.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    return PopupMenuButton<NotificationKind?>(
+      tooltip: '알림 종류 선택',
+      offset: const Offset(0, 36),
+      color: tc.surface,
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
       ),
-      builder: (sheetCtx) {
-        final options = <NotificationKind?>[
-          null, // 전체
-          ...NotificationKind.values,
-        ];
-        return SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 8),
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: tc.card,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 12),
-              for (final opt in options)
-                Pressable(
-                  onTap: () => Navigator.of(sheetCtx).pop(opt),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 14,
-                    ),
-                    child: Row(
-                      children: [
-                        _filterIcon(opt, size: 24),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Text(
-                            opt == null ? '전체' : _notificationLabel(opt),
-                            style: WeRoboTypography.bodySmall.copyWith(
-                              color: tc.textPrimary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        if (opt == _filter)
-                          Icon(
-                            Icons.check_rounded,
-                            size: 20,
-                            color: WeRoboColors.primary,
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-            ],
+      onSelected: onPick,
+      itemBuilder: (ctx) => <PopupMenuEntry<NotificationKind?>>[
+        _menuItem(ctx, value: null, label: '전체'),
+        ...NotificationKind.values.map(
+          (k) => _menuItem(ctx, value: k, label: _notificationLabel(k)),
+        ),
+      ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            selected == null ? '알림' : _notificationLabel(selected!),
+            style: WeRoboTypography.heading2.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        );
-      },
+          const SizedBox(width: 4),
+          Icon(
+            Icons.expand_more_rounded,
+            size: 24,
+            color: tc.textSecondary,
+          ),
+        ],
+      ),
     );
-    if (!mounted) return;
-    // showModalBottomSheet returns null on barrier dismiss too — only
-    // overwrite when the user explicitly chose something.
-    setState(() => _filter = picked);
+  }
+
+  PopupMenuEntry<NotificationKind?> _menuItem(
+    BuildContext ctx, {
+    required NotificationKind? value,
+    required String label,
+  }) {
+    final tc = WeRoboThemeColors.of(ctx);
+    return PopupMenuItem<NotificationKind?>(
+      value: value,
+      height: 44,
+      child: Row(
+        children: [
+          _filterIcon(value, size: 20),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textPrimary,
+              fontWeight: value == selected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
 Widget _filterIcon(NotificationKind? kind, {double size = 20}) {
   if (kind == null) {
     return Icon(
-      Icons.notifications_none_rounded,
+      Icons.menu_rounded,
       size: size,
-      color: WeRoboColors.textPrimary,
+      color: WeRoboColors.primary,
     );
   }
   return SizedBox(
@@ -313,47 +322,6 @@ Widget _filterIcon(NotificationKind? kind, {double size = 20}) {
     height: size,
     child: Image.asset(_notificationIcon(kind), fit: BoxFit.contain),
   );
-}
-
-class _FilterPill extends StatelessWidget {
-  final NotificationKind? selected;
-  final VoidCallback onTap;
-  const _FilterPill({required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Pressable(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: tc.card,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _filterIcon(selected, size: 20),
-            const SizedBox(width: 8),
-            Text(
-              selected == null ? '전체' : _notificationLabel(selected!),
-              style: WeRoboTypography.bodySmall.copyWith(
-                color: tc.textPrimary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.expand_more_rounded,
-              size: 18,
-              color: tc.textSecondary,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _HistoryRow extends StatelessWidget {
@@ -366,12 +334,13 @@ class _HistoryRow extends StatelessWidget {
     return Pressable(
       onTap: item.onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             SizedBox(
-              width: 32,
-              height: 32,
+              width: 36,
+              height: 36,
               child: Image.asset(_notificationIcon(item.kind), fit: BoxFit.contain),
             ),
             const SizedBox(width: 14),
@@ -382,16 +351,16 @@ class _HistoryRow extends StatelessWidget {
                 children: [
                   Text(
                     _notificationLabel(item.kind),
-                    style: WeRoboTypography.caption.copyWith(
-                      color: tc.textTertiary,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     item.title,
                     style: WeRoboTypography.bodySmall.copyWith(
-                      color: tc.textPrimary,
-                      fontWeight: FontWeight.w600,
+                      color: tc.textSecondary,
                     ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -399,12 +368,6 @@ class _HistoryRow extends StatelessWidget {
                 ],
               ),
             ),
-            if (item.onTap != null)
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 20,
-                color: tc.textTertiary,
-              ),
           ],
         ),
       ),
@@ -420,15 +383,80 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final message = filter == null
-        ? '아직 지난 알림이 없어요'
+        ? '아직 받은 알림이 없어요'
         : '${_notificationLabel(filter!)} 알림이 없어요';
     return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          message,
-          style: WeRoboTypography.body.copyWith(color: tc.textTertiary),
-          textAlign: TextAlign.center,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.sticky_note_2_outlined,
+            size: 56,
+            color: tc.textTertiary.withValues(alpha: 0.5),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            message,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textTertiary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationSettingsPage extends StatelessWidget {
+  const _NotificationSettingsPage();
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Scaffold(
+      backgroundColor: tc.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              child: Row(
+                children: [
+                  Pressable(
+                    onTap: () => Navigator.pop(context),
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 20,
+                        color: tc.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '알림 설정',
+                    style: WeRoboTypography.heading2.themed(context),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: Text(
+                  '준비중입니다',
+                  style: WeRoboTypography.body.copyWith(
+                    color: tc.textTertiary,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

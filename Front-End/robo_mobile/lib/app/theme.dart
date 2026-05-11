@@ -192,7 +192,7 @@ class WeRoboMotion {
   static const Duration short = Duration(milliseconds: 150);
   static const Duration medium = Duration(milliseconds: 250);
   static const Duration long = Duration(milliseconds: 400);
-  static const Duration pageTransition = Duration(milliseconds: 300);
+  static const Duration pageTransition = Duration(milliseconds: 220);
   static const Duration stagger = Duration(milliseconds: 50);
   static const Duration chartDraw = Duration(milliseconds: 800);
 
