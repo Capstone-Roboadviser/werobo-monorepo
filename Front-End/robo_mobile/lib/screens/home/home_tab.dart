@@ -3421,13 +3421,19 @@ class _NotificationIconButton extends StatelessWidget {
 /// Public entry point so widget tests can drive the sheet without going
 /// through the bell icon's GestureDetector.
 void showNotificationsSheet(BuildContext context) {
+  // Capture state before the dialog route so it is available in the new
+  // route's widget tree (GeneralDialog creates an isolated context).
+  final state = PortfolioStateProvider.of(context);
   showGeneralDialog<void>(
     context: context,
     barrierDismissible: true,
     barrierLabel: '알림 닫기',
     barrierColor: Colors.black.withValues(alpha: 0.32),
     transitionDuration: WeRoboMotion.medium,
-    pageBuilder: (_, __, ___) => const _NotificationsSheet(),
+    pageBuilder: (_, __, ___) => PortfolioStateProvider(
+      state: state,
+      child: const _NotificationsSheet(),
+    ),
     transitionBuilder: (_, anim, __, child) {
       final slide = Tween<Offset>(
         begin: const Offset(0, -1),
@@ -3446,29 +3452,89 @@ class _NotificationsSheet extends StatefulWidget {
 }
 
 class _NotificationsSheetState extends State<_NotificationsSheet> {
-  // Rows render in this order. Task 7 wires the first three; Task 8 wires the
-  // last two (async).
-  static const _rowOrder = <_NotificationKind>[
-    _NotificationKind.monthlySummary,
-    _NotificationKind.contribution,
-    _NotificationKind.algorithmSignal,
-    _NotificationKind.volatilityAlert,
-    _NotificationKind.assetNews,
-  ];
-
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final state = PortfolioStateProvider.of(context);
 
-    // Placeholder rows until Task 7 / Task 8 ship.
-    final placeholderRows = _rowOrder
-        .map((k) => _NotificationRow(
-              kind: k,
-              category: _categoryLabel(k),
-              title: '(데이터 연결 예정)',
-              onTap: () => Navigator.of(context).pop(),
-            ))
-        .toList();
+    final rows = <Widget>[];
+
+    // 1. Monthly summary.
+    final monthly = state.trailingMonthReturn;
+    if (monthly != null) {
+      final sign = monthly >= 0 ? '+' : '−';
+      final pct = (monthly.abs() * 100).toStringAsFixed(1);
+      rows.add(_NotificationRow(
+        kind: _NotificationKind.monthlySummary,
+        category: _categoryLabel(_NotificationKind.monthlySummary),
+        title: '지난 30일 포트폴리오 $sign$pct%',
+        onTap: () => Navigator.of(context).pop(),
+      ));
+    }
+
+    // 2. Contribution.
+    final contributor = state.topContributorOver30d;
+    if (contributor != null) {
+      final pct = (contributor.weight * contributor.assetReturn * 100)
+          .abs()
+          .round();
+      rows.add(_NotificationRow(
+        kind: _NotificationKind.contribution,
+        category: _categoryLabel(_NotificationKind.contribution),
+        title: '이번 달 ${contributor.label}이 수익의 $pct%를 기여했어요',
+        onTap: () => Navigator.of(context).pop(),
+      ));
+    }
+
+    // 3. Algorithm signal — sources from existing rebalance insights.
+    final insightRow = _buildAlgorithmSignalRow(state, context);
+    if (insightRow != null) rows.add(insightRow);
+
+    // 4-5. Volatility and news land in Task 8.
+    rows.add(_NotificationRow(
+      kind: _NotificationKind.volatilityAlert,
+      category: _categoryLabel(_NotificationKind.volatilityAlert),
+      title: '(데이터 연결 예정)',
+      onTap: () => Navigator.of(context).pop(),
+    ));
+    rows.add(_NotificationRow(
+      kind: _NotificationKind.assetNews,
+      category: _categoryLabel(_NotificationKind.assetNews),
+      title: '(데이터 연결 예정)',
+      onTap: () => Navigator.of(context).pop(),
+    ));
+
+    final body = rows.isEmpty
+        ? <Widget>[
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 24,
+                vertical: 24,
+              ),
+              child: Text(
+                '오늘은 새로운 알림이 없어요',
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textTertiary,
+                ),
+              ),
+            ),
+          ]
+        : <Widget>[
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              itemCount: rows.length,
+              separatorBuilder: (_, __) => Divider(
+                height: 1,
+                thickness: 1,
+                color: tc.card,
+                indent: 20,
+                endIndent: 20,
+              ),
+              itemBuilder: (_, i) => rows[i],
+            ),
+          ];
 
     return Align(
       alignment: Alignment.topCenter,
@@ -3526,20 +3592,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
                     ),
                   ),
                   Divider(height: 1, thickness: 1, color: tc.card),
-                  ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: placeholderRows.length,
-                    separatorBuilder: (_, __) => Divider(
-                      height: 1,
-                      thickness: 1,
-                      color: tc.card,
-                      indent: 20,
-                      endIndent: 20,
-                    ),
-                    itemBuilder: (_, i) => placeholderRows[i],
-                  ),
+                  ...body,
                   const SizedBox(height: 8),
                 ],
               ),
@@ -3548,6 +3601,46 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
         ),
       ),
     );
+  }
+
+  _NotificationRow? _buildAlgorithmSignalRow(
+    PortfolioState state,
+    BuildContext context,
+  ) {
+    final insights = state.insights;
+    if (insights.isEmpty) return null;
+    final latest = insights.first;
+    final created = DateTime.tryParse(latest.createdAt);
+    final ageDays = created == null
+        ? 0
+        : DateTime.now().difference(created).inDays;
+    if (latest.isRead && ageDays > 30) return null;
+
+    final dateLabel = latest.rebalanceDate.length >= 10
+        ? latest.rebalanceDate.substring(5).replaceAll('-', '/')
+        : latest.rebalanceDate;
+    final triggerLabel = _triggerLabel(latest.trigger);
+    return _NotificationRow(
+      kind: _NotificationKind.algorithmSignal,
+      category: _categoryLabel(_NotificationKind.algorithmSignal),
+      title: '$dateLabel $triggerLabel',
+      onTap: () => Navigator.of(context).pop(),
+    );
+  }
+
+  String _triggerLabel(String? trigger) {
+    switch (trigger) {
+      case 'scheduled':
+        return '정기 리밸런싱 시그널';
+      case 'drift':
+        return '비중 드리프트 감지';
+      case 'threshold':
+        return '임계치 초과 감지';
+      case null:
+        return '리밸런싱 시그널 감지';
+      default:
+        return trigger;
+    }
   }
 }
 
