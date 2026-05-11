@@ -111,3 +111,20 @@ def test_fetch_news_raises_when_no_items():
     with patch.object(news_service.httpx, "get", return_value=_mock_response(empty_rss)):
         with pytest.raises(news_service.NewsUnavailableError):
             news_service.fetch_news(NewsAssetClass.gold)
+
+
+def test_fetch_news_raises_when_entry_missing_link():
+    rss_no_link = """<?xml version='1.0'?>
+<rss version='2.0'>
+  <channel>
+    <title>Yahoo Finance: GLD</title>
+    <item>
+      <title>Headline without a link</title>
+      <pubDate>Mon, 12 May 2026 14:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>
+"""
+    with patch.object(news_service.httpx, "get", return_value=_mock_response(rss_no_link)):
+        with pytest.raises(news_service.NewsUnavailableError):
+            news_service.fetch_news(NewsAssetClass.gold)
