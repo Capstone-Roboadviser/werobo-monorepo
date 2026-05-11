@@ -3620,30 +3620,42 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     // 3. Algorithm signal — one row per rebalance insight, most recent first.
     rows.addAll(_buildAlgorithmSignalRows(state, context));
 
-    // 4. Volatility row — appears only after _ready and only if a spike exists.
+    // 4. Volatility row — always rendered. Copy depends on whether a spike
+    //    was detected after the async fetch completed.
     final spike = state.portfolioVolatilitySpike;
-    if (_ready && spike != null) {
-      final pct = (spike.percentAboveAverage * 100).round();
-      rows.add(_NotificationRow(
-        kind: _NotificationKind.volatilityAlert,
-        category: _categoryLabel(_NotificationKind.volatilityAlert),
-        title: '포트폴리오 변동성 +$pct% 주의 구간이에요',
-        onTap: () => _navigateToComingSoon(
-          context,
-          _categoryLabel(_NotificationKind.volatilityAlert),
-        ),
-      ));
-    }
+    final volatilityTitle = !_ready
+        ? '변동성 데이터를 불러오는 중이에요'
+        : spike != null
+            ? '포트폴리오 변동성 +${(spike.percentAboveAverage * 100).round()}% 주의 구간이에요'
+            : '현재 시장 변동성은 안정세를 유지하고 있어요';
+    rows.add(_NotificationRow(
+      kind: _NotificationKind.volatilityAlert,
+      category: _categoryLabel(_NotificationKind.volatilityAlert),
+      title: volatilityTitle,
+      onTap: () => _navigateToComingSoon(
+        context,
+        _categoryLabel(_NotificationKind.volatilityAlert),
+      ),
+    ));
 
-    // 5. News row — appears only after _ready, when fetch succeeded.
-    if (_ready && _news != null && !_newsErrored) {
-      rows.add(_NotificationRow(
-        kind: _NotificationKind.assetNews,
-        category: _categoryLabel(_NotificationKind.assetNews),
-        title: _news!.title,
-        onTap: () => _openNewsLink(_news!.link),
-      ));
-    }
+    // 5. News row — always rendered. Title falls back when the fetch fails
+    //    or hasn't completed yet.
+    final newsTitle = !_ready
+        ? '뉴스를 불러오는 중이에요'
+        : (_news != null && !_newsErrored)
+            ? _news!.title
+            : '뉴스를 불러올 수 없어요';
+    rows.add(_NotificationRow(
+      kind: _NotificationKind.assetNews,
+      category: _categoryLabel(_NotificationKind.assetNews),
+      title: newsTitle,
+      onTap: _ready && _news != null && !_newsErrored
+          ? () => _openNewsLink(_news!.link)
+          : () => _navigateToComingSoon(
+                context,
+                _categoryLabel(_NotificationKind.assetNews),
+              ),
+    ));
 
     final body = rows.isEmpty && _ready
         ? <Widget>[
@@ -3770,13 +3782,16 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
 
       final dateLabel = _formatKoreanDate(insight.rebalanceDate);
       final triggerLabel = _triggerLabel(insight.trigger);
-      final title = dateLabel == null
-          ? '$triggerLabel 시그널이 감지됐어요'
-          : '$dateLabel $triggerLabel 시그널이 감지됐어요';
+      // Caption pulls the date + trigger label so each row is identifiable
+      // at a glance; title pulls the AI-generated historySummary so each
+      // insight carries real context, not a generic "signal detected" line.
+      final caption = dateLabel == null
+          ? '알고리즘 시그널 · $triggerLabel'
+          : '알고리즘 시그널 · $dateLabel · $triggerLabel';
       yield _NotificationRow(
         kind: _NotificationKind.algorithmSignal,
-        category: _categoryLabel(_NotificationKind.algorithmSignal),
-        title: title,
+        category: caption,
+        title: insight.historySummary,
         onTap: () {
           Navigator.of(context).push(
             WeRoboMotion.fadeRoute<void>(

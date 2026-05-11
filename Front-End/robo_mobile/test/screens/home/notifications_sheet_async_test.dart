@@ -76,7 +76,7 @@ void main() {
     expect(find.textContaining('변동성'), findsWidgets);
   });
 
-  testWidgets('news row hides on fetch error', (tester) async {
+  testWidgets('news row shows error copy on fetch failure', (tester) async {
     final api = _FakeApi();
     api.volError = Exception('skip');
     api.newsError = Exception('rss down');
@@ -91,6 +91,8 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    expect(find.text('자산군별 뉴스'), findsNothing);
+    // Row is always rendered; copy reflects the error state.
+    expect(find.text('자산군별 뉴스'), findsOneWidget);
+    expect(find.text('뉴스를 불러올 수 없어요'), findsOneWidget);
   });
 }
