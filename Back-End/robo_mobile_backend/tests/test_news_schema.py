@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
 
-import pytest
-
 from mobile_backend.api.schemas.news import (
     AssetClassNewsResponse,
     NewsAssetClass,
@@ -29,3 +27,4 @@ def test_news_response_round_trip():
     assert payload["title"] == "S&P 500 closes at record high"
     assert payload["link"] == "https://example.com/article"
     assert payload["source"] == "Yahoo Finance"
+    assert payload["published"] == "2026-05-12T14:00:00Z"
