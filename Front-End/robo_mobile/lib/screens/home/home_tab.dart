@@ -3763,7 +3763,15 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
         kind: _NotificationKind.algorithmSignal,
         category: _categoryLabel(_NotificationKind.algorithmSignal),
         title: title,
-        onTap: () => Navigator.of(context).pop(),
+        onTap: () {
+          final navigator = Navigator.of(context);
+          navigator.pop();
+          navigator.push(
+            WeRoboMotion.fadeRoute<void>(
+              InsightDetailPage(insight: insight),
+            ),
+          );
+        },
       );
     }
   }
