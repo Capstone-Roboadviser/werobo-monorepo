@@ -1475,7 +1475,7 @@ class _SkeletonBar extends StatelessWidget {
 // ─── Portfolio issue feed ──────────────────────────────────────
 
 class _PortfolioIssueFeed extends StatelessWidget {
-  static const _maxItems = 5;
+  static const _maxItems = 3;
 
   final MobileDigestResponse? digest;
   final RebalanceInsight? latestInsight;
@@ -1498,8 +1498,10 @@ class _PortfolioIssueFeed extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = _buildItems();
-    if (items.isEmpty) return const SizedBox.shrink();
+    final allItems = _buildItems();
+    if (allItems.isEmpty) return const SizedBox.shrink();
+    final visibleItems = allItems.take(_maxItems).toList();
+    final hasMore = allItems.length > _maxItems;
 
     final tc = WeRoboThemeColors.of(context);
     return Column(
@@ -1514,15 +1516,31 @@ class _PortfolioIssueFeed extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Container(
-          key: const Key('portfolio_issue_timeline_rail'),
+          decoration: BoxDecoration(
+            color: tc.surface,
+            borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
+            border: Border.all(color: tc.border, width: 1),
+          ),
           child: Column(
             children: [
-              for (int i = 0; i < items.length; i++)
-                _PortfolioIssueRow(
-                  item: items[i],
-                  index: i,
-                  isFirst: i == 0,
-                  isLast: i == items.length - 1,
+              for (int i = 0; i < visibleItems.length; i++) ...[
+                _PortfolioIssueRow(item: visibleItems[i]),
+                if (i < visibleItems.length - 1 || hasMore)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 16),
+                    child: Container(
+                      height: 1,
+                      color: tc.border.withValues(alpha: 0.3),
+                    ),
+                  ),
+              ],
+              if (hasMore)
+                _MoreItemsRow(
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('준비 중')),
+                    );
+                  },
                 ),
             ],
           ),
@@ -1541,6 +1559,14 @@ class _PortfolioIssueFeed extends StatelessWidget {
     if (contribution != null) {
       final isPositive = contribution.contributionWon >= 0;
       final periodLabel = _digestPeriodLabel(digest!);
+      final name = contribution.nameKo.isNotEmpty
+          ? contribution.nameKo
+          : contribution.ticker;
+      final josa = _josaSubject(name);
+      final won = _formatSignedWon(contribution.contributionWon);
+      final title = isPositive
+          ? '$name$josa $won 기여했어요'
+          : '$name$josa $won 영향을 줬어요';
       items.add(
         _PortfolioIssueItem(
           icon: isPositive
@@ -1548,8 +1574,7 @@ class _PortfolioIssueFeed extends StatelessWidget {
               : Icons.trending_down_rounded,
           iconColor: isPositive ? WeRoboColors.accent : WeRoboColors.error,
           eyebrow: periodLabel,
-          title: '기여도 알림',
-          body: _contributionBody(contribution, periodLabel),
+          title: title,
           onTap: onDigestTap,
         ),
       );
@@ -1557,14 +1582,12 @@ class _PortfolioIssueFeed extends StatelessWidget {
 
     if (_hasVolatilitySignal(digest)) {
       final multiple = digest!.triggerSigmaMultiple!;
-      final periodLabel = _digestPeriodLabel(digest!);
       items.add(
         _PortfolioIssueItem(
           icon: Icons.show_chart_rounded,
           iconColor: WeRoboColors.warning,
           eyebrow: '변동성 감지',
-          title: '시장 변동성 경고',
-          body: '$periodLabel 움직임이 평소보다 ${multiple.toStringAsFixed(1)}배 컸어요.',
+          title: '시장 변동성이 평소보다 ${multiple.toStringAsFixed(1)}배 컸어요',
           onTap: onDigestTap,
         ),
       );
@@ -1576,8 +1599,7 @@ class _PortfolioIssueFeed extends StatelessWidget {
           icon: Icons.auto_graph_rounded,
           iconColor: WeRoboColors.primary,
           eyebrow: _issueDateLabel(latestInsight!.rebalanceDate),
-          title: '알고리즘 시그널',
-          body: latestInsight!.historySummary,
+          title: '신규 알고리즘 시그널이 발생했어요',
           onTap: onInsightTap,
         ),
       );
@@ -1590,14 +1612,13 @@ class _PortfolioIssueFeed extends StatelessWidget {
           icon: Icons.article_outlined,
           iconColor: WeRoboColors.assetTier3,
           eyebrow: '최근 뉴스',
-          title: '자산군 뉴스',
-          body: '$sources 기반 주요 뉴스가 다이제스트에 반영됐어요.',
+          title: '$sources 뉴스가 다이제스트에 반영됐어요',
           onTap: onDigestTap,
         ),
       );
     }
 
-    return items.take(_maxItems).toList();
+    return items;
   }
 
   static _PortfolioIssueItem _digestStatusItem(
@@ -1606,26 +1627,15 @@ class _PortfolioIssueFeed extends StatelessWidget {
   ) {
     final available = digest.available;
     final periodLabel = _digestPeriodLabel(digest);
-    final pct = _formatSignedPercent(digest.totalReturnPct);
-    final won = _formatSignedWon(digest.totalReturnWon);
     return _PortfolioIssueItem(
       icon: available ? Icons.summarize_rounded : Icons.hourglass_empty_rounded,
       iconColor: available ? WeRoboColors.primary : WeRoboColors.textTertiary,
       eyebrow: periodLabel,
-      title: _digestTitle(digest),
-      body: available
-          ? '$periodLabel 수익률 $pct, $won 움직임이 감지됐어요.'
-          : '이번 주는 평소 변동 범위 안이라 주요 이슈만 모니터링 중이에요.',
+      title: available
+          ? '$periodLabel 다이제스트가 도착했어요'
+          : '이번 주는 평소 변동 범위 안이에요',
       onTap: available ? onDigestTap : null,
     );
-  }
-
-  static String _digestTitle(MobileDigestResponse digest) {
-    final periodLabel = _digestPeriodLabel(digest);
-    if (periodLabel == '최근 한 달') {
-      return '최근 한 달 다이제스트';
-    }
-    return '이번 주 다이제스트';
   }
 
   static String _digestPeriodLabel(MobileDigestResponse digest) {
@@ -1658,19 +1668,19 @@ class _PortfolioIssueFeed extends StatelessWidget {
     return digest?.available == true && digest!.sourcesUsed.isNotEmpty;
   }
 
-  static String _contributionBody(DigestDriver driver, String periodLabel) {
-    final name = driver.nameKo.isNotEmpty ? driver.nameKo : driver.ticker;
-    final won = _formatSignedWon(driver.contributionWon);
-    if (driver.contributionWon >= 0) {
-      return '$name가 $periodLabel 수익에 $won 기여했어요.';
-    }
-    return '$name가 $periodLabel 수익에 $won 영향을 줬어요.';
-  }
-
   static String _issueDateLabel(String isoDate) {
     final parsed = DateTime.tryParse(isoDate);
     if (parsed == null) return '최근 신호';
     return '${parsed.month}월 ${parsed.day}일';
+  }
+
+  static String _josaSubject(String name) {
+    if (name.isEmpty) return '가';
+    final code = name.codeUnitAt(name.length - 1);
+    if (code >= 0xAC00 && code <= 0xD7A3) {
+      return (code - 0xAC00) % 28 == 0 ? '가' : '이';
+    }
+    return '가';
   }
 }
 
@@ -1679,7 +1689,6 @@ class _PortfolioIssueItem {
   final Color iconColor;
   final String eyebrow;
   final String title;
-  final String body;
   final VoidCallback? onTap;
 
   const _PortfolioIssueItem({
@@ -1687,114 +1696,45 @@ class _PortfolioIssueItem {
     required this.iconColor,
     required this.eyebrow,
     required this.title,
-    required this.body,
     this.onTap,
   });
 }
 
 class _PortfolioIssueRow extends StatelessWidget {
   final _PortfolioIssueItem item;
-  final int index;
-  final bool isFirst;
-  final bool isLast;
 
-  const _PortfolioIssueRow({
-    required this.item,
-    required this.index,
-    required this.isFirst,
-    required this.isLast,
-  });
+  const _PortfolioIssueRow({required this.item});
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final row = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: IntrinsicHeight(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: SizedBox(
+        height: 32,
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            SizedBox(
-              width: 34,
-              child: Stack(
-                alignment: Alignment.topCenter,
-                children: [
-                  Positioned(
-                    top: isFirst ? 18 : 0,
-                    bottom: isLast ? 42 : 0,
-                    child: Container(
-                      width: 1,
-                      color: tc.border.withValues(alpha: 0.30),
-                    ),
-                  ),
-                  Positioned(
-                    top: 6,
-                    child: Container(
-                      key: ValueKey('portfolio_issue_timeline_node_$index'),
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: item.iconColor.withValues(alpha: 0.12),
-                        border: Border.all(
-                          color: item.iconColor.withValues(alpha: 0.34),
-                          width: 1,
-                        ),
-                      ),
-                      child: Icon(item.icon, size: 15, color: item.iconColor),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 10),
+            Icon(item.icon, size: 20, color: item.iconColor),
+            const SizedBox(width: 12),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(top: 5, bottom: 14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.eyebrow,
-                      style: WeRoboTypography.caption.copyWith(
-                        color: tc.textTertiary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      item.title,
-                      style: WeRoboTypography.bodySmall.copyWith(
-                        color: tc.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      item.body,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: WeRoboTypography.caption.copyWith(
-                        color: tc.textSecondary,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
+              child: Text(
+                item.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textPrimary,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
             ),
-            if (item.onTap != null) ...[
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: tc.textTertiary,
-                ),
+            const SizedBox(width: 8),
+            Text(
+              item.eyebrow,
+              style: WeRoboTypography.caption.copyWith(
+                color: tc.textTertiary,
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -1802,6 +1742,36 @@ class _PortfolioIssueRow extends StatelessWidget {
 
     if (item.onTap == null) return row;
     return Pressable(onTap: item.onTap!, child: row);
+  }
+}
+
+class _MoreItemsRow extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _MoreItemsRow({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: onTap,
+      child: const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: SizedBox(
+          height: 32,
+          child: Center(
+            child: Text(
+              '더 보기',
+              style: TextStyle(
+                fontFamily: WeRoboFonts.body,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: WeRoboColors.primary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
@@ -2626,11 +2596,6 @@ String _formatCurrency(int amount) {
 String _formatSignedWon(double amount) {
   final sign = amount >= 0 ? '+' : '-';
   return '$sign₩${_formatCurrency(amount.abs().round())}';
-}
-
-String _formatSignedPercent(double percentage) {
-  final sign = percentage >= 0 ? '+' : '-';
-  return '$sign${percentage.abs().toStringAsFixed(1)}%';
 }
 
 String _formatPercentLabel(double percentage) {
