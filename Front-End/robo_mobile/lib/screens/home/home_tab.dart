@@ -872,6 +872,91 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     );
   }
 
+  ({
+    double x,
+    double y,
+    DateTime anchorDate,
+    DateTime touchDate,
+    ({double anchorPct, double touchPct}) portfolio,
+    List<({String name, double anchorPct, double touchPct})> assetRows,
+  })? _buildCompareCardData(
+    List<ChartPoint> valuePts, {
+    required double fullWidth,
+    required double stackWidth,
+  }) {
+    final ai = _anchorIndex;
+    final ti = _touchIndex;
+    if (ai == null || ti == null || ai == ti) return null;
+    if (ai < 0 || ai >= valuePts.length) return null;
+    if (ti < 0 || ti >= valuePts.length) return null;
+    final base = valuePts.first.value;
+    if (base == 0) return null;
+    final anchorPortfolioPct = (valuePts[ai].value - base) / base;
+    final touchPortfolioPct = (valuePts[ti].value - base) / base;
+
+    final state = PortfolioStateProvider.of(context);
+    final names = <String, String>{
+      for (final s in (state.selectedPortfolio?.sectorAllocations ??
+          const <MobileSectorAllocation>[]))
+        s.assetCode: s.assetName,
+    };
+    final anchorReturns =
+        ai >= 1 ? _cumulativeAssetReturnsLocal(valuePts, ai) : const {};
+    final touchReturns =
+        ti >= 1 ? _cumulativeAssetReturnsLocal(valuePts, ti) : const {};
+
+    final codes = <String>{
+      ...anchorReturns.keys,
+      ...touchReturns.keys,
+    }.where(names.containsKey);
+    final candidates =
+        <({String name, double anchorPct, double touchPct, double delta})>[];
+    for (final code in codes) {
+      final a = anchorReturns[code] ?? 0.0;
+      final t = touchReturns[code] ?? 0.0;
+      candidates.add(
+        (name: names[code]!, anchorPct: a, touchPct: t, delta: t - a),
+      );
+    }
+    candidates.sort((a, b) => b.delta.abs().compareTo(a.delta.abs()));
+    final assetRows = candidates
+        .take(2)
+        .map((c) => (
+              name: c.name,
+              anchorPct: c.anchorPct,
+              touchPct: c.touchPct,
+            ))
+        .toList();
+
+    // Position: center between anchor and touch x positions, clamped.
+    // Sit the compare card near the top of the chart canvas so it stays
+    // clear of the two vertical lines below it.
+    const padX = 8.0;
+    const cardWidth = _CompareCard.width;
+    const cardHeight = _CompareCard.height;
+    const chartTotalH = 320.0;
+    final anchorX = (ai / (valuePts.length - 1)) * fullWidth - 24;
+    final touchX = (ti / (valuePts.length - 1)) * fullWidth - 24;
+    final mid = (anchorX + touchX) / 2;
+    final x = (mid - cardWidth / 2)
+        .clamp(padX, stackWidth - cardWidth - padX)
+        .toDouble();
+    const padY = 8.0;
+    final y = padY.clamp(padY, chartTotalH - cardHeight - padY).toDouble();
+
+    return (
+      x: x,
+      y: y.toDouble(),
+      anchorDate: valuePts[ai].date,
+      touchDate: valuePts[ti].date,
+      portfolio: (
+        anchorPct: anchorPortfolioPct,
+        touchPct: touchPortfolioPct,
+      ),
+      assetRows: assetRows,
+    );
+  }
+
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -885,6 +970,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     setState(() {
       _range = idx;
       _touchIndex = null;
+      _anchorIndex = null;
     });
     _drawCtrl.forward(from: 0);
   }
@@ -992,9 +1078,24 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                         return '${d.year}년 ${d.month}월 ${d.day}일';
                       }()
                     : '';
-            // Compute card data when dragging at a non-zero index
-            final cardData = _touchIndex != null && _touchIndex! >= 1
+            // Compute card data when dragging at a non-zero index.
+            // When an anchor is set and the touch is at a different
+            // index, switch to compare mode so the card shows the gap
+            // between the two points instead of a single snapshot.
+            final isCompareMode = _anchorIndex != null &&
+                _touchIndex != null &&
+                _anchorIndex != _touchIndex;
+            final cardData = !isCompareMode &&
+                    _touchIndex != null &&
+                    _touchIndex! >= 1
                 ? _buildCardData(
+                    valuePts,
+                    fullWidth: fullWidth,
+                    stackWidth: constraints.maxWidth,
+                  )
+                : null;
+            final compareData = isCompareMode
+                ? _buildCompareCardData(
                     valuePts,
                     fullWidth: fullWidth,
                     stackWidth: constraints.maxWidth,
@@ -1029,12 +1130,36 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                         onPanEnd: (_) {
                           _glowCtrl.stop();
                           _glowCtrl.value = 0;
-                          setState(() => _touchIndex = null);
+                          // Keep the touch index pinned when an anchor is
+                          // set, so the compare card stays visible after
+                          // the user lifts their finger.
+                          if (_anchorIndex == null) {
+                            setState(() => _touchIndex = null);
+                          }
                         },
                         onPanCancel: () {
                           _glowCtrl.stop();
                           _glowCtrl.value = 0;
-                          setState(() => _touchIndex = null);
+                          if (_anchorIndex == null) {
+                            setState(() => _touchIndex = null);
+                          }
+                        },
+                        onLongPressStart: (d) {
+                          final x = d.localPosition.dx;
+                          final idx = ((x / fullWidth) * (valuePts.length - 1))
+                              .round()
+                              .clamp(0, valuePts.length - 1);
+                          setState(() {
+                            _anchorIndex = idx;
+                            _touchIndex = idx;
+                          });
+                        },
+                        onLongPressMoveUpdate: (d) {
+                          final x = d.localPosition.dx;
+                          final idx = ((x / fullWidth) * (valuePts.length - 1))
+                              .round()
+                              .clamp(0, valuePts.length - 1);
+                          setState(() => _touchIndex = idx);
                         },
                         child: AnimatedBuilder(
                           animation: Listenable.merge([_drawCurve, _glowCtrl]),
@@ -1093,6 +1218,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                 ],
                                 progress: _drawCurve.value,
                                 touchIndex: _touchIndex,
+                                anchorIndex: _anchorIndex,
                                 glowPhase: _glowCtrl.value,
                                 dateLabel: dateLabel,
                                 glowColor: WeRoboColors.assetTier3,
@@ -1113,6 +1239,23 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                         portfolioPct: cardData.portfolioPct,
                         marketPct: cardData.marketPct,
                         assetRows: cardData.assetRows,
+                      ),
+                    ),
+                  if (compareData != null)
+                    Positioned(
+                      left: compareData.x,
+                      top: compareData.y,
+                      child: _CompareCard(
+                        anchorDate: compareData.anchorDate,
+                        touchDate: compareData.touchDate,
+                        portfolio: compareData.portfolio,
+                        assetRows: compareData.assetRows,
+                        onClose: () {
+                          setState(() {
+                            _anchorIndex = null;
+                            _touchIndex = null;
+                          });
+                        },
                       ),
                     ),
                 ],
@@ -1591,6 +1734,7 @@ class _HomePerformancePainter extends CustomPainter {
   final List<ChartLine> lines;
   final double progress;
   final int? touchIndex;
+  final int? anchorIndex;
   final double glowPhase;
   final String dateLabel;
   final Color glowColor;
@@ -1601,6 +1745,7 @@ class _HomePerformancePainter extends CustomPainter {
     required this.lines,
     required this.progress,
     this.touchIndex,
+    this.anchorIndex,
     this.glowPhase = 0,
     required this.dateLabel,
     required this.glowColor,
@@ -1697,6 +1842,14 @@ class _HomePerformancePainter extends CustomPainter {
       toY,
     );
 
+    // Anchor: dashed vertical line at the long-pressed point. Drawn
+    // before the touch crosshair so the live crosshair sits on top.
+    if (anchorIndex != null &&
+        anchorIndex! >= 0 &&
+        anchorIndex! < basePts.length) {
+      _drawAnchorLine(canvas, size, anchorIndex!, basePts.length, toX);
+    }
+
     // Crosshair + glow + date label (only when dragging).
     if (isDragging) {
       _drawCrosshair(
@@ -1710,6 +1863,30 @@ class _HomePerformancePainter extends CustomPainter {
         drawCount,
         lineTopPad,
       );
+    }
+  }
+
+  void _drawAnchorLine(
+    Canvas canvas,
+    Size size,
+    int idx,
+    int totalPts,
+    double Function(int, int) toX,
+  ) {
+    const lineTopPad = 16.0;
+    final h = size.height;
+    final tx = toX(idx, totalPts);
+    final paint = Paint()
+      ..color = crosshairColor.withValues(alpha: 0.5)
+      ..strokeWidth = 1;
+    const dashLen = 4.0;
+    const gapLen = 4.0;
+    double y = lineTopPad;
+    final bottom = h - lineTopPad;
+    while (y < bottom) {
+      final end = math.min(y + dashLen, bottom);
+      canvas.drawLine(Offset(tx, y), Offset(tx, end), paint);
+      y = end + gapLen;
     }
   }
 
@@ -1911,9 +2088,10 @@ class _HomePerformancePainter extends CustomPainter {
   bool shouldRepaint(covariant _HomePerformancePainter old) =>
       old.progress != progress ||
       old.touchIndex != touchIndex ||
+      old.anchorIndex != anchorIndex ||
       old.glowPhase != glowPhase;
   // `lines` is freshly constructed every build (new list, new ChartLine
-  // instances) so reference equality is always false — we'd always
+  // instances) so reference equality is always false. We'd always
   // repaint. Range/data changes already trigger a setState that
   // unconditionally rebuilds, so omitting `lines` here is safe.
 }
@@ -2103,6 +2281,210 @@ class _DragContextRow extends StatelessWidget {
               fontWeight: FontWeight.w500,
               color: color,
               fontFeatures: const [ui.FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Two-point compare card ───────────────────────────────────
+
+class _CompareCard extends StatelessWidget {
+  final DateTime anchorDate;
+  final DateTime touchDate;
+  final ({double anchorPct, double touchPct}) portfolio;
+  final List<({String name, double anchorPct, double touchPct})> assetRows;
+  final VoidCallback onClose;
+
+  const _CompareCard({
+    required this.anchorDate,
+    required this.touchDate,
+    required this.portfolio,
+    required this.assetRows,
+    required this.onClose,
+  });
+
+  static const double width = 240.0;
+  static const double height = 152.0;
+
+  String _formatShortDate(DateTime d) => '${d.month}월 ${d.day}일';
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          width: width,
+          color: tc.surface.withValues(alpha: 0.62),
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${_formatShortDate(anchorDate)} → '
+                      '${_formatShortDate(touchDate)}',
+                      style: WeRoboTypography.caption.copyWith(
+                        color: tc.textTertiary,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: IconButton(
+                      padding: EdgeInsets.zero,
+                      iconSize: 12,
+                      icon: Icon(Icons.close, color: tc.textTertiary),
+                      onPressed: onClose,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Container(
+                height: 1,
+                color: tc.border.withValues(alpha: 0.3),
+              ),
+              const SizedBox(height: 6),
+              _CompareRow(
+                label: '포트폴리오',
+                anchorPct: portfolio.anchorPct,
+                touchPct: portfolio.touchPct,
+              ),
+              for (final row in assetRows)
+                _CompareRow(
+                  label: row.name,
+                  anchorPct: row.anchorPct,
+                  touchPct: row.touchPct,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompareRow extends StatelessWidget {
+  final String label;
+  final double? anchorPct;
+  final double? touchPct;
+
+  const _CompareRow({
+    required this.label,
+    required this.anchorPct,
+    required this.touchPct,
+  });
+
+  String _formatPct(double? pct) {
+    if (pct == null) return '--%';
+    final sign = pct >= 0 ? '+' : '-';
+    return '$sign${(pct * 100).abs().toStringAsFixed(1)}%';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final hasData = anchorPct != null && touchPct != null;
+    final delta = hasData ? touchPct! - anchorPct! : null;
+    final deltaColor = delta == null
+        ? tc.textTertiary
+        : (delta >= 0 ? _gainColor : _lossColor);
+    final glyph = delta == null ? '' : (delta >= 0 ? '▲' : '▼');
+    return SizedBox(
+      height: 28,
+      child: Row(
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: WeRoboTypography.caption.copyWith(
+                color: tc.textPrimary,
+                fontSize: 12,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 48,
+            child: Text(
+              _formatPct(anchorPct),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontFamily: WeRoboFonts.english,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: tc.textSecondary,
+                fontFeatures: const [ui.FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Text(
+              '→',
+              style: TextStyle(
+                fontSize: 12,
+                color: tc.textTertiary,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 48,
+            child: Text(
+              _formatPct(touchPct),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontFamily: WeRoboFonts.english,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: tc.textPrimary,
+                fontFeatures: const [ui.FontFeature.tabularFigures()],
+              ),
+            ),
+          ),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    delta == null
+                        ? ''
+                        : '${delta >= 0 ? '+' : '-'}${(delta * 100).abs().toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontFamily: WeRoboFonts.english,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: deltaColor,
+                      fontFeatures: const [ui.FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  if (glyph.isNotEmpty) ...[
+                    const SizedBox(width: 2),
+                    Text(
+                      glyph,
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: deltaColor,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
