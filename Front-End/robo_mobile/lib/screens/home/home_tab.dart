@@ -3748,13 +3748,10 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     final uri = Uri.tryParse(url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
-    if (mounted) Navigator.of(context).pop();
   }
 
   void _navigateToComingSoon(BuildContext context, String title) {
-    final navigator = Navigator.of(context);
-    navigator.pop();
-    navigator.push(
+    Navigator.of(context).push(
       WeRoboMotion.fadeRoute<void>(_ComingSoonPage(title: title)),
     );
   }
@@ -3781,9 +3778,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
         category: _categoryLabel(_NotificationKind.algorithmSignal),
         title: title,
         onTap: () {
-          final navigator = Navigator.of(context);
-          navigator.pop();
-          navigator.push(
+          Navigator.of(context).push(
             WeRoboMotion.fadeRoute<void>(
               InsightDetailPage(insight: insight),
             ),
