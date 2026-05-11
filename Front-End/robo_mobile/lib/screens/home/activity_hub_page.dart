@@ -4,6 +4,7 @@ import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import 'insight_detail_page.dart';
+import 'notification_settings_page.dart';
 
 /// Categories that can be filtered on the notification history page.
 enum NotificationKind {
@@ -147,7 +148,7 @@ class _ActivityHubPageState extends State<ActivityHubPage> {
                   Pressable(
                     onTap: () => Navigator.of(context).push(
                       WeRoboMotion.fadeRoute<void>(
-                        const _NotificationSettingsPage(),
+                        const NotificationSettingsPage(),
                       ),
                     ),
                     child: Padding(
@@ -556,57 +557,3 @@ class _ComingSoonPage extends StatelessWidget {
   }
 }
 
-class _NotificationSettingsPage extends StatelessWidget {
-  const _NotificationSettingsPage();
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Scaffold(
-      backgroundColor: tc.background,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 8,
-              ),
-              child: Row(
-                children: [
-                  Pressable(
-                    onTap: () => Navigator.pop(context),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        size: 20,
-                        color: tc.textPrimary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '알림 설정',
-                    style: WeRoboTypography.heading2.themed(context),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Center(
-                child: Text(
-                  '준비중입니다',
-                  style: WeRoboTypography.body.copyWith(
-                    color: tc.textTertiary,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
