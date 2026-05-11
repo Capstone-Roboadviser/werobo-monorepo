@@ -1060,6 +1060,29 @@ class MobileVolatilityHistoryResponse {
   }
 }
 
+class MobileAssetClassNewsResponse {
+  final String title;
+  final String link;
+  final DateTime published;
+  final String source;
+
+  const MobileAssetClassNewsResponse({
+    required this.title,
+    required this.link,
+    required this.published,
+    required this.source,
+  });
+
+  factory MobileAssetClassNewsResponse.fromJson(Map<String, dynamic> json) {
+    return MobileAssetClassNewsResponse(
+      title: json['title']?.toString() ?? '',
+      link: json['link']?.toString() ?? '',
+      published: _parseDate(json['published']),
+      source: json['source']?.toString() ?? '',
+    );
+  }
+}
+
 class MobileReturnPoint {
   final DateTime date;
   final double expectedReturn;
