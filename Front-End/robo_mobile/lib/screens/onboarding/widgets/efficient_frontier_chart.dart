@@ -25,7 +25,7 @@ const Map<AssetClass, Offset> _kAssetBubbleSlots = {
   AssetClass.newGrowth: Offset(0.82, 0.22),
 };
 
-const double _kFrontierCurveStartX = 0.06;
+const double _kFrontierCurveStartX = 0.10;
 const double _kFrontierCurveEndX = 0.94;
 const double _kFrontierBubbleLabelFontSize = 10.5;
 const double _kFrontierBubbleLabelMargin = 4.0;
