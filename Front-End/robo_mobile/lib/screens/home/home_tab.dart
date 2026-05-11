@@ -52,6 +52,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
   bool _showAllocationAmounts = false;
   bool _earningsHistoryFetchStarted = false;
+  bool _isRangeDigestMode = false;
+  _ChartRangeSelection? _selectedDigestRange;
   String? _loadedEarningsRiskCode;
 
   @override
@@ -164,6 +166,24 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     );
   }
 
+  void _enterRangeDigestMode() {
+    setState(() {
+      _isRangeDigestMode = true;
+      _selectedDigestRange = null;
+    });
+  }
+
+  void _exitRangeDigestMode() {
+    setState(() {
+      _isRangeDigestMode = false;
+      _selectedDigestRange = null;
+    });
+  }
+
+  void _setDigestRange(_ChartRangeSelection? selection) {
+    setState(() => _selectedDigestRange = selection);
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
@@ -231,7 +251,14 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
             // Hero: value + chart + time range
             _stagger(
               !state.welcomeBannerSeen ? ++staggerIdx : staggerIdx,
-              _PortfolioHeroChart(type: type, digest: issueDigest),
+              _PortfolioHeroChart(
+                type: type,
+                digest: issueDigest,
+                rangeDigestMode: _isRangeDigestMode,
+                selectedDigestRange: _selectedDigestRange,
+                onRangeSelectionChanged: _setDigestRange,
+                onExitRangeDigestMode: _exitRangeDigestMode,
+              ),
             ),
             if (hasIssueFeed) const SizedBox(height: 16),
             if (hasIssueFeed)
@@ -240,6 +267,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 _PortfolioIssueFeed(
                   digest: issueDigest,
                   latestInsight: issueInsight,
+                  rangeDigestMode: _isRangeDigestMode,
+                  selectedDigestRange: _selectedDigestRange,
+                  onEnterRangeDigestMode: _enterRangeDigestMode,
+                  onExitRangeDigestMode: _exitRangeDigestMode,
                   onDigestTap: issueData.usesPlaceholderDigest
                       ? null
                       : () => Navigator.push(
@@ -429,10 +460,18 @@ class _HomeIssueFeedDataSource {
 class _PortfolioHeroChart extends StatefulWidget {
   final InvestmentType type;
   final MobileDigestResponse? digest;
+  final bool rangeDigestMode;
+  final _ChartRangeSelection? selectedDigestRange;
+  final ValueChanged<_ChartRangeSelection?> onRangeSelectionChanged;
+  final VoidCallback onExitRangeDigestMode;
 
   const _PortfolioHeroChart({
     required this.type,
     this.digest,
+    required this.rangeDigestMode,
+    required this.selectedDigestRange,
+    required this.onRangeSelectionChanged,
+    required this.onExitRangeDigestMode,
   });
 
   @override
@@ -460,6 +499,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   // dashed vertical line at this index and the drag card switches to
   // anchor-vs-touch compare mode.
   int? _anchorIndex;
+  int? _rangeStartIndex;
+  int? _rangeEndIndex;
   // Cache of cumulative asset returns since the start of the visible
   // range, keyed by date. Rebuilt when the range changes or the earnings
   // history reference changes.
@@ -530,7 +571,26 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.type != widget.type) {
       _touchIndex = null;
+      _anchorIndex = null;
+      _rangeStartIndex = null;
+      _rangeEndIndex = null;
       _drawCtrl.forward(from: 0);
+    }
+    if (oldWidget.rangeDigestMode != widget.rangeDigestMode) {
+      _touchIndex = null;
+      _anchorIndex = null;
+      _glowCtrl.stop();
+      _glowCtrl.value = 0;
+      if (!widget.rangeDigestMode) {
+        _rangeStartIndex = null;
+        _rangeEndIndex = null;
+      }
+    }
+    if (widget.rangeDigestMode &&
+        oldWidget.selectedDigestRange != null &&
+        widget.selectedDigestRange == null) {
+      _rangeStartIndex = null;
+      _rangeEndIndex = null;
     }
   }
 
@@ -962,6 +1022,78 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     );
   }
 
+  int _indexForChartX(double x, double fullWidth, int pointCount) {
+    if (pointCount <= 1) return 0;
+    return ((x / fullWidth) * (pointCount - 1))
+        .round()
+        .clamp(0, pointCount - 1)
+        .toInt();
+  }
+
+  void _beginRangeSelectionAt(
+    double x,
+    double fullWidth,
+    List<ChartPoint> valuePts,
+  ) {
+    if (valuePts.length < 2) return;
+    final idx = _indexForChartX(x, fullWidth, valuePts.length);
+    setState(() {
+      _touchIndex = null;
+      _anchorIndex = null;
+      _rangeStartIndex = idx;
+      _rangeEndIndex = idx;
+    });
+  }
+
+  void _updateRangeSelectionAt(
+    double x,
+    double fullWidth,
+    List<ChartPoint> valuePts,
+  ) {
+    if (valuePts.length < 2 || _rangeStartIndex == null) return;
+    final idx = _indexForChartX(x, fullWidth, valuePts.length);
+    setState(() => _rangeEndIndex = idx);
+  }
+
+  void _completeRangeSelection(List<ChartPoint> valuePts) {
+    final startIdx = _rangeStartIndex;
+    final endIdx = _rangeEndIndex;
+    if (valuePts.length < 2 || startIdx == null || endIdx == null) {
+      widget.onRangeSelectionChanged(null);
+      return;
+    }
+
+    final normalizedStart = math.min(startIdx, endIdx);
+    final normalizedEnd = math.max(startIdx, endIdx);
+    if (normalizedEnd - normalizedStart < 1) {
+      widget.onRangeSelectionChanged(null);
+      return;
+    }
+
+    final start = valuePts[normalizedStart];
+    final end = valuePts[normalizedEnd];
+    setState(() {
+      _rangeStartIndex = normalizedStart;
+      _rangeEndIndex = normalizedEnd;
+    });
+    widget.onRangeSelectionChanged(
+      _ChartRangeSelection(
+        startDate: start.date,
+        endDate: end.date,
+        startValue: start.value,
+        endValue: end.value,
+      ),
+    );
+  }
+
+  void _cancelRangeSelection() {
+    setState(() {
+      _rangeStartIndex = null;
+      _rangeEndIndex = null;
+    });
+    widget.onRangeSelectionChanged(null);
+  }
+
   void _selectRange(int idx) {
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
@@ -976,7 +1108,10 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
       _range = idx;
       _touchIndex = null;
       _anchorIndex = null;
+      _rangeStartIndex = null;
+      _rangeEndIndex = null;
     });
+    widget.onRangeSelectionChanged(null);
     _drawCtrl.forward(from: 0);
   }
 
@@ -1015,8 +1150,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final formattedPnl =
         '$sign₩${_formatCurrency(displayChange.abs().toInt())}';
     final formattedPct = '($sign${displayChangePct.abs().toStringAsFixed(2)}%)';
-    final investedAmount =
-        accountSummary?.investedAmount ?? startValue;
+    final investedAmount = accountSummary?.investedAmount ?? startValue;
     final headerCurrentValue = crosshairValue ?? currentValue;
 
     return Column(
@@ -1069,6 +1203,11 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           current: headerCurrentValue,
         ),
 
+        if (widget.rangeDigestMode) ...[
+          const SizedBox(height: 14),
+          _RangeDigestModeChip(onExit: widget.onExitRangeDigestMode),
+        ],
+
         const SizedBox(height: 20),
 
         // Chart (edge-to-edge)
@@ -1087,10 +1226,12 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
             // When an anchor is set and the touch is at a different
             // index, switch to compare mode so the card shows the gap
             // between the two points instead of a single snapshot.
-            final isCompareMode = _anchorIndex != null &&
+            final isCompareMode = !widget.rangeDigestMode &&
+                _anchorIndex != null &&
                 _touchIndex != null &&
                 _anchorIndex != _touchIndex;
-            final cardData = !isCompareMode &&
+            final cardData = !widget.rangeDigestMode &&
+                    !isCompareMode &&
                     _touchIndex != null &&
                     _touchIndex! >= 1
                 ? _buildCardData(
@@ -1117,22 +1258,55 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     child: Transform.translate(
                       offset: const Offset(-24, 0),
                       child: GestureDetector(
+                        key: const Key('home_performance_chart_gesture'),
+                        behavior: HitTestBehavior.opaque,
                         onPanDown: (d) {
-                          final x = d.localPosition.dx;
-                          final idx = ((x / fullWidth) * (valuePts.length - 1))
-                              .round()
-                              .clamp(0, valuePts.length - 1);
+                          if (widget.rangeDigestMode) {
+                            _beginRangeSelectionAt(
+                              d.localPosition.dx,
+                              fullWidth,
+                              valuePts,
+                            );
+                            return;
+                          }
+                          final idx = _indexForChartX(
+                            d.localPosition.dx,
+                            fullWidth,
+                            valuePts.length,
+                          );
                           _glowCtrl.repeat(reverse: true);
                           setState(() => _touchIndex = idx);
                         },
+                        onPanStart: (d) {
+                          if (widget.rangeDigestMode) {
+                            _beginRangeSelectionAt(
+                              d.localPosition.dx,
+                              fullWidth,
+                              valuePts,
+                            );
+                          }
+                        },
                         onPanUpdate: (d) {
-                          final x = d.localPosition.dx;
-                          final idx = ((x / fullWidth) * (valuePts.length - 1))
-                              .round()
-                              .clamp(0, valuePts.length - 1);
+                          if (widget.rangeDigestMode) {
+                            _updateRangeSelectionAt(
+                              d.localPosition.dx,
+                              fullWidth,
+                              valuePts,
+                            );
+                            return;
+                          }
+                          final idx = _indexForChartX(
+                            d.localPosition.dx,
+                            fullWidth,
+                            valuePts.length,
+                          );
                           setState(() => _touchIndex = idx);
                         },
                         onPanEnd: (_) {
+                          if (widget.rangeDigestMode) {
+                            _completeRangeSelection(valuePts);
+                            return;
+                          }
                           _glowCtrl.stop();
                           _glowCtrl.value = 0;
                           // Keep the touch index pinned when an anchor is
@@ -1143,6 +1317,10 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                           }
                         },
                         onPanCancel: () {
+                          if (widget.rangeDigestMode) {
+                            _cancelRangeSelection();
+                            return;
+                          }
                           _glowCtrl.stop();
                           _glowCtrl.value = 0;
                           if (_anchorIndex == null) {
@@ -1150,20 +1328,24 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                           }
                         },
                         onLongPressStart: (d) {
-                          final x = d.localPosition.dx;
-                          final idx = ((x / fullWidth) * (valuePts.length - 1))
-                              .round()
-                              .clamp(0, valuePts.length - 1);
+                          if (widget.rangeDigestMode) return;
+                          final idx = _indexForChartX(
+                            d.localPosition.dx,
+                            fullWidth,
+                            valuePts.length,
+                          );
                           setState(() {
                             _anchorIndex = idx;
                             _touchIndex = idx;
                           });
                         },
                         onLongPressMoveUpdate: (d) {
-                          final x = d.localPosition.dx;
-                          final idx = ((x / fullWidth) * (valuePts.length - 1))
-                              .round()
-                              .clamp(0, valuePts.length - 1);
+                          if (widget.rangeDigestMode) return;
+                          final idx = _indexForChartX(
+                            d.localPosition.dx,
+                            fullWidth,
+                            valuePts.length,
+                          );
                           setState(() => _touchIndex = idx);
                         },
                         child: AnimatedBuilder(
@@ -1224,6 +1406,12 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                                 progress: _drawCurve.value,
                                 touchIndex: _touchIndex,
                                 anchorIndex: _anchorIndex,
+                                selectedRangeStartIndex: widget.rangeDigestMode
+                                    ? _rangeStartIndex
+                                    : null,
+                                selectedRangeEndIndex: widget.rangeDigestMode
+                                    ? _rangeEndIndex
+                                    : null,
                                 glowPhase: _glowCtrl.value,
                                 dateLabel: dateLabel,
                                 glowColor: WeRoboColors.assetTier3,
@@ -1364,6 +1552,59 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   }
 }
 
+class _RangeDigestModeChip extends StatelessWidget {
+  final VoidCallback onExit;
+
+  const _RangeDigestModeChip({required this.onExit});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Container(
+      key: const Key('range_digest_mode_chip'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: WeRoboColors.primary.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: WeRoboColors.primary.withValues(alpha: 0.22),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.auto_graph_rounded,
+            size: 17,
+            color: WeRoboColors.primary,
+          ),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Text(
+              '구간을 드래그해서 선택하세요',
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          IconButton(
+            key: const Key('range_digest_exit'),
+            onPressed: onExit,
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+            icon: Icon(
+              Icons.close_rounded,
+              size: 18,
+              color: tc.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ContributionOneLiners extends StatelessWidget {
   final MobileDigestResponse? digest;
 
@@ -1372,8 +1613,7 @@ class _ContributionOneLiners extends StatelessWidget {
   List<DigestDriver> _topTwo() {
     final d = digest;
     if (d == null || !d.available) return const [];
-    final items = [...d.drivers, ...d.detractors]
-      ..sort(
+    final items = [...d.drivers, ...d.detractors]..sort(
         (a, b) => b.contributionWon.abs().compareTo(a.contributionWon.abs()),
       );
     return items.take(2).toList();
@@ -1479,12 +1719,20 @@ class _PortfolioIssueFeed extends StatelessWidget {
 
   final MobileDigestResponse? digest;
   final RebalanceInsight? latestInsight;
+  final bool rangeDigestMode;
+  final _ChartRangeSelection? selectedDigestRange;
+  final VoidCallback onEnterRangeDigestMode;
+  final VoidCallback onExitRangeDigestMode;
   final VoidCallback? onDigestTap;
   final VoidCallback? onInsightTap;
 
   const _PortfolioIssueFeed({
     required this.digest,
     required this.latestInsight,
+    required this.rangeDigestMode,
+    required this.selectedDigestRange,
+    required this.onEnterRangeDigestMode,
+    required this.onExitRangeDigestMode,
     this.onDigestTap,
     this.onInsightTap,
   });
@@ -1498,6 +1746,13 @@ class _PortfolioIssueFeed extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (rangeDigestMode) {
+      return _RangeDigestIssueCard(
+        selection: selectedDigestRange,
+        onExit: onExitRangeDigestMode,
+      );
+    }
+
     final allItems = _buildItems();
     if (allItems.isEmpty) return const SizedBox.shrink();
     final visibleItems = allItems.take(_maxItems).toList();
@@ -1542,6 +1797,14 @@ class _PortfolioIssueFeed extends StatelessWidget {
                     );
                   },
                 ),
+              Padding(
+                padding: const EdgeInsets.only(left: 16),
+                child: Container(
+                  height: 1,
+                  color: tc.border.withValues(alpha: 0.3),
+                ),
+              ),
+              _RangeDigestEntryRow(onTap: onEnterRangeDigestMode),
             ],
           ),
         ),
@@ -1564,9 +1827,8 @@ class _PortfolioIssueFeed extends StatelessWidget {
           : contribution.ticker;
       final josa = _josaSubject(name);
       final won = _formatSignedWon(contribution.contributionWon);
-      final title = isPositive
-          ? '$name$josa $won 기여했어요'
-          : '$name$josa $won 영향을 줬어요';
+      final title =
+          isPositive ? '$name$josa $won 기여했어요' : '$name$josa $won 영향을 줬어요';
       items.add(
         _PortfolioIssueItem(
           icon: isPositive
@@ -1631,9 +1893,7 @@ class _PortfolioIssueFeed extends StatelessWidget {
       icon: available ? Icons.summarize_rounded : Icons.hourglass_empty_rounded,
       iconColor: available ? WeRoboColors.primary : WeRoboColors.textTertiary,
       eyebrow: periodLabel,
-      title: available
-          ? '$periodLabel 다이제스트가 도착했어요'
-          : '이번 주는 평소 변동 범위 안이에요',
+      title: available ? '$periodLabel 다이제스트가 도착했어요' : '이번 주는 평소 변동 범위 안이에요',
       onTap: available ? onDigestTap : null,
     );
   }
@@ -1682,6 +1942,198 @@ class _PortfolioIssueFeed extends StatelessWidget {
     }
     return '가';
   }
+}
+
+class _RangeDigestEntryRow extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _RangeDigestEntryRow({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: SizedBox(
+          height: 32,
+          child: Row(
+            children: [
+              Icon(
+                Icons.timeline_rounded,
+                size: 20,
+                color: WeRoboColors.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  '이 구간 분석',
+                  style: WeRoboTypography.bodySmall.copyWith(
+                    color: tc.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: tc.textTertiary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RangeDigestIssueCard extends StatelessWidget {
+  final _ChartRangeSelection? selection;
+  final VoidCallback onExit;
+
+  const _RangeDigestIssueCard({
+    required this.selection,
+    required this.onExit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final summary = selection == null
+        ? const _RangeDigestSummary(
+            title: '이 구간은 왜 움직였을까?',
+            meta: '구간 분석',
+            body: '차트에서 궁금한 구간을 드래그해 선택하세요.',
+          )
+        : _RangeDigestSummary.fromSelection(selection!);
+
+    return Container(
+      key: Key(selection == null
+          ? 'portfolio_range_digest_card'
+          : 'range_digest_selection_active'),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        color: tc.surface,
+        borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
+        border: Border.all(
+          color: WeRoboColors.primary.withValues(alpha: 0.28),
+          width: 1,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.auto_graph_rounded,
+                size: 17,
+                color: WeRoboColors.primary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                summary.meta,
+                style: WeRoboTypography.caption.copyWith(
+                  color: tc.textTertiary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Pressable(
+                onTap: onExit,
+                child: Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: tc.textTertiary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            summary.title,
+            style: WeRoboTypography.heading3.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            summary.body,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textSecondary,
+              height: 1.45,
+            ),
+          ),
+          if (selection == null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '손을 떼면 선택한 구간이 유지돼요.',
+              style: WeRoboTypography.caption.copyWith(
+                color: tc.textTertiary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ChartRangeSelection {
+  final DateTime startDate;
+  final DateTime endDate;
+  final double startValue;
+  final double endValue;
+
+  const _ChartRangeSelection({
+    required this.startDate,
+    required this.endDate,
+    required this.startValue,
+    required this.endValue,
+  });
+
+  double get change => endValue - startValue;
+  double get changePct => startValue == 0 ? 0 : change / startValue * 100;
+}
+
+class _RangeDigestSummary {
+  final String title;
+  final String meta;
+  final String body;
+
+  const _RangeDigestSummary({
+    required this.title,
+    required this.meta,
+    required this.body,
+  });
+
+  factory _RangeDigestSummary.fromSelection(_ChartRangeSelection selection) {
+    final pct = selection.changePct;
+    final title = pct > 0.1
+        ? '이 구간에서 왜 올랐을까?'
+        : pct < -0.1
+            ? '이 구간에서 왜 내려갔을까?'
+            : '왜 큰 변화가 없었을까?';
+    final range = _formatDateRange(selection.startDate, selection.endDate);
+    final signedPct = _formatSignedPercent(pct);
+    final signedWon = _formatSignedWon(selection.change);
+    return _RangeDigestSummary(
+      title: title,
+      meta: '선택 구간 · $range',
+      body: '$range 동안 $signedPct, $signedWon 움직였어요. '
+          '변화 원인 분석은 곧 연결됩니다.',
+    );
+  }
+}
+
+String _formatDateRange(DateTime start, DateTime end) {
+  return '${start.month}월 ${start.day}일-${end.month}월 ${end.day}일';
 }
 
 class _PortfolioIssueItem {
@@ -1823,6 +2275,8 @@ class _HomePerformancePainter extends CustomPainter {
   final double progress;
   final int? touchIndex;
   final int? anchorIndex;
+  final int? selectedRangeStartIndex;
+  final int? selectedRangeEndIndex;
   final double glowPhase;
   final String dateLabel;
   final Color glowColor;
@@ -1834,6 +2288,8 @@ class _HomePerformancePainter extends CustomPainter {
     required this.progress,
     this.touchIndex,
     this.anchorIndex,
+    this.selectedRangeStartIndex,
+    this.selectedRangeEndIndex,
     this.glowPhase = 0,
     required this.dateLabel,
     required this.glowColor,
@@ -1872,6 +2328,8 @@ class _HomePerformancePainter extends CustomPainter {
     double toX(int i, int total) => w * i / (total - 1);
     double toY(double val) =>
         graphTopPad + chartH - ((val - minY) / rangeY) * chartH;
+
+    _drawSelectedRange(canvas, basePts.length, toX, graphTopPad, chartH);
 
     // Grid lines — dimmed to 0.08 (was 0.15) so the chart reads
     // "no Y axis" while keeping spatial reference.
@@ -1952,6 +2410,48 @@ class _HomePerformancePainter extends CustomPainter {
         lineTopPad,
       );
     }
+  }
+
+  void _drawSelectedRange(
+    Canvas canvas,
+    int pointCount,
+    double Function(int, int) toX,
+    double graphTopPad,
+    double chartH,
+  ) {
+    final start = selectedRangeStartIndex;
+    final end = selectedRangeEndIndex;
+    if (start == null || end == null || pointCount < 2) return;
+
+    final leftIdx = math.min(start, end).clamp(0, pointCount - 1).toInt();
+    final rightIdx = math.max(start, end).clamp(0, pointCount - 1).toInt();
+    final left = toX(leftIdx, pointCount);
+    final right = toX(rightIdx, pointCount);
+    if ((right - left).abs() < 1) return;
+
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTRB(left, graphTopPad, right, graphTopPad + chartH),
+      const Radius.circular(8),
+    );
+    canvas.drawRRect(
+      rect,
+      Paint()..color = WeRoboColors.primary.withValues(alpha: 0.08),
+    );
+
+    final handlePaint = Paint()
+      ..color = WeRoboColors.primary.withValues(alpha: 0.55)
+      ..strokeWidth = 1.2
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(left, graphTopPad),
+      Offset(left, graphTopPad + chartH),
+      handlePaint,
+    );
+    canvas.drawLine(
+      Offset(right, graphTopPad),
+      Offset(right, graphTopPad + chartH),
+      handlePaint,
+    );
   }
 
   void _drawAnchorLine(
@@ -2177,6 +2677,8 @@ class _HomePerformancePainter extends CustomPainter {
       old.progress != progress ||
       old.touchIndex != touchIndex ||
       old.anchorIndex != anchorIndex ||
+      old.selectedRangeStartIndex != selectedRangeStartIndex ||
+      old.selectedRangeEndIndex != selectedRangeEndIndex ||
       old.glowPhase != glowPhase;
   // `lines` is freshly constructed every build (new list, new ChartLine
   // instances) so reference equality is always false. We'd always
@@ -2596,6 +3098,11 @@ String _formatCurrency(int amount) {
 String _formatSignedWon(double amount) {
   final sign = amount >= 0 ? '+' : '-';
   return '$sign₩${_formatCurrency(amount.abs().round())}';
+}
+
+String _formatSignedPercent(double percentage) {
+  final sign = percentage >= 0 ? '+' : '-';
+  return '$sign${percentage.abs().toStringAsFixed(1)}%';
 }
 
 String _formatPercentLabel(double percentage) {

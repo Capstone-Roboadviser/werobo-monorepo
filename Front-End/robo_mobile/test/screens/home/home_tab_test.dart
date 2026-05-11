@@ -379,8 +379,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
-    expect(
-        find.textContaining('미국 가치주가 +₩600,000 기여했어요'), findsOneWidget);
+    expect(find.textContaining('미국 가치주가 +₩600,000 기여했어요'), findsOneWidget);
     expect(find.textContaining('시장 변동성이 평소보다 2.4배 컸어요'), findsOneWidget);
   });
 
@@ -528,5 +527,100 @@ void main() {
     // After release, _touchIndex resets to null and the card disappears,
     // so only the legend's '포트폴리오' remains.
     expect(find.text('포트폴리오'), findsOneWidget);
+  });
+
+  testWidgets('range analysis mode enters from issue feed and exits cleanly',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(accountDashboard());
+    state.setWeeklyDigest(digestFixture(available: true));
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    await tester.ensureVisible(find.text('이 구간 분석'));
+    await tester.pump();
+    await tester.tap(find.text('이 구간 분석'));
+    await tester.pump();
+
+    expect(find.text('구간을 드래그해서 선택하세요'), findsOneWidget);
+    expect(find.text('차트에서 궁금한 구간을 드래그해 선택하세요.'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('range_digest_exit')));
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('range_digest_exit')));
+    await tester.pump();
+
+    expect(find.text('포트폴리오 주요 이슈 알림'), findsOneWidget);
+    expect(find.text('구간을 드래그해서 선택하세요'), findsNothing);
+  });
+
+  testWidgets('range analysis drag selects persistent interval summary',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(
+      MobileAccountDashboard(
+        hasAccount: true,
+        summary: accountDashboard().summary,
+        history: List.generate(
+          60,
+          (i) => MobileAccountHistoryPoint(
+            date: DateTime.now().subtract(Duration(days: 60 - i)),
+            portfolioValue: 10000000 + (i * 5000),
+            investedAmount: 10000000,
+            profitLoss: i * 5000,
+            profitLossPct: (i * 5000) / 10000000,
+          ),
+        ),
+        recentActivity: const [],
+      ),
+    );
+    state.setWeeklyDigest(digestFixture(available: true));
+    await state.markWelcomeBannerSeen();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    await tester.ensureVisible(find.text('이 구간 분석'));
+    await tester.pump();
+    await tester.tap(find.text('이 구간 분석'));
+    await tester.pump();
+
+    final chart = find.byKey(const Key('home_performance_chart_gesture'));
+    await tester.ensureVisible(chart);
+    await tester.pump();
+    await tester.timedDrag(
+      chart,
+      const Offset(260, 0),
+      const Duration(milliseconds: 300),
+    );
+    await tester.pump();
+
+    expect(
+        find.byKey(const Key('range_digest_selection_active')), findsOneWidget);
+    expect(find.textContaining('움직였어요'), findsOneWidget);
   });
 }
