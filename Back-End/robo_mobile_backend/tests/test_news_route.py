@@ -43,6 +43,7 @@ def test_get_news_returns_503_on_unavailable(client):
     with patch.object(news_service, "fetch_news", side_effect=boom):
         response = client.get("/api/v1/news/asset-class", params={"cls": "gold"})
     assert response.status_code == 503
+    assert response.json()["detail"] == "news_unavailable"
 
 
 def test_get_news_rejects_unknown_cls(client):

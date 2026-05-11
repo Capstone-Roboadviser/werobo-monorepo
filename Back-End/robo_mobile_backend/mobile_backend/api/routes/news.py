@@ -11,7 +11,7 @@ from mobile_backend.api.schemas.news import (
 from mobile_backend.services import news_service
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/v1/news", tags=["mobile"])
+router = APIRouter(prefix="/api/v1/news", tags=["news"])
 
 
 @router.get(
