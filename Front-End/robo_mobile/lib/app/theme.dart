@@ -207,6 +207,10 @@ class WeRoboMotion {
   /// On push, the incoming page slides in from the right; on pop, it
   /// slides back to the right. The outgoing page also slides slightly
   /// left during push for a parallax feel.
+  ///
+  /// Uses the symmetric `move` curve (not `enter`) so push and pop
+  /// feel identical in speed — `enter` is decelerating, which on pop
+  /// would read as a slow start before a rush.
   static Route<T> fadeRoute<T>(Widget page) {
     return PageRouteBuilder<T>(
       pageBuilder: (_, __, ___) => page,
@@ -214,17 +218,18 @@ class WeRoboMotion {
         final inSlide = Tween<Offset>(
           begin: const Offset(1, 0),
           end: Offset.zero,
-        ).chain(CurveTween(curve: enter)).animate(anim);
+        ).chain(CurveTween(curve: move)).animate(anim);
         final outSlide = Tween<Offset>(
           begin: Offset.zero,
           end: const Offset(-0.25, 0),
-        ).chain(CurveTween(curve: enter)).animate(secAnim);
+        ).chain(CurveTween(curve: move)).animate(secAnim);
         return SlideTransition(
           position: outSlide,
           child: SlideTransition(position: inSlide, child: child),
         );
       },
       transitionDuration: pageTransition,
+      reverseTransitionDuration: pageTransition,
     );
   }
 }
