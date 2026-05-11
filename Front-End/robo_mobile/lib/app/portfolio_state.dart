@@ -205,7 +205,8 @@ class PortfolioState extends ChangeNotifier {
 
     ContributionEntry? best;
     weights.forEach((cls, weight) {
-      final code = cls.koLabel; // earnings keys are Korean labels in fixtures
+      final code = _assetClassToEarningsCode(cls); // English asset codes; see _assetClassToEarningsCode helper
+      if (code == null) return;
       final endValue = end.assetEarnings[code];
       final startValue = startWindow.assetEarnings[code];
       if (endValue == null || startValue == null || startValue == 0) return;
@@ -230,6 +231,7 @@ class PortfolioState extends ChangeNotifier {
   /// Returns null when no spike, no data, or insufficient history.
   VolatilitySpike? get portfolioVolatilitySpike {
     final vol = _portfolioVolatility;
+    // Need 21 total points: 1 "current" + 20 "trailing window" minimum.
     if (vol == null || vol.points.length < 21) return null;
     final sorted = [...vol.points]..sort((a, b) => a.date.compareTo(b.date));
     final current = sorted.last.volatility;
@@ -266,6 +268,29 @@ class PortfolioState extends ChangeNotifier {
   }
 
   // ─── Notification-row internal helpers ────────────────────────────────────
+
+  /// Maps [AssetClass] to the canonical English asset code used as keys in
+  /// [MobileEarningsPoint.assetEarnings] (both mock fixture and backend).
+  String? _assetClassToEarningsCode(AssetClass cls) {
+    // Earnings map keys are English asset codes (canonical form used by both
+    // the mock fixture and the backend's earnings endpoints).
+    switch (cls) {
+      case AssetClass.cash:
+        return 'cash_equivalents';
+      case AssetClass.shortBond:
+        return 'short_term_bond';
+      case AssetClass.infraBond:
+        return 'infra_bond';
+      case AssetClass.gold:
+        return 'gold';
+      case AssetClass.usValue:
+        return 'us_value';
+      case AssetClass.usGrowth:
+        return 'us_growth';
+      case AssetClass.newGrowth:
+        return 'new_growth';
+    }
+  }
 
   AssetClass? _assetCodeToAssetClass(String assetCode) {
     switch (assetCode) {
@@ -938,6 +963,12 @@ class PortfolioState extends ChangeNotifier {
   @visibleForTesting
   void debugSetInsights(List<RebalanceInsight> insights) {
     _insights = insights;
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void debugSetRecommendation(MobileRecommendationResponse rec) {
+    _recommendation = rec;
     notifyListeners();
   }
 }
