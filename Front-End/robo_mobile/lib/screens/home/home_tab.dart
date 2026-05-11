@@ -13,7 +13,6 @@ import '../../models/mobile_backend_models.dart';
 import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
 import '../../models/rebalance_insight.dart';
-import 'activity_hub_page.dart';
 import 'digest_screen.dart';
 import 'insight_detail_page.dart';
 import 'portfolio_allocation_detail_page.dart';
@@ -3405,16 +3404,271 @@ class _NotificationIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Pressable(
-      onTap: () => Navigator.push(
-        context,
-        WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
-      ),
+      onTap: () => showNotificationsSheet(context),
       child: Icon(
         hasUnread
             ? Icons.notifications_rounded
             : Icons.notifications_none_rounded,
         size: 24,
         color: tc.textSecondary,
+      ),
+    );
+  }
+}
+
+// ─── Notification dropdown sheet ────────────────────────────
+
+/// Public entry point so widget tests can drive the sheet without going
+/// through the bell icon's GestureDetector.
+void showNotificationsSheet(BuildContext context) {
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: '알림 닫기',
+    barrierColor: Colors.black.withValues(alpha: 0.32),
+    transitionDuration: WeRoboMotion.medium,
+    pageBuilder: (_, __, ___) => const _NotificationsSheet(),
+    transitionBuilder: (_, anim, __, child) {
+      final slide = Tween<Offset>(
+        begin: const Offset(0, -1),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: anim, curve: WeRoboMotion.enter));
+      return SlideTransition(position: slide, child: child);
+    },
+  );
+}
+
+class _NotificationsSheet extends StatefulWidget {
+  const _NotificationsSheet();
+
+  @override
+  State<_NotificationsSheet> createState() => _NotificationsSheetState();
+}
+
+class _NotificationsSheetState extends State<_NotificationsSheet> {
+  // Rows render in this order. Task 7 wires the first three; Task 8 wires the
+  // last two (async).
+  static const _rowOrder = <_NotificationKind>[
+    _NotificationKind.monthlySummary,
+    _NotificationKind.contribution,
+    _NotificationKind.algorithmSignal,
+    _NotificationKind.volatilityAlert,
+    _NotificationKind.assetNews,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+
+    // Placeholder rows until Task 7 / Task 8 ship.
+    final placeholderRows = _rowOrder
+        .map((k) => _NotificationRow(
+              kind: k,
+              category: _categoryLabel(k),
+              title: '(데이터 연결 예정)',
+              onTap: () => Navigator.of(context).pop(),
+            ))
+        .toList();
+
+    return Align(
+      alignment: Alignment.topCenter,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: tc.surface,
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(20),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.08),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '오늘의 알림',
+                            textAlign: TextAlign.center,
+                            style: WeRoboTypography.heading3.themed(context),
+                          ),
+                        ),
+                        Pressable(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: tc.card,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: tc.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, thickness: 1, color: tc.card),
+                  ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    itemCount: placeholderRows.length,
+                    separatorBuilder: (_, __) => Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: tc.card,
+                      indent: 20,
+                      endIndent: 20,
+                    ),
+                    itemBuilder: (_, i) => placeholderRows[i],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+enum _NotificationKind {
+  monthlySummary,
+  contribution,
+  algorithmSignal,
+  volatilityAlert,
+  assetNews,
+}
+
+String _categoryLabel(_NotificationKind kind) {
+  switch (kind) {
+    case _NotificationKind.monthlySummary:
+      return '월간 요약';
+    case _NotificationKind.contribution:
+      return '기여도 알림';
+    case _NotificationKind.algorithmSignal:
+      return '알고리즘 시그널';
+    case _NotificationKind.volatilityAlert:
+      return '시장 변동성 경고';
+    case _NotificationKind.assetNews:
+      return '자산군별 뉴스';
+  }
+}
+
+String _iconAsset(_NotificationKind kind) {
+  switch (kind) {
+    case _NotificationKind.monthlySummary:
+      return 'assets/icons/calendar.png';
+    case _NotificationKind.contribution:
+      return 'assets/icons/contribution-alarm.png';
+    case _NotificationKind.algorithmSignal:
+      return 'assets/icons/algorithm-signal.png';
+    case _NotificationKind.volatilityAlert:
+      return 'assets/icons/change-alert.png';
+    case _NotificationKind.assetNews:
+      return 'assets/icons/asset-news.png';
+  }
+}
+
+Color _iconTint(_NotificationKind kind) {
+  switch (kind) {
+    case _NotificationKind.monthlySummary:
+      return const Color(0xFF3B82F6);
+    case _NotificationKind.contribution:
+      return const Color(0xFF10B981);
+    case _NotificationKind.algorithmSignal:
+      return const Color(0xFF8B5CF6);
+    case _NotificationKind.volatilityAlert:
+      return const Color(0xFFF59E0B);
+    case _NotificationKind.assetNews:
+      return const Color(0xFF1E3A8A);
+  }
+}
+
+class _NotificationRow extends StatelessWidget {
+  final _NotificationKind kind;
+  final String category;
+  final String title;
+  final VoidCallback onTap;
+
+  const _NotificationRow({
+    required this.kind,
+    required this.category,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final tint = _iconTint(kind);
+    return Pressable(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: tint.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              padding: const EdgeInsets.all(8),
+              child: Image.asset(_iconAsset(kind), fit: BoxFit.contain),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    category,
+                    style: WeRoboTypography.caption.copyWith(
+                      color: tc.textTertiary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    title,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: tc.textTertiary,
+            ),
+          ],
+        ),
       ),
     );
   }
