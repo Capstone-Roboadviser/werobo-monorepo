@@ -1161,7 +1161,7 @@ class MobileComparisonLine {
     return MobileComparisonLine(
       key: json['key']?.toString() ?? '',
       label: json['label']?.toString() ?? '',
-      color: json['color']?.toString() ?? '#FE9337',
+      color: json['color']?.toString() ?? '#0614A7',
       style: json['style']?.toString() ?? 'solid',
       points: (json['points'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
