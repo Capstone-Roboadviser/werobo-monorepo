@@ -564,6 +564,39 @@ class MobileBackendApi {
     }
   }
 
+  Future<MobileRangeDigestResponse> fetchRangeDigest({
+    required String accessToken,
+    required DateTime startDate,
+    required DateTime endDate,
+    required double startValue,
+    required double endValue,
+  }) async {
+    logApi('start', 'fetchRangeDigest');
+    try {
+      final result = await _post(
+        path: '/account/digest/range',
+        body: <String, dynamic>{
+          'start_date': _formatDate(startDate),
+          'end_date': _formatDate(endDate),
+          'start_value': startValue,
+          'end_value': endValue,
+        },
+        parser: MobileRangeDigestResponse.fromJson,
+        timeout: const Duration(seconds: 45),
+        headers: _authHeaders(accessToken),
+      );
+      logApi('success', 'fetchRangeDigest', {
+        'degradation': result.degradationLevel,
+      });
+      return result;
+    } catch (error) {
+      logApi('fail', 'fetchRangeDigest', {
+        'error': error.toString(),
+      });
+      rethrow;
+    }
+  }
+
   Future<T> _postWithFallback<T>({
     required String path,
     required Map<String, dynamic> Function(String dataSource) bodyForDataSource,

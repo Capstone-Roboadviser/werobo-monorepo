@@ -234,6 +234,99 @@ def test_falls_back_to_monthly_digest_when_weekly_is_quiet(
     assert digest["drivers"][0]["ticker"] == "AAA"
 
 
+def test_generate_range_digest_calls_llm_and_includes_reference_news(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = digest_module.DigestService()
+    service.account_repo = FakeAccountRepository(
+        snapshots=[
+            {
+                "snapshot_date": datetime.now(timezone.utc).date().isoformat(),
+                "portfolio_value": 10_000_000,
+            }
+        ]
+    )
+    service.digest_repo = FakeDigestRepository()
+    service.universe_repo = FakeUniverseRepository()
+
+    monkeypatch.setattr(digest_module, "StockDataRepository", FakeStockDataRepository)
+
+    news_calls: list[list[str]] = []
+    monkeypatch.setattr(
+        digest_module,
+        "fetch_news_for_tickers",
+        lambda tickers: news_calls.append(list(tickers))
+        or {
+            "AAA": ["AAA jumps on stronger AI demand"],
+            "BBB": ["BBB slips as rates rise"],
+        },
+    )
+    monkeypatch.setattr(
+        digest_module,
+        "get_sources_used",
+        lambda news: ["Google News"] if news else [],
+    )
+    narrative_calls: list[dict] = []
+
+    def fake_narrative(**kwargs):
+        narrative_calls.append(kwargs)
+        return {
+            "narrative_ko": "미국 성장주 반등이 선택 구간 수익을 이끌었어요.",
+            "explanations": {
+                "AAA": "AAA가 강하게 상승하며 수익에 기여했어요.",
+                "BBB": "BBB는 일부 부담을 줬어요.",
+            },
+        }
+
+    monkeypatch.setattr(digest_module, "generate_narrative", fake_narrative)
+
+    end_date = datetime.now(timezone.utc).date() - timedelta(days=1)
+    start_date = end_date - timedelta(days=5)
+    digest = service.generate_range(
+        {
+            "id": 1,
+            "data_source": "stock_combination_demo",
+            "portfolio_label": "균형형",
+            "stock_allocations": [
+                {
+                    "ticker": "AAA",
+                    "name": "Alpha Asset",
+                    "sector_code": "us_growth",
+                    "sector_name": "미국 성장주",
+                    "weight": 0.6,
+                },
+                {
+                    "ticker": "BBB",
+                    "name": "Beta Bond",
+                    "sector_code": "bond",
+                    "sector_name": "채권",
+                    "weight": 0.4,
+                },
+            ],
+        },
+        start_date=start_date,
+        end_date=end_date,
+        start_value=10_000_000,
+        end_value=10_200_000,
+    )
+
+    assert digest["period_start"] == start_date.isoformat()
+    assert digest["period_end"] == end_date.isoformat()
+    assert digest["total_return_pct"] == 2.0
+    assert digest["total_return_won"] == 200_000
+    assert digest["has_narrative"] is True
+    assert digest["narrative_ko"] == "미국 성장주 반등이 선택 구간 수익을 이끌었어요."
+    assert digest["drivers"][0]["ticker"] == "AAA"
+    assert digest["drivers"][0]["explanation_ko"] == "AAA가 강하게 상승하며 수익에 기여했어요."
+    assert digest["reference_news"] == [
+        {"ticker": "AAA", "title": "AAA jumps on stronger AI demand"},
+        {"ticker": "BBB", "title": "BBB slips as rates rise"},
+    ]
+    assert digest["sources_used"] == ["Google News"]
+    assert news_calls == [["AAA", "BBB"]]
+    assert narrative_calls[0]["period_label"] == "선택 구간"
+
+
 def test_low_volatility_portfolio_surfaces_digest_below_fixed_5pct(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

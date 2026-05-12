@@ -2,10 +2,16 @@ from __future__ import annotations
 
 import logging
 
+from datetime import date
+
 from fastapi import APIRouter, Header, HTTPException
 
 from mobile_backend.api.routes.auth import _extract_bearer_token
-from mobile_backend.api.schemas.digest import DigestResponse
+from mobile_backend.api.schemas.digest import (
+    DigestResponse,
+    RangeDigestRequest,
+    RangeDigestResponse,
+)
 from mobile_backend.api.schemas.response import ErrorResponse
 from mobile_backend.services.account_service import (
     PortfolioAccountNotFoundError,
@@ -62,6 +68,41 @@ def get_digest(
 
         digest = digest_service.generate(dict(account))
         return DigestResponse(**digest)
+    except InsufficientDataError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except PortfolioAccountNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post(
+    "/digest/range",
+    response_model=RangeDigestResponse,
+    summary="선택 구간 포트폴리오 다이제스트 생성",
+    description="사용자가 차트에서 선택한 구간의 성과 원인을 AI 요약과 참고 뉴스로 반환합니다.",
+    responses=DIGEST_ERROR_RESPONSES,
+)
+def get_range_digest(
+    payload: RangeDigestRequest,
+    authorization: str | None = Header(default=None),
+) -> RangeDigestResponse:
+    user_id = _current_user_id(authorization)
+    try:
+        account = account_service.repository.get_account_by_user_id(user_id)
+        if account is None:
+            raise HTTPException(status_code=404, detail="자산 계정을 찾지 못했습니다.")
+
+        start_date = date.fromisoformat(payload.start_date)
+        end_date = date.fromisoformat(payload.end_date)
+        digest = digest_service.generate_range(
+            dict(account),
+            start_date=start_date,
+            end_date=end_date,
+            start_value=payload.start_value,
+            end_value=payload.end_value,
+        )
+        return RangeDigestResponse(**digest)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="날짜 형식이 올바르지 않습니다.") from exc
     except InsufficientDataError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except PortfolioAccountNotFoundError as exc:

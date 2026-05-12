@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robo_mobile/app/portfolio_state.dart';
@@ -58,6 +60,39 @@ void main() {
       generatedAt: '2026-04-29T00:00:00Z',
       degradationLevel: 0,
       triggerSigmaMultiple: triggerSigmaMultiple,
+    );
+  }
+
+  MobileRangeDigestResponse rangeDigestFixture() {
+    return const MobileRangeDigestResponse(
+      periodStart: '2026-04-10',
+      periodEnd: '2026-04-18',
+      totalReturnPct: 2.4,
+      totalReturnWon: 240000,
+      narrativeKo: '미국 성장주 반등이 선택 구간 수익을 이끌었어요.',
+      hasNarrative: true,
+      drivers: [
+        DigestDriver(
+          ticker: 'QQQ',
+          nameKo: '미국 성장주',
+          sectorCode: 'us_growth',
+          weightPct: 60,
+          returnPct: 4,
+          contributionWon: 180000,
+          explanationKo: '기술주 반등이 기여했어요.',
+        ),
+      ],
+      detractors: [],
+      referenceNews: [
+        RangeDigestNewsItem(
+          ticker: 'QQQ',
+          title: 'Tech shares rise on earnings optimism',
+        ),
+      ],
+      sourcesUsed: ['Google News'],
+      disclaimer: '이 내용은 투자 조언이 아닙니다.',
+      generatedAt: '2026-04-18T00:00:00Z',
+      degradationLevel: 0,
     );
   }
 
@@ -148,6 +183,96 @@ void main() {
     expect(find.text('포트폴리오 구성 비중에는 포함되지 않아요.'), findsOneWidget);
     expect(find.text('리밸런싱 시 별도로 보관됐다가 자동 사용돼요.'), findsOneWidget);
     expect(find.text('₩25,000'), findsOneWidget);
+  });
+
+  testWidgets('shows WeRobo logo above total profit', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(accountDashboard());
+    await state.markWelcomeBannerSeen();
+    await state.markDigestSeen('2026-04-16');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    final logo = find.byKey(const Key('home_werobo_logo'));
+    final totalProfit = find.text('총손익');
+
+    expect(logo, findsOneWidget);
+    expect(totalProfit, findsOneWidget);
+    expect(
+      tester.getTopLeft(logo).dy,
+      lessThan(tester.getTopLeft(totalProfit).dy),
+    );
+  });
+
+  testWidgets('stacks invested and current values with aligned plain amounts',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    state.setAccountDashboard(accountDashboard());
+    await state.markWelcomeBannerSeen();
+    await state.markDigestSeen('2026-04-16');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    final investedLabel = find.text('투자금액');
+    final investedAmount = find.text('₩10,000,000');
+    final currentLabel = find.text('평가금액');
+    final currentAmount = find.text('₩10,500,000');
+
+    expect(investedLabel, findsOneWidget);
+    expect(investedAmount, findsOneWidget);
+    expect(currentLabel, findsOneWidget);
+    expect(currentAmount, findsOneWidget);
+    expect(
+      tester.getTopLeft(currentLabel).dy,
+      greaterThan(tester.getTopLeft(investedLabel).dy),
+    );
+    expect(
+      tester.getCenter(investedAmount).dy,
+      moreOrLessEquals(tester.getCenter(investedLabel).dy, epsilon: 1.5),
+    );
+    expect(
+      tester.getCenter(currentAmount).dy,
+      moreOrLessEquals(tester.getCenter(currentLabel).dy, epsilon: 1.5),
+    );
+
+    final investedLabelStyle = tester.widget<Text>(investedLabel).style!;
+    final investedAmountStyle = tester.widget<Text>(investedAmount).style!;
+    final currentLabelStyle = tester.widget<Text>(currentLabel).style!;
+    final currentAmountStyle = tester.widget<Text>(currentAmount).style!;
+    final tc = WeRoboTheme.light.extension<WeRoboThemeColors>()!;
+
+    expect(investedLabelStyle.color, tc.textSecondary);
+    expect(currentLabelStyle.color, tc.textSecondary);
+    expect(investedAmountStyle.color, tc.textPrimary);
+    expect(currentAmountStyle.color, tc.textPrimary);
+    expect(investedAmountStyle.fontSize, investedLabelStyle.fontSize);
+    expect(currentAmountStyle.fontSize, currentLabelStyle.fontSize);
+    expect(investedAmountStyle.fontWeight, FontWeight.w400);
+    expect(currentAmountStyle.fontWeight, FontWeight.w400);
   });
 
   testWidgets('digest banner hidden when digest is unavailable',
@@ -758,5 +883,106 @@ void main() {
     final labelText = tester.widget<Text>(dateLabel).data;
     expect(labelText, matches(RegExp(r'\d{1,2}\.\d{2} - \d{1,2}\.\d{2}')));
     expect(find.textContaining('움직였어요'), findsOneWidget);
+  });
+
+  testWidgets('range analysis loads AI summary and opens detail page',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    addTearDown(() => debugSetRangeDigestApiOverride(null));
+
+    await state.setAuthSession(
+      MobileAuthSession(
+        accessToken: 'token',
+        tokenType: 'bearer',
+        expiresAt:
+            DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+        user: const MobileAuthUser(
+          id: 1,
+          email: 'test@example.com',
+          name: '테스터',
+          provider: AuthProviderType.password,
+          createdAt: '2026-04-01T00:00:00Z',
+        ),
+      ),
+      notify: false,
+    );
+    state.setAccountDashboard(
+      MobileAccountDashboard(
+        hasAccount: true,
+        summary: accountDashboard().summary,
+        history: List.generate(
+          60,
+          (i) => MobileAccountHistoryPoint(
+            date: DateTime.now().subtract(Duration(days: 60 - i)),
+            portfolioValue: 10000000 + (i * 5000),
+            investedAmount: 10000000,
+            profitLoss: i * 5000,
+            profitLossPct: (i * 5000) / 10000000,
+          ),
+        ),
+        recentActivity: const [],
+      ),
+    );
+    state.setWeeklyDigest(digestFixture(available: true));
+    await state.markWelcomeBannerSeen();
+
+    final completer = Completer<MobileRangeDigestResponse>();
+    debugSetRangeDigestApiOverride(
+      ({
+        required String accessToken,
+        required DateTime startDate,
+        required DateTime endDate,
+        required double startValue,
+        required double endValue,
+      }) {
+        expect(accessToken, 'token');
+        expect(endDate.isAfter(startDate), isTrue);
+        expect(endValue, greaterThan(startValue));
+        return completer.future;
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    await tester.ensureVisible(find.text('구간분석'));
+    await tester.pump();
+    await tester.tap(find.text('구간분석'));
+    await tester.pump();
+
+    final chart = find.byKey(const Key('home_performance_chart_gesture'));
+    await tester.ensureVisible(chart);
+    await tester.pump();
+    await tester.timedDrag(
+      chart,
+      const Offset(260, 0),
+      const Duration(milliseconds: 300),
+    );
+    await tester.pump();
+
+    expect(find.text('이 구간의 변화를 분석하고 있어요'), findsOneWidget);
+
+    completer.complete(rangeDigestFixture());
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('자세히 보기'), findsOneWidget);
+    expect(find.text('미국 성장주 반등이 선택 구간 수익을 이끌었어요.'), findsOneWidget);
+
+    await tester.tap(find.text('자세히 보기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('참고 뉴스'), findsOneWidget);
+    expect(find.text('Tech shares rise on earnings optimism'), findsOneWidget);
   });
 }

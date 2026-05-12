@@ -1586,3 +1586,83 @@ class MobileDigestResponse {
     );
   }
 }
+
+class RangeDigestNewsItem {
+  final String ticker;
+  final String title;
+
+  const RangeDigestNewsItem({
+    required this.ticker,
+    required this.title,
+  });
+
+  factory RangeDigestNewsItem.fromJson(Map<String, dynamic> json) {
+    return RangeDigestNewsItem(
+      ticker: json['ticker']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+    );
+  }
+}
+
+class MobileRangeDigestResponse {
+  final String periodStart;
+  final String periodEnd;
+  final double totalReturnPct;
+  final double totalReturnWon;
+  final String? narrativeKo;
+  final bool hasNarrative;
+  final List<DigestDriver> drivers;
+  final List<DigestDriver> detractors;
+  final List<RangeDigestNewsItem> referenceNews;
+  final List<String> sourcesUsed;
+  final String disclaimer;
+  final String generatedAt;
+  final int degradationLevel;
+
+  const MobileRangeDigestResponse({
+    required this.periodStart,
+    required this.periodEnd,
+    required this.totalReturnPct,
+    required this.totalReturnWon,
+    this.narrativeKo,
+    required this.hasNarrative,
+    required this.drivers,
+    required this.detractors,
+    required this.referenceNews,
+    required this.sourcesUsed,
+    required this.disclaimer,
+    required this.generatedAt,
+    required this.degradationLevel,
+  });
+
+  factory MobileRangeDigestResponse.fromJson(Map<String, dynamic> json) {
+    return MobileRangeDigestResponse(
+      periodStart: json['period_start']?.toString() ?? '',
+      periodEnd: json['period_end']?.toString() ?? '',
+      totalReturnPct: _asDouble(json['total_return_pct']),
+      totalReturnWon: _asDouble(json['total_return_won']),
+      narrativeKo: json['narrative_ko']?.toString(),
+      hasNarrative: json['has_narrative'] == true,
+      drivers: (json['drivers'] as List<dynamic>?)
+              ?.map((e) => DigestDriver.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      detractors: (json['detractors'] as List<dynamic>?)
+              ?.map((e) => DigestDriver.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      referenceNews: (json['reference_news'] as List<dynamic>?)
+              ?.map((e) =>
+                  RangeDigestNewsItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      sourcesUsed: (json['sources_used'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      disclaimer: json['disclaimer']?.toString() ?? '',
+      generatedAt: json['generated_at']?.toString() ?? '',
+      degradationLevel: (json['degradation_level'] as num?)?.toInt() ?? 0,
+    );
+  }
+}

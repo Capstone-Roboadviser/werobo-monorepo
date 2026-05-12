@@ -644,6 +644,51 @@ class DigestService:
             "trigger_threshold_pct": trigger_threshold_pct,
         }
 
+    def _build_range_candidate(
+        self,
+        *,
+        prices_df: pd.DataFrame,
+        stock_allocations: list[dict],
+        start_value: float,
+        end_value: float,
+        start_date: date,
+        end_date: date,
+    ) -> dict:
+        if end_date <= start_date:
+            raise InsufficientDataError("분석 종료일은 시작일보다 뒤여야 합니다.")
+        if start_value <= 0:
+            raise InsufficientDataError("구간 시작 평가액이 올바르지 않습니다.")
+
+        digest_prices_df = _filter_prices_by_date(
+            prices_df,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        if digest_prices_df.empty:
+            raise InsufficientDataError("선택 구간의 가격 데이터가 부족합니다.")
+
+        prices_by_ticker = _prices_by_ticker(digest_prices_df)
+        attributions = compute_attribution(
+            stock_allocations=stock_allocations,
+            prices_by_ticker=prices_by_ticker,
+            portfolio_value=start_value,
+            period_days=(end_date - start_date).days,
+        )
+        if not attributions:
+            raise InsufficientDataError("선택 구간의 수익률 데이터가 부족합니다.")
+
+        drivers, detractors = top_drivers_detractors(attributions)
+        total_return_won = round(end_value - start_value)
+        total_return_pct = round(total_return_won / start_value * 100, 2)
+        return {
+            "period_start": start_date.isoformat(),
+            "period_end": end_date.isoformat(),
+            "total_return_pct": total_return_pct,
+            "total_return_won": total_return_won,
+            "drivers": drivers,
+            "detractors": detractors,
+        }
+
     def _unavailable_digest_from_candidate(
         self,
         *,
@@ -843,6 +888,97 @@ class DigestService:
         self.digest_repo.cache(account_id, digest)
         logger.info(
             "digest.generate.end account_id=%s degradation_level=%s",
+            account_id,
+            degradation_level,
+        )
+        return digest
+
+    def generate_range(
+        self,
+        account: dict,
+        *,
+        start_date: date,
+        end_date: date,
+        start_value: float,
+        end_value: float,
+    ) -> dict:
+        """Generate an on-demand digest for a user-selected chart range."""
+        account_id = int(account["id"])
+        stock_allocations = account.get("stock_allocations") or []
+        if not stock_allocations:
+            raise InsufficientDataError("포트폴리오에 종목이 없습니다.")
+
+        tickers = [a["ticker"] for a in stock_allocations]
+        prices_df = self._load_digest_prices(
+            account=account,
+            tickers=tickers,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat(),
+        )
+        if prices_df is None or prices_df.empty:
+            raise InsufficientDataError("선택 구간의 가격 데이터가 부족합니다.")
+
+        candidate = self._build_range_candidate(
+            prices_df=prices_df,
+            stock_allocations=stock_allocations,
+            start_value=start_value,
+            end_value=end_value,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        drivers = candidate["drivers"]
+        detractors = candidate["detractors"]
+        all_tickers = [d["ticker"] for d in drivers] + [d["ticker"] for d in detractors]
+        news = fetch_news_for_tickers(all_tickers)
+        sources_used = get_sources_used(news)
+        reference_news = [
+            {"ticker": ticker, "title": title}
+            for ticker, headlines in news.items()
+            for title in headlines[:2]
+        ][:4]
+
+        llm_result = generate_narrative(
+            total_return_pct=candidate["total_return_pct"],
+            total_return_won=candidate["total_return_won"],
+            portfolio_type=account.get("portfolio_label", "균형형"),
+            drivers=drivers,
+            detractors=detractors,
+            news=news,
+            period_label="선택 구간",
+        )
+
+        narrative_ko = None
+        explanations = {}
+        degradation_level = 0
+        if llm_result is None:
+            degradation_level = 2
+        else:
+            narrative_ko = llm_result.get("narrative_ko")
+            explanations = llm_result.get("explanations", {})
+            if not news:
+                degradation_level = 1
+
+        for item in drivers + detractors:
+            item["explanation_ko"] = explanations.get(item["ticker"])
+
+        now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        digest = {
+            "period_start": candidate["period_start"],
+            "period_end": candidate["period_end"],
+            "total_return_pct": candidate["total_return_pct"],
+            "total_return_won": candidate["total_return_won"],
+            "narrative_ko": narrative_ko,
+            "has_narrative": narrative_ko is not None,
+            "drivers": drivers,
+            "detractors": detractors,
+            "reference_news": reference_news,
+            "sources_used": sources_used,
+            "disclaimer": "이 내용은 투자 조언이 아닙니다. AI가 생성한 요약이며 투자 결정의 근거로 사용하지 마세요.",
+            "generated_at": now_utc,
+            "degradation_level": degradation_level,
+        }
+        logger.info(
+            "digest.range.generate.end account_id=%s degradation_level=%s",
             account_id,
             degradation_level,
         )
