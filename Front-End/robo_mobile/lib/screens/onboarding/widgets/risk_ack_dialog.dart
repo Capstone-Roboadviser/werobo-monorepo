@@ -69,21 +69,25 @@ class _RiskAckDialogState extends State<_RiskAckDialog> {
             style: WeRoboTypography.bodySmall,
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Checkbox(
-                value: _acknowledged,
-                activeColor: WeRoboColors.primaryDark,
-                onChanged: (v) => setState(() => _acknowledged = v ?? false),
-              ),
-              const SizedBox(width: 4),
-              const Expanded(
-                child: Text(
-                  '위험을 충분히 인지하였습니다',
-                  style: WeRoboTypography.bodySmall,
+          InkWell(
+            onTap: () => setState(() => _acknowledged = !_acknowledged),
+            child: Row(
+              children: [
+                Checkbox(
+                  value: _acknowledged,
+                  activeColor: WeRoboColors.primaryDark,
+                  onChanged: (v) =>
+                      setState(() => _acknowledged = v ?? false),
                 ),
-              ),
-            ],
+                const SizedBox(width: 4),
+                const Expanded(
+                  child: Text(
+                    '위험을 충분히 인지하였습니다',
+                    style: WeRoboTypography.bodySmall,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

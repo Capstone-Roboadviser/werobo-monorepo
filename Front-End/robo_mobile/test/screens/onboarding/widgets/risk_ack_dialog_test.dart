@@ -60,5 +60,47 @@ void main() {
         expect(dialogResult, isTrue);
       },
     );
+
+    testWidgets(
+      '비중 조정하기 pops the dialog with false',
+      (tester) async {
+        bool? dialogResult;
+        bool didResolve = false;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: WeRoboTheme.light,
+            home: Builder(
+              builder: (ctx) => Scaffold(
+                body: Center(
+                  child: TextButton(
+                    onPressed: () {
+                      showRiskAckDialog(
+                        context: ctx,
+                        marketVolPct: 10.0,
+                        userVolPct: 45.0,
+                      ).then((v) {
+                        dialogResult = v;
+                        didResolve = true;
+                      });
+                    },
+                    child: const Text('open'),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await tester.tap(find.text('open'));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.widgetWithText(OutlinedButton, '비중 조정하기'));
+        await tester.pumpAndSettle();
+
+        expect(didResolve, isTrue);
+        expect(dialogResult, isFalse);
+      },
+    );
   });
 }

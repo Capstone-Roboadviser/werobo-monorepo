@@ -120,13 +120,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Future<void> _goToReview() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     final resolvedSelection =
         _frontierSelection ?? _selectionFromCachedPreview();
     if (resolvedSelection == null) {
       logAction('frontier selection unavailable on next', {
         'dotT': _selectedDotT.toStringAsFixed(2),
       });
-      ScaffoldMessenger.of(context).showSnackBar(
+      messenger.showSnackBar(
         const SnackBar(
           content: Text('포트폴리오 데이터를 불러오는 중이에요. 잠시 후 다시 시도해 주세요.'),
         ),
@@ -159,7 +161,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       }
     }
     if (!mounted) return;
-    Navigator.of(context).push(
+    navigator.push(
       WeRoboMotion.fadeRoute(
         PortfolioReviewScreen(selection: resolvedSelection),
       ),
