@@ -52,12 +52,12 @@ void main() {
     (tester) async {
       await tester.pumpWidget(_wrap(_chart));
 
-      // At ~100ms, the first segment covers the 0–667ms slot (1/3 of 2000ms).
-      // Progress is ~0.15 with WeRoboMotion.enter curve.
-      // Count-up: 50 * 0.15 ≈ 7–8, so "50%" must NOT be visible.
       await tester.pump(const Duration(milliseconds: 100));
 
-      // "50%" (first segment's final value) must not be visible yet.
+      // At 100ms, segment 0 is mid-interval (interval is [0, 666ms]) and the
+      // WeRoboMotion.enter curve is strongly front-loaded, so the count-up
+      // reads ~32%, well below the "50%" rounding threshold (which it hits
+      // around 413ms).
       expect(find.text('50%'), findsNothing);
 
       // "30%" and "20%" (second and third final values) must not be visible.

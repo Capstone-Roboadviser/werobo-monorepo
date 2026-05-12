@@ -47,7 +47,7 @@ class _DonutChartState extends State<DonutChart>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   // One CurvedAnimation per segment, covering its sub-interval in [0, 1].
-  late List<Animation<double>> _segmentAnimations;
+  List<CurvedAnimation> _segmentAnimations = const [];
 
   /// Index of the slice the user has tapped. `null` means show the default
   /// center label.
@@ -60,13 +60,13 @@ class _DonutChartState extends State<DonutChart>
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     );
-    _buildSegmentAnimations();
+    _segmentAnimations = _buildSegmentAnimations();
     _controller.forward();
   }
 
-  void _buildSegmentAnimations() {
+  List<CurvedAnimation> _buildSegmentAnimations() {
     final n = widget.segments.length;
-    _segmentAnimations = [
+    return [
       for (var i = 0; i < n; i++)
         CurvedAnimation(
           parent: _controller,
@@ -76,20 +76,20 @@ class _DonutChartState extends State<DonutChart>
   }
 
   @override
-  void didUpdateWidget(DonutChart oldWidget) {
+  void didUpdateWidget(covariant DonutChart oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.segments != widget.segments) {
+    if (oldWidget.segments.length != widget.segments.length) {
       for (final a in _segmentAnimations) {
-        (a as CurvedAnimation).dispose();
+        a.dispose();
       }
-      _buildSegmentAnimations();
+      _segmentAnimations = _buildSegmentAnimations();
     }
   }
 
   @override
   void dispose() {
     for (final a in _segmentAnimations) {
-      (a as CurvedAnimation).dispose();
+      a.dispose();
     }
     _controller.dispose();
     super.dispose();
