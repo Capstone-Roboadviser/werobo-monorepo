@@ -206,33 +206,33 @@ class _ProjectionScreenState extends State<ProjectionScreen>
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? Colors.black : Colors.white;
-    final textColor = isDark ? Colors.white : WeRoboColors.textPrimary;
     final portfolio =
         PortfolioStateProvider.of(context).selectedPortfolio;
 
     return Scaffold(
-      backgroundColor: bgColor,
+      backgroundColor: tc.background,
       appBar: AppBar(
-        backgroundColor: bgColor,
+        backgroundColor: tc.background,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-          color: textColor,
+          color: tc.textPrimary,
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
           '미래 예측',
-          style: WeRoboTypography.heading2.copyWith(color: textColor),
+          style:
+              WeRoboTypography.heading2.copyWith(color: tc.textPrimary),
         ),
         centerTitle: false,
       ),
       body: portfolio == null
-          ? _buildNoPortfolio(textColor)
+          ? _buildNoPortfolio(tc.textPrimary)
           : _ageSet
-              ? _buildProjection(isDark, textColor)
-              : _buildAgePicker(isDark, textColor),
+              ? _buildProjection(isDark, tc)
+              : _buildAgePicker(isDark, tc.textPrimary),
     );
   }
 
@@ -334,11 +334,9 @@ class _ProjectionScreenState extends State<ProjectionScreen>
     );
   }
 
-  Widget _buildProjection(bool isDark, Color textColor) {
+  Widget _buildProjection(bool isDark, WeRoboThemeColors tc) {
     final result = _result;
     final medianValue = result?.medianFinal ?? _currentPortfolioValue;
-    final secondaryColor =
-        isDark ? const Color(0xFF8E8E8E) : WeRoboColors.textSecondary;
 
     return Column(
       children: [
@@ -349,39 +347,35 @@ class _ProjectionScreenState extends State<ProjectionScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Hero projected value
+                // Hero projected value — matches the home hero
+                // (English numeric face, large weight, tight leading)
                 Text(
                   _formatWonDisplay(medianValue),
                   style: TextStyle(
-                    fontFamily: WeRoboFonts.number,
-                    fontSize: 32,
-                    fontWeight: FontWeight.w500,
-                    color: textColor,
+                    fontFamily: WeRoboFonts.english,
+                    fontSize: 34,
+                    fontWeight: FontWeight.w700,
+                    color: tc.textPrimary,
+                    letterSpacing: -0.5,
+                    height: 1.2,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
                   '$_projectionYears년 후 예상 포트폴리오 가치',
-                  style: TextStyle(
-                    fontFamily: WeRoboFonts.caption,
-                    fontSize: 12,
-                    color: secondaryColor,
+                  style: WeRoboTypography.caption.copyWith(
+                    color: tc.textSecondary,
+                    fontSize: 13,
                   ),
                 ),
 
                 const SizedBox(height: 20),
 
-                // Fan chart
-                Container(
+                // Fan chart — edge-to-edge on the page background, no
+                // inset card, so it reads as the same surface as the
+                // home performance chart.
+                SizedBox(
                   height: 250,
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF1A1A1A)
-                        : const Color(0xFFF5F5F5),
-                    borderRadius:
-                        BorderRadius.circular(WeRoboColors.radiusXL),
-                  ),
-                  clipBehavior: Clip.antiAlias,
                   child: result != null
                       ? GestureDetector(
                           onPanUpdate: (d) =>
@@ -396,10 +390,8 @@ class _ProjectionScreenState extends State<ProjectionScreen>
                                 data: result,
                                 progress: _animCtrl.value,
                                 touchIndex: _touchIndex,
-                                gridColor: isDark
-                                    ? Colors.white
-                                    : Colors.black,
-                                textColor: secondaryColor,
+                                gridColor: tc.border,
+                                textColor: tc.textSecondary,
                               ),
                             ),
                           ),
@@ -423,9 +415,7 @@ class _ProjectionScreenState extends State<ProjectionScreen>
         // Bottom deposit controls (fixed)
         Container(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-          decoration: BoxDecoration(
-            color: isDark ? Colors.black : Colors.white,
-          ),
+          color: tc.background,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -441,7 +431,7 @@ class _ProjectionScreenState extends State<ProjectionScreen>
                         fontFamily: WeRoboFonts.body,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: textColor,
+                        color: tc.textPrimary,
                         decoration: TextDecoration.underline,
                       ),
                     ),
@@ -450,14 +440,14 @@ class _ProjectionScreenState extends State<ProjectionScreen>
                       style: TextStyle(
                         fontFamily: WeRoboFonts.body,
                         fontSize: 14,
-                        color: secondaryColor,
+                        color: tc.textSecondary,
                       ),
                     ),
                     const SizedBox(width: 4),
                     Icon(
                       Icons.unfold_more,
                       size: 16,
-                      color: secondaryColor,
+                      color: tc.textSecondary,
                     ),
                   ],
                 ),
@@ -479,7 +469,7 @@ class _ProjectionScreenState extends State<ProjectionScreen>
 
               const SizedBox(height: 20),
 
-              // CTA button
+              // CTA button — primary orange to match app's primary CTAs
               SafeArea(
                 top: false,
                 child: Padding(
@@ -490,21 +480,17 @@ class _ProjectionScreenState extends State<ProjectionScreen>
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isDark
-                            ? Colors.white
-                            : WeRoboColors.textPrimary,
-                        foregroundColor:
-                            isDark ? Colors.black : Colors.white,
+                        backgroundColor: WeRoboColors.primary,
+                        foregroundColor: WeRoboColors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(
-                              WeRoboColors.radiusFull),
+                              WeRoboColors.radiusL),
                         ),
                       ),
                       child: Text(
                         '투자금 추가하기',
-                        style: WeRoboTypography.button.copyWith(
-                          color: isDark ? Colors.black : Colors.white,
-                        ),
+                        style: WeRoboTypography.button
+                            .copyWith(color: WeRoboColors.white),
                       ),
                     ),
                   ),

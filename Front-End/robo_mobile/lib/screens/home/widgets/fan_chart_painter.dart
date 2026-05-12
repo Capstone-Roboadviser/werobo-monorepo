@@ -2,13 +2,17 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
+import '../../../app/theme.dart';
 import '../../../models/projection_data.dart';
 
 /// Custom painter for Monte Carlo projection fan chart.
 ///
 /// X-axis: current year → current year + 30 (two labels only).
 /// Y-axis: starts from 0, rounded to nearest 천만원 (10,000,000).
-/// Confidence bands spread open via [progress] animation.
+/// Animation: median line wipes left-to-right for the first 70% of
+/// `progress`; the confidence bands fade in over the last 30%. This
+/// avoids the "fanning open" sensation and matches the home chart's
+/// line-drawing feel.
 class FanChartPainter extends CustomPainter {
   final ProjectionResult data;
   final double progress;
@@ -26,12 +30,12 @@ class FanChartPainter extends CustomPainter {
     this.progress = 1.0,
     this.touchIndex,
     int? startYear,
-    this.outerBandColor = const Color(0xFFCFECF7),
-    this.innerBandColor = const Color(0xFFA0D9EF),
-    this.medianColor = const Color(0xFF20A7DB),
-    this.gridColor = const Color(0xFFFFFFFF),
+    this.outerBandColor = WeRoboColors.primary,
+    this.innerBandColor = WeRoboColors.primary,
+    this.medianColor = WeRoboColors.primary,
+    this.gridColor = const Color(0xFF1A1919),
     this.textColor = const Color(0xFF8E8E8E),
-    this.todayDotColor = const Color(0xFF20A7DB),
+    this.todayDotColor = WeRoboColors.primary,
   }) : startYear = startYear ?? DateTime.now().year;
 
   @override
@@ -48,12 +52,18 @@ class FanChartPainter extends CustomPainter {
     final chartH = h - padT - padB;
 
     final n = data.length;
-    final drawCount = (n * progress).ceil().clamp(1, n);
+    // First 70%: line wipes left→right. Last 30%: bands fade in.
+    // Splitting prevents the band wedge from visually fanning open as
+    // the cursor sweeps right.
+    final lineProgress = (progress / 0.7).clamp(0.0, 1.0);
+    final bandAlpha = ((progress - 0.7) / 0.3).clamp(0.0, 1.0);
+    final lineDrawCount = (n * lineProgress).ceil().clamp(1, n);
 
-    // Y range: start from 0, max rounded up to nearest 천만
+    // Y range: start from 0, max rounded up to nearest 천만. Scan the
+    // full series so the Y-axis is stable while the line wipes in.
     const minY = 0.0;
     double rawMax = 0;
-    for (int i = 0; i < drawCount; i++) {
+    for (int i = 0; i < n; i++) {
       if (data.p90[i] > rawMax) rawMax = data.p90[i];
     }
     // Round up to nearest 천만 (10,000,000)
@@ -95,21 +105,22 @@ class FanChartPainter extends CustomPainter {
       tp.paint(canvas, Offset(padL - tp.width - 6, y - tp.height / 2));
     }
 
-    // Outer band (p10-p90)
-    _drawBand(
-      canvas, drawCount, data.p10, data.p90, toX, toY,
-      outerBandColor.withValues(alpha: 0.15),
-    );
-
-    // Inner band (p25-p75)
-    _drawBand(
-      canvas, drawCount, data.p25, data.p75, toX, toY,
-      innerBandColor.withValues(alpha: 0.30),
-    );
+    // Outer band (p10-p90) — full width, fades in during last 30%
+    if (bandAlpha > 0) {
+      _drawBand(
+        canvas, n, data.p10, data.p90, toX, toY,
+        outerBandColor.withValues(alpha: 0.10 * bandAlpha),
+      );
+      // Inner band (p25-p75)
+      _drawBand(
+        canvas, n, data.p25, data.p75, toX, toY,
+        innerBandColor.withValues(alpha: 0.20 * bandAlpha),
+      );
+    }
 
     // Median line
     final medianPath = Path();
-    for (int i = 0; i < drawCount; i++) {
+    for (int i = 0; i < lineDrawCount; i++) {
       final x = toX(i);
       final y = toY(data.median[i]);
       if (i == 0) {

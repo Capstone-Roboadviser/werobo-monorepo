@@ -817,7 +817,7 @@ void main() {
     await tester.pump(WeRoboMotion.medium);
     await tester.pump(const Duration(milliseconds: 16));
 
-    expect(find.text('선택중'), findsOneWidget);
+    expect(find.byIcon(Icons.crop_free_rounded), findsOneWidget);
     expect(find.text('차트에서 궁금한 구간을 드래그해 선택하세요.'), findsOneWidget);
     expect(homeScrollController().offset, moreOrLessEquals(0));
 
@@ -827,7 +827,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('AI 요약 · 최근 7일'), findsOneWidget);
-    expect(find.text('선택중'), findsNothing);
+    expect(find.byIcon(Icons.crop_free_rounded), findsNothing);
   });
 
   testWidgets('range analysis drag selects persistent interval summary',

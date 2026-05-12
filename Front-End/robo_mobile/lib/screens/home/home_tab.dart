@@ -57,6 +57,40 @@ Map<String, double> earningsHistoryWeightsFor(
   return weights;
 }
 
+// Backend returns each point's `asset_earnings` as **cumulative gain** per
+// asset (starts at 0). Downstream consumers (drag context card,
+// topContributorOver30d) treat values as **absolute portfolio value per
+// asset** (base + gain). Convert here at the API boundary so both views see
+// the same semantics as the mock fixture. See note in mock_earnings_data.dart.
+MobileEarningsHistoryResponse _earningsHistoryAsAbsolute(
+  MobileEarningsHistoryResponse r,
+) {
+  final base = <String, double>{
+    for (final s in r.assetSummary) s.assetCode: s.weight * r.investmentAmount,
+  };
+  if (base.isEmpty) return r;
+  return MobileEarningsHistoryResponse(
+    points: [
+      for (final p in r.points)
+        MobileEarningsPoint(
+          date: p.date,
+          totalEarnings: p.totalEarnings,
+          totalReturnPct: p.totalReturnPct,
+          assetEarnings: {
+            for (final e in p.assetEarnings.entries)
+              if (base.containsKey(e.key)) e.key: base[e.key]! + e.value,
+          },
+        ),
+    ],
+    investmentAmount: r.investmentAmount,
+    startDate: r.startDate,
+    endDate: r.endDate,
+    totalReturnPct: r.totalReturnPct,
+    totalEarnings: r.totalEarnings,
+    assetSummary: r.assetSummary,
+  );
+}
+
 class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
 
@@ -145,7 +179,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
         startDate: startedAt,
       );
       if (!mounted) return;
-      state.setEarningsHistory(response);
+      state.setEarningsHistory(_earningsHistoryAsAbsolute(response));
     } catch (e) {
       if (!mounted) return;
       developer.log(
@@ -1443,11 +1477,21 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                   Positioned(
                     right: 0,
                     top: 8,
-                    child: _RangeDigestChartAiButton(
-                      active: widget.rangeDigestMode,
-                      onTap: widget.rangeDigestMode
-                          ? widget.onExitRangeDigestMode
-                          : widget.onEnterRangeDigestMode,
+                    child: IgnorePointer(
+                      ignoring:
+                          _touchIndex != null && !widget.rangeDigestMode,
+                      child: AnimatedOpacity(
+                        opacity: _touchIndex != null && !widget.rangeDigestMode
+                            ? 0.0
+                            : 1.0,
+                        duration: const Duration(milliseconds: 140),
+                        child: _RangeDigestChartAiButton(
+                          active: widget.rangeDigestMode,
+                          onTap: widget.rangeDigestMode
+                              ? widget.onExitRangeDigestMode
+                              : widget.onEnterRangeDigestMode,
+                        ),
+                      ),
                     ),
                   ),
                   if (rangeDateLabelData != null)
@@ -1610,45 +1654,56 @@ class _RangeDigestChartAiButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final fg = active ? WeRoboColors.white : WeRoboColors.primary;
     return Pressable(
       onTap: onTap,
-      child: Container(
-        key: Key(active ? 'range_digest_exit' : 'range_digest_chart_ai_button'),
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
-        decoration: BoxDecoration(
-          color:
-              active ? WeRoboColors.primary : tc.card.withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: active
-                ? WeRoboColors.primary
-                : WeRoboColors.primary.withValues(alpha: 0.28),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              active ? Icons.close_rounded : Icons.auto_awesome_rounded,
-              size: 15,
-              color: active ? WeRoboColors.white : WeRoboColors.primary,
-            ),
-            const SizedBox(width: 5),
-            Text(
-              active ? '선택중' : 'AI',
-              style: WeRoboTypography.caption.copyWith(
-                color: active ? WeRoboColors.white : WeRoboColors.primary,
-                fontWeight: FontWeight.w800,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            key:
+                Key(active ? 'range_digest_exit' : 'range_digest_chart_ai_button'),
+            padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+            decoration: BoxDecoration(
+              color: active
+                  ? WeRoboColors.primary.withValues(alpha: 0.78)
+                  : tc.surface.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: active
+                    ? WeRoboColors.primary.withValues(alpha: 0.55)
+                    : WeRoboColors.primary.withValues(alpha: 0.22),
               ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
-          ],
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  active ? Icons.close_rounded : Icons.auto_awesome_rounded,
+                  size: 15,
+                  color: fg,
+                ),
+                const SizedBox(width: 5),
+                active
+                    ? Icon(Icons.crop_free_rounded, size: 15, color: fg)
+                    : Text(
+                        'AI',
+                        style: WeRoboTypography.caption.copyWith(
+                          color: fg,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1840,7 +1895,7 @@ class _DigestAiSummary {
   }) {
     final contributions = _PortfolioIssueFeed._topContributions(digest);
     if (contributions.isNotEmpty) {
-      return contributions.map(_driverSentence).join(' ');
+      return contributions.map(_driverSentence).join('\n');
     }
 
     final narrative = digest?.narrativeKo?.trim();
