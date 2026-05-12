@@ -3,6 +3,7 @@ import 'dart:developer' as developer;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
@@ -3489,16 +3490,634 @@ class _NotificationIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Pressable(
-      onTap: () => Navigator.push(
-        context,
-        WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
-      ),
+      onTap: () => showNotificationsSheet(context),
       child: Icon(
         hasUnread
             ? Icons.notifications_rounded
             : Icons.notifications_none_rounded,
         size: 24,
         color: tc.textSecondary,
+      ),
+    );
+  }
+}
+
+// ─── Notification dropdown sheet ────────────────────────────
+
+typedef NotificationsApiOverride = ({
+  Future<MobileVolatilityHistoryResponse> Function() fetchVolatility,
+  Future<MobileAssetClassNewsResponse> Function(AssetClass cls) fetchNews,
+});
+
+NotificationsApiOverride? _notificationsApiOverride;
+
+@visibleForTesting
+void debugSetNotificationsApiOverride(NotificationsApiOverride? override) {
+  _notificationsApiOverride = override;
+}
+
+/// Public entry point so widget tests can drive the sheet without going
+/// through the bell icon's GestureDetector.
+void showNotificationsSheet(BuildContext context) {
+  // Capture state before the dialog route so it is available in the new
+  // route's widget tree (GeneralDialog creates an isolated context).
+  final state = PortfolioStateProvider.of(context);
+  showGeneralDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: '알림 닫기',
+    barrierColor: Colors.black.withValues(alpha: 0.32),
+    transitionDuration: WeRoboMotion.medium,
+    pageBuilder: (_, __, ___) => PortfolioStateProvider(
+      state: state,
+      child: const _NotificationsSheet(),
+    ),
+    transitionBuilder: (_, anim, __, child) {
+      final slide = Tween<Offset>(
+        begin: const Offset(0, -1),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: anim, curve: WeRoboMotion.enter));
+      return SlideTransition(position: slide, child: child);
+    },
+  );
+}
+
+class _NotificationsSheet extends StatefulWidget {
+  const _NotificationsSheet();
+
+  @override
+  State<_NotificationsSheet> createState() => _NotificationsSheetState();
+}
+
+class _NotificationsSheetState extends State<_NotificationsSheet> {
+  MobileAssetClassNewsResponse? _news;
+  bool _newsErrored = false;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadAsync());
+  }
+
+  Future<void> _loadAsync() async {
+    final state = PortfolioStateProvider.of(context);
+    final override = _notificationsApiOverride;
+    final fetchVolatility = override?.fetchVolatility ??
+        () {
+          final portfolio = state.selectedPortfolio;
+          final riskProfile = portfolio?.code ?? state.type.riskCode;
+          return MobileBackendApi.instance.fetchVolatilityHistory(
+            riskProfile: riskProfile,
+            stockWeights: portfolio?.stockWeights,
+          );
+        };
+    final topAsset = _topWeightedAssetClass(state);
+    final fetchNews = override?.fetchNews ??
+        (AssetClass cls) =>
+            MobileBackendApi.instance.fetchAssetClassNews(cls);
+
+    final volFuture = _safeVoid(() async {
+      final vol = await fetchVolatility();
+      if (!mounted) return;
+      state.setPortfolioVolatilityHistory(vol);
+    });
+
+    final newsFuture = topAsset == null
+        ? Future<void>.value()
+        : _safeVoid(
+            () async {
+              final news = await fetchNews(topAsset);
+              if (!mounted) return;
+              setState(() {
+                _news = news;
+              });
+            },
+            onError: () {
+              if (!mounted) return;
+              setState(() => _newsErrored = true);
+            },
+          );
+
+    await Future.wait<void>([volFuture, newsFuture]);
+    if (!mounted) return;
+    setState(() {
+      _ready = true;
+    });
+  }
+
+  Future<void> _safeVoid(
+    Future<void> Function() body, {
+    VoidCallback? onError,
+  }) async {
+    try {
+      await body();
+    } catch (_) {
+      onError?.call();
+    }
+  }
+
+  AssetClass? _topWeightedAssetClass(PortfolioState state) {
+    final portfolio = state.selectedPortfolio;
+    if (portfolio == null) return null;
+    final weights = <AssetClass, double>{};
+    for (final alloc in portfolio.sectorAllocations) {
+      final cls = _sectorCodeToAssetClass(alloc.assetCode);
+      if (cls == null) continue;
+      weights[cls] = (weights[cls] ?? 0.0) + alloc.weight;
+    }
+    if (weights.isEmpty) return null;
+    final sorted = weights.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    return sorted.first.key;
+  }
+
+  AssetClass? _sectorCodeToAssetClass(String code) {
+    switch (code) {
+      case 'cash':
+      case 'cash_equivalent':
+      case 'cash_equivalents':
+        return AssetClass.cash;
+      case 'short_term_bond':
+      case 'bond':
+      case 'treasury':
+        return AssetClass.shortBond;
+      case 'infra':
+      case 'infra_bond':
+      case 'infrastructure':
+      case 'infrastructure_bond':
+        return AssetClass.infraBond;
+      case 'gold':
+      case 'commodity_gold':
+        return AssetClass.gold;
+      case 'us_value':
+      case 'value_stock':
+        return AssetClass.usValue;
+      case 'us_growth':
+      case 'growth_stock':
+        return AssetClass.usGrowth;
+      case 'new_growth':
+        return AssetClass.newGrowth;
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final state = PortfolioStateProvider.of(context);
+
+    final rows = <Widget>[];
+
+    // 1. Monthly summary.
+    final monthly = state.trailingMonthReturn;
+    if (monthly != null) {
+      final sign = monthly >= 0 ? '+' : '−';
+      final pct = (monthly.abs() * 100).toStringAsFixed(1);
+      rows.add(_NotificationRow(
+        kind: _NotificationKind.monthlySummary,
+        category: _categoryLabel(_NotificationKind.monthlySummary),
+        title: '지난 30일 포트폴리오 $sign$pct%',
+        onTap: () => _navigateToComingSoon(
+          context,
+          _categoryLabel(_NotificationKind.monthlySummary),
+        ),
+      ));
+    }
+
+    // 2. Contribution.
+    final contributor = state.topContributorOver30d;
+    if (contributor != null) {
+      final pct = (contributor.weight * contributor.assetReturn * 100)
+          .abs()
+          .round();
+      rows.add(_NotificationRow(
+        kind: _NotificationKind.contribution,
+        category: _categoryLabel(_NotificationKind.contribution),
+        title: '이번 달 ${contributor.label}이 수익의 $pct%를 기여했어요',
+        onTap: () => _navigateToComingSoon(
+          context,
+          _categoryLabel(_NotificationKind.contribution),
+        ),
+      ));
+    }
+
+    // 3. Algorithm signal — one row per rebalance insight, most recent first.
+    rows.addAll(_buildAlgorithmSignalRows(state, context));
+
+    // 4. Volatility row — always rendered. Copy depends on whether a spike
+    //    was detected after the async fetch completed.
+    final spike = state.portfolioVolatilitySpike;
+    final volatilityTitle = !_ready
+        ? '변동성 데이터를 불러오는 중이에요'
+        : spike != null
+            ? '포트폴리오 변동성 +${(spike.percentAboveAverage * 100).round()}% 주의 구간이에요'
+            : '현재 시장 변동성은 안정세를 유지하고 있어요';
+    rows.add(_NotificationRow(
+      kind: _NotificationKind.volatilityAlert,
+      category: _categoryLabel(_NotificationKind.volatilityAlert),
+      title: volatilityTitle,
+      onTap: () => _navigateToComingSoon(
+        context,
+        _categoryLabel(_NotificationKind.volatilityAlert),
+      ),
+    ));
+
+    // 5. News row — always rendered. Title falls back when the fetch fails
+    //    or hasn't completed yet.
+    final newsTitle = !_ready
+        ? '뉴스를 불러오는 중이에요'
+        : (_news != null && !_newsErrored)
+            ? _news!.title
+            : '뉴스를 불러올 수 없어요';
+    rows.add(_NotificationRow(
+      kind: _NotificationKind.assetNews,
+      category: _categoryLabel(_NotificationKind.assetNews),
+      title: newsTitle,
+      onTap: _ready && _news != null && !_newsErrored
+          ? () => _openNewsLink(_news!.link)
+          : () => _navigateToComingSoon(
+                context,
+                _categoryLabel(_NotificationKind.assetNews),
+              ),
+    ));
+
+    final body = rows.isEmpty && _ready
+        ? <Widget>[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: Text(
+                '오늘은 새로운 알림이 없어요',
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textTertiary,
+                ),
+              ),
+            ),
+          ]
+        : <Widget>[
+            // Cap height at 60% of the screen so a long insight history
+            // doesn't push the sheet off the bottom of the device. The
+            // "지난 알림 모두 보기" link is appended as the final list item
+            // so it scrolls with the content rather than sticking at the
+            // bottom of the sheet.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.6,
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                itemCount: rows.length + 1,
+                separatorBuilder: (_, __) => const SizedBox(height: 4),
+                itemBuilder: (_, i) {
+                  if (i < rows.length) return rows[i];
+                  return _SeeAllRow(
+                    onTap: () => Navigator.of(context).push(
+                      WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ];
+
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          decoration: BoxDecoration(
+            color: tc.surface,
+            borderRadius: const BorderRadius.vertical(
+              bottom: Radius.circular(20),
+            ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              bottom: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '오늘의 알림',
+                            textAlign: TextAlign.center,
+                            style: WeRoboTypography.heading3.themed(context),
+                          ),
+                        ),
+                        Pressable(
+                          onTap: () => Navigator.of(context).pop(),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: tc.card,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.close_rounded,
+                              size: 18,
+                              color: tc.textSecondary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, thickness: 1, color: tc.card),
+                  ...body,
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ),
+    );
+  }
+
+  Future<void> _openNewsLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  void _navigateToComingSoon(BuildContext context, String title) {
+    Navigator.of(context).push(
+      WeRoboMotion.fadeRoute<void>(_ComingSoonPage(title: title)),
+    );
+  }
+
+  Iterable<_NotificationRow> _buildAlgorithmSignalRows(
+    PortfolioState state,
+    BuildContext context,
+  ) sync* {
+    // "오늘의 알림" is by definition today's signals only. Filter on the
+    // rebalanceDate (the actual event date), not createdAt — createdAt
+    // may be a metadata timestamp that's always recent. Older insights
+    // are reachable via "지난 알림 모두 보기" at the bottom of the sheet.
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    for (final insight in state.insights) {
+      final rebalDate = _parseIsoDate(insight.rebalanceDate);
+      if (rebalDate == null || rebalDate.isBefore(today)) continue;
+
+      final dateLabel = _formatKoreanDate(insight.rebalanceDate);
+      final triggerSentence = _triggerSentence(insight.trigger);
+      final title = dateLabel == null
+          ? triggerSentence
+          : '$dateLabel $triggerSentence';
+      yield _NotificationRow(
+        kind: _NotificationKind.algorithmSignal,
+        category: _categoryLabel(_NotificationKind.algorithmSignal),
+        title: title,
+        onTap: () {
+          Navigator.of(context).push(
+            WeRoboMotion.fadeRoute<void>(
+              InsightDetailPage(insight: insight),
+            ),
+          );
+        },
+      );
+    }
+  }
+
+  String? _formatKoreanDate(String iso) {
+    // Expects "YYYY-MM-DD"; returns "M월 D일".
+    if (iso.length < 10) return null;
+    final month = int.tryParse(iso.substring(5, 7));
+    final day = int.tryParse(iso.substring(8, 10));
+    if (month == null || day == null) return null;
+    return '$month월 $day일';
+  }
+
+  DateTime? _parseIsoDate(String iso) {
+    if (iso.length < 10) return null;
+    final year = int.tryParse(iso.substring(0, 4));
+    final month = int.tryParse(iso.substring(5, 7));
+    final day = int.tryParse(iso.substring(8, 10));
+    if (year == null || month == null || day == null) return null;
+    return DateTime(year, month, day);
+  }
+
+  String _triggerSentence(String? trigger) {
+    // Backend trigger codes (see account_service._rebalance_activity_title).
+    switch (trigger) {
+      case 'scheduled':
+        return '정기 리밸런싱이 실행됐어요';
+      case 'drift_guard':
+        return '드리프트 가드가 작동했어요';
+      case 'threshold':
+        return '임계치 초과로 조정됐어요';
+      case null:
+        return '리밸런싱이 실행됐어요';
+      default:
+        return '리밸런싱이 실행됐어요';
+    }
+  }
+}
+
+enum _NotificationKind {
+  monthlySummary,
+  contribution,
+  algorithmSignal,
+  volatilityAlert,
+  assetNews,
+}
+
+String _categoryLabel(_NotificationKind kind) {
+  switch (kind) {
+    case _NotificationKind.monthlySummary:
+      return '월간 요약';
+    case _NotificationKind.contribution:
+      return '기여도 알림';
+    case _NotificationKind.algorithmSignal:
+      return '알고리즘 시그널';
+    case _NotificationKind.volatilityAlert:
+      return '시장 변동성 경고';
+    case _NotificationKind.assetNews:
+      return '자산군별 뉴스';
+  }
+}
+
+String _iconAsset(_NotificationKind kind) {
+  switch (kind) {
+    case _NotificationKind.monthlySummary:
+      return 'assets/icons/calendar.png';
+    case _NotificationKind.contribution:
+      return 'assets/icons/contribution-alarm.png';
+    case _NotificationKind.algorithmSignal:
+      return 'assets/icons/algorithm-signal.png';
+    case _NotificationKind.volatilityAlert:
+      return 'assets/icons/change-alert.png';
+    case _NotificationKind.assetNews:
+      return 'assets/icons/asset-news.png';
+  }
+}
+
+class _ComingSoonPage extends StatelessWidget {
+  final String title;
+  const _ComingSoonPage({required this.title});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Scaffold(
+      backgroundColor: tc.background,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 8,
+              ),
+              child: Row(
+                children: [
+                  Pressable(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: tc.card,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        size: 20,
+                        color: tc.textPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    title,
+                    style: WeRoboTypography.heading2.themed(context),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Center(
+                child: Text(
+                  '준비중입니다',
+                  style: WeRoboTypography.body.copyWith(
+                    color: tc.textTertiary,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationRow extends StatelessWidget {
+  final _NotificationKind kind;
+  final String category;
+  final String title;
+  final VoidCallback onTap;
+
+  const _NotificationRow({
+    required this.kind,
+    required this.category,
+    required this.title,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: tc.card,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              padding: const EdgeInsets.all(7),
+              child: Image.asset(_iconAsset(kind), fit: BoxFit.contain),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    category,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    title,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textSecondary,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SeeAllRow extends StatelessWidget {
+  final VoidCallback onTap;
+  const _SeeAllRow({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '지난 알림 모두 보기',
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: tc.textTertiary,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 import '../app/debug_page_logger.dart';
+import '../app/theme.dart';
 import '../models/mobile_backend_models.dart';
 import '../models/rebalance_insight.dart';
 
@@ -161,6 +162,36 @@ class MobileBackendApi {
       timeout: _defaultTimeout,
       preferredDataSource: preferredDataSource,
     );
+  }
+
+  Future<MobileAssetClassNewsResponse> fetchAssetClassNews(
+    AssetClass cls,
+  ) {
+    final clsParam = _assetClassToApi(cls);
+    return _get<MobileAssetClassNewsResponse>(
+      path: '/news/asset-class?cls=$clsParam',
+      parser: MobileAssetClassNewsResponse.fromJson,
+      timeout: _defaultTimeout,
+    );
+  }
+
+  String _assetClassToApi(AssetClass cls) {
+    switch (cls) {
+      case AssetClass.cash:
+        return 'cash';
+      case AssetClass.shortBond:
+        return 'short_bond';
+      case AssetClass.infraBond:
+        return 'infra_bond';
+      case AssetClass.gold:
+        return 'gold';
+      case AssetClass.usValue:
+        return 'us_value';
+      case AssetClass.usGrowth:
+        return 'us_growth';
+      case AssetClass.newGrowth:
+        return 'new_growth';
+    }
   }
 
   Future<MobileReturnHistoryResponse> fetchReturnHistory({

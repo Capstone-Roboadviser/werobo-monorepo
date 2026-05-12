@@ -94,7 +94,10 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
       appBar: AppBar(
         backgroundColor: tc.background,
         elevation: 0,
-        leading: const BackButton(),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          onPressed: () => Navigator.maybePop(context),
+        ),
         centerTitle: true,
         title: Text(
           '포트폴리오 상세',
