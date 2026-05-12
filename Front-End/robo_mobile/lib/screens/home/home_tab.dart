@@ -335,12 +335,24 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           children: [
             const SizedBox(height: 12),
 
-            // Notification icon (persistent access)
-            Align(
-              alignment: Alignment.centerRight,
-              child: _NotificationIconButton(
-                hasUnread: state.unreadInsightCount > 0,
-              ),
+            // Header row: WeRobo wordmark left, notification icon right.
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  'WeRobo',
+                  key: const Key('home_werobo_logo'),
+                  style: WeRoboTypography.logo.copyWith(
+                    color: WeRoboColors.primary,
+                    fontSize: 22,
+                    height: 1.1,
+                  ),
+                ),
+                _NotificationIconButton(
+                  hasUnread: state.unreadInsightCount > 0,
+                ),
+              ],
             ),
             const SizedBox(height: 8),
 
@@ -1226,18 +1238,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // WeRobo wordmark above the 총손익 readout (capstone 2026-05-12 spec)
-        Text(
-          'WeRobo',
-          key: const Key('home_werobo_logo'),
-          style: WeRoboTypography.logo.copyWith(
-            color: WeRoboColors.primary,
-            fontSize: 22,
-            height: 1.1,
-          ),
-        ),
-        const SizedBox(height: 14),
-        // 총손익 label
+        // 총손익 label (wordmark moved up next to the notification icon)
         Text(
           '총손익',
           style: WeRoboTypography.caption.copyWith(
@@ -2367,13 +2368,14 @@ class _InvestedVsCurrentStack extends StatelessWidget {
       fontFamily: WeRoboFonts.english,
     );
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text('투자금액', style: labelStyle),
+            const SizedBox(width: 8),
             Text(
               '₩${_formatCurrency(invested.toInt())}',
               style: amountStyle,
@@ -2382,9 +2384,10 @@ class _InvestedVsCurrentStack extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text('평가금액', style: labelStyle),
+            const SizedBox(width: 8),
             Text(
               '₩${_formatCurrency(current.toInt())}',
               style: amountStyle,
