@@ -8,6 +8,7 @@ import 'frontier_selection_resolver.dart';
 import 'portfolio_review_screen.dart';
 import 'widgets/asset_weight.dart';
 import 'widgets/efficient_frontier_chart.dart';
+import 'widgets/risk_ack_dialog.dart';
 
 const _frontierPreviewSamplePoints = 301;
 
@@ -118,7 +119,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.dispose();
   }
 
-  void _goToReview() {
+  Future<void> _goToReview() async {
     final resolvedSelection =
         _frontierSelection ?? _selectionFromCachedPreview();
     if (resolvedSelection == null) {
@@ -140,6 +141,24 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'dataSource': resolvedSelection.dataSource,
       });
     }
+    final preview = resolvedSelection.preview;
+    if (preview != null && preview.points.isNotEmpty) {
+      final points = preview.points;
+      final averageVol =
+          points.map((p) => p.volatility).reduce((a, b) => a + b) /
+              points.length;
+      final diffPp =
+          (resolvedSelection.targetVolatility - averageVol) * 100;
+      if (diffPp >= 30) {
+        final confirmed = await showRiskAckDialog(
+          context: context,
+          marketVolPct: averageVol * 100,
+          userVolPct: resolvedSelection.targetVolatility * 100,
+        );
+        if (confirmed != true) return;
+      }
+    }
+    if (!mounted) return;
     Navigator.of(context).push(
       WeRoboMotion.fadeRoute(
         PortfolioReviewScreen(selection: resolvedSelection),
