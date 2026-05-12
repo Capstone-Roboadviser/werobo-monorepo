@@ -1037,6 +1037,43 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     _drawCtrl.forward(from: 0);
   }
 
+  String _formatChartRangeDate(DateTime date) =>
+      '${date.month}.${date.day.toString().padLeft(2, '0')}';
+
+  ({double x, String label})? _rangeDateLabelData(
+    List<ChartPoint> valuePts, {
+    required double fullWidth,
+    required double stackWidth,
+  }) {
+    if (!widget.rangeDigestMode || valuePts.length < 2) return null;
+    final start = _rangeStartIndex;
+    final end = _rangeEndIndex;
+    if (start == null || end == null) return null;
+
+    final leftIdx = math.min(start, end).clamp(0, valuePts.length - 1).toInt();
+    final rightIdx = math.max(start, end).clamp(0, valuePts.length - 1).toInt();
+    if (rightIdx - leftIdx < 1) return null;
+
+    double xForIndex(int index) => fullWidth * index / (valuePts.length - 1);
+    // The chart canvas is shifted 24px left so it can draw edge-to-edge.
+    // Mirror that offset for the widget overlay so it sits above the
+    // selected range, not above the clipped Stack coordinates.
+    final left = xForIndex(leftIdx) - 24;
+    final right = xForIndex(rightIdx) - 24;
+    final center = (left + right) / 2;
+    final maxLeft =
+        math.max(0.0, stackWidth - _RangeDigestChartDateLabel.width);
+    final x = (center - _RangeDigestChartDateLabel.width / 2)
+        .clamp(0.0, maxLeft)
+        .toDouble();
+
+    return (
+      x: x,
+      label:
+          '${_formatChartRangeDate(valuePts[leftIdx].date)} - ${_formatChartRangeDate(valuePts[rightIdx].date)}',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
@@ -1153,6 +1190,11 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     stackWidth: constraints.maxWidth,
                   )
                 : null;
+            final rangeDateLabelData = _rangeDateLabelData(
+              valuePts,
+              fullWidth: fullWidth,
+              stackWidth: constraints.maxWidth,
+            );
             return SizedBox(
               height: 320,
               child: Stack(
@@ -1301,6 +1343,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                       ),
                     ),
                   ),
+                  if (rangeDateLabelData != null)
+                    Positioned(
+                      left: rangeDateLabelData.x,
+                      top: 6,
+                      width: _RangeDigestChartDateLabel.width,
+                      child: _RangeDigestChartDateLabel(
+                        label: rangeDateLabelData.label,
+                      ),
+                    ),
                   if (cardData != null)
                     Positioned(
                       left: cardData.x,
@@ -1408,6 +1459,39 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         // at a glance.
         _ContributionOneLiners(digest: widget.digest),
       ],
+    );
+  }
+}
+
+class _RangeDigestChartDateLabel extends StatelessWidget {
+  static const double width = 112;
+
+  final String label;
+
+  const _RangeDigestChartDateLabel({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Text(
+      label,
+      key: const Key('range_digest_chart_date_label'),
+      textAlign: TextAlign.center,
+      maxLines: 1,
+      overflow: TextOverflow.visible,
+      style: TextStyle(
+        fontFamily: WeRoboFonts.english,
+        fontSize: 10,
+        fontWeight: FontWeight.w500,
+        color: tc.textSecondary.withValues(alpha: 0.82),
+        height: 1.2,
+        shadows: [
+          Shadow(
+            color: tc.surface.withValues(alpha: 0.9),
+            blurRadius: 4,
+          ),
+        ],
+      ),
     );
   }
 }

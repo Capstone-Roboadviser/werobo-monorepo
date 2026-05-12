@@ -742,6 +742,10 @@ void main() {
 
     expect(
         find.byKey(const Key('range_digest_selection_active')), findsOneWidget);
+    final dateLabel = find.byKey(const Key('range_digest_chart_date_label'));
+    expect(dateLabel, findsOneWidget);
+    final labelText = tester.widget<Text>(dateLabel).data;
+    expect(labelText, matches(RegExp(r'\d{1,2}\.\d{2} - \d{1,2}\.\d{2}')));
     expect(find.textContaining('움직였어요'), findsOneWidget);
   });
 }
