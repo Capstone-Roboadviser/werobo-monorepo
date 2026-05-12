@@ -1234,18 +1234,15 @@ class EmbeddedPortfolioEngineAdapter:
             for point in response.points
         ]
 
-        # Compute equal-weight (1/N) benchmark volatility, isolated
-        # so failures don't break the main response.
+        # Asset-class equal-weight market benchmark (matches the comparison
+        # view's "benchmark_avg" line — 6자산 단순평균, excluding 신성장주).
+        # Isolated so failures don't break the main response.
         benchmark_points: list[dict[str, object]] | None = None
         try:
-            tickers = list(snapshot["stock_weights"].keys())
-            equal_weights = {t: 1.0 / len(tickers) for t in tickers}
-            bench_response = self.portfolio_analytics_service.build_volatility_history(
-                weights=equal_weights,
+            bench_response = self.portfolio_analytics_service.build_benchmark_volatility_history(
                 data_source=self._to_core_data_source(data_source),
                 rolling_window=rolling_window,
             )
-            # Inner join on dates: only include dates present in both
             benchmark_points = [
                 {"date": point.date, "volatility": point.value}
                 for point in bench_response.points
