@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/chart_point_filters.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
+import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
@@ -9,6 +10,7 @@ import '../../models/portfolio_data.dart';
 import '../../services/mobile_backend_api.dart';
 import '../onboarding/widgets/portfolio_charts.dart';
 import '../onboarding/widgets/vestor_pie_chart.dart';
+import 'portfolio_allocation_detail_page.dart';
 
 List<ChartLine> buildHomePortfolioComparisonLines(
   PortfolioState portfolioState,
@@ -43,6 +45,7 @@ class PortfolioTab extends StatefulWidget {
 class _PortfolioTabState extends State<PortfolioTab> {
   int _viewTab = 0; // 0 = 비중, 1 = 성과 추이
   int? _selectedSector;
+  bool _showAllocationAmounts = false;
 
   // Card 2 API data (volatility-history)
   bool _isLoadingHistory = false;
@@ -222,6 +225,10 @@ class _PortfolioTabState extends State<PortfolioTab> {
     final selectedPortfolio = portfolioState.selectedPortfolio;
     final categories = portfolioState.categories;
     final details = portfolioState.categoryDetails;
+    final accountSummary = portfolioState.accountSummary;
+    final accountActivities = portfolioState.accountActivities;
+    final hasResolvedPortfolio =
+        selectedPortfolio != null || accountSummary != null;
     final comparisonLines = buildHomePortfolioComparisonLines(portfolioState);
     final rebalanceDates = buildHomePortfolioRebalanceDates(portfolioState);
 
@@ -288,10 +295,15 @@ class _PortfolioTabState extends State<PortfolioTab> {
               _AllocationView(
                 categories: categories,
                 details: details,
-                hasResolvedPortfolio: selectedPortfolio != null,
+                baseValue: _portfolioAllocationBaseValue(accountSummary),
+                showAmounts: _showAllocationAmounts,
+                hasResolvedPortfolio: hasResolvedPortfolio,
                 selectedSector: _selectedSector,
                 onSectorSelected: (idx) =>
                     setState(() => _selectedSector = idx),
+                onValueModeChanged: (showAmounts) {
+                  setState(() => _showAllocationAmounts = showAmounts);
+                },
               )
             else
               _TrendView(
@@ -307,6 +319,16 @@ class _PortfolioTabState extends State<PortfolioTab> {
 
             // Next rebalance card
             _NextRebalanceCard(rebalanceDates: rebalanceDates),
+            const SizedBox(height: 28),
+            _DepositsPanel(
+              activities: accountActivities,
+              accountSummary: accountSummary,
+            ),
+            if (accountSummary != null) const SizedBox(height: 20),
+            if (accountSummary != null)
+              _ReserveCashPanel(
+                reserveCashAmount: accountSummary.cashBalance,
+              ),
             const SizedBox(height: 32),
           ],
         ),
@@ -474,16 +496,22 @@ class _ToggleChip extends StatelessWidget {
 class _AllocationView extends StatelessWidget {
   final List<PortfolioCategory> categories;
   final List<PortfolioCategoryDetail> details;
+  final double? baseValue;
+  final bool showAmounts;
   final bool hasResolvedPortfolio;
   final int? selectedSector;
   final ValueChanged<int?> onSectorSelected;
+  final ValueChanged<bool> onValueModeChanged;
 
   const _AllocationView({
     required this.categories,
     required this.details,
+    required this.baseValue,
+    required this.showAmounts,
     required this.hasResolvedPortfolio,
     required this.selectedSector,
     required this.onSectorSelected,
+    required this.onValueModeChanged,
   });
 
   @override
@@ -519,50 +547,62 @@ class _AllocationView extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        ...details.map((d) => Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: tc.card,
-                borderRadius: BorderRadius.circular(12),
+        Row(
+          children: [
+            Text(
+              '포트폴리오 구성',
+              style: WeRoboTypography.heading3.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w600,
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      color: d.category.color,
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(d.category.name,
-                            style: WeRoboTypography.bodySmall
-                                .copyWith(color: tc.textPrimary)),
-                        if (d.tickers.isNotEmpty)
-                          Text(
-                            d.tickers.map((t) => t.symbol).join(', '),
-                            style: WeRoboTypography.caption.themed(context),
-                          ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    '${d.category.percentage.toInt()}%',
-                    style: WeRoboTypography.bodySmall.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: tc.textPrimary,
-                    ),
-                  ),
-                ],
+            ),
+            const Spacer(),
+            _PortfolioValueToggle(
+              showAmounts: showAmounts,
+              onValueModeChanged: onValueModeChanged,
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...details.map(
+          (detail) => _PortfolioAllocationRow(
+            detail: detail,
+            baseValue: baseValue,
+            showAmounts: showAmounts,
+            onTap: () => _openAllocationDetailPage(context, detail),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Pressable(
+          onTap: () {},
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '포트폴리오 조정',
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w700,
               ),
-            )),
+            ),
+          ),
+        ),
       ],
+    );
+  }
+
+  void _openAllocationDetailPage(
+    BuildContext context,
+    PortfolioCategoryDetail detail,
+  ) {
+    Navigator.push(
+      context,
+      WeRoboMotion.fadeRoute<void>(
+        PortfolioAllocationDetailPage(
+          detail: detail,
+          baseValue: baseValue,
+          initialShowAmounts: showAmounts,
+        ),
+      ),
     );
   }
 
@@ -608,6 +648,470 @@ class _AllocationView extends StatelessWidget {
       ],
     );
   }
+}
+
+class _PortfolioValueToggle extends StatelessWidget {
+  final bool showAmounts;
+  final ValueChanged<bool> onValueModeChanged;
+
+  const _PortfolioValueToggle({
+    required this.showAmounts,
+    required this.onValueModeChanged,
+  });
+
+  static const double _chipSize = 36.0;
+  static const double _padding = 3.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    const totalWidth = _chipSize * 2 + _padding * 2 + 4;
+    return Pressable(
+      onTap: () => onValueModeChanged(!showAmounts),
+      child: Container(
+        width: totalWidth,
+        height: _chipSize + _padding * 2,
+        padding: const EdgeInsets.all(_padding),
+        decoration: BoxDecoration(
+          color: tc.surface,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Stack(
+          children: [
+            AnimatedAlign(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              alignment:
+                  showAmounts ? Alignment.centerRight : Alignment.centerLeft,
+              child: Container(
+                width: _chipSize,
+                height: _chipSize,
+                decoration: BoxDecoration(
+                  color: tc.card,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                SizedBox(
+                  width: _chipSize + 2,
+                  child: Center(
+                    child: Text(
+                      '%',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: !showAmounts ? tc.textPrimary : tc.textTertiary,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: WeRoboFonts.english,
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: _chipSize + 2,
+                  child: Center(
+                    child: Text(
+                      '₩',
+                      style: WeRoboTypography.bodySmall.copyWith(
+                        color: showAmounts ? tc.textPrimary : tc.textTertiary,
+                        fontWeight: FontWeight.w700,
+                        fontFamily: WeRoboFonts.english,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PortfolioAllocationRow extends StatelessWidget {
+  final PortfolioCategoryDetail detail;
+  final double? baseValue;
+  final bool showAmounts;
+  final VoidCallback onTap;
+
+  const _PortfolioAllocationRow({
+    required this.detail,
+    required this.baseValue,
+    required this.showAmounts,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: tc.card,
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: detail.category.color,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    detail.category.name,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    _buildAllocationSubtitle(detail),
+                    style: WeRoboTypography.caption.copyWith(
+                      color: tc.textSecondary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              showAmounts
+                  ? _formatWonFromRatio(baseValue, detail.category.percentage)
+                  : _formatPercentLabel(detail.category.percentage),
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w500,
+                fontFamily: WeRoboFonts.english,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right_rounded, color: tc.textTertiary, size: 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _buildAllocationSubtitle(PortfolioCategoryDetail detail) {
+    if (detail.tickers.isEmpty) {
+      return '세부 종목 정보 없음';
+    }
+    final symbols =
+        detail.tickers.take(3).map((ticker) => ticker.symbol).join(', ');
+    if (detail.tickers.length <= 3) {
+      return symbols;
+    }
+    return '$symbols 외 ${detail.tickers.length - 3}개';
+  }
+}
+
+class _DepositsPanel extends StatelessWidget {
+  final List<MobileAccountActivity> activities;
+  final MobileAccountSummary? accountSummary;
+
+  const _DepositsPanel({
+    required this.activities,
+    required this.accountSummary,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    final latestDeposit = _findLatestDeposit(activities);
+    final latestAmount = latestDeposit?.amount ??
+        ((accountSummary?.investedAmount ?? 0) > 0
+            ? accountSummary?.investedAmount
+            : null);
+    final latestDate = _parseIsoDate(
+      latestDeposit?.date ?? accountSummary?.startedAt,
+    );
+    const upcomingAmount = 100000.0;
+    final upcomingDate = latestDate == null ? null : _addOneMonth(latestDate);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              '입금 현황',
+              style: WeRoboTypography.heading3.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right_rounded, size: 20, color: tc.textTertiary),
+          ],
+        ),
+        const SizedBox(height: 16),
+        _DepositInfoRow(
+          label: '최근 입금',
+          valueText: latestAmount == null
+              ? '아직 입금 내역이 없어요'
+              : '₩${_formatCurrency(latestAmount.round())}'
+                  ' · ${_formatKoreanMonthDay(latestDate!)}',
+        ),
+        Divider(
+          color: tc.border.withValues(alpha: 0.4),
+          height: 1,
+          thickness: 0.5,
+        ),
+        _DepositInfoRow(
+          label: '예정 입금',
+          valueText: upcomingDate == null
+              ? '예정된 입금이 없어요'
+              : '₩${_formatCurrency(upcomingAmount.round())}'
+                  ' · ${_formatKoreanMonthDay(upcomingDate)}',
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: const [
+            Expanded(
+              child: _DepositActionButton(
+                icon: Icons.add_rounded,
+                label: '입금하기',
+              ),
+            ),
+            SizedBox(width: 12),
+            Expanded(
+              child: _DepositActionButton(
+                icon: Icons.event_repeat_rounded,
+                label: '정기 입금',
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  MobileAccountActivity? _findLatestDeposit(List<MobileAccountActivity> items) {
+    final deposits = items
+        .where(
+          (activity) =>
+              activity.type == 'cash_in' || activity.type == 'initial_deposit',
+        )
+        .toList()
+      ..sort((a, b) {
+        final aDate = _parseIsoDate(a.date) ?? DateTime(1970);
+        final bDate = _parseIsoDate(b.date) ?? DateTime(1970);
+        return bDate.compareTo(aDate);
+      });
+
+    if (deposits.isEmpty) {
+      return null;
+    }
+    return deposits.first;
+  }
+}
+
+class _DepositInfoRow extends StatelessWidget {
+  final String label;
+  final String valueText;
+
+  const _DepositInfoRow({required this.label, required this.valueText});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textSecondary,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          const Spacer(),
+          Text(
+            valueText,
+            style: WeRoboTypography.bodySmall.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w500,
+              fontFamily: WeRoboFonts.english,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DepositActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _DepositActionButton({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: () {},
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: tc.border.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: tc.textPrimary),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: WeRoboTypography.bodySmall.copyWith(
+                  color: tc.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ReserveCashPanel extends StatelessWidget {
+  final double reserveCashAmount;
+
+  const _ReserveCashPanel({required this.reserveCashAmount});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '예비 현금',
+          style: WeRoboTypography.heading3.copyWith(
+            color: tc.textPrimary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          '포트폴리오 구성 비중에는 포함되지 않아요.',
+          style: WeRoboTypography.bodySmall.copyWith(color: tc.textSecondary),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '리밸런싱 시 별도로 보관됐다가 자동 사용돼요.',
+          style: WeRoboTypography.caption.copyWith(color: tc.textTertiary),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Text(
+              '현재 보유',
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textSecondary,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              _formatWonAmount(reserveCashAmount),
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontFamily: WeRoboFonts.english,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+String _formatCurrency(int amount) {
+  final str = amount.abs().toString();
+  final buf = StringBuffer();
+  for (int i = 0; i < str.length; i++) {
+    if (i > 0 && (str.length - i) % 3 == 0) buf.write(',');
+    buf.write(str[i]);
+  }
+  return buf.toString();
+}
+
+String _formatPercentLabel(double percentage) {
+  return '${percentage.toStringAsFixed(2)}%';
+}
+
+String _formatWonFromRatio(double? baseValue, double percentage) {
+  if (baseValue == null || baseValue <= 0) {
+    return '-';
+  }
+  final amount = (baseValue * percentage / 100).round();
+  return '₩${_formatCurrency(amount)}';
+}
+
+String _formatWonAmount(double? amount) {
+  if (amount == null) {
+    return '-';
+  }
+  return '₩${_formatCurrency(amount.round())}';
+}
+
+double? _portfolioAllocationBaseValue(MobileAccountSummary? summary) {
+  if (summary == null) {
+    return null;
+  }
+  final currentInvestedValue = summary.currentValue - summary.cashBalance;
+  if (currentInvestedValue > 0) {
+    return currentInvestedValue;
+  }
+  final investedPrincipalExcludingCash =
+      summary.investedAmount - summary.cashBalance;
+  if (investedPrincipalExcludingCash > 0) {
+    return investedPrincipalExcludingCash;
+  }
+  return null;
+}
+
+DateTime? _parseIsoDate(String? value) {
+  if (value == null || value.isEmpty) {
+    return null;
+  }
+  return DateTime.tryParse(value);
+}
+
+DateTime _addOneMonth(DateTime date) {
+  final nextMonth = date.month == 12 ? 1 : date.month + 1;
+  final nextYear = date.month == 12 ? date.year + 1 : date.year;
+  final lastDayOfNextMonth = DateTime(nextYear, nextMonth + 1, 0).day;
+  final nextDay = date.day > lastDayOfNextMonth ? lastDayOfNextMonth : date.day;
+  return DateTime(nextYear, nextMonth, nextDay);
+}
+
+String _formatKoreanMonthDay(DateTime date) {
+  return '${date.month}월 ${date.day}일';
 }
 
 // ── Trend view (card 2 + card 7 API data) ──

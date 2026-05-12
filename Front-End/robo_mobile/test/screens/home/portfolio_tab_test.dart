@@ -155,6 +155,38 @@ void main() {
     });
   });
 
+  testWidgets('shows home allocation rows and cash sections in portfolio tab',
+      (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    state.setAccountDashboard(accountDashboard());
+    state.setBacktest(comparisonBacktest());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: PortfolioTab()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('포트폴리오 구성'), findsOneWidget);
+    expect(find.text('미국 가치주'), findsWidgets);
+    expect(find.text('VTV'), findsOneWidget);
+    expect(find.text('60.00%'), findsOneWidget);
+    expect(find.text('금'), findsWidgets);
+    expect(find.text('GLD'), findsOneWidget);
+    expect(find.text('40.00%'), findsOneWidget);
+
+    expect(find.text('입금 현황'), findsOneWidget);
+    expect(find.text('예비 현금'), findsOneWidget);
+    expect(find.text('포트폴리오 구성 비중에는 포함되지 않아요.'), findsOneWidget);
+    expect(find.text('₩25,000'), findsOneWidget);
+  });
+
   group('volatility view market benchmark', () {
     List<ChartPoint> makePoints(int count) {
       return List.generate(

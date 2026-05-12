@@ -155,7 +155,7 @@ void main() {
     );
   });
 
-  testWidgets('shows reserve cash as separate from portfolio allocation',
+  testWidgets('keeps operational portfolio sections out of home',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = PortfolioState();
@@ -178,11 +178,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('포트폴리오 구성'), findsOneWidget);
-    expect(find.text('예비 현금'), findsOneWidget);
-    expect(find.text('포트폴리오 구성 비중에는 포함되지 않아요.'), findsOneWidget);
-    expect(find.text('리밸런싱 시 별도로 보관됐다가 자동 사용돼요.'), findsOneWidget);
-    expect(find.text('₩25,000'), findsOneWidget);
+    expect(find.text('입금 현황'), findsNothing);
+    expect(find.text('포트폴리오 구성'), findsNothing);
+    expect(find.text('예비 현금'), findsNothing);
+    expect(find.text('포트폴리오 구성 비중에는 포함되지 않아요.'), findsNothing);
+    expect(find.text('리밸런싱 시 별도로 보관됐다가 자동 사용돼요.'), findsNothing);
   });
 
   testWidgets('shows WeRobo logo above total profit', (tester) async {
