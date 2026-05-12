@@ -1040,7 +1040,12 @@ void main() {
     await state.markWelcomeBannerSeen();
 
     final completer = Completer<MobileRangeDigestResponse>();
-    var requestCount = 0;
+    final requests = <({
+      DateTime startDate,
+      DateTime endDate,
+      double startValue,
+      double endValue,
+    })>[];
     debugSetRangeDigestApiOverride(
       ({
         required String accessToken,
@@ -1049,7 +1054,12 @@ void main() {
         required double startValue,
         required double endValue,
       }) {
-        requestCount++;
+        requests.add((
+          startDate: startDate,
+          endDate: endDate,
+          startValue: startValue,
+          endValue: endValue,
+        ));
         return completer.future;
       },
     );
@@ -1075,18 +1085,39 @@ void main() {
     final chart = find.byKey(const Key('home_performance_chart_gesture'));
     await tester.ensureVisible(chart);
     await tester.pump();
+
     await tester.timedDrag(
       chart,
       const Offset(260, 0),
       const Duration(milliseconds: 300),
     );
+    expect(requests, hasLength(1));
+
+    final firstRequest = requests.single;
+    final expectedLockedLabel =
+        '${firstRequest.startDate.month}.${firstRequest.startDate.day.toString().padLeft(2, '0')} - '
+        '${firstRequest.endDate.month}.${firstRequest.endDate.day.toString().padLeft(2, '0')}';
+
+    final secondGesture = await tester
+        .startGesture(tester.getCenter(chart) + const Offset(120, 0));
+    await tester.pump();
+    await secondGesture.moveBy(const Offset(-260, 0));
+    await tester.pump();
+    await secondGesture.up();
     await tester.pump();
 
-    expect(requestCount, 1);
+    expect(requests, hasLength(1));
     expect(find.text('이 구간의 변화를 분석하고 있어요'), findsOneWidget);
-    final lockedLabel = tester
-        .widget<Text>(find.byKey(const Key('range_digest_chart_date_label')))
-        .data;
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('range_digest_chart_date_label')))
+          .data,
+      expectedLockedLabel,
+    );
+
+    completer.complete(rangeDigestFixture());
+    await tester.pump();
+    await tester.pump();
 
     await tester.timedDrag(
       chart,
@@ -1095,15 +1126,12 @@ void main() {
     );
     await tester.pump();
 
-    expect(requestCount, 1);
+    expect(requests, hasLength(1));
     expect(
       tester
           .widget<Text>(find.byKey(const Key('range_digest_chart_date_label')))
           .data,
-      lockedLabel,
+      expectedLockedLabel,
     );
-
-    completer.complete(rangeDigestFixture());
-    await tester.pump();
   });
 }
