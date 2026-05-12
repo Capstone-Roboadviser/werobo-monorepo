@@ -241,8 +241,7 @@ class _DonutChartState extends State<DonutChart>
 }
 
 /// One row in the legend beneath the donut.
-/// Slides in from the left and counts the percentage up as [progress] goes
-/// from 0.0 to 1.0.
+/// Fades in and counts the percentage up as [progress] goes from 0.0 to 1.0.
 class _SegmentLegendRow extends StatelessWidget {
   final DonutSegment segment;
   final double progress; // 0.0–1.0 for this segment's sub-interval
@@ -255,49 +254,44 @@ class _SegmentLegendRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    // Slide: progress 0 → shift left by full width, progress 1 → no shift.
-    final slideOffset = (1 - progress) * -1.0;
     final pct = (segment.weight * 100 * progress).toStringAsFixed(0);
 
-    return FractionalTranslation(
-      translation: Offset(slideOffset, 0),
-      child: Opacity(
-        opacity: progress.clamp(0.0, 1.0),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 4),
-          child: Row(
-            children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: segment.color,
-                  shape: BoxShape.circle,
-                ),
+    return Opacity(
+      opacity: progress.clamp(0.0, 1.0),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 10,
+              height: 10,
+              decoration: BoxDecoration(
+                color: segment.color,
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  segment.label!,
-                  style: WeRoboTypography.bodySmall.copyWith(
-                    color: tc.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '$pct%',
-                style: TextStyle(
-                  fontFamily: WeRoboFonts.number,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                segment.label!,
+                style: WeRoboTypography.bodySmall.copyWith(
                   color: tc.textPrimary,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '$pct%',
+              style: TextStyle(
+                fontFamily: WeRoboFonts.number,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: tc.textPrimary,
+              ),
+            ),
+          ],
         ),
       ),
     );
