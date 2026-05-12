@@ -354,8 +354,12 @@ void main() {
     expect(find.textContaining('영향을 줬어요'), findsAtLeastNWidgets(1));
     expect(find.textContaining('시장 변동성이 평소보다'), findsNothing);
     expect(find.text('더 보기'), findsNothing);
-    expect(find.text('구간분석'), findsOneWidget);
+    expect(find.text('구간분석'), findsNothing);
     expect(find.text('이 구간 분석'), findsNothing);
+    expect(
+      find.byKey(const Key('range_digest_chart_ai_button')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('digest banner hidden when already seen', (tester) async {
@@ -775,7 +779,7 @@ void main() {
     await gesture.up();
   });
 
-  testWidgets('range analysis mode enters from issue feed and exits cleanly',
+  testWidgets('range analysis mode enters from chart AI button and exits cleanly',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = PortfolioState();
@@ -796,22 +800,23 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    await tester.ensureVisible(find.text('구간분석'));
+    await tester.ensureVisible(
+      find.byKey(const Key('range_digest_chart_ai_button')),
+    );
     await tester.pump();
     ScrollController homeScrollController() => tester
         .widget<SingleChildScrollView>(
           find.byKey(const Key('home_tab_scroll')),
         )
         .controller!;
-    expect(homeScrollController().offset, greaterThan(0));
 
-    await tester.tap(find.text('구간분석'));
+    await tester.tap(find.byKey(const Key('range_digest_chart_ai_button')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 16));
     await tester.pump(WeRoboMotion.medium);
     await tester.pump(const Duration(milliseconds: 16));
 
-    expect(find.text('구간을 드래그해서 선택하세요'), findsOneWidget);
+    expect(find.text('선택중'), findsOneWidget);
     expect(find.text('차트에서 궁금한 구간을 드래그해 선택하세요.'), findsOneWidget);
     expect(homeScrollController().offset, moreOrLessEquals(0));
 
@@ -821,7 +826,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('AI 요약 · 최근 7일'), findsOneWidget);
-    expect(find.text('구간을 드래그해서 선택하세요'), findsNothing);
+    expect(find.text('선택중'), findsNothing);
   });
 
   testWidgets('range analysis drag selects persistent interval summary',
@@ -861,9 +866,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    await tester.ensureVisible(find.text('구간분석'));
+    await tester.ensureVisible(
+      find.byKey(const Key('range_digest_chart_ai_button')),
+    );
     await tester.pump();
-    await tester.tap(find.text('구간분석'));
+    await tester.tap(find.byKey(const Key('range_digest_chart_ai_button')));
     await tester.pump();
 
     final chart = find.byKey(const Key('home_performance_chart_gesture'));
@@ -955,9 +962,11 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    await tester.ensureVisible(find.text('구간분석'));
+    await tester.ensureVisible(
+      find.byKey(const Key('range_digest_chart_ai_button')),
+    );
     await tester.pump();
-    await tester.tap(find.text('구간분석'));
+    await tester.tap(find.byKey(const Key('range_digest_chart_ai_button')));
     await tester.pump();
 
     final chart = find.byKey(const Key('home_performance_chart_gesture'));
