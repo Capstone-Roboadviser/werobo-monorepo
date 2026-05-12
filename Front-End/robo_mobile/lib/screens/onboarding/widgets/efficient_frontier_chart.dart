@@ -52,12 +52,29 @@ const double _kFrontierBubbleLabelFontSize = 10.5;
 const double _kFrontierBubbleLabelMargin = 4.0;
 const double _kFrontierBubbleLabelGap = 2.0;
 
+// Cubic ease over the first 2% of t replaces sqrt's vertical-slope tip
+// with a smooth corner: the cubic has zero slope at t=0 (so the curve
+// enters horizontally and curls slightly inward) and matches sqrt's
+// value AND slope exactly at t=0.02, so everything past t=0.02 is the
+// untouched sqrt curve.
+const double _kFrontierEaseJoin = 0.02;
+const double _kFrontierEaseA = -26516.50; // -3 / (2 * 0.02^2.5)
+const double _kFrontierEaseB = 883.88;    // 5 / (2 * 0.02^1.5)
+
+double _frontierProgressY(double t) {
+  if (t < _kFrontierEaseJoin) {
+    return _kFrontierEaseA * t * t * t + _kFrontierEaseB * t * t;
+  }
+  return sqrt(t);
+}
+
 Offset frontierCurvePointForT(double t, Size size) {
   final clampedT = t.clamp(0.0, 1.0).toDouble();
   final x = size.width *
       (_kFrontierCurveStartX +
           (_kFrontierCurveEndX - _kFrontierCurveStartX) * clampedT);
-  final normalizedY = 0.85 - 0.7 * sqrt(clampedT) + 0.15 * clampedT;
+  final normalizedY =
+      0.85 - 0.7 * _frontierProgressY(clampedT) + 0.15 * clampedT;
   final y = size.height * normalizedY;
   return Offset(x, y);
 }
