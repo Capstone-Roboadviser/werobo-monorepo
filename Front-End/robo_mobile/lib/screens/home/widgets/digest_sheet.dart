@@ -1,21 +1,115 @@
 import 'package:flutter/material.dart';
-import '../../app/debug_page_logger.dart';
-import '../../app/portfolio_state.dart';
-import '../../app/theme.dart';
-import '../../models/mobile_backend_models.dart';
-import '../../services/mobile_backend_api.dart';
-import 'widgets/digest_loading.dart';
-import 'widgets/driver_card.dart';
-import 'widgets/return_bar_chart.dart';
 
-class DigestScreen extends StatefulWidget {
-  const DigestScreen({super.key});
+import '../../../app/debug_page_logger.dart';
+import '../../../app/portfolio_state.dart';
+import '../../../app/theme.dart';
+import '../../../models/mobile_backend_models.dart';
+import '../../../services/mobile_backend_api.dart';
+import 'digest_loading.dart';
+import 'driver_card.dart';
+import 'return_bar_chart.dart';
+
+/// Chrome for the AI 요약 modal bottom sheet: rounded top corners, drag
+/// handle, X close button, and a slot for the scrollable body.
+///
+/// No business logic — the parent widget owns state and supplies the body.
+class DigestSheetShell extends StatelessWidget {
+  final Widget child;
+
+  const DigestSheetShell({
+    super.key,
+    required this.child,
+  });
 
   @override
-  State<DigestScreen> createState() => _DigestScreenState();
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Material(
+      color: tc.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 56,
+            child: Stack(
+              children: [
+                Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Container(
+                      key: const Key('digest_sheet_drag_handle'),
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: tc.border.withValues(alpha: 0.8),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.topRight,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6, right: 6),
+                    child: IconButton(
+                      key: const Key('digest_sheet_close_button'),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 24,
+                        color: tc.textSecondary,
+                      ),
+                      tooltip: '닫기',
+                      constraints: const BoxConstraints(
+                        minWidth: 44,
+                        minHeight: 44,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Flexible(child: child),
+        ],
+      ),
+    );
+  }
 }
 
-class _DigestScreenState extends State<DigestScreen> {
+/// AI 요약 detail body for the modal bottom sheet.
+///
+/// Owns the fetch + loading/error state machine. Identical to the previous
+/// `DigestScreen` behavior, including the "skip loading animation when the
+/// digest was already seen" short-circuit and the 5500ms minimum loading
+/// duration for first-time digests.
+class DigestSheet extends StatefulWidget {
+  const DigestSheet({super.key});
+
+  /// Opens the sheet as a modal bottom sheet covering ~92% of screen height.
+  static Future<void> show(BuildContext context) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      isDismissible: true,
+      enableDrag: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.4),
+      builder: (_) => const DigestSheet(),
+    );
+  }
+
+  @override
+  State<DigestSheet> createState() => _DigestSheetState();
+}
+
+class _DigestSheetState extends State<DigestSheet> {
   MobileDigestResponse? _digest;
   String? _error;
   bool _loading = true;
@@ -45,7 +139,6 @@ class _DigestScreenState extends State<DigestScreen> {
 
     try {
       if (alreadySeen) {
-        // Skip loading animation for already-seen digests
         final result =
             await MobileBackendApi.instance.fetchDigest(accessToken: token);
         if (mounted) {
@@ -55,7 +148,6 @@ class _DigestScreenState extends State<DigestScreen> {
           });
         }
       } else {
-        // Show full loading animation for new digests
         const minDuration = Duration(milliseconds: 5500);
         final results = await Future.wait([
           MobileBackendApi.instance.fetchDigest(accessToken: token),
@@ -85,34 +177,22 @@ class _DigestScreenState extends State<DigestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    logPageEnter('DigestScreen');
-    final tc = WeRoboThemeColors.of(context);
-    return Scaffold(
-      backgroundColor: tc.background,
-      appBar: AppBar(
-        backgroundColor: tc.background,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: tc.textSecondary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          '포트폴리오 다이제스트',
-          style: WeRoboTypography.heading3.copyWith(
-            color: tc.textPrimary,
-          ),
-        ),
-        centerTitle: false,
+    logPageEnter('DigestSheet');
+    final media = MediaQuery.of(context);
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxHeight: media.size.height * 0.92,
       ),
-      body: _loading
-          ? const DigestLoading()
-          : _error != null
-              ? _ErrorState(message: _error!)
-              : _digest != null
-                  ? _DigestContent(digest: _digest!)
-                  : const SizedBox.shrink(),
+      child: DigestSheetShell(child: _renderBody()),
     );
+  }
+
+  Widget _renderBody() {
+    if (_loading) return const DigestLoading();
+    if (_error != null) return _ErrorState(message: _error!);
+    final digest = _digest;
+    if (digest == null) return const SizedBox.shrink();
+    return _DigestContent(digest: digest);
   }
 }
 
@@ -164,15 +244,10 @@ class _DigestContent extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
       children: [
-        // Date badge
         _DateBadge(start: digest.periodStart, end: digest.periodEnd),
         const SizedBox(height: WeRoboSpacing.lg),
-
-        // Summary card
         _SummaryCard(digest: digest),
         const SizedBox(height: WeRoboSpacing.xl),
-
-        // Asset return bar chart
         if (digest.drivers.isNotEmpty || digest.detractors.isNotEmpty) ...[
           ReturnBarChart(
             drivers: digest.drivers,
@@ -180,8 +255,6 @@ class _DigestContent extends StatelessWidget {
           ),
           const SizedBox(height: WeRoboSpacing.xxl),
         ],
-
-        // Drivers
         if (digest.drivers.isNotEmpty) ...[
           _SectionHeader(
             icon: Icons.arrow_drop_up,
@@ -194,8 +267,6 @@ class _DigestContent extends StatelessWidget {
           ),
           const SizedBox(height: WeRoboSpacing.xl),
         ],
-
-        // Detractors
         if (digest.detractors.isNotEmpty) ...[
           _SectionHeader(
             icon: Icons.arrow_drop_down,
@@ -208,8 +279,6 @@ class _DigestContent extends StatelessWidget {
           ),
           const SizedBox(height: WeRoboSpacing.xl),
         ],
-
-        // Disclaimer
         Padding(
           padding: const EdgeInsets.only(bottom: 40),
           child: Text(
@@ -348,7 +417,6 @@ class _SummaryCard extends StatelessWidget {
   ) {
     final narrative = _insertBenchmarkSentence(d);
 
-    // Collect asset names to bold (tickers + Korean names)
     final names = <String>{};
     for (final driver in [...d.drivers, ...d.detractors]) {
       names.add(driver.ticker);
@@ -356,7 +424,6 @@ class _SummaryCard extends StatelessWidget {
     }
     if (names.isEmpty) return TextSpan(text: narrative);
 
-    // Build regex matching any asset name
     final escaped = names.map((n) => RegExp.escape(n)).toList()
       ..sort((a, b) => b.length.compareTo(a.length));
     final pattern = RegExp(escaped.join('|'));

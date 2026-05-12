@@ -4,21 +4,21 @@ import 'package:flutter/material.dart';
 class WeRoboColors {
   WeRoboColors._();
 
-  // Primary — Neon Carrot (#FE9337), main brand color (capstone 2026-05-04).
-  static const Color primary = Color(0xFFFE9337);
-  static const Color primaryDark = Color(0xFFE07A1F);    // 8% darker, pressed
-  static const Color primaryLight = Color(0xFFFFC091);   // lighter primary tint
+  // Primary — deep navy (#0614A7), key icon color (capstone 2026-05-12).
+  static const Color primary = Color(0xFF0614A7);
+  static const Color primaryDark = Color(0xFF0713A7);    // CTA (확인/다음)
+  static const Color primaryLight = Color(0xFFEFF2F7);   // pressed/secondary
 
-  // 부 색상 — warm-tinted neutrals to harmonize with orange.
+  // 부 색상 — cool-tinted neutrals to harmonize with navy.
   static const Color white = Color(0xFFFFFFFF);
-  static const Color lightGray = Color(0xFFE5E1DD);   // warm border
+  static const Color lightGray = Color(0xFFE2E5EE);   // cool hairline
   static const Color silver = Color(0xFF8E8E8E);
   static const Color black = Color(0xFF1A1919);       // warm black
 
-  // Surfaces (warm-tinted to harmonize with orange).
-  static const Color background = Color(0xFFF4F2F0);
+  // Surfaces (cool-tinted to harmonize with navy).
+  static const Color background = Color(0xFFEDF1FA);
   static const Color surface = white;
-  static const Color card = Color(0xFFF4F2F0);
+  static const Color card = white;
 
   // Text
   static const Color textPrimary = black;
@@ -30,27 +30,30 @@ class WeRoboColors {
   static const Color warning = Color(0xFFFBBF24);
   static const Color error = Color(0xFFEF4444);
 
+  // Korean financial convention: red = gain (up), blue = loss/warning (down).
+  static const Color gainRed = Color(0xFFE5455F);
+  static const Color lossBlue = Color(0xFF3182F6);
+
   // Asset class colors. One distinct hue per asset class so users learn
   // each color over time. Order matches AssetClass enum (defensive to
-  // aggressive). Cash sits at near-black as a baseline; the rest use
-  // distinct hues so segments are easy to tell apart.
-  static const Color assetCash = Color(0xFF2A2A2A);       // 현금성자산, near-black baseline
-  static const Color assetShortBond = Color(0xFF4A7FB8);  // 단기채권, calm blue
-  static const Color assetInfraBond = Color(0xFF2C5F8D);  // 인프라채권, deeper blue
-  static const Color assetGold = Color(0xFFD4A24A);       // 금, warm gold
-  static const Color assetUSValue = Color(0xFF6FA66A);    // 미국가치주, muted green
-  static const Color assetUSGrowth = primary;             // 미국성장주, brand orange
-  static const Color assetNewGrowth = Color(0xFFC85A4A);  // 신성장주, deeper red
+  // aggressive). Seven-hue palette from capstone 2026-05-12 spec.
+  static const Color assetCash = Color(0xFF870BE6);       // 현금성자산, purple
+  static const Color assetShortBond = Color(0xFF5568E3);  // 단기채권, blue
+  static const Color assetInfraBond = Color(0xFF85C410);  // 인프라채권, green
+  static const Color assetGold = Color(0xFFE6CC0B);       // 금, yellow
+  static const Color assetUSValue = Color(0xFF01A1D6);    // 미국가치주, cyan
+  static const Color assetUSGrowth = Color(0xFFFF708F);   // 미국성장주, pink
+  static const Color assetNewGrowth = Color(0xFFFF4141);  // 신성장주, red
 
-  // Orange brand shade aliases (legacy). Used by a few visual treatments
-  // outside the asset palette (glow color, gradient backgrounds, benchmark
-  // line). Kept for backward compatibility; new code should prefer primary
-  // or primaryLight, or one of the asset class colors above.
-  static const Color assetTier5 = Color(0xFFFFC091);
-  static const Color assetTier4 = Color(0xFFFFB57D);
-  static const Color assetTier3 = Color(0xFFFFAA69);
-  static const Color assetTier2 = Color(0xFFFF9F52);
-  static const Color assetTier1 = Color(0xFFFE9337);
+  // Navy brand shade aliases (tier5 = lightest, tier1 = primary). Used by
+  // a few visual treatments outside the asset palette (glow color, gradient
+  // backgrounds, benchmark line). New code should prefer primary or
+  // primaryLight, or one of the asset class colors above.
+  static const Color assetTier5 = Color(0xFFC9CEEC);
+  static const Color assetTier4 = Color(0xFF969FDD);
+  static const Color assetTier3 = Color(0xFF6371CE);
+  static const Color assetTier2 = Color(0xFF3142BD);
+  static const Color assetTier1 = primary;
 
   /// Ordered palette indexed by AssetClass. Use `assetColor(AssetClass)`
   /// for ergonomic lookup.
@@ -85,7 +88,7 @@ class WeRoboColors {
 
   // Interactive states
   static const double disabledOpacity = 0.4;
-  static const Color focusRing = Color(0x4DFE9337); // primary @ 30%
+  static const Color focusRing = Color(0x4D0614A7); // primary @ 30%
 }
 
 /// Spacing scale — base unit 4px, all multiples of 4.
@@ -351,11 +354,11 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
   });
 
   static const light = WeRoboThemeColors(
-    background: Color(0xFFF4F2F0),  // warm gray (was #F6F7F8)
-    surface: Color(0xFFFFFFFF),
-    card: Color(0xFFF4F2F0),         // warm gray (was #EFF1F3)
-    border: Color(0xFFE5E1DD),       // warm hairline (was #CDD1D6)
-    textPrimary: Color(0xFF1A1919),  // warm black (was #000000)
+    background: Color(0xFFEDF1FA),   // cool blue tint, scaffold
+    surface: Color(0xFFFFFFFF),      // white frames, no border
+    card: Color(0xFFFFFFFF),         // inset frames also white
+    border: Color(0xFFE2E5EE),       // cool hairline
+    textPrimary: Color(0xFF1A1919),
     textSecondary: Color(0xFF6B6B6B),
     textTertiary: Color(0xFF8E8E8E),
     accent: Color(0xFF059669),
@@ -456,7 +459,7 @@ class WeRoboTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: WeRoboColors.primary,
+          backgroundColor: WeRoboColors.primaryDark,
           foregroundColor: WeRoboColors.white,
           minimumSize: const Size(double.infinity, 52),
           shape: RoundedRectangleBorder(
@@ -510,7 +513,7 @@ class WeRoboTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: WeRoboColors.primary,
+          backgroundColor: WeRoboColors.primaryDark,
           foregroundColor: WeRoboColors.white,
           minimumSize: const Size(double.infinity, 52),
           shape: RoundedRectangleBorder(
