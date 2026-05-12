@@ -779,7 +779,8 @@ void main() {
     await gesture.up();
   });
 
-  testWidgets('range analysis mode enters from chart AI button and exits cleanly',
+  testWidgets(
+      'range analysis mode enters from chart AI button and exits cleanly',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = PortfolioState();
@@ -993,5 +994,116 @@ void main() {
 
     expect(find.text('참고 뉴스'), findsOneWidget);
     expect(find.text('Tech shares rise on earnings optimism'), findsOneWidget);
+  });
+
+  testWidgets('range analysis locks selected interval while AI is loading',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    addTearDown(() => debugSetRangeDigestApiOverride(null));
+
+    await state.setAuthSession(
+      MobileAuthSession(
+        accessToken: 'token',
+        tokenType: 'bearer',
+        expiresAt:
+            DateTime.now().add(const Duration(days: 1)).toIso8601String(),
+        user: const MobileAuthUser(
+          id: 1,
+          email: 'test@example.com',
+          name: '테스터',
+          provider: AuthProviderType.password,
+          createdAt: '2026-04-01T00:00:00Z',
+        ),
+      ),
+      notify: false,
+    );
+    state.setAccountDashboard(
+      MobileAccountDashboard(
+        hasAccount: true,
+        summary: accountDashboard().summary,
+        history: List.generate(
+          60,
+          (i) => MobileAccountHistoryPoint(
+            date: DateTime.now().subtract(Duration(days: 60 - i)),
+            portfolioValue: 10000000 + (i * 5000),
+            investedAmount: 10000000,
+            profitLoss: i * 5000,
+            profitLossPct: (i * 5000) / 10000000,
+          ),
+        ),
+        recentActivity: const [],
+      ),
+    );
+    state.setWeeklyDigest(digestFixture(available: true));
+    await state.markWelcomeBannerSeen();
+
+    final completer = Completer<MobileRangeDigestResponse>();
+    var requestCount = 0;
+    debugSetRangeDigestApiOverride(
+      ({
+        required String accessToken,
+        required DateTime startDate,
+        required DateTime endDate,
+        required double startValue,
+        required double endValue,
+      }) {
+        requestCount++;
+        return completer.future;
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: const Scaffold(body: HomeTab()),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 800));
+
+    await tester.ensureVisible(
+      find.byKey(const Key('range_digest_chart_ai_button')),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('range_digest_chart_ai_button')));
+    await tester.pump();
+
+    final chart = find.byKey(const Key('home_performance_chart_gesture'));
+    await tester.ensureVisible(chart);
+    await tester.pump();
+    await tester.timedDrag(
+      chart,
+      const Offset(260, 0),
+      const Duration(milliseconds: 300),
+    );
+    await tester.pump();
+
+    expect(requestCount, 1);
+    expect(find.text('이 구간의 변화를 분석하고 있어요'), findsOneWidget);
+    final lockedLabel = tester
+        .widget<Text>(find.byKey(const Key('range_digest_chart_date_label')))
+        .data;
+
+    await tester.timedDrag(
+      chart,
+      const Offset(-260, 0),
+      const Duration(milliseconds: 300),
+    );
+    await tester.pump();
+
+    expect(requestCount, 1);
+    expect(
+      tester
+          .widget<Text>(find.byKey(const Key('range_digest_chart_date_label')))
+          .data,
+      lockedLabel,
+    );
+
+    completer.complete(rangeDigestFixture());
+    await tester.pump();
   });
 }
