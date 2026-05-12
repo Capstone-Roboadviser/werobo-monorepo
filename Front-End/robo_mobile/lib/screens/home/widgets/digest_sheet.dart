@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
-import '../../../app/theme.dart';
 import '../../../app/debug_page_logger.dart';
 import '../../../app/portfolio_state.dart';
+import '../../../app/theme.dart';
 import '../../../models/mobile_backend_models.dart';
 import '../../../services/mobile_backend_api.dart';
 import 'digest_loading.dart';
