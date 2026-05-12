@@ -178,6 +178,53 @@ class PortfolioAnalyticsService:
                 f"변동성 추이 계산 중 오류가 발생했습니다: {exc}"
             ) from exc
 
+    def build_benchmark_volatility_history(
+        self,
+        *,
+        data_source: SimulationDataSource,
+        rolling_window: int,
+        version_id: int | None = None,
+    ) -> PortfolioHistorySeries:
+        """Rolling volatility for the equal-weight asset-class market benchmark
+        used by the comparison view's `benchmark_avg` line. Each non-excluded
+        asset class contributes 1/N of the weight, and tickers within a class
+        share that slice equally."""
+        assets = self._load_comparison_assets(data_source, version_id=version_id)
+        instruments, _, _ = self._load_comparison_universe(
+            data_source, version_id=version_id
+        )
+
+        benchmark_assets = [
+            asset
+            for asset in assets
+            if not self._exclude_from_equal_weight_asset_benchmark(asset)
+        ]
+        if not benchmark_assets:
+            raise RuntimeError("벤치마크에 포함할 자산군이 없습니다.")
+
+        grouped: dict[str, list] = {}
+        for instrument in instruments:
+            grouped.setdefault(instrument.sector_code, []).append(instrument)
+
+        weights: dict[str, float] = {}
+        per_asset = 1.0 / len(benchmark_assets)
+        for asset in benchmark_assets:
+            members = grouped.get(asset.code, [])
+            if not members:
+                continue
+            per_member = per_asset / len(members)
+            for inst in members:
+                weights[str(inst.ticker).upper()] = per_member
+
+        if not weights:
+            raise RuntimeError("벤치마크 가중치를 생성할 수 없습니다.")
+
+        return self.build_volatility_history(
+            weights=weights,
+            data_source=data_source,
+            rolling_window=rolling_window,
+        )
+
     def build_return_history(
         self,
         *,
