@@ -26,6 +26,30 @@ void main() {
     expect(find.text('비교 데이터가 없어요'), findsNothing);
     expect(find.text('시장'), findsOneWidget);
   });
+
+  testWidgets('volatility tab reuses loaded backtest data', (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    state.setBacktest(_comparisonBacktest());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: PortfolioReviewScreen(selection: _selection()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('변동성'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('비교 데이터가 없어요'), findsNothing);
+    expect(find.text('포트폴리오'), findsWidgets);
+    expect(find.text('시장'), findsOneWidget);
+  });
 }
 
 OnboardingFrontierSelection _selection() {
@@ -84,6 +108,8 @@ MobileComparisonBacktestResponse _comparisonBacktest() {
     DateTime(2026, 3, 1),
     DateTime(2026, 3, 2),
     DateTime(2026, 3, 3),
+    DateTime(2026, 3, 4),
+    DateTime(2026, 3, 5),
   ];
   return MobileComparisonBacktestResponse(
     trainStartDate: DateTime(2025, 1, 1),
@@ -104,6 +130,8 @@ MobileComparisonBacktestResponse _comparisonBacktest() {
           MobileComparisonLinePoint(date: dates[0], returnPct: 0.01),
           MobileComparisonLinePoint(date: dates[1], returnPct: 0.03),
           MobileComparisonLinePoint(date: dates[2], returnPct: 0.05),
+          MobileComparisonLinePoint(date: dates[3], returnPct: 0.04),
+          MobileComparisonLinePoint(date: dates[4], returnPct: 0.07),
         ],
       ),
       MobileComparisonLine(
@@ -115,6 +143,8 @@ MobileComparisonBacktestResponse _comparisonBacktest() {
           MobileComparisonLinePoint(date: dates[0], returnPct: 0.00),
           MobileComparisonLinePoint(date: dates[1], returnPct: 0.02),
           MobileComparisonLinePoint(date: dates[2], returnPct: 0.04),
+          MobileComparisonLinePoint(date: dates[3], returnPct: 0.03),
+          MobileComparisonLinePoint(date: dates[4], returnPct: 0.05),
         ],
       ),
     ],

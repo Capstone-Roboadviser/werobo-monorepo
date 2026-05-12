@@ -46,6 +46,10 @@ class PortfolioComparisonChart extends StatefulWidget {
   /// [seriesData]; callers are responsible for matching the order.
   final List<String>? seriesLabels;
 
+  /// Return charts should rebase to the first visible point. Level charts
+  /// such as volatility should keep their original values.
+  final bool rebaseToFirstValue;
+
   /// Gesture flags wired in Task 3.5. Currently accepted but inert so the
   /// review screen can pass them through without an API churn later.
   final bool enablePinchZoom;
@@ -57,6 +61,7 @@ class PortfolioComparisonChart extends StatefulWidget {
     required this.timeAxis,
     this.initialRange = TimeRange.threeYear,
     this.seriesLabels,
+    this.rebaseToFirstValue = true,
     this.enablePinchZoom = false,
     this.enableHorizontalDrag = false,
   });
@@ -135,9 +140,8 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
     final innerX = tapX - 28; // padL
     final innerW = chartWidth - 28 - 12; // padL + padR
     if (innerW <= 0) return;
-    final idx = ((innerX / innerW) * (pointCount - 1))
-        .round()
-        .clamp(0, pointCount - 1);
+    final idx =
+        ((innerX / innerW) * (pointCount - 1)).round().clamp(0, pointCount - 1);
     setState(() => _touchIndex = idx);
   }
 
@@ -174,15 +178,15 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
           ChartPoint(date: timeAxis[j], value: raw[j]),
       ];
       if (rangedPoints.length < 2) continue;
-      final rebased = rebaseChartPointsToFirstValue(rangedPoints);
+      final points = widget.rebaseToFirstValue
+          ? rebaseChartPointsToFirstValue(rangedPoints)
+          : rangedPoints;
       lines.add(ChartLine(
         key: 'series_$i',
         label: i < labels.length ? labels[i] : 'series ${i + 1}',
-        color: i < _seriesPalette.length
-            ? _seriesPalette[i]
-            : Colors.grey,
+        color: i < _seriesPalette.length ? _seriesPalette[i] : Colors.grey,
         dashed: _dashedIndexes.contains(i),
-        points: rebased,
+        points: points,
       ));
     }
     return lines;
@@ -216,8 +220,8 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
                     _resetTransform();
                   },
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: _range == r
                           ? WeRoboColors.primary
@@ -229,9 +233,8 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        color: _range == r
-                            ? WeRoboColors.white
-                            : tc.textTertiary,
+                        color:
+                            _range == r ? WeRoboColors.white : tc.textTertiary,
                       ),
                     ),
                   ),
@@ -538,7 +541,6 @@ class _VolReturnViewState extends State<_VolReturnView>
     );
   }
 }
-
 
 class _EmptyChartState extends StatelessWidget {
   final String message;

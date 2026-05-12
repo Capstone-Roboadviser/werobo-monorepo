@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import '../../app/portfolio_state.dart';
@@ -115,7 +116,6 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
               const SizedBox(height: 24),
               _CompareVolatilityTabs(
                 controller: _tabController,
-                selection: widget.selection,
                 comparisonBacktest: comparisonBacktest,
                 isLoadingComparisonBacktest: _isLoadingComparisonBacktest,
               ),
@@ -198,12 +198,10 @@ class _DonutAndListColumn extends StatelessWidget {
 /// volatility stub.
 class _CompareVolatilityTabs extends StatelessWidget {
   final TabController controller;
-  final OnboardingFrontierSelection selection;
   final MobileComparisonBacktestResponse? comparisonBacktest;
   final bool isLoadingComparisonBacktest;
   const _CompareVolatilityTabs({
     required this.controller,
-    required this.selection,
     required this.comparisonBacktest,
     required this.isLoadingComparisonBacktest,
   });
@@ -245,7 +243,10 @@ class _CompareVolatilityTabs extends StatelessWidget {
                 comparisonBacktest: comparisonBacktest,
                 isLoading: isLoadingComparisonBacktest,
               ),
-              _VolatilityTabBody(selection: selection),
+              _VolatilityTabBody(
+                comparisonBacktest: comparisonBacktest,
+                isLoading: isLoadingComparisonBacktest,
+              ),
             ],
           ),
         ),
@@ -377,38 +378,134 @@ class _ChartLoadingState extends StatelessWidget {
   }
 }
 
-/// Second tab: portfolio rolling 60d σ overlaid against the market's
-/// rolling 60d σ. The frontier preview only carries scalar volatility
-/// per point, so until a dedicated volatility-time-series endpoint
-/// lands the chart degrades to its empty state.
+/// Second tab: portfolio rolling σ overlaid against the market's rolling σ.
+/// It derives per-period returns from the same comparison backtest payload
+/// used by the first tab, so onboarding does not need a second fetch.
 class _VolatilityTabBody extends StatelessWidget {
-  final OnboardingFrontierSelection selection;
-  const _VolatilityTabBody({required this.selection});
+  final MobileComparisonBacktestResponse? comparisonBacktest;
+  final bool isLoading;
+
+  const _VolatilityTabBody({
+    required this.comparisonBacktest,
+    required this.isLoading,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const _ChartLoadingState(message: '변동성 데이터를 불러오는 중이에요');
+    }
+    final chartData = _volatilityChartData(comparisonBacktest);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: PortfolioComparisonChart(
-        seriesData: _volatilitySeries(selection),
-        timeAxis: _volatilityTimeAxis(selection),
+        seriesData: chartData.seriesData,
+        timeAxis: chartData.timeAxis,
         seriesLabels: const ['포트폴리오', '시장'],
         initialRange: TimeRange.threeYear,
+        rebaseToFirstValue: false,
         enablePinchZoom: true,
         enableHorizontalDrag: true,
       ),
     );
   }
 
-  List<List<double>> _volatilitySeries(OnboardingFrontierSelection selection) {
-    // TODO(backend): wire portfolio rolling 60d σ + market rolling 60d σ.
-    // Today the backend exposes only scalar volatility per frontier point;
-    // a separate endpoint will provide the time series.
-    return const [];
+  ({
+    List<List<double>> seriesData,
+    List<DateTime> timeAxis,
+  }) _volatilityChartData(MobileComparisonBacktestResponse? response) {
+    if (response == null || response.lines.isEmpty) {
+      return (
+        seriesData: const <List<double>>[],
+        timeAxis: const <DateTime>[],
+      );
+    }
+
+    final selectedLine = _findLine(response, preferredKey: 'selected');
+    final marketLine = _findLine(response, preferredKey: 'market');
+    if (selectedLine == null || marketLine == null) {
+      return (
+        seriesData: const <List<double>>[],
+        timeAxis: const <DateTime>[],
+      );
+    }
+
+    final selectedVolatility = _rollingVolatilitySeries(selectedLine);
+    final marketVolatility = _rollingVolatilitySeries(marketLine);
+    if (selectedVolatility.values.isEmpty ||
+        marketVolatility.values.isEmpty ||
+        !_sameAxis(selectedVolatility.dates, marketVolatility.dates)) {
+      return (
+        seriesData: const <List<double>>[],
+        timeAxis: const <DateTime>[],
+      );
+    }
+
+    return (
+      seriesData: [selectedVolatility.values, marketVolatility.values],
+      timeAxis: selectedVolatility.dates,
+    );
   }
 
-  List<DateTime> _volatilityTimeAxis(OnboardingFrontierSelection selection) {
-    // TODO(backend): wire date axis aligned with the volatility series.
-    return const [];
+  MobileComparisonLine? _findLine(
+    MobileComparisonBacktestResponse response, {
+    required String preferredKey,
+  }) {
+    for (final line in response.lines) {
+      if (line.key == preferredKey && line.points.length >= 3) {
+        return line;
+      }
+    }
+    return null;
+  }
+
+  ({List<double> values, List<DateTime> dates}) _rollingVolatilitySeries(
+    MobileComparisonLine line,
+  ) {
+    if (line.points.length < 3) {
+      return (values: const <double>[], dates: const <DateTime>[]);
+    }
+
+    final returns = <double>[];
+    final returnDates = <DateTime>[];
+    for (var i = 1; i < line.points.length; i++) {
+      final previousBase = 1 + line.points[i - 1].returnPct;
+      final currentBase = 1 + line.points[i].returnPct;
+      if (previousBase <= 0 || currentBase <= 0) {
+        return (values: const <double>[], dates: const <DateTime>[]);
+      }
+      returns.add((currentBase / previousBase) - 1);
+      returnDates.add(line.points[i].date);
+    }
+
+    const tradingDaysPerYear = 252.0;
+    const rollingWindow = 60;
+    final values = <double>[];
+    final dates = <DateTime>[];
+    for (var i = 1; i < returns.length; i++) {
+      final start = math.max(0, i - rollingWindow + 1);
+      final sample = returns.sublist(start, i + 1);
+      final mean = sample.reduce((a, b) => a + b) / sample.length;
+      final variance = sample
+              .map((value) => math.pow(value - mean, 2).toDouble())
+              .reduce((a, b) => a + b) /
+          (sample.length - 1);
+      values.add(math.sqrt(variance) * math.sqrt(tradingDaysPerYear));
+      dates.add(returnDates[i]);
+    }
+
+    return (values: values, dates: dates);
+  }
+
+  bool _sameAxis(List<DateTime> left, List<DateTime> right) {
+    if (left.length != right.length) {
+      return false;
+    }
+    for (var i = 0; i < left.length; i++) {
+      if (left[i] != right[i]) {
+        return false;
+      }
+    }
+    return true;
   }
 }
