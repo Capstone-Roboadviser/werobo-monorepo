@@ -673,11 +673,22 @@ void main() {
 
     await tester.ensureVisible(find.text('구간분석'));
     await tester.pump();
+    ScrollController homeScrollController() => tester
+        .widget<SingleChildScrollView>(
+          find.byKey(const Key('home_tab_scroll')),
+        )
+        .controller!;
+    expect(homeScrollController().offset, greaterThan(0));
+
     await tester.tap(find.text('구간분석'));
     await tester.pump();
+    await tester.pump(const Duration(milliseconds: 16));
+    await tester.pump(WeRoboMotion.medium);
+    await tester.pump(const Duration(milliseconds: 16));
 
     expect(find.text('구간을 드래그해서 선택하세요'), findsOneWidget);
     expect(find.text('차트에서 궁금한 구간을 드래그해 선택하세요.'), findsOneWidget);
+    expect(homeScrollController().offset, moreOrLessEquals(0));
 
     await tester.ensureVisible(find.byKey(const Key('range_digest_exit')));
     await tester.pump();

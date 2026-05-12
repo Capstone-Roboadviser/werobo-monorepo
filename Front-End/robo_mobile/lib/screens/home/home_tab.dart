@@ -51,6 +51,7 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   late AnimationController _staggerCtrl;
+  late final ScrollController _scrollController;
   bool _showAllocationAmounts = false;
   bool _earningsHistoryFetchStarted = false;
   bool _isRangeDigestMode = false;
@@ -61,6 +62,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   void initState() {
     super.initState();
     logPageEnter('HomeTab');
+    _scrollController = ScrollController();
     _staggerCtrl = AnimationController(
       duration: const Duration(milliseconds: 500),
       vsync: this,
@@ -71,6 +73,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   void dispose() {
     logPageExit('HomeTab');
     _staggerCtrl.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -172,6 +175,14 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
       _isRangeDigestMode = true;
       _selectedDigestRange = null;
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        0,
+        duration: WeRoboMotion.medium,
+        curve: WeRoboMotion.enter,
+      );
+    });
   }
 
   void _exitRangeDigestMode() {
@@ -217,6 +228,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
 
     return SafeArea(
       child: SingleChildScrollView(
+        key: const Key('home_tab_scroll'),
+        controller: _scrollController,
         physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 24),
         child: Column(
