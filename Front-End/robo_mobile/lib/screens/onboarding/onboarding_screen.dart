@@ -505,9 +505,12 @@ class _FrontierBodyState extends State<_FrontierBody> {
         color: WeRoboColors.accent,
       );
     }
-    final diff = (selected.volatility - averageVol) / averageVol;
-    final percentDiff = (diff.abs() * 100).round();
-    final isRiskier = diff > 0;
+    // Spec (capstone 2026-05-12): use absolute percentage-point gap
+    // between portfolio and market volatility. ≥30pp riskier flips
+    // the color to warning blue; under that stays green.
+    final diffPp = (selected.volatility - averageVol) * 100;
+    final percentDiff = diffPp.abs().round();
+    final isRiskier = diffPp > 0;
     if (percentDiff == 0) {
       return (
         emphasis: null,
@@ -516,13 +519,9 @@ class _FrontierBodyState extends State<_FrontierBody> {
         color: WeRoboColors.accent,
       );
     }
-    // Smooth green→orange transition based on risk factor.
-    final lerpT = isRiskier ? (diff.abs() * 2).clamp(0.0, 1.0) : 0.0;
-    final color = Color.lerp(
-      const Color(0xFF059669),
-      const Color(0xFFF97316),
-      lerpT,
-    )!;
+    final color = isRiskier && diffPp >= 30
+        ? WeRoboColors.lossBlue
+        : WeRoboColors.accent;
     final emphasis = '$percentDiff%';
     final suffix = isRiskier ? '더 위험한' : '더 안전한';
     return (
@@ -707,7 +706,8 @@ class _FrontierBodyState extends State<_FrontierBody> {
                   child: _StatCard(
                     label: '연 기대수익률',
                     value: '${_returnRate.toStringAsFixed(1)}%',
-                    color: WeRoboColors.primary,
+                    color: WeRoboColors.gainRed,
+                    boldLabel: true,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -716,6 +716,7 @@ class _FrontierBodyState extends State<_FrontierBody> {
                     label: '시장대비',
                     value: _riskComparison.plainText,
                     color: _riskComparison.color,
+                    boldLabel: true,
                     valueChild: _RiskComparisonValue(
                       comparison: _riskComparison,
                     ),
@@ -792,6 +793,10 @@ class _FrontierBodyState extends State<_FrontierBody> {
                     style: WeRoboTypography.caption.copyWith(
                       color: tc.textSecondary,
                     ),
+                    strutStyle: StrutStyle.fromTextStyle(
+                      WeRoboTypography.caption,
+                      forceStrutHeight: true,
+                    ),
                   ),
                 ),
               ],
@@ -809,18 +814,24 @@ class _StatCard extends StatelessWidget {
   final String value;
   final Color color;
   final Widget? valueChild;
+  final bool boldLabel;
 
   const _StatCard({
     required this.label,
     required this.value,
     required this.color,
     this.valueChild,
+    this.boldLabel = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final resolvedValueStyle = WeRoboTypography.number.copyWith(color: color);
+    final labelStyle = WeRoboTypography.caption.copyWith(
+      color: tc.textSecondary,
+      fontWeight: boldLabel ? FontWeight.w700 : null,
+    );
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
       decoration: BoxDecoration(
@@ -830,9 +841,7 @@ class _StatCard extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(label,
-              style:
-                  WeRoboTypography.caption.copyWith(color: tc.textSecondary)),
+          Text(label, style: labelStyle),
           const SizedBox(height: 4),
           AnimatedDefaultTextStyle(
             duration: const Duration(milliseconds: 300),
@@ -859,6 +868,13 @@ class _RiskComparisonValue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final emphasis = comparison.emphasis;
+    // forceStrutHeight locks the line box height so Korean characters
+    // with low descenders (e.g. "한" in 위험한) don't grow the row and
+    // shove the efficient-frontier chart up/down on flip.
+    final strut = StrutStyle.fromTextStyle(
+      WeRoboTypography.number,
+      forceStrutHeight: true,
+    );
     if (emphasis == null) {
       return Text(
         comparison.suffix,
@@ -867,6 +883,7 @@ class _RiskComparisonValue extends StatelessWidget {
           color: comparison.color,
           fontWeight: FontWeight.w600,
         ),
+        strutStyle: strut,
       );
     }
     return Text.rich(
@@ -894,6 +911,7 @@ class _RiskComparisonValue extends StatelessWidget {
       ),
       textAlign: TextAlign.center,
       softWrap: true,
+      strutStyle: strut,
     );
   }
 }

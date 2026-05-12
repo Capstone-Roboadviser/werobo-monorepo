@@ -30,6 +30,10 @@ class WeRoboColors {
   static const Color warning = Color(0xFFFBBF24);
   static const Color error = Color(0xFFEF4444);
 
+  // Korean financial convention: red = gain (up), blue = loss/warning (down).
+  static const Color gainRed = Color(0xFFE5455F);
+  static const Color lossBlue = Color(0xFF3182F6);
+
   // Asset class colors. One distinct hue per asset class so users learn
   // each color over time. Order matches AssetClass enum (defensive to
   // aggressive). Seven-hue palette from capstone 2026-05-12 spec.

@@ -3,6 +3,20 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 
+/// Left-to-right order the asset weight bar follows. Matches the capstone
+/// 2026-05-12 palette image (purple → blue → yellow → green → cyan →
+/// pink → red), which puts gold before infraBond — different from the
+/// AssetClass enum's defensive→aggressive ordering.
+int _assetBarDisplayIndex(AssetClass cls) => switch (cls) {
+      AssetClass.cash => 0,
+      AssetClass.shortBond => 1,
+      AssetClass.gold => 2,
+      AssetClass.infraBond => 3,
+      AssetClass.usValue => 4,
+      AssetClass.usGrowth => 5,
+      AssetClass.newGrowth => 6,
+    };
+
 /// One asset class with its current weight in a portfolio.
 class AssetWeight {
   final AssetClass cls;
@@ -64,10 +78,13 @@ class _AssetWeightBarState extends State<AssetWeightBar> {
 
   @override
   Widget build(BuildContext context) {
-    // Sort by AssetClass enum order, NOT by weight, so the leftmost
-    // segment is always the most defensive class (cash).
+    // Visual order from capstone 2026-05-12 palette: cash → shortBond →
+    // gold → infraBond → usValue → usGrowth → newGrowth. Note this
+    // diverges from AssetClass enum order (which keeps infraBond before
+    // gold) by design.
     final ordered = [...widget.assets]
-      ..sort((a, b) => a.cls.index.compareTo(b.cls.index));
+      ..sort((a, b) =>
+          _assetBarDisplayIndex(a.cls).compareTo(_assetBarDisplayIndex(b.cls)));
     final total = ordered.fold<double>(0, (s, a) => s + a.weight);
     if (total <= 0) {
       return SizedBox(height: widget.height);
