@@ -64,7 +64,10 @@ class DigestSheetShell extends StatelessWidget {
                         color: tc.textSecondary,
                       ),
                       tooltip: '닫기',
-                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                      constraints: const BoxConstraints(
+                        minWidth: 44,
+                        minHeight: 44,
+                      ),
                       onPressed: () => Navigator.of(context).pop(),
                     ),
                   ),
