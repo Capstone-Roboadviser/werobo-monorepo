@@ -1121,6 +1121,19 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // WeRobo wordmark above the 총손익 readout (capstone 2026-05-12 spec)
+        Text(
+          'WeRobo',
+          style: TextStyle(
+            fontFamily: WeRoboFonts.display,
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            color: WeRoboColors.primary,
+            height: 1.0,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 8),
         // 총손익 label
         Text(
           '총손익',
