@@ -46,8 +46,6 @@ class DonutChart extends StatefulWidget {
 class _DonutChartState extends State<DonutChart>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  // One CurvedAnimation per segment, covering its sub-interval in [0, 1].
-  List<CurvedAnimation> _segmentAnimations = const [];
 
   /// Index of the slice the user has tapped. `null` means show the default
   /// center label.
@@ -60,39 +58,28 @@ class _DonutChartState extends State<DonutChart>
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     );
-    _segmentAnimations = _buildSegmentAnimations();
     _controller.forward();
-  }
-
-  List<CurvedAnimation> _buildSegmentAnimations() {
-    final n = widget.segments.length;
-    return [
-      for (var i = 0; i < n; i++)
-        CurvedAnimation(
-          parent: _controller,
-          curve: Interval(i / n, (i + 1) / n, curve: WeRoboMotion.enter),
-        ),
-    ];
-  }
-
-  @override
-  void didUpdateWidget(covariant DonutChart oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.segments.length != widget.segments.length) {
-      for (final a in _segmentAnimations) {
-        a.dispose();
-      }
-      _segmentAnimations = _buildSegmentAnimations();
-    }
   }
 
   @override
   void dispose() {
-    for (final a in _segmentAnimations) {
-      a.dispose();
-    }
     _controller.dispose();
     super.dispose();
+  }
+
+  /// Local progress (0..1) for segment [i] derived from the global sweep
+  /// progress [gp]. Segments are traversed in order around the circle, each
+  /// occupying a sub-arc proportional to its weight. A segment's local
+  /// progress only ramps from 0 to 1 while the global sweep is inside its
+  /// angular range, producing one continuous clockwise reveal.
+  double _segmentProgressAt(int i, double gp) {
+    var cum = 0.0;
+    for (var j = 0; j < i; j++) {
+      cum += widget.segments[j].weight;
+    }
+    final w = widget.segments[i].weight;
+    if (w <= 0) return 0;
+    return ((gp - cum) / w).clamp(0.0, 1.0);
   }
 
   /// Decide which slice (if any) the tap falls inside. Returns `null` when
@@ -111,9 +98,10 @@ class _DonutChartState extends State<DonutChart>
     // convention where 0 is at the top (-pi/2) and increases clockwise.
     var angle = atan2(dy, dx) + pi / 2;
     if (angle < 0) angle += 2 * pi;
+    final gp = _controller.value;
     var sweepStart = 0.0;
     for (var i = 0; i < widget.segments.length; i++) {
-      final prog = _segmentAnimations[i].value;
+      final prog = _segmentProgressAt(i, gp);
       final sweep = 2 * pi * widget.segments[i].weight * prog;
       if (angle >= sweepStart && angle < sweepStart + sweep) {
         return i;
@@ -141,8 +129,10 @@ class _DonutChartState extends State<DonutChart>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, _) {
+        final gp = _controller.value;
         final progresses = [
-          for (final a in _segmentAnimations) a.value,
+          for (var i = 0; i < widget.segments.length; i++)
+            _segmentProgressAt(i, gp),
         ];
         return Column(
           mainAxisSize: MainAxisSize.min,

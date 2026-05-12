@@ -54,13 +54,12 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 100));
 
-      // At 100ms, segment 0 is mid-interval (interval is [0, 666ms]) and the
-      // WeRoboMotion.enter curve is strongly front-loaded, so the count-up
-      // reads ~32%, well below the "50%" rounding threshold (which it hits
-      // around 413ms).
+      // At 100ms, the global linear sweep is at 5% of the full circle. Since
+      // cash (segment 0, weight 0.5) covers the first half of the sweep, its
+      // local progress is 0.05 / 0.5 = 0.10, so the count-up shows "5%". The
+      // other two segments haven't been reached, so they read "0%". None of
+      // the final values should be visible yet.
       expect(find.text('50%'), findsNothing);
-
-      // "30%" and "20%" (second and third final values) must not be visible.
       expect(find.text('30%'), findsNothing);
       expect(find.text('20%'), findsNothing);
     },
