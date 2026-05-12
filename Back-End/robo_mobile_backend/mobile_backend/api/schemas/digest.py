@@ -53,3 +53,41 @@ class DigestResponse(BaseModel):
     trigger_sigma_multiple: float | None = Field(
         None, description="분석 기간 수익률이 평소 5영업일 변동성의 몇 배인지"
     )
+
+
+class RangeDigestRequest(BaseModel):
+    start_date: str = Field(..., description="선택 구간 시작일", examples=["2026-04-07"])
+    end_date: str = Field(..., description="선택 구간 종료일", examples=["2026-04-14"])
+    start_value: float = Field(..., gt=0, description="구간 시작 포트폴리오 평가액")
+    end_value: float = Field(..., gt=0, description="구간 종료 포트폴리오 평가액")
+
+
+class RangeDigestNewsResponse(BaseModel):
+    ticker: str = Field(..., description="관련 종목 티커", examples=["QQQ"])
+    title: str = Field(..., description="참고 뉴스 헤드라인")
+
+
+class RangeDigestResponse(BaseModel):
+    period_start: str = Field(..., description="분석 시작일", examples=["2026-04-07"])
+    period_end: str = Field(..., description="분석 종료일", examples=["2026-04-14"])
+    total_return_pct: float = Field(..., description="선택 구간 총 수익률(%)")
+    total_return_won: float = Field(..., description="선택 구간 총 수익(원)")
+    narrative_ko: str | None = Field(None, description="AI 생성 한국어 요약")
+    has_narrative: bool = Field(..., description="AI 요약 포함 여부")
+    drivers: list[DigestDriverResponse] = Field(..., description="상승 기여 종목")
+    detractors: list[DigestDriverResponse] = Field(..., description="하락 기여 종목")
+    reference_news: list[RangeDigestNewsResponse] = Field(
+        default_factory=list,
+        description="상세 화면에 표시할 참고 뉴스",
+    )
+    sources_used: list[str] = Field(..., description="데이터 소스 목록")
+    disclaimer: str = Field(
+        default="이 내용은 투자 조언이 아닙니다. AI가 생성한 요약이며 투자 결정의 근거로 사용하지 마세요.",
+        description="법적 면책 조항",
+    )
+    generated_at: str = Field(..., description="생성 시각(UTC)")
+    degradation_level: int = Field(
+        ...,
+        description="저하 수준: 0=전체, 1=뉴스 없음, 2=내러티브 없음, 3=오류",
+        examples=[0],
+    )

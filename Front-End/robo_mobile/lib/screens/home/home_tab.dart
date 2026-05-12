@@ -18,6 +18,7 @@ import 'activity_hub_page.dart';
 import 'widgets/digest_sheet.dart';
 import 'insight_detail_page.dart';
 import 'portfolio_allocation_detail_page.dart';
+import 'range_digest_detail_page.dart';
 import 'widgets/glowing_border.dart';
 import 'projection_screen.dart';
 import 'widgets/insight_transition_chart.dart';
@@ -26,6 +27,21 @@ import 'widgets/insight_transition_chart.dart';
 // opposite of the Korean stock sign convention but matches the meeting spec.
 const Color _gainColor = Color(0xFFE5455F);
 const Color _lossColor = Color(0xFF3182F6);
+
+typedef RangeDigestApiOverride = Future<MobileRangeDigestResponse> Function({
+  required String accessToken,
+  required DateTime startDate,
+  required DateTime endDate,
+  required double startValue,
+  required double endValue,
+});
+
+RangeDigestApiOverride? _rangeDigestApiOverride;
+
+@visibleForTesting
+void debugSetRangeDigestApiOverride(RangeDigestApiOverride? override) {
+  _rangeDigestApiOverride = override;
+}
 
 Map<String, double> earningsHistoryWeightsFor(
   MobilePortfolioRecommendation portfolio,
@@ -56,6 +72,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
   bool _earningsHistoryFetchStarted = false;
   bool _isRangeDigestMode = false;
   _ChartRangeSelection? _selectedDigestRange;
+  MobileRangeDigestResponse? _rangeDigest;
+  bool _rangeDigestLoading = false;
+  String? _rangeDigestError;
+  int _rangeDigestRequestId = 0;
   String? _loadedEarningsRiskCode;
 
   @override
@@ -174,6 +194,10 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     setState(() {
       _isRangeDigestMode = true;
       _selectedDigestRange = null;
+      _rangeDigest = null;
+      _rangeDigestLoading = false;
+      _rangeDigestError = null;
+      _rangeDigestRequestId++;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
@@ -189,11 +213,85 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
     setState(() {
       _isRangeDigestMode = false;
       _selectedDigestRange = null;
+      _rangeDigest = null;
+      _rangeDigestLoading = false;
+      _rangeDigestError = null;
+      _rangeDigestRequestId++;
     });
   }
 
   void _setDigestRange(_ChartRangeSelection? selection) {
+    if (selection == null) {
+      setState(() {
+        _selectedDigestRange = null;
+        _rangeDigest = null;
+        _rangeDigestLoading = false;
+        _rangeDigestError = null;
+        _rangeDigestRequestId++;
+      });
+      return;
+    }
     setState(() => _selectedDigestRange = selection);
+    _loadRangeDigest(selection);
+  }
+
+  Future<void> _loadRangeDigest(_ChartRangeSelection selection) async {
+    final state = PortfolioStateProvider.of(context);
+    final accessToken = state.authSession?.accessToken;
+    final requestId = ++_rangeDigestRequestId;
+    if (accessToken == null || accessToken.isEmpty) {
+      setState(() {
+        _rangeDigest = null;
+        _rangeDigestLoading = false;
+        _rangeDigestError = '로그인이 필요해요.';
+      });
+      return;
+    }
+
+    setState(() {
+      _rangeDigest = null;
+      _rangeDigestLoading = true;
+      _rangeDigestError = null;
+    });
+
+    try {
+      final fetchRangeDigest =
+          _rangeDigestApiOverride ?? MobileBackendApi.instance.fetchRangeDigest;
+      final digest = await fetchRangeDigest(
+        accessToken: accessToken,
+        startDate: selection.startDate,
+        endDate: selection.endDate,
+        startValue: selection.startValue,
+        endValue: selection.endValue,
+      );
+      if (!mounted || requestId != _rangeDigestRequestId) return;
+      setState(() {
+        _rangeDigest = digest;
+        _rangeDigestLoading = false;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _rangeDigestRequestId) return;
+      developer.log(
+        'fetchRangeDigest failed: $e',
+        name: 'HomeTab',
+      );
+      setState(() {
+        _rangeDigest = null;
+        _rangeDigestLoading = false;
+        _rangeDigestError = '분석을 불러오지 못했어요.';
+      });
+    }
+  }
+
+  void _openRangeDigestDetail() {
+    final digest = _rangeDigest;
+    if (digest == null) return;
+    Navigator.push(
+      context,
+      WeRoboMotion.fadeRoute<void>(
+        RangeDigestDetailPage(digest: digest),
+      ),
+    );
   }
 
   @override
@@ -283,8 +381,15 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   latestInsight: issueInsight,
                   rangeDigestMode: _isRangeDigestMode,
                   selectedDigestRange: _selectedDigestRange,
+                  rangeDigest: _rangeDigest,
+                  rangeDigestLoading: _rangeDigestLoading,
+                  rangeDigestError: _rangeDigestError,
                   onEnterRangeDigestMode: _enterRangeDigestMode,
                   onExitRangeDigestMode: _exitRangeDigestMode,
+                  onRetryRangeDigest: _selectedDigestRange == null
+                      ? null
+                      : () => _loadRangeDigest(_selectedDigestRange!),
+                  onRangeDigestDetailTap: _openRangeDigestDetail,
                   onDigestTap: issueData.usesPlaceholderDigest
                       ? null
                       : () => DigestSheet.show(context),
@@ -1124,16 +1229,14 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         // WeRobo wordmark above the 총손익 readout (capstone 2026-05-12 spec)
         Text(
           'WeRobo',
-          style: TextStyle(
-            fontFamily: WeRoboFonts.display,
-            fontSize: 20,
-            fontWeight: FontWeight.w700,
+          key: const Key('home_werobo_logo'),
+          style: WeRoboTypography.logo.copyWith(
             color: WeRoboColors.primary,
-            height: 1.0,
-            letterSpacing: -0.5,
+            fontSize: 22,
+            height: 1.1,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 14),
         // 총손익 label
         Text(
           '총손익',
@@ -1682,8 +1785,13 @@ class _PortfolioIssueFeed extends StatelessWidget {
   final RebalanceInsight? latestInsight;
   final bool rangeDigestMode;
   final _ChartRangeSelection? selectedDigestRange;
+  final MobileRangeDigestResponse? rangeDigest;
+  final bool rangeDigestLoading;
+  final String? rangeDigestError;
   final VoidCallback onEnterRangeDigestMode;
   final VoidCallback onExitRangeDigestMode;
+  final VoidCallback? onRetryRangeDigest;
+  final VoidCallback? onRangeDigestDetailTap;
   final VoidCallback? onDigestTap;
 
   const _PortfolioIssueFeed({
@@ -1691,8 +1799,13 @@ class _PortfolioIssueFeed extends StatelessWidget {
     required this.latestInsight,
     required this.rangeDigestMode,
     required this.selectedDigestRange,
+    required this.rangeDigest,
+    required this.rangeDigestLoading,
+    required this.rangeDigestError,
     required this.onEnterRangeDigestMode,
     required this.onExitRangeDigestMode,
+    this.onRetryRangeDigest,
+    this.onRangeDigestDetailTap,
     this.onDigestTap,
   });
 
@@ -1708,7 +1821,12 @@ class _PortfolioIssueFeed extends StatelessWidget {
     if (rangeDigestMode) {
       return _RangeDigestIssueCard(
         selection: selectedDigestRange,
+        digest: rangeDigest,
+        loading: rangeDigestLoading,
+        error: rangeDigestError,
         onExit: onExitRangeDigestMode,
+        onRetry: onRetryRangeDigest,
+        onDetailTap: onRangeDigestDetailTap,
       );
     }
 
@@ -1929,23 +2047,36 @@ class _RangeDigestEntryRow extends StatelessWidget {
 
 class _RangeDigestIssueCard extends StatelessWidget {
   final _ChartRangeSelection? selection;
+  final MobileRangeDigestResponse? digest;
+  final bool loading;
+  final String? error;
   final VoidCallback onExit;
+  final VoidCallback? onRetry;
+  final VoidCallback? onDetailTap;
 
   const _RangeDigestIssueCard({
     required this.selection,
+    required this.digest,
+    required this.loading,
+    required this.error,
     required this.onExit,
+    this.onRetry,
+    this.onDetailTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final summary = selection == null
-        ? const _RangeDigestSummary(
-            title: '이 구간은 왜 움직였을까?',
-            meta: '구간 분석',
-            body: '차트에서 궁금한 구간을 드래그해 선택하세요.',
-          )
-        : _RangeDigestSummary.fromSelection(selection!);
+    final summary = _RangeDigestSummary.resolve(
+      selection: selection,
+      digest: digest,
+      loading: loading,
+      error: error,
+    );
+    final showLoading = selection != null && loading;
+    final showRetry = selection != null && error != null && onRetry != null;
+    final showDetail =
+        selection != null && digest != null && onDetailTap != null;
 
     return Container(
       key: Key(selection == null
@@ -2001,13 +2132,49 @@ class _RangeDigestIssueCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             summary.body,
-            maxLines: 3,
+            maxLines: digest == null ? 3 : 4,
             overflow: TextOverflow.ellipsis,
             style: WeRoboTypography.bodySmall.copyWith(
               color: tc.textSecondary,
               height: 1.45,
             ),
           ),
+          if (showLoading) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: WeRoboColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Gemini가 구간 근거를 정리 중이에요.',
+                  style: WeRoboTypography.caption.copyWith(
+                    color: tc.textTertiary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (showRetry || showDetail) ...[
+            const SizedBox(height: 14),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: _RangeDigestActionButton(
+                label: showDetail ? '자세히 보기' : '다시 시도',
+                icon: showDetail
+                    ? Icons.chevron_right_rounded
+                    : Icons.refresh_rounded,
+                onTap: showDetail ? onDetailTap! : onRetry!,
+              ),
+            ),
+          ],
           if (selection == null) ...[
             const SizedBox(height: 12),
             Text(
@@ -2052,6 +2219,44 @@ class _RangeDigestSummary {
     required this.body,
   });
 
+  factory _RangeDigestSummary.resolve({
+    required _ChartRangeSelection? selection,
+    required MobileRangeDigestResponse? digest,
+    required bool loading,
+    required String? error,
+  }) {
+    if (selection == null) {
+      return const _RangeDigestSummary(
+        title: '이 구간은 왜 움직였을까?',
+        meta: '구간 분석',
+        body: '차트에서 궁금한 구간을 드래그해 선택하세요.',
+      );
+    }
+    if (loading) {
+      final range = _formatDateRange(selection.startDate, selection.endDate);
+      final signedPct = _formatSignedPercent(selection.changePct);
+      final signedWon = _formatSignedWon(selection.change);
+      return _RangeDigestSummary(
+        title: '이 구간의 변화를 분석하고 있어요',
+        meta: '선택 구간 · $range',
+        body: '$range 동안 $signedPct, $signedWon 움직였어요.',
+      );
+    }
+    if (digest != null) {
+      return _RangeDigestSummary.fromDigest(
+          selection: selection, digest: digest);
+    }
+    if (error != null) {
+      final base = _RangeDigestSummary.fromSelection(selection);
+      return _RangeDigestSummary(
+        title: error,
+        meta: base.meta,
+        body: base.body,
+      );
+    }
+    return _RangeDigestSummary.fromSelection(selection);
+  }
+
   factory _RangeDigestSummary.fromSelection(_ChartRangeSelection selection) {
     final pct = selection.changePct;
     final title = pct > 0.1
@@ -2067,6 +2272,69 @@ class _RangeDigestSummary {
       meta: '선택 구간 · $range',
       body: '$range 동안 $signedPct, $signedWon 움직였어요. '
           '변화 원인 분석은 곧 연결됩니다.',
+    );
+  }
+
+  factory _RangeDigestSummary.fromDigest({
+    required _ChartRangeSelection selection,
+    required MobileRangeDigestResponse digest,
+  }) {
+    final pct = digest.totalReturnPct;
+    final title = pct > 0.1
+        ? '왜 올랐을까?'
+        : pct < -0.1
+            ? '왜 내려갔을까?'
+            : '왜 큰 변화가 없었을까?';
+    final range = _formatDateRange(selection.startDate, selection.endDate);
+    final narrative = digest.narrativeKo?.trim();
+    final body =
+        digest.hasNarrative && narrative != null && narrative.isNotEmpty
+            ? narrative
+            : _RangeDigestSummary.fromSelection(selection).body;
+    return _RangeDigestSummary(
+      title: title,
+      meta: 'AI 요약 · $range',
+      body: body,
+    );
+  }
+}
+
+class _RangeDigestActionButton extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _RangeDigestActionButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: WeRoboColors.primary.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(WeRoboColors.radiusS),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: WeRoboColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Icon(icon, size: 18, color: WeRoboColors.primary),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -3607,8 +3875,7 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
         };
     final topAsset = _topWeightedAssetClass(state);
     final fetchNews = override?.fetchNews ??
-        (AssetClass cls) =>
-            MobileBackendApi.instance.fetchAssetClassNews(cls);
+        (AssetClass cls) => MobileBackendApi.instance.fetchAssetClassNews(cls);
 
     final volFuture = _safeVoid(() async {
       final vol = await fetchVolatility();
@@ -3721,9 +3988,8 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
     // 2. Contribution.
     final contributor = state.topContributorOver30d;
     if (contributor != null) {
-      final pct = (contributor.weight * contributor.assetReturn * 100)
-          .abs()
-          .round();
+      final pct =
+          (contributor.weight * contributor.assetReturn * 100).abs().round();
       rows.add(_NotificationRow(
         kind: _NotificationKind.contribution,
         category: _categoryLabel(_NotificationKind.contribution),
@@ -3824,57 +4090,57 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
             borderRadius: const BorderRadius.vertical(
               bottom: Radius.circular(20),
             ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 24,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: SafeArea(
-              bottom: false,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '오늘의 알림',
-                            textAlign: TextAlign.center,
-                            style: WeRoboTypography.heading3.themed(context),
-                          ),
-                        ),
-                        Pressable(
-                          onTap: () => Navigator.of(context).pop(),
-                          child: Container(
-                            width: 32,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: tc.card,
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.close_rounded,
-                              size: 18,
-                              color: tc.textSecondary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Divider(height: 1, thickness: 1, color: tc.card),
-                  ...body,
-                  const SizedBox(height: 8),
-                ],
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
               ),
+            ],
+          ),
+          child: SafeArea(
+            bottom: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 12, 12),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '오늘의 알림',
+                          textAlign: TextAlign.center,
+                          style: WeRoboTypography.heading3.themed(context),
+                        ),
+                      ),
+                      Pressable(
+                        onTap: () => Navigator.of(context).pop(),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            color: tc.card,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: tc.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Divider(height: 1, thickness: 1, color: tc.card),
+                ...body,
+                const SizedBox(height: 8),
+              ],
             ),
           ),
         ),
+      ),
     );
   }
 
@@ -3906,9 +4172,8 @@ class _NotificationsSheetState extends State<_NotificationsSheet> {
 
       final dateLabel = _formatKoreanDate(insight.rebalanceDate);
       final triggerSentence = _triggerSentence(insight.trigger);
-      final title = dateLabel == null
-          ? triggerSentence
-          : '$dateLabel $triggerSentence';
+      final title =
+          dateLabel == null ? triggerSentence : '$dateLabel $triggerSentence';
       yield _NotificationRow(
         kind: _NotificationKind.algorithmSignal,
         category: _categoryLabel(_NotificationKind.algorithmSignal),
