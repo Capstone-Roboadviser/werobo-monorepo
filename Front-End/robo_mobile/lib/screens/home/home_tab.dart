@@ -15,7 +15,7 @@ import '../../models/mock_earnings_data.dart';
 import '../../models/portfolio_data.dart';
 import '../../models/rebalance_insight.dart';
 import 'activity_hub_page.dart';
-import 'digest_screen.dart';
+import 'widgets/digest_sheet.dart';
 import 'insight_detail_page.dart';
 import 'portfolio_allocation_detail_page.dart';
 import 'widgets/glowing_border.dart';
@@ -287,12 +287,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   onExitRangeDigestMode: _exitRangeDigestMode,
                   onDigestTap: issueData.usesPlaceholderDigest
                       ? null
-                      : () => Navigator.push(
-                            context,
-                            WeRoboMotion.fadeRoute<void>(
-                              const DigestScreen(),
-                            ),
-                          ),
+                      : () => DigestSheet.show(context),
                 ),
               ),
             SizedBox(height: hasIssueFeed ? 24 : 28),
@@ -316,10 +311,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               _stagger(
                 ++staggerIdx,
                 _DigestBanner(
-                  onTap: () => Navigator.push(
-                    context,
-                    WeRoboMotion.fadeRoute<void>(const DigestScreen()),
-                  ),
+                  onTap: () => DigestSheet.show(context),
                 ),
               ),
             if (hasStandaloneDigestBanner) const SizedBox(height: 20),
