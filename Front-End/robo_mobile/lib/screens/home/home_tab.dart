@@ -1560,11 +1560,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
             );
           }),
         ),
-
-        // Top contributor one-liners. Always rendered, even when not
-        // dragging, so the hero answers "which asset moved the needle?"
-        // at a glance.
-        _ContributionOneLiners(digest: widget.digest),
       ],
     );
   }
@@ -1654,113 +1649,6 @@ class _RangeDigestChartAiButton extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ContributionOneLiners extends StatelessWidget {
-  final MobileDigestResponse? digest;
-
-  const _ContributionOneLiners({required this.digest});
-
-  List<DigestDriver> _topTwo() {
-    final d = digest;
-    if (d == null || !d.available) return const [];
-    final items = [...d.drivers, ...d.detractors]..sort(
-        (a, b) => b.contributionWon.abs().compareTo(a.contributionWon.abs()),
-      );
-    return items.take(2).toList();
-  }
-
-  String _josa(String name) {
-    if (name.isEmpty) return '가';
-    final code = name.codeUnitAt(name.length - 1);
-    if (code >= 0xAC00 && code <= 0xD7A3) {
-      return (code - 0xAC00) % 28 == 0 ? '가' : '이';
-    }
-    return '가';
-  }
-
-  String _line(DigestDriver d, {required bool isPrimary}) {
-    final name = d.nameKo.isNotEmpty ? d.nameKo : d.ticker;
-    final josa = _josa(name);
-    final won = _formatSignedWon(d.contributionWon);
-    if (isPrimary) {
-      return d.contributionWon >= 0
-          ? '$name$josa 이번 기간 수익에 $won 기여했어요.'
-          : '$name$josa 이번 기간 수익에 $won 영향을 줬어요.';
-    }
-    return d.contributionWon >= 0
-        ? '$name$josa $won 기여했어요.'
-        : '$name$josa $won 영향을 줬어요.';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    final top = _topTwo();
-    if (top.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: WeRoboSpacing.sm),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _SkeletonBar(
-              widthFactor: 0.6,
-              color: tc.border.withValues(alpha: 0.3),
-            ),
-            const SizedBox(height: 6),
-            _SkeletonBar(
-              widthFactor: 0.5,
-              color: tc.border.withValues(alpha: 0.3),
-            ),
-          ],
-        ),
-      );
-    }
-    final lines = <String>[
-      _line(top[0], isPrimary: true),
-      if (top.length > 1) _line(top[1], isPrimary: false),
-    ];
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: WeRoboSpacing.sm),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          for (var i = 0; i < lines.length; i++) ...[
-            if (i > 0) const SizedBox(height: 4),
-            Text(
-              lines[i],
-              style: WeRoboTypography.bodySmall.copyWith(
-                color: tc.textSecondary,
-                height: 1.5,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _SkeletonBar extends StatelessWidget {
-  final double widthFactor;
-  final Color color;
-
-  const _SkeletonBar({required this.widthFactor, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return FractionallySizedBox(
-      alignment: Alignment.centerLeft,
-      widthFactor: widthFactor,
-      child: Container(
-        height: 12,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(4),
         ),
       ),
     );
