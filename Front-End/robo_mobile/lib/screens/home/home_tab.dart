@@ -379,6 +379,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 type: type,
                 digest: issueDigest,
                 rangeDigestMode: _isRangeDigestMode,
+                rangeDigestLocked: _selectedDigestRange != null,
                 selectedDigestRange: _selectedDigestRange,
                 onRangeSelectionChanged: _setDigestRange,
                 onEnterRangeDigestMode: _enterRangeDigestMode,
@@ -571,6 +572,7 @@ class _PortfolioHeroChart extends StatefulWidget {
   final InvestmentType type;
   final MobileDigestResponse? digest;
   final bool rangeDigestMode;
+  final bool rangeDigestLocked;
   final _ChartRangeSelection? selectedDigestRange;
   final ValueChanged<_ChartRangeSelection?> onRangeSelectionChanged;
   final VoidCallback onEnterRangeDigestMode;
@@ -580,6 +582,7 @@ class _PortfolioHeroChart extends StatefulWidget {
     required this.type,
     this.digest,
     required this.rangeDigestMode,
+    required this.rangeDigestLocked,
     required this.selectedDigestRange,
     required this.onRangeSelectionChanged,
     required this.onEnterRangeDigestMode,
@@ -609,6 +612,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   int? _touchIndex;
   int? _rangeStartIndex;
   int? _rangeEndIndex;
+  bool _rangeSelectionLocked = false;
   // Cache of cumulative asset returns since the start of the visible
   // range, keyed by date. Rebuilt when the range changes or the earnings
   // history reference changes.
@@ -681,6 +685,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
       _touchIndex = null;
       _rangeStartIndex = null;
       _rangeEndIndex = null;
+      _rangeSelectionLocked = false;
       _drawCtrl.forward(from: 0);
     }
     if (oldWidget.rangeDigestMode != widget.rangeDigestMode) {
@@ -690,6 +695,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
       if (!widget.rangeDigestMode) {
         _rangeStartIndex = null;
         _rangeEndIndex = null;
+        _rangeSelectionLocked = false;
       }
     }
     if (widget.rangeDigestMode &&
@@ -697,6 +703,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         widget.selectedDigestRange == null) {
       _rangeStartIndex = null;
       _rangeEndIndex = null;
+      _rangeSelectionLocked = false;
     }
   }
 
@@ -1079,12 +1086,15 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         .toInt();
   }
 
+  bool get _isRangeSelectionLocked =>
+      _rangeSelectionLocked || widget.rangeDigestLocked;
+
   void _beginRangeSelectionAt(
     double x,
     double fullWidth,
     List<ChartPoint> valuePts,
   ) {
-    if (valuePts.length < 2) return;
+    if (_isRangeSelectionLocked || valuePts.length < 2) return;
     final idx = _indexForChartX(x, fullWidth, valuePts.length);
     setState(() {
       _touchIndex = null;
@@ -1098,12 +1108,17 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     double fullWidth,
     List<ChartPoint> valuePts,
   ) {
-    if (valuePts.length < 2 || _rangeStartIndex == null) return;
+    if (_isRangeSelectionLocked ||
+        valuePts.length < 2 ||
+        _rangeStartIndex == null) {
+      return;
+    }
     final idx = _indexForChartX(x, fullWidth, valuePts.length);
     setState(() => _rangeEndIndex = idx);
   }
 
   void _completeRangeSelection(List<ChartPoint> valuePts) {
+    if (_isRangeSelectionLocked) return;
     final startIdx = _rangeStartIndex;
     final endIdx = _rangeEndIndex;
     if (valuePts.length < 2 || startIdx == null || endIdx == null) {
@@ -1123,6 +1138,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     setState(() {
       _rangeStartIndex = normalizedStart;
       _rangeEndIndex = normalizedEnd;
+      _rangeSelectionLocked = true;
     });
     widget.onRangeSelectionChanged(
       _ChartRangeSelection(
@@ -1135,6 +1151,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   }
 
   void _cancelRangeSelection() {
+    if (_isRangeSelectionLocked) return;
     setState(() {
       _rangeStartIndex = null;
       _rangeEndIndex = null;
@@ -1143,6 +1160,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
   }
 
   void _selectRange(int idx) {
+    if (_isRangeSelectionLocked) return;
     // "미래" tab navigates to ProjectionScreen
     if (idx == _rangeLabels.length - 1) {
       Navigator.push(
