@@ -1162,8 +1162,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
         ),
         const SizedBox(height: 12),
 
-        // Invested vs current value row
-        _InvestedVsCurrentRow(
+        // Invested vs current value stack
+        _InvestedVsCurrentStack(
           invested: investedAmount,
           current: headerCurrentValue,
         ),
@@ -2062,13 +2062,13 @@ String _formatDateRange(DateTime start, DateTime end) {
   return '${start.month}월 ${start.day}일-${end.month}월 ${end.day}일';
 }
 
-// ─── Invested vs current value row ────────────────────────────
+// ─── Invested vs current value stack ──────────────────────────
 
-class _InvestedVsCurrentRow extends StatelessWidget {
+class _InvestedVsCurrentStack extends StatelessWidget {
   final double invested;
   final double current;
 
-  const _InvestedVsCurrentRow({
+  const _InvestedVsCurrentStack({
     required this.invested,
     required this.current,
   });
@@ -2079,22 +2079,37 @@ class _InvestedVsCurrentRow extends StatelessWidget {
     final labelStyle = WeRoboTypography.bodySmall.copyWith(
       color: tc.textSecondary,
     );
+    // Spec: numbers match the label's bodySmall size, stay black, NOT bold.
     final amountStyle = WeRoboTypography.bodySmall.copyWith(
       color: tc.textPrimary,
-      fontWeight: FontWeight.w600,
+      fontWeight: FontWeight.w400,
       fontFamily: WeRoboFonts.english,
     );
-    return Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Text('투자금액', style: labelStyle),
-        const SizedBox(width: 4),
-        Text('₩${_formatCurrency(invested.toInt())}', style: amountStyle),
-        const SizedBox(width: 12),
-        Container(width: 1, height: 12, color: tc.border),
-        const SizedBox(width: 12),
-        Text('평가금액', style: labelStyle),
-        const SizedBox(width: 4),
-        Text('₩${_formatCurrency(current.toInt())}', style: amountStyle),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('투자금액', style: labelStyle),
+            Text(
+              '₩${_formatCurrency(invested.toInt())}',
+              style: amountStyle,
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('평가금액', style: labelStyle),
+            Text(
+              '₩${_formatCurrency(current.toInt())}',
+              style: amountStyle,
+            ),
+          ],
+        ),
       ],
     );
   }
