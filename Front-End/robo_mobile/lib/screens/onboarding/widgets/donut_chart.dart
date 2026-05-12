@@ -46,7 +46,9 @@ class DonutChart extends StatefulWidget {
 class _DonutChartState extends State<DonutChart>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _animation;
+  // One CurvedAnimation per segment, covering its sub-interval in [0, 1].
+  late List<Animation<double>> _segmentAnimations;
+
   /// Index of the slice the user has tapped. `null` means show the default
   /// center label.
   int? _activeSegmentIndex;
@@ -55,17 +57,40 @@ class _DonutChartState extends State<DonutChart>
   void initState() {
     super.initState();
     _controller = AnimationController(
-      duration: WeRoboMotion.chartDraw,
+      duration: const Duration(milliseconds: 2000),
       vsync: this,
     );
-    _animation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: WeRoboMotion.chartReveal),
-    );
+    _buildSegmentAnimations();
     _controller.forward();
+  }
+
+  void _buildSegmentAnimations() {
+    final n = widget.segments.length;
+    _segmentAnimations = [
+      for (var i = 0; i < n; i++)
+        CurvedAnimation(
+          parent: _controller,
+          curve: Interval(i / n, (i + 1) / n, curve: WeRoboMotion.enter),
+        ),
+    ];
+  }
+
+  @override
+  void didUpdateWidget(DonutChart oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.segments != widget.segments) {
+      for (final a in _segmentAnimations) {
+        (a as CurvedAnimation).dispose();
+      }
+      _buildSegmentAnimations();
+    }
   }
 
   @override
   void dispose() {
+    for (final a in _segmentAnimations) {
+      (a as CurvedAnimation).dispose();
+    }
     _controller.dispose();
     super.dispose();
   }
@@ -86,10 +111,10 @@ class _DonutChartState extends State<DonutChart>
     // convention where 0 is at the top (-pi/2) and increases clockwise.
     var angle = atan2(dy, dx) + pi / 2;
     if (angle < 0) angle += 2 * pi;
-    final progress = _animation.value;
     var sweepStart = 0.0;
     for (var i = 0; i < widget.segments.length; i++) {
-      final sweep = 2 * pi * widget.segments[i].weight * progress;
+      final prog = _segmentAnimations[i].value;
+      final sweep = 2 * pi * widget.segments[i].weight * prog;
       if (angle >= sweepStart && angle < sweepStart + sweep) {
         return i;
       }
@@ -112,26 +137,57 @@ class _DonutChartState extends State<DonutChart>
 
   @override
   Widget build(BuildContext context) {
-    final size = widget.compact ? 180.0 : 240.0;
+    final donutSize = widget.compact ? 180.0 : 240.0;
     return AnimatedBuilder(
-      animation: _animation,
-      builder: (context, _) => SizedBox(
-        width: size,
-        height: size,
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapUp: (d) => _handleTap(d, size),
-          child: CustomPaint(
-            painter: _DonutPainter(
-              progress: _animation.value,
-              segments: widget.segments,
-              activeIndex: _activeSegmentIndex,
+      animation: _controller,
+      builder: (context, _) {
+        final progresses = [
+          for (final a in _segmentAnimations) a.value,
+        ];
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: donutSize,
+              height: donutSize,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTapUp: (d) => _handleTap(d, donutSize),
+                child: CustomPaint(
+                  painter: _DonutPainter(
+                    segmentProgresses: progresses,
+                    segments: widget.segments,
+                    activeIndex: _activeSegmentIndex,
+                  ),
+                  child: Center(
+                    child: _buildCenterLabel(context),
+                  ),
+                ),
+              ),
             ),
-            child: Center(
-              child: _buildCenterLabel(context),
-            ),
-          ),
-        ),
+            if (widget.segments.any((s) => s.label != null)) ...[
+              const SizedBox(height: 20),
+              _buildLegend(context, progresses),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildLegend(BuildContext context, List<double> progresses) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < widget.segments.length; i++)
+            if (widget.segments[i].label != null)
+              _SegmentLegendRow(
+                segment: widget.segments[i],
+                progress: progresses[i],
+              ),
+        ],
       ),
     );
   }
@@ -194,13 +250,77 @@ class _DonutChartState extends State<DonutChart>
   }
 }
 
+/// One row in the legend beneath the donut.
+/// Slides in from the left and counts the percentage up as [progress] goes
+/// from 0.0 to 1.0.
+class _SegmentLegendRow extends StatelessWidget {
+  final DonutSegment segment;
+  final double progress; // 0.0–1.0 for this segment's sub-interval
+
+  const _SegmentLegendRow({
+    required this.segment,
+    required this.progress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    // Slide: progress 0 → shift left by full width, progress 1 → no shift.
+    final slideOffset = (1 - progress) * -1.0;
+    final pct = (segment.weight * 100 * progress).toStringAsFixed(0);
+
+    return FractionalTranslation(
+      translation: Offset(slideOffset, 0),
+      child: Opacity(
+        opacity: progress.clamp(0.0, 1.0),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: segment.color,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  segment.label!,
+                  style: WeRoboTypography.bodySmall.copyWith(
+                    color: tc.textPrimary,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '$pct%',
+                style: TextStyle(
+                  fontFamily: WeRoboFonts.number,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: tc.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DonutPainter extends CustomPainter {
-  final double progress;
+  final List<double> segmentProgresses;
   final List<DonutSegment> segments;
   final int? activeIndex;
 
   _DonutPainter({
-    required this.progress,
+    required this.segmentProgresses,
     required this.segments,
     this.activeIndex,
   });
@@ -215,7 +335,14 @@ class _DonutPainter extends CustomPainter {
     double startAngle = -pi / 2;
     for (var i = 0; i < segments.length; i++) {
       final segment = segments[i];
-      final sweepAngle = 2 * pi * segment.weight * progress - gapAngle;
+      final progress = segmentProgresses[i];
+      final fullSweep = 2 * pi * segment.weight;
+      final animatedSweep = fullSweep * progress;
+      final sweepAngle = animatedSweep - gapAngle;
+      if (sweepAngle <= 0) {
+        startAngle += animatedSweep;
+        continue;
+      }
       final isDimmed = activeIndex != null && activeIndex != i;
       final paint = Paint()
         ..color = isDimmed
@@ -231,13 +358,13 @@ class _DonutPainter extends CustomPainter {
         false,
         paint,
       );
-      startAngle += 2 * pi * segment.weight * progress;
+      startAngle += animatedSweep;
     }
   }
 
   @override
   bool shouldRepaint(covariant _DonutPainter oldDelegate) =>
-      oldDelegate.progress != progress ||
+      oldDelegate.segmentProgresses != segmentProgresses ||
       oldDelegate.segments != segments ||
       oldDelegate.activeIndex != activeIndex;
 }
