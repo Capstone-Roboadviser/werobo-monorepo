@@ -147,17 +147,21 @@ class _PortfolioTabState extends State<PortfolioTab> {
     final state = PortfolioStateProvider.of(context);
     final rec = state.recommendation;
     final selection = state.frontierSelection;
+    final onboardingPick = state.onboardingFrontierSelection;
     final portfolio =
         state.selectedPortfolio ?? rec?.portfolioByCode(type.riskCode);
     final accountSummary = state.accountSummary;
     final portfolioStartedAt =
         DateTime.tryParse(accountSummary?.startedAt ?? '');
     final horizon = selection?.resolvedProfile.investmentHorizon ??
+        onboardingPick?.preview?.resolvedProfile.investmentHorizon ??
         accountSummary?.investmentHorizon ??
         rec?.resolvedProfile.investmentHorizon ??
         'medium';
-    final riskProfile =
-        selection?.classificationCode ?? portfolio?.code ?? type.riskCode;
+    final riskProfile = selection?.classificationCode ??
+        portfolio?.code ??
+        onboardingPick?.preview?.resolvedProfile.code ??
+        type.riskCode;
 
     List<ChartPoint>? volPoints;
 
@@ -166,11 +170,14 @@ class _PortfolioTabState extends State<PortfolioTab> {
           await MobileBackendApi.instance.fetchVolatilityHistory(
         riskProfile: riskProfile,
         investmentHorizon: horizon,
-        preferredDataSource:
-            selection?.dataSource ?? accountSummary?.dataSource,
+        preferredDataSource: selection?.dataSource ??
+            onboardingPick?.dataSource ??
+            accountSummary?.dataSource,
         stockWeights: portfolio?.stockWeights,
-        selectedPointIndex: selection?.selectedPointIndex,
-        targetVolatility: selection?.selectedTargetVolatility,
+        selectedPointIndex:
+            selection?.selectedPointIndex ?? onboardingPick?.selectedPointIndex,
+        targetVolatility: selection?.selectedTargetVolatility ??
+            onboardingPick?.targetVolatility,
       );
       volPoints = volResponse.points
           .map((p) => ChartPoint(

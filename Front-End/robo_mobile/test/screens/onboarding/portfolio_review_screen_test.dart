@@ -17,7 +17,10 @@ void main() {
         theme: WeRoboTheme.light,
         home: PortfolioStateProvider(
           state: state,
-          child: PortfolioReviewScreen(selection: _selection()),
+          child: PortfolioReviewScreen(
+            selection: _selection(),
+            fetchVolatilityHistory: _failingVolatilityHistoryFetch,
+          ),
         ),
       ),
     );
@@ -37,7 +40,10 @@ void main() {
         theme: WeRoboTheme.light,
         home: PortfolioStateProvider(
           state: state,
-          child: PortfolioReviewScreen(selection: _selection()),
+          child: PortfolioReviewScreen(
+            selection: _selection(),
+            fetchVolatilityHistory: _failingVolatilityHistoryFetch,
+          ),
         ),
       ),
     );
@@ -62,7 +68,10 @@ void main() {
         theme: WeRoboTheme.light,
         home: PortfolioStateProvider(
           state: state,
-          child: PortfolioReviewScreen(selection: _selection()),
+          child: PortfolioReviewScreen(
+            selection: _selection(),
+            fetchVolatilityHistory: _failingVolatilityHistoryFetch,
+          ),
         ),
       ),
     );
@@ -74,6 +83,84 @@ void main() {
     expect(find.text('비교 데이터가 없어요'), findsNothing);
     expect(find.text('포트폴리오'), findsWidgets);
     expect(find.text('시장'), findsOneWidget);
+  });
+
+  testWidgets('volatility tab uses loaded volatility history', (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    state.setBacktest(_flatComparisonBacktest());
+    state.debugSetVolatilityHistory(_volatilityHistory());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: PortfolioReviewScreen(selection: _zeroVolatilitySelection()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('변동성'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('비교 데이터가 없어요'), findsNothing);
+    expect(find.text('포트폴리오'), findsWidgets);
+    expect(find.text('시장'), findsOneWidget);
+  });
+
+  testWidgets('confirm investment creates account with 10m from today',
+      (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    state.setBacktest(_comparisonBacktest());
+    state.debugSetVolatilityHistory(_volatilityHistory());
+    final today = DateTime(2026, 5, 12, 14, 30);
+    double? createdAmount;
+    DateTime? createdStartedAt;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        routes: {
+          '/home': (_) => const SizedBox(key: Key('home-screen')),
+        },
+        home: PortfolioStateProvider(
+          state: state,
+          child: PortfolioReviewScreen(
+            selection: _selection(),
+            now: () => today,
+            resolveFrontierSelection: ({
+              required PortfolioState state,
+              required OnboardingFrontierSelection selection,
+            }) async =>
+                _frontierSelectionResponse(asOfDate: selection.asOfDate),
+            createInitialAccount: ({
+              required PortfolioState state,
+              required MobileFrontierSelectionResponse selection,
+              required double initialCashAmount,
+              required DateTime startedAt,
+            }) async {
+              createdAmount = initialCashAmount;
+              createdStartedAt = startedAt;
+              return _accountDashboard(startedAt: startedAt);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('투자 확정'));
+    await tester.pumpAndSettle();
+
+    expect(createdAmount, 10000000);
+    expect(createdStartedAt, today);
+    expect(state.frontierSelection, isNotNull);
+    expect(state.accountDashboard?.summary?.investedAmount, 10000000);
+    expect(state.accountDashboard?.summary?.startedAt, '2026-05-12');
+    expect(find.byKey(const Key('home-screen')), findsOneWidget);
   });
 }
 
@@ -125,6 +212,18 @@ OnboardingFrontierSelection _selection() {
     asOfDate: DateTime(2026, 3, 1),
     isAuthoritative: true,
     preview: preview,
+  );
+}
+
+OnboardingFrontierSelection _zeroVolatilitySelection() {
+  final base = _selection();
+  return OnboardingFrontierSelection(
+    normalizedT: base.normalizedT,
+    selectedPointIndex: base.selectedPointIndex,
+    targetVolatility: 0,
+    dataSource: base.dataSource,
+    asOfDate: base.asOfDate,
+    isAuthoritative: base.isAuthoritative,
   );
 }
 
@@ -212,5 +311,110 @@ MobileComparisonBacktestResponse _flatComparisonBacktest() {
         ],
       ),
     ],
+  );
+}
+
+MobileVolatilityHistoryResponse _volatilityHistory() {
+  final dates = [
+    DateTime(2026, 3, 1),
+    DateTime(2026, 3, 2),
+    DateTime(2026, 3, 3),
+  ];
+  return MobileVolatilityHistoryResponse(
+    portfolioCode: 'selected',
+    portfolioLabel: '선택 포트폴리오',
+    rollingWindow: 20,
+    earliestDataDate: dates.first,
+    latestDataDate: dates.last,
+    points: [
+      MobileVolatilityPoint(date: dates[0], volatility: 0.11),
+      MobileVolatilityPoint(date: dates[1], volatility: 0.12),
+      MobileVolatilityPoint(date: dates[2], volatility: 0.13),
+    ],
+    benchmarkPoints: [
+      MobileVolatilityPoint(date: dates[0], volatility: 0.10),
+      MobileVolatilityPoint(date: dates[1], volatility: 0.105),
+      MobileVolatilityPoint(date: dates[2], volatility: 0.115),
+    ],
+  );
+}
+
+Future<MobileVolatilityHistoryResponse> _failingVolatilityHistoryFetch({
+  required PortfolioState state,
+  required OnboardingFrontierSelection selection,
+}) {
+  throw StateError('volatility history unavailable in this test');
+}
+
+MobileFrontierSelectionResponse _frontierSelectionResponse({
+  DateTime? asOfDate,
+}) {
+  return MobileFrontierSelectionResponse(
+    resolvedProfile: const MobileResolvedProfile(
+      code: 'balanced',
+      label: '균형형',
+      propensityScore: 45,
+      targetVolatility: 0.12,
+      investmentHorizon: 'medium',
+    ),
+    dataSource: 'managed_universe',
+    asOfDate: asOfDate,
+    requestedTargetVolatility: 0.12,
+    selectedTargetVolatility: 0.12,
+    selectedPointIndex: 40,
+    totalPointCount: 61,
+    representativeCode: 'balanced',
+    representativeLabel: '균형형',
+    portfolio: const MobilePortfolioRecommendation(
+      code: 'balanced',
+      label: '균형형',
+      portfolioId: 'balanced-40',
+      targetVolatility: 0.12,
+      expectedReturn: 0.08,
+      volatility: 0.11,
+      sharpeRatio: 0.7,
+      sectorAllocations: [],
+      stockAllocations: [],
+    ),
+  );
+}
+
+MobileAccountDashboard _accountDashboard({
+  required DateTime startedAt,
+}) {
+  final startedAtText =
+      '${startedAt.year.toString().padLeft(4, '0')}-${startedAt.month.toString().padLeft(2, '0')}-${startedAt.day.toString().padLeft(2, '0')}';
+  return MobileAccountDashboard(
+    hasAccount: true,
+    summary: MobileAccountSummary(
+      portfolioCode: 'balanced',
+      portfolioLabel: '균형형',
+      portfolioId: 'balanced-40',
+      dataSource: 'managed_universe',
+      investmentHorizon: 'medium',
+      targetVolatility: 0.12,
+      expectedReturn: 0.08,
+      volatility: 0.11,
+      sharpeRatio: 0.7,
+      startedAt: startedAtText,
+      lastSnapshotDate: startedAtText,
+      currentValue: 10000000,
+      investedAmount: 10000000,
+      profitLoss: 0,
+      cashBalance: 0,
+      profitLossPct: 0,
+      sectorAllocations: const [],
+      stockAllocations: const [],
+    ),
+    history: [
+      MobileAccountHistoryPoint(
+        date: startedAt,
+        portfolioValue: 10000000,
+        investedAmount: 10000000,
+        profitLoss: 0,
+        profitLossPct: 0,
+      ),
+    ],
+    recentActivity: const [],
   );
 }

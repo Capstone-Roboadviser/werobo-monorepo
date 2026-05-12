@@ -12,6 +12,28 @@ import 'widgets/asset_weight.dart';
 import 'widgets/donut_chart.dart';
 import 'widgets/portfolio_charts.dart';
 
+typedef PortfolioReviewSelectionResolver
+    = Future<MobileFrontierSelectionResponse> Function({
+  required PortfolioState state,
+  required OnboardingFrontierSelection selection,
+});
+
+typedef PortfolioReviewAccountCreator = Future<MobileAccountDashboard>
+    Function({
+  required PortfolioState state,
+  required MobileFrontierSelectionResponse selection,
+  required double initialCashAmount,
+  required DateTime startedAt,
+});
+
+typedef PortfolioReviewVolatilityHistoryFetcher
+    = Future<MobileVolatilityHistoryResponse> Function({
+  required PortfolioState state,
+  required OnboardingFrontierSelection selection,
+});
+
+const double _initialPortfolioCashAmount = 10000000;
+
 /// Post-frontier confirmation screen. Layout per 2026-05-05 user notes
 /// (and rev F–J 2026-05-04):
 ///   - Centered "포트폴리오 상세" page title
@@ -21,8 +43,19 @@ import 'widgets/portfolio_charts.dart';
 ///   - Bottom CTA: 투자 확정
 class PortfolioReviewScreen extends StatefulWidget {
   final OnboardingFrontierSelection selection;
+  final DateTime Function()? now;
+  final PortfolioReviewSelectionResolver? resolveFrontierSelection;
+  final PortfolioReviewAccountCreator? createInitialAccount;
+  final PortfolioReviewVolatilityHistoryFetcher? fetchVolatilityHistory;
 
-  const PortfolioReviewScreen({super.key, required this.selection});
+  const PortfolioReviewScreen({
+    super.key,
+    required this.selection,
+    this.now,
+    this.resolveFrontierSelection,
+    this.createInitialAccount,
+    this.fetchVolatilityHistory,
+  });
 
   @override
   State<PortfolioReviewScreen> createState() => _PortfolioReviewScreenState();
@@ -34,8 +67,12 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
   late final List<AssetWeight> _assets;
   late final List<DonutSegment> _segments;
   MobileComparisonBacktestResponse? _comparisonBacktest;
+  MobileVolatilityHistoryResponse? _volatilityHistory;
   bool _didRequestComparisonBacktest = false;
+  bool _didRequestVolatilityHistory = false;
   bool _isLoadingComparisonBacktest = false;
+  bool _isLoadingVolatilityHistory = false;
+  bool _isConfirmingInvestment = false;
 
   @override
   void initState() {
@@ -72,18 +109,20 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    final state = PortfolioStateProvider.of(context);
     if (_didRequestComparisonBacktest) {
+      _loadVolatilityHistoryIfNeeded(state);
       return;
     }
     _didRequestComparisonBacktest = true;
-    final state = PortfolioStateProvider.of(context);
     final existingBacktest = state.backtest;
     if (existingBacktest != null) {
       _comparisonBacktest = existingBacktest;
-      return;
+    } else {
+      _isLoadingComparisonBacktest = true;
+      unawaited(_fetchComparisonBacktest(state));
     }
-    _isLoadingComparisonBacktest = true;
-    unawaited(_fetchComparisonBacktest(state));
+    _loadVolatilityHistoryIfNeeded(state);
   }
 
   @override
@@ -118,7 +157,9 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
                 controller: _tabController,
                 selection: widget.selection,
                 comparisonBacktest: comparisonBacktest,
+                volatilityHistory: _volatilityHistory,
                 isLoadingComparisonBacktest: _isLoadingComparisonBacktest,
+                isLoadingVolatilityHistory: _isLoadingVolatilityHistory,
               ),
               const SizedBox(height: 100), // bottom CTA clearance
             ],
@@ -129,18 +170,66 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
         child: Padding(
           padding: WeRoboSpacing.bottomButton,
           child: ElevatedButton(
-            onPressed: () => _confirmInvestment(context),
-            child: const Text('투자 확정'),
+            onPressed: _isConfirmingInvestment
+                ? null
+                : () => unawaited(_confirmInvestment()),
+            child: _isConfirmingInvestment
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: WeRoboColors.white,
+                    ),
+                  )
+                : const Text('투자 확정'),
           ),
         ),
       ),
     );
   }
 
-  void _confirmInvestment(BuildContext context) {
+  Future<void> _confirmInvestment() async {
+    if (_isConfirmingInvestment) {
+      return;
+    }
     final state = PortfolioStateProvider.of(context);
+    final startedAt = widget.now?.call() ?? DateTime.now();
     state.recordFrontierSelection(widget.selection);
-    Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+    setState(() {
+      _isConfirmingInvestment = true;
+    });
+    try {
+      final frontierSelection = await _resolveFrontierSelectionForAccount(
+        state,
+      );
+      if (!mounted) {
+        return;
+      }
+      state.setFrontierSelection(frontierSelection);
+      final dashboard = await _createInitialAccountForSelection(
+        state: state,
+        selection: frontierSelection,
+        startedAt: startedAt,
+      );
+      if (!mounted) {
+        return;
+      }
+      state.setAccountDashboard(dashboard);
+      Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isConfirmingInvestment = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('계좌를 만드는 중 문제가 발생했어요. 다시 시도해 주세요.'),
+        ),
+      );
+    }
   }
 
   Future<void> _fetchComparisonBacktest(PortfolioState state) async {
@@ -152,7 +241,7 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
                 state.recommendation?.resolvedProfile.investmentHorizon ??
                 'medium',
         selectedPointIndex: widget.selection.selectedPointIndex,
-        targetVolatility: widget.selection.targetVolatility,
+        targetVolatility: _apiTargetVolatility(widget.selection),
       );
       if (!mounted) {
         return;
@@ -171,7 +260,110 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
       });
     }
   }
+
+  void _loadVolatilityHistoryIfNeeded(PortfolioState state) {
+    if (_didRequestVolatilityHistory) {
+      return;
+    }
+    _didRequestVolatilityHistory = true;
+    final existingVolatilityHistory = state.portfolioVolatilityHistory;
+    if (existingVolatilityHistory != null) {
+      _volatilityHistory = existingVolatilityHistory;
+      return;
+    }
+    _isLoadingVolatilityHistory = true;
+    unawaited(_fetchVolatilityHistory(state));
+  }
+
+  Future<void> _fetchVolatilityHistory(PortfolioState state) async {
+    try {
+      final fetcher = widget.fetchVolatilityHistory;
+      final response = fetcher == null
+          ? await MobileBackendApi.instance.fetchVolatilityHistory(
+              riskProfile: widget.selection.preview?.resolvedProfile.code ??
+                  state.recommendation?.resolvedProfile.code ??
+                  'balanced',
+              investmentHorizon:
+                  widget.selection.preview?.resolvedProfile.investmentHorizon ??
+                      state.recommendation?.resolvedProfile.investmentHorizon ??
+                      'medium',
+              preferredDataSource: widget.selection.dataSource,
+              selectedPointIndex: widget.selection.selectedPointIndex,
+              targetVolatility: _apiTargetVolatility(widget.selection),
+            )
+          : await fetcher(
+              state: state,
+              selection: widget.selection,
+            );
+      if (!mounted) {
+        return;
+      }
+      state.setPortfolioVolatilityHistory(response);
+      setState(() {
+        _volatilityHistory = response;
+        _isLoadingVolatilityHistory = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isLoadingVolatilityHistory = false;
+      });
+    }
+  }
+
+  Future<MobileFrontierSelectionResponse> _resolveFrontierSelectionForAccount(
+    PortfolioState state,
+  ) {
+    final resolver = widget.resolveFrontierSelection;
+    if (resolver != null) {
+      return resolver(
+        state: state,
+        selection: widget.selection,
+      );
+    }
+    return MobileBackendApi.instance.fetchFrontierSelection(
+      propensityScore:
+          widget.selection.preview?.resolvedProfile.propensityScore ?? 45.0,
+      targetVolatility: _apiTargetVolatility(widget.selection),
+      pointIndex: widget.selection.selectedPointIndex,
+      investmentHorizon:
+          widget.selection.preview?.resolvedProfile.investmentHorizon ??
+              state.recommendation?.resolvedProfile.investmentHorizon ??
+              'medium',
+      preferredDataSource: widget.selection.dataSource,
+      asOfDate: widget.selection.asOfDate,
+    );
+  }
+
+  Future<MobileAccountDashboard> _createInitialAccountForSelection({
+    required PortfolioState state,
+    required MobileFrontierSelectionResponse selection,
+    required DateTime startedAt,
+  }) {
+    final creator = widget.createInitialAccount;
+    if (creator != null) {
+      return creator(
+        state: state,
+        selection: selection,
+        initialCashAmount: _initialPortfolioCashAmount,
+        startedAt: startedAt,
+      );
+    }
+    return state.createPrototypeAccount(
+      selection: selection,
+      initialCashAmount: _initialPortfolioCashAmount,
+      startedAt: startedAt,
+    );
+  }
 }
+
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
+
+double? _apiTargetVolatility(OnboardingFrontierSelection selection) =>
+    selection.targetVolatility > 0 ? selection.targetVolatility : null;
 
 /// Donut chart only — the asset list was removed (rev J, 2026-05-04) because
 /// tap-for-details on the donut now surfaces the same per-asset breakdown.
@@ -201,12 +393,16 @@ class _CompareVolatilityTabs extends StatelessWidget {
   final TabController controller;
   final OnboardingFrontierSelection selection;
   final MobileComparisonBacktestResponse? comparisonBacktest;
+  final MobileVolatilityHistoryResponse? volatilityHistory;
   final bool isLoadingComparisonBacktest;
+  final bool isLoadingVolatilityHistory;
   const _CompareVolatilityTabs({
     required this.controller,
     required this.selection,
     required this.comparisonBacktest,
+    required this.volatilityHistory,
     required this.isLoadingComparisonBacktest,
+    required this.isLoadingVolatilityHistory,
   });
 
   @override
@@ -249,7 +445,9 @@ class _CompareVolatilityTabs extends StatelessWidget {
               _VolatilityTabBody(
                 selection: selection,
                 comparisonBacktest: comparisonBacktest,
+                volatilityHistory: volatilityHistory,
                 isLoading: isLoadingComparisonBacktest,
+                isLoadingVolatilityHistory: isLoadingVolatilityHistory,
               ),
             ],
           ),
@@ -388,28 +586,35 @@ class _ChartLoadingState extends StatelessWidget {
 class _VolatilityTabBody extends StatelessWidget {
   final OnboardingFrontierSelection selection;
   final MobileComparisonBacktestResponse? comparisonBacktest;
+  final MobileVolatilityHistoryResponse? volatilityHistory;
   final bool isLoading;
+  final bool isLoadingVolatilityHistory;
 
   const _VolatilityTabBody({
     required this.selection,
     required this.comparisonBacktest,
+    required this.volatilityHistory,
     required this.isLoading,
+    required this.isLoadingVolatilityHistory,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
+    if (isLoading && isLoadingVolatilityHistory) {
       return const _ChartLoadingState(message: '변동성 데이터를 불러오는 중이에요');
     }
-    final chartData = _volatilityChartData(comparisonBacktest);
-    final fallbackChartData = chartData.seriesData.isEmpty
+    final historyChartData = _volatilityHistoryChartData(volatilityHistory);
+    final chartData = historyChartData.seriesData.isNotEmpty
+        ? historyChartData
+        : _volatilityChartData(comparisonBacktest);
+    final resolvedChartData = chartData.seriesData.isEmpty
         ? _fallbackVolatilityChartData(selection, comparisonBacktest)
         : chartData;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: PortfolioComparisonChart(
-        seriesData: fallbackChartData.seriesData,
-        timeAxis: fallbackChartData.timeAxis,
+        seriesData: resolvedChartData.seriesData,
+        timeAxis: resolvedChartData.timeAxis,
         seriesLabels: const ['포트폴리오', '시장'],
         initialRange: TimeRange.threeYear,
         rebaseToFirstValue: false,
@@ -422,11 +627,59 @@ class _VolatilityTabBody extends StatelessWidget {
   ({
     List<List<double>> seriesData,
     List<DateTime> timeAxis,
+  }) _volatilityHistoryChartData(MobileVolatilityHistoryResponse? response) {
+    if (response == null || response.points.length < 2) {
+      return (
+        seriesData: const <List<double>>[],
+        timeAxis: const <DateTime>[],
+      );
+    }
+
+    final portfolioPoints = [...response.points]
+      ..sort((a, b) => a.date.compareTo(b.date));
+    final benchmarkByDate = <DateTime, double>{
+      for (final point in response.benchmarkPoints ?? const [])
+        _dateOnly(point.date): point.volatility,
+    };
+    final timeAxis = <DateTime>[];
+    final portfolioValues = <double>[];
+    final benchmarkValues = <double>[];
+    for (final point in portfolioPoints) {
+      final benchmarkValue = benchmarkByDate[_dateOnly(point.date)];
+      if (benchmarkValue == null) {
+        continue;
+      }
+      timeAxis.add(point.date);
+      portfolioValues.add(point.volatility);
+      benchmarkValues.add(benchmarkValue);
+    }
+
+    if (timeAxis.length >= 2) {
+      return (
+        seriesData: [portfolioValues, benchmarkValues],
+        timeAxis: timeAxis,
+      );
+    }
+
+    return (
+      seriesData: [
+        portfolioPoints.map((point) => point.volatility).toList(),
+        portfolioPoints.map((point) => point.volatility * 1.08).toList(),
+      ],
+      timeAxis: portfolioPoints.map((point) => point.date).toList(),
+    );
+  }
+
+  ({
+    List<List<double>> seriesData,
+    List<DateTime> timeAxis,
   }) _fallbackVolatilityChartData(
     OnboardingFrontierSelection selection,
     MobileComparisonBacktestResponse? response,
   ) {
-    final targetVolatility = selection.targetVolatility;
+    final targetVolatility = selection.targetVolatility > 0
+        ? selection.targetVolatility
+        : selection.preview?.resolvedProfile.targetVolatility ?? 0;
     if (targetVolatility <= 0) {
       return (
         seriesData: const <List<double>>[],

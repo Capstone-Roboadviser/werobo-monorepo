@@ -136,6 +136,8 @@ class PortfolioState extends ChangeNotifier {
   MobileRecommendationResponse? get recommendation => _recommendation;
   MobileComparisonBacktestResponse? get backtest => _backtest;
   MobileEarningsHistoryResponse? get earningsHistory => _earningsHistory;
+  MobileVolatilityHistoryResponse? get portfolioVolatilityHistory =>
+      _portfolioVolatility;
   MobileFrontierPreviewResponse? get frontierPreview => _frontierPreview;
   MobileFrontierSelectionResponse? get frontierSelection => _frontierSelection;
   MobileAuthSession? get authSession => _authSession;
@@ -698,6 +700,7 @@ class PortfolioState extends ChangeNotifier {
   Future<MobileAccountDashboard> createPrototypeAccount({
     required MobileFrontierSelectionResponse selection,
     double initialCashAmount = 10000000,
+    DateTime? startedAt,
   }) async {
     final accessToken = _authSession?.accessToken;
     if (accessToken == null || accessToken.isEmpty) {
@@ -712,7 +715,7 @@ class PortfolioState extends ChangeNotifier {
       portfolioCode: selection.classificationCode,
       portfolioLabel: portfolio.label,
       initialCashAmount: initialCashAmount,
-      startedAt: selection.asOfDate,
+      startedAt: startedAt ?? selection.asOfDate,
     );
     setAccountDashboard(dashboard);
     return dashboard;
