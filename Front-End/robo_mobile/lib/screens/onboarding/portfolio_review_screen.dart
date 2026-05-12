@@ -65,6 +65,10 @@ class _PortfolioAllocationScreenState
               color: WeRoboColors.assetColor(a.cls),
               label: a.label,
               tickers: [
+                // The frontier preview only carries the slice's overall
+                // weight, so we split it evenly across the constituent
+                // tickers. Once a per-ticker weight feed is wired this can
+                // be replaced with the real values.
                 if (a.tickers.isNotEmpty)
                   for (final t in a.tickers)
                     DonutTicker(

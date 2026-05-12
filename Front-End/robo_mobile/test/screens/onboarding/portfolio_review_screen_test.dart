@@ -28,6 +28,32 @@ void main() {
     expect(find.text('다음'), findsOneWidget);
   });
 
+  testWidgets('allocation screen 다음 button pushes review screen',
+      (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    state.setBacktest(_comparisonBacktest());
+    state.debugSetVolatilityHistory(_volatilityHistory());
+
+    await tester.pumpWidget(
+      PortfolioStateProvider(
+        state: state,
+        child: MaterialApp(
+          theme: WeRoboTheme.light,
+          home: PortfolioAllocationScreen(
+            selection: _selection(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('다음'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PortfolioReviewScreen), findsOneWidget);
+  });
+
   testWidgets('comparison tab renders loaded backtest data', (tester) async {
     final state = PortfolioState();
     addTearDown(state.dispose);
