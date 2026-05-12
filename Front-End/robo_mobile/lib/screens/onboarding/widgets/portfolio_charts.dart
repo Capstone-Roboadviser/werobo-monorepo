@@ -533,6 +533,7 @@ class _VolReturnViewState extends State<_VolReturnView>
                                 marketPoints: marketPoints,
                                 progress: _drawCtrl.value,
                                 color: WeRoboColors.primary,
+                                marketLineColor: tc.textSecondary,
                                 touchIndex: _touchIndex,
                                 valueLabel: '변동성',
                                 baselineValue: _expectedVolatility(),
@@ -626,6 +627,7 @@ class _AreaChartPainter extends CustomPainter {
   final List<ChartPoint>? marketPoints;
   final double progress;
   final Color color;
+  final Color? marketLineColor;
   final int? touchIndex;
   final String valueLabel;
   final double? baselineValue;
@@ -641,6 +643,7 @@ class _AreaChartPainter extends CustomPainter {
     this.marketPoints,
     required this.progress,
     required this.color,
+    this.marketLineColor,
     this.touchIndex,
     required this.valueLabel,
     this.baselineValue,
@@ -677,6 +680,12 @@ class _AreaChartPainter extends CustomPainter {
     }
     final rangeY = (maxY - minY).clamp(0.001, double.infinity);
 
+    // Date range across the portfolio series. The market line is positioned
+    // by date against this same axis so the two series stay aligned even
+    // if they drift in length or start date.
+    final portfolioMinDate = points.first.date;
+    final portfolioMaxDate = points.last.date;
+
     // Grid
     _drawGrid(canvas, size, padL, padR, padB, h, minY, rangeY);
 
@@ -702,12 +711,26 @@ class _AreaChartPainter extends CustomPainter {
           canvas, baselineLabel ?? '', Offset(padL + 4, y - 14), labelStyle);
     }
 
-    // Market benchmark line (drawn first, behind portfolio area)
-    if (mktValues != null && mktValues.isNotEmpty) {
+    // Market benchmark line (drawn first, behind portfolio area). Position
+    // points by date against the portfolio's date axis so misaligned
+    // series stay visually anchored to the matching dates.
+    final resolvedMarketColor =
+        marketLineColor ?? gridColor.withValues(alpha: 0.7);
+    if (marketPoints != null &&
+        marketPoints!.isNotEmpty &&
+        mktValues != null &&
+        mktValues.isNotEmpty) {
+      final mkt = marketPoints!;
       final mktPathPoints = _interpolatedPathPoints(
-        n: mktValues.length,
+        n: mkt.length,
         progress: progress,
-        xAt: (i) => padL + w * i / (mktValues.length - 1),
+        xAt: (i) => _xForDate(
+          mkt[i].date,
+          portfolioMinDate,
+          portfolioMaxDate,
+          padL,
+          w,
+        ),
         yAt: (i) => h - ((mktValues[i] - minY) / rangeY) * h,
       );
       if (mktPathPoints != null) {
@@ -721,7 +744,7 @@ class _AreaChartPainter extends CustomPainter {
           }
         }
         final mktPaint = Paint()
-          ..color = gridColor.withValues(alpha: 0.7)
+          ..color = resolvedMarketColor
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.5
           ..strokeCap = StrokeCap.round
@@ -792,26 +815,37 @@ class _AreaChartPainter extends CustomPainter {
       canvas.drawCircle(Offset(tx, ty), 5, Paint()..color = color);
       canvas.drawCircle(Offset(tx, ty), 3, Paint()..color = tooltipBackground);
 
-      // Dot (market, nearest point by index)
+      // Dot (market, nearest market point by DATE so misaligned series
+      // still pair the user's MM/DD with the market's same MM/DD).
       String mktStr = '';
-      if (mktValues != null && mktValues.isNotEmpty) {
-        final mktTi = ti.clamp(0, mktValues.length - 1);
-        final mktTy = h - ((mktValues[mktTi] - minY) / rangeY) * h;
-        final mktTx = padL + w * mktTi / (mktValues.length - 1);
-        canvas.drawCircle(
-          Offset(mktTx, mktTy),
-          4,
-          Paint()..color = gridColor.withValues(alpha: 0.7),
-        );
-        mktStr =
-            '\n시장 변동성: ${(mktValues[mktTi] * 100).toStringAsFixed(1)}%';
+      if (marketPoints != null &&
+          marketPoints!.isNotEmpty &&
+          mktValues != null &&
+          mktValues.isNotEmpty) {
+        final mkt = marketPoints!;
+        final touchDate = points[ti].date;
+        final mktIdx = _nearestPointIndexByDate(mkt, touchDate);
+        if (mktIdx != null) {
+          final mktTy = h - ((mktValues[mktIdx] - minY) / rangeY) * h;
+          final mktTx = _xForDate(
+            mkt[mktIdx].date,
+            portfolioMinDate,
+            portfolioMaxDate,
+            padL,
+            w,
+          );
+          canvas.drawCircle(
+            Offset(mktTx, mktTy),
+            4,
+            Paint()..color = resolvedMarketColor,
+          );
+          mktStr =
+              '\n시장 변동성: ${(mktValues[mktIdx] * 100).toStringAsFixed(1)}%';
+        }
       }
 
       // Tooltip
-      final date = points[ti].date;
-      final dateStr =
-          '${date.year}-${date.month.toString().padLeft(2, '0')}'
-          '-${date.day.toString().padLeft(2, '0')}';
+      final dateStr = _formatDate(points[ti].date);
       final valStr = '${(values[ti] * 100).toStringAsFixed(1)}%';
       _drawTooltip(canvas, Offset(tx, ty - 28),
           '$dateStr\n$valueLabel: $valStr$mktStr', size.width);
@@ -904,6 +938,7 @@ class _AreaChartPainter extends CustomPainter {
       old.marketPoints != marketPoints ||
       old.progress != progress ||
       old.color != color ||
+      old.marketLineColor != marketLineColor ||
       old.touchIndex != touchIndex ||
       old.baselineValue != baselineValue ||
       old.baselineLabel != baselineLabel;

@@ -218,6 +218,34 @@ void main() {
 
       expect(find.text('시장 변동성'), findsNothing);
     });
+
+    testWidgets(
+        'renders without crashing when market series has different length',
+        (tester) async {
+      final portfolioPoints = makePoints(20);
+      final marketPoints = makePoints(8);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WeRoboTheme.light,
+          home: Scaffold(
+            body: SizedBox(
+              height: 400,
+              child: PortfolioCharts(
+                type: InvestmentType.balanced,
+                volatilityPoints: portfolioPoints,
+                marketVolatilityPoints: marketPoints,
+                useFallbackMock: false,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('시장 변동성'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 }
 
