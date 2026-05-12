@@ -202,14 +202,21 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
       appBar: AppBar(
         backgroundColor: tc.background,
         elevation: 0,
+        toolbarHeight: 80,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.maybePop(context),
         ),
         centerTitle: true,
         title: Text(
-          '내 포트폴리오를 시장과 비교한다면?',
+          // Manual break keeps the verb phrase intact on line 2 and balances
+          // the column widths (7 / 10 chars). Without it Flutter wraps mid-
+          // verb at "비교한다" / "면?", which looks off-balance.
+          '내 포트폴리오를\n시장과 비교한다면?',
           style: WeRoboTypography.heading2.themed(context),
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          softWrap: true,
         ),
       ),
       body: SafeArea(
