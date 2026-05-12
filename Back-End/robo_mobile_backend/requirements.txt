@@ -8,4 +8,4 @@ yfinance
 psycopg[binary]
 google-generativeai
 feedparser
-
+httpx
