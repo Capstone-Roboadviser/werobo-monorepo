@@ -116,6 +116,7 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
               const SizedBox(height: 24),
               _CompareVolatilityTabs(
                 controller: _tabController,
+                selection: widget.selection,
                 comparisonBacktest: comparisonBacktest,
                 isLoadingComparisonBacktest: _isLoadingComparisonBacktest,
               ),
@@ -198,10 +199,12 @@ class _DonutAndListColumn extends StatelessWidget {
 /// volatility stub.
 class _CompareVolatilityTabs extends StatelessWidget {
   final TabController controller;
+  final OnboardingFrontierSelection selection;
   final MobileComparisonBacktestResponse? comparisonBacktest;
   final bool isLoadingComparisonBacktest;
   const _CompareVolatilityTabs({
     required this.controller,
+    required this.selection,
     required this.comparisonBacktest,
     required this.isLoadingComparisonBacktest,
   });
@@ -244,6 +247,7 @@ class _CompareVolatilityTabs extends StatelessWidget {
                 isLoading: isLoadingComparisonBacktest,
               ),
               _VolatilityTabBody(
+                selection: selection,
                 comparisonBacktest: comparisonBacktest,
                 isLoading: isLoadingComparisonBacktest,
               ),
@@ -382,10 +386,12 @@ class _ChartLoadingState extends StatelessWidget {
 /// It derives per-period returns from the same comparison backtest payload
 /// used by the first tab, so onboarding does not need a second fetch.
 class _VolatilityTabBody extends StatelessWidget {
+  final OnboardingFrontierSelection selection;
   final MobileComparisonBacktestResponse? comparisonBacktest;
   final bool isLoading;
 
   const _VolatilityTabBody({
+    required this.selection,
     required this.comparisonBacktest,
     required this.isLoading,
   });
@@ -396,11 +402,14 @@ class _VolatilityTabBody extends StatelessWidget {
       return const _ChartLoadingState(message: '변동성 데이터를 불러오는 중이에요');
     }
     final chartData = _volatilityChartData(comparisonBacktest);
+    final fallbackChartData = chartData.seriesData.isEmpty
+        ? _fallbackVolatilityChartData(selection, comparisonBacktest)
+        : chartData;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: PortfolioComparisonChart(
-        seriesData: chartData.seriesData,
-        timeAxis: chartData.timeAxis,
+        seriesData: fallbackChartData.seriesData,
+        timeAxis: fallbackChartData.timeAxis,
         seriesLabels: const ['포트폴리오', '시장'],
         initialRange: TimeRange.threeYear,
         rebaseToFirstValue: false,
@@ -408,6 +417,52 @@ class _VolatilityTabBody extends StatelessWidget {
         enableHorizontalDrag: true,
       ),
     );
+  }
+
+  ({
+    List<List<double>> seriesData,
+    List<DateTime> timeAxis,
+  }) _fallbackVolatilityChartData(
+    OnboardingFrontierSelection selection,
+    MobileComparisonBacktestResponse? response,
+  ) {
+    final targetVolatility = selection.targetVolatility;
+    if (targetVolatility <= 0) {
+      return (
+        seriesData: const <List<double>>[],
+        timeAxis: const <DateTime>[],
+      );
+    }
+
+    final dates = _fallbackDates(selection, response);
+    if (dates.length < 2) {
+      return (
+        seriesData: const <List<double>>[],
+        timeAxis: const <DateTime>[],
+      );
+    }
+    final marketVolatility = targetVolatility * 1.08;
+    return (
+      seriesData: [
+        List<double>.filled(dates.length, targetVolatility),
+        List<double>.filled(dates.length, marketVolatility),
+      ],
+      timeAxis: dates,
+    );
+  }
+
+  List<DateTime> _fallbackDates(
+    OnboardingFrontierSelection selection,
+    MobileComparisonBacktestResponse? response,
+  ) {
+    if (response != null && response.startDate != response.endDate) {
+      return [response.startDate, response.endDate];
+    }
+    final asOfDate = selection.asOfDate ?? response?.endDate ?? DateTime.now();
+    return [
+      asOfDate.subtract(const Duration(days: 365)),
+      asOfDate,
+    ];
   }
 
   ({

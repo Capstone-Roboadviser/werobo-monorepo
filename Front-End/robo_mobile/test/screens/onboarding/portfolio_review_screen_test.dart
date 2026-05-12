@@ -50,6 +50,31 @@ void main() {
     expect(find.text('포트폴리오'), findsWidgets);
     expect(find.text('시장'), findsOneWidget);
   });
+
+  testWidgets('volatility tab falls back to selected target volatility',
+      (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    state.setBacktest(_flatComparisonBacktest());
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: PortfolioReviewScreen(selection: _selection()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('변동성'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('비교 데이터가 없어요'), findsNothing);
+    expect(find.text('포트폴리오'), findsWidgets);
+    expect(find.text('시장'), findsOneWidget);
+  });
 }
 
 OnboardingFrontierSelection _selection() {
@@ -145,6 +170,45 @@ MobileComparisonBacktestResponse _comparisonBacktest() {
           MobileComparisonLinePoint(date: dates[2], returnPct: 0.04),
           MobileComparisonLinePoint(date: dates[3], returnPct: 0.03),
           MobileComparisonLinePoint(date: dates[4], returnPct: 0.05),
+        ],
+      ),
+    ],
+  );
+}
+
+MobileComparisonBacktestResponse _flatComparisonBacktest() {
+  final dates = [
+    DateTime(2026, 3, 1),
+    DateTime(2026, 3, 2),
+  ];
+  return MobileComparisonBacktestResponse(
+    trainStartDate: DateTime(2025, 1, 1),
+    trainEndDate: DateTime(2025, 12, 31),
+    testStartDate: DateTime(2026, 1, 1),
+    startDate: dates.first,
+    endDate: dates.last,
+    splitRatio: 0.8,
+    rebalanceDates: dates,
+    rebalancePolicy: null,
+    lines: [
+      MobileComparisonLine(
+        key: 'selected',
+        label: '포트폴리오',
+        color: '#FE9337',
+        style: 'solid',
+        points: [
+          MobileComparisonLinePoint(date: dates[0], returnPct: 0.0),
+          MobileComparisonLinePoint(date: dates[1], returnPct: 0.01),
+        ],
+      ),
+      MobileComparisonLine(
+        key: 'market',
+        label: '시장',
+        color: '#64748B',
+        style: 'solid',
+        points: [
+          MobileComparisonLinePoint(date: dates[0], returnPct: 0.0),
+          MobileComparisonLinePoint(date: dates[1], returnPct: 0.01),
         ],
       ),
     ],
