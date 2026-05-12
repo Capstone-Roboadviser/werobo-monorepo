@@ -5,6 +5,26 @@ import '../../../models/mobile_backend_models.dart';
 
 String frontierAssetBubbleLabel(AssetClass cls) => cls.koLabel;
 
+// Locked stair-step layout from capstone 2026-05-12 reference image:
+// dots sit below the frontier curve in a fan, cash at bottom-left and
+// newGrowth at top-right. Each x is held high enough that the label
+// (positioned to the dot's left) still fits inside the chart.
+const Map<AssetClass, Offset> _kAssetBubbleSlots = {
+  AssetClass.cash: Offset(0.06, 0.94),
+  AssetClass.shortBond: Offset(0.18, 0.84),
+  AssetClass.gold: Offset(0.31, 0.74),
+  AssetClass.infraBond: Offset(0.44, 0.645),
+  AssetClass.usValue: Offset(0.57, 0.52),
+  AssetClass.usGrowth: Offset(0.77, 0.42),
+  AssetClass.newGrowth: Offset(0.91, 0.22),
+};
+
+// Exceptions: assets whose label sits to the LEFT of the dot. Everyone
+// else defaults to right-side labels.
+const Set<AssetClass> _kLeftLabelAssets = {AssetClass.newGrowth};
+
+// Backend asset code → AssetClass enum, used to read the selected
+// portfolio's weight per class for dot-size scaling.
 const Map<String, AssetClass> _kAssetClassByCode = {
   'cash_equivalents': AssetClass.cash,
   'short_term_bond': AssetClass.shortBond,
@@ -15,78 +35,22 @@ const Map<String, AssetClass> _kAssetClassByCode = {
   'new_growth': AssetClass.newGrowth,
 };
 
-const Map<AssetClass, Offset> _kAssetBubbleSlots = {
-  AssetClass.cash: Offset(0.20, 0.78),
-  AssetClass.shortBond: Offset(0.36, 0.72),
-  AssetClass.infraBond: Offset(0.18, 0.34),
-  AssetClass.gold: Offset(0.40, 0.24),
-  AssetClass.usValue: Offset(0.60, 0.20),
-  AssetClass.usGrowth: Offset(0.78, 0.36),
-  AssetClass.newGrowth: Offset(0.82, 0.22),
-};
+// Locked dot size: 7.7px (110% of the 7.0px base) at weight ≥ 0.30,
+// scaling down linearly to 65% of the base (4.55px) at weight 0.
+// Positions stay locked; only the radius reflects the selected
+// portfolio's allocation.
+double _radiusForWeight(double weight) {
+  const minRadius = 4.55;
+  const maxRadius = 7.7;
+  final t = (weight / 0.30).clamp(0.0, 1.0);
+  return minRadius + (maxRadius - minRadius) * t;
+}
 
 const double _kFrontierCurveStartX = 0.10;
 const double _kFrontierCurveEndX = 0.94;
 const double _kFrontierBubbleLabelFontSize = 10.5;
 const double _kFrontierBubbleLabelMargin = 4.0;
 const double _kFrontierBubbleLabelGap = 2.0;
-
-const Map<int, Map<AssetClass, double>> _kFallbackWeightsAtPosition = {
-  0: {
-    AssetClass.shortBond: 0.30,
-    AssetClass.cash: 0.30,
-    AssetClass.gold: 0.22,
-    AssetClass.usValue: 0.07,
-    AssetClass.newGrowth: 0.05,
-    AssetClass.infraBond: 0.03,
-    AssetClass.usGrowth: 0.03,
-  },
-  20: {
-    AssetClass.shortBond: 0.30,
-    AssetClass.cash: 0.29,
-    AssetClass.infraBond: 0.26,
-    AssetClass.newGrowth: 0.05,
-    AssetClass.usValue: 0.04,
-    AssetClass.usGrowth: 0.03,
-    AssetClass.gold: 0.03,
-  },
-  35: {
-    AssetClass.shortBond: 0.30,
-    AssetClass.usValue: 0.23,
-    AssetClass.cash: 0.19,
-    AssetClass.infraBond: 0.17,
-    AssetClass.newGrowth: 0.05,
-    AssetClass.gold: 0.03,
-    AssetClass.usGrowth: 0.03,
-  },
-  45: {
-    AssetClass.usValue: 0.30,
-    AssetClass.shortBond: 0.30,
-    AssetClass.infraBond: 0.16,
-    AssetClass.cash: 0.13,
-    AssetClass.newGrowth: 0.05,
-    AssetClass.usGrowth: 0.03,
-    AssetClass.gold: 0.03,
-  },
-  55: {
-    AssetClass.shortBond: 0.30,
-    AssetClass.usValue: 0.30,
-    AssetClass.infraBond: 0.24,
-    AssetClass.cash: 0.05,
-    AssetClass.newGrowth: 0.05,
-    AssetClass.gold: 0.03,
-    AssetClass.usGrowth: 0.03,
-  },
-  60: {
-    AssetClass.usValue: 0.30,
-    AssetClass.infraBond: 0.30,
-    AssetClass.shortBond: 0.21,
-    AssetClass.usGrowth: 0.08,
-    AssetClass.newGrowth: 0.05,
-    AssetClass.cash: 0.03,
-    AssetClass.gold: 0.03,
-  },
-};
 
 Offset frontierCurvePointForT(double t, Size size) {
   final clampedT = t.clamp(0.0, 1.0).toDouble();
@@ -147,26 +111,34 @@ List<FrontierAssetBubbleSpec> frontierAssetBubbleSpecs({
   required int selectedPosition,
   required int previewPointCount,
 }) {
-  final weights = _weightsForFrontierPoint(
-    point: point,
-    selectedPosition: selectedPosition,
-    previewPointCount: previewPointCount,
-  );
+  // Position is locked per _kAssetBubbleSlots; the only thing that
+  // varies with the selected portfolio is each dot's radius. Opacity
+  // stays at the locked max via the constant `weight: 0.30` below.
+  final weights = <AssetClass, double>{};
+  if (point != null) {
+    for (final alloc in point.sectorAllocations) {
+      final cls = _kAssetClassByCode[alloc.assetCode];
+      if (cls == null) continue;
+      weights[cls] = (weights[cls] ?? 0) + alloc.weight;
+    }
+  }
+  // Before any preview data lands, render every dot at max size so the
+  // chart doesn't shrink-and-grow on first paint.
+  final fallbackWeight = point == null ? 0.30 : 0.0;
   final specs = <FrontierAssetBubbleSpec>[];
   for (final cls in AssetClass.values) {
-    final weight = weights[cls] ?? 0;
-    if (weight <= 0.005) continue;
     final slot = _kAssetBubbleSlots[cls]!;
+    final weight = weights[cls] ?? fallbackWeight;
     specs.add(
       FrontierAssetBubbleSpec(
         cls: cls,
-        weight: weight,
+        weight: 0.30,
         anchor: Offset(size.width * slot.dx, size.height * slot.dy),
-        radius: _bubbleRadiusForWeight(weight),
+        radius: _radiusForWeight(weight),
       ),
     );
   }
-  return specs..sort((a, b) => a.radius.compareTo(b.radius));
+  return specs;
 }
 
 List<FrontierAssetBubbleLabelLayout> frontierAssetBubbleLabelLayouts({
@@ -177,7 +149,9 @@ List<FrontierAssetBubbleLabelLayout> frontierAssetBubbleLabelLayouts({
   for (final spec in bubbleSpecs) {
     final text = frontierAssetBubbleLabel(spec.cls);
     final labelSize = _frontierBubbleLabelSize(text);
-    final labelOnLeft = spec.anchor.dx > size.width * 0.70;
+    // Labels sit to the right of every dot, with per-asset overrides in
+    // _kLeftLabelAssets for dots crowded against the right edge.
+    final labelOnLeft = _kLeftLabelAssets.contains(spec.cls);
     final rawDx = labelOnLeft
         ? spec.anchor.dx - spec.radius - labelSize.width - 6
         : spec.anchor.dx + spec.radius + 6;
@@ -255,65 +229,6 @@ Size _frontierBubbleLabelSize(String text) {
     textAlign: TextAlign.center,
   )..layout();
   return tp.size;
-}
-
-Map<AssetClass, double> _weightsForFrontierPoint({
-  required MobileFrontierPreviewPoint? point,
-  required int selectedPosition,
-  required int previewPointCount,
-}) {
-  if (point != null && point.sectorAllocations.isNotEmpty) {
-    final weights = <AssetClass, double>{};
-    for (final allocation in point.sectorAllocations) {
-      final cls = _kAssetClassByCode[allocation.assetCode];
-      if (cls == null || allocation.weight <= 0) continue;
-      weights[cls] = (weights[cls] ?? 0) + allocation.weight;
-    }
-    return weights;
-  }
-
-  final maxPosition = max(0, previewPointCount - 1);
-  final clampedPosition = selectedPosition.clamp(0, maxPosition).toDouble();
-  final normalizedPosition =
-      maxPosition <= 0 ? 0.0 : clampedPosition / maxPosition;
-  return _interpolateFallbackWeights(normalizedPosition * 60);
-}
-
-Map<AssetClass, double> _interpolateFallbackWeights(double scaledPosition) {
-  final keys = _kFallbackWeightsAtPosition.keys.toList()..sort();
-  if (keys.isEmpty) return const {};
-  if (scaledPosition <= keys.first) {
-    return _kFallbackWeightsAtPosition[keys.first]!;
-  }
-  if (scaledPosition >= keys.last) {
-    return _kFallbackWeightsAtPosition[keys.last]!;
-  }
-
-  int lower = keys.first;
-  int upper = keys.last;
-  for (final key in keys) {
-    if (key <= scaledPosition) lower = key;
-    if (key >= scaledPosition) {
-      upper = key;
-      break;
-    }
-  }
-  if (lower == upper) return _kFallbackWeightsAtPosition[lower]!;
-
-  final t = (scaledPosition - lower) / (upper - lower);
-  final lowerWeights = _kFallbackWeightsAtPosition[lower]!;
-  final upperWeights = _kFallbackWeightsAtPosition[upper]!;
-  final allClasses = {...lowerWeights.keys, ...upperWeights.keys};
-  return {
-    for (final cls in allClasses)
-      cls:
-          (lowerWeights[cls] ?? 0.0) * (1 - t) + (upperWeights[cls] ?? 0.0) * t,
-  };
-}
-
-double _bubbleRadiusForWeight(double weight) {
-  final clamped = weight.clamp(0.0, 0.30).toDouble();
-  return 4.5 + clamped * 20.0;
 }
 
 class EfficientFrontierChart extends StatefulWidget {
@@ -572,51 +487,16 @@ class _FrontierPainter extends CustomPainter {
       canvas.drawLine(Offset(x, 0), Offset(x, h), gridPaint);
     }
 
-    // Efficient frontier convention: x-axis risk, y-axis expected return.
-    final labelStyle = TextStyle(
-      color: textTertiaryColor,
-      fontSize: 10,
-    );
-
-    _drawText(canvas, '연 기대수익률', const Offset(4, 4), labelStyle);
-
     // Keep the selected dot on the smooth frontier curve, while the
     // allocation bubbles live in stable risk/return slots around it.
     if (curveProgress > 0) {
       _drawSmoothFrontier(canvas, size, curveProgress);
     }
-    var occupiedLabelRects = const <Rect>[];
     if (dotProgress > 0) {
-      occupiedLabelRects = _drawAssetBubbles(canvas, size, dotProgress)
-          .map((layout) => layout.rect.inflate(3))
-          .toList();
-    }
-    if (dotProgress > 0) {
+      _drawAssetBubbles(canvas, size, dotProgress);
       final tSelected = _selectedDotT();
       final dotPos = _tToPoint(tSelected, w, h);
       _drawSelectedDot(canvas, dotPos);
-
-      // Representative label (e.g. 안정형 / 균형형 / 성장형) for the
-      // currently-selected preview point — only present at the marker
-      // indices the backend tags.
-      final pp = previewPoints;
-      final pos = _selectedPosition();
-      if (pp != null && pos >= 0 && pos < pp.length) {
-        final label = pp[pos].representativeLabel;
-        if (label != null) {
-          _drawSelectedLabel(
-            canvas,
-            size,
-            label,
-            dotPos,
-            labelStyle.copyWith(
-              color: WeRoboColors.primary,
-              fontWeight: FontWeight.w600,
-            ),
-            occupiedLabelRects,
-          );
-        }
-      }
     }
   }
 
@@ -738,16 +618,6 @@ class _FrontierPainter extends CustomPainter {
       ..strokeWidth = 0.8;
     canvas.drawLine(layout.anchor, labelEdge, leaderPaint);
 
-    final bgPaint = Paint()
-      ..color = labelBackgroundColor.withValues(alpha: 0.82 * opacity);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        layout.rect.inflate(3),
-        const Radius.circular(5),
-      ),
-      bgPaint,
-    );
-
     final text = frontierAssetBubbleLabel(layout.cls);
     final tp = TextPainter(
       text: TextSpan(
@@ -765,61 +635,7 @@ class _FrontierPainter extends CustomPainter {
     tp.paint(canvas, layout.rect.topLeft);
   }
 
-  void _drawSelectedLabel(
-    Canvas canvas,
-    Size size,
-    String text,
-    Offset dotPos,
-    TextStyle style,
-    List<Rect> occupiedRects,
-  ) {
-    final tp = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-    )..layout();
-    final candidateOffsets = [
-      Offset(dotPos.dx + 10, dotPos.dy - tp.height - 12),
-      Offset(dotPos.dx + 10, dotPos.dy + 12),
-      Offset(dotPos.dx - tp.width - 10, dotPos.dy - tp.height - 12),
-      Offset(dotPos.dx - tp.width - 10, dotPos.dy + 12),
-    ];
-    Rect selectedRect = Rect.zero;
-    for (final offset in candidateOffsets) {
-      final dx = offset.dx.clamp(
-        _kFrontierBubbleLabelMargin,
-        max(
-          _kFrontierBubbleLabelMargin,
-          size.width - tp.width - _kFrontierBubbleLabelMargin,
-        ),
-      );
-      final dy = offset.dy.clamp(
-        _kFrontierBubbleLabelMargin,
-        max(
-          _kFrontierBubbleLabelMargin,
-          size.height - tp.height - _kFrontierBubbleLabelMargin,
-        ),
-      );
-      final rect = Offset(dx.toDouble(), dy.toDouble()) & tp.size;
-      selectedRect = rect;
-      if (!occupiedRects
-          .any((occupied) => occupied.overlaps(rect.inflate(3)))) {
-        break;
-      }
-    }
-
-    final bgPaint = Paint()
-      ..color = labelBackgroundColor.withValues(alpha: 0.86 * dotProgress);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        selectedRect.inflate(4),
-        const Radius.circular(6),
-      ),
-      bgPaint,
-    );
-    tp.paint(canvas, selectedRect.topLeft);
-  }
-
-  /// Selected (draggable) dot with pulse glow — preserved from previous
+/// Selected (draggable) dot with pulse glow — preserved from previous
   /// behaviour. Asset bubbles resize from weights; this dot marks the
   /// currently selected frontier point.
   void _drawSelectedDot(Canvas canvas, Offset position) {
@@ -846,15 +662,6 @@ class _FrontierPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.5;
     canvas.drawCircle(position, dotRadius * dotProgress, ringPaint);
-  }
-
-  void _drawText(Canvas canvas, String text, Offset offset, TextStyle style) {
-    final tp = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: TextDirection.ltr,
-    );
-    tp.layout();
-    tp.paint(canvas, offset);
   }
 
   @override

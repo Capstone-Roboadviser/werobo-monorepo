@@ -48,40 +48,67 @@ void main() {
     expect(frontierAssetBubbleLabel(AssetClass.newGrowth), '신성장주');
   });
 
-  test('frontier asset bubble specs scale radius from selected weights', () {
-    const size = Size(320, 400);
+  test(
+    'frontier asset bubble specs lock anchors and scale radius by weight',
+    () {
+      const size = Size(320, 400);
 
-    final defensiveSpecs = frontierAssetBubbleSpecs(
-      point: pointWith(cash: 0.30, shortBond: 0.20, usGrowth: 0.03),
-      size: size,
-      selectedPosition: 0,
-      previewPointCount: 2,
-    );
-    final growthSpecs = frontierAssetBubbleSpecs(
-      point: pointWith(cash: 0.03, shortBond: 0.10, usGrowth: 0.30),
-      size: size,
-      selectedPosition: 1,
-      previewPointCount: 2,
-    );
+      final defensiveSpecs = frontierAssetBubbleSpecs(
+        point: pointWith(cash: 0.30, shortBond: 0.20, usGrowth: 0.03),
+        size: size,
+        selectedPosition: 0,
+        previewPointCount: 2,
+      );
+      final growthSpecs = frontierAssetBubbleSpecs(
+        point: pointWith(cash: 0.03, shortBond: 0.10, usGrowth: 0.30),
+        size: size,
+        selectedPosition: 1,
+        previewPointCount: 2,
+      );
 
-    final defensiveCash = defensiveSpecs.singleWhere(
-      (spec) => spec.cls == AssetClass.cash,
-    );
-    final growthCash = growthSpecs.singleWhere(
-      (spec) => spec.cls == AssetClass.cash,
-    );
-    final defensiveGrowth = defensiveSpecs.singleWhere(
-      (spec) => spec.cls == AssetClass.usGrowth,
-    );
-    final growthGrowth = growthSpecs.singleWhere(
-      (spec) => spec.cls == AssetClass.usGrowth,
-    );
+      // All seven asset classes always render.
+      expect(defensiveSpecs.length, AssetClass.values.length);
+      expect(growthSpecs.length, AssetClass.values.length);
 
-    expect(defensiveCash.radius, greaterThan(growthCash.radius));
-    expect(growthGrowth.radius, greaterThan(defensiveGrowth.radius));
-    expect(defensiveCash.anchor.dy, greaterThan(size.height * 0.65));
-    expect(growthGrowth.anchor.dx, greaterThan(size.width * 0.70));
-  });
+      // Anchors are locked — they don't move with selection.
+      for (final cls in AssetClass.values) {
+        final a = defensiveSpecs.firstWhere((s) => s.cls == cls);
+        final b = growthSpecs.firstWhere((s) => s.cls == cls);
+        expect(a.anchor, b.anchor);
+      }
+
+      // Radius scales with weight: cash is heavier in defensive,
+      // usGrowth heavier in growth.
+      final defensiveCash = defensiveSpecs.firstWhere(
+        (s) => s.cls == AssetClass.cash,
+      );
+      final growthCash = growthSpecs.firstWhere(
+        (s) => s.cls == AssetClass.cash,
+      );
+      final defensiveGrowth = defensiveSpecs.firstWhere(
+        (s) => s.cls == AssetClass.usGrowth,
+      );
+      final growthGrowth = growthSpecs.firstWhere(
+        (s) => s.cls == AssetClass.usGrowth,
+      );
+      expect(defensiveCash.radius, greaterThan(growthCash.radius));
+      expect(growthGrowth.radius, greaterThan(defensiveGrowth.radius));
+
+      // Radius stays inside the 65%/110% bounds of the 7.0px base.
+      for (final spec in [...defensiveSpecs, ...growthSpecs]) {
+        expect(spec.radius, greaterThanOrEqualTo(4.55));
+        expect(spec.radius, lessThanOrEqualTo(7.7));
+      }
+
+      // Stair-step direction: cash bottom-left, newGrowth top-right.
+      final cash = defensiveSpecs.firstWhere((s) => s.cls == AssetClass.cash);
+      final newGrowth =
+          defensiveSpecs.firstWhere((s) => s.cls == AssetClass.newGrowth);
+      expect(cash.anchor.dy, greaterThan(size.height * 0.85));
+      expect(newGrowth.anchor.dx, greaterThan(size.width * 0.70));
+      expect(newGrowth.anchor.dy, lessThan(size.height * 0.25));
+    },
+  );
 
   test('frontier curve uses most of the chart width', () {
     const size = Size(320, 360);
