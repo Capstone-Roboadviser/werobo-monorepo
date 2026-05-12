@@ -7,6 +7,27 @@ import 'package:robo_mobile/screens/onboarding/onboarding_screen.dart';
 import 'package:robo_mobile/screens/onboarding/portfolio_review_screen.dart';
 
 void main() {
+  testWidgets('allocation screen renders donut chart', (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: WeRoboTheme.light,
+        home: PortfolioStateProvider(
+          state: state,
+          child: PortfolioAllocationScreen(
+            selection: _selection(),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('포트폴리오 비중'), findsWidgets);
+    expect(find.text('다음'), findsOneWidget);
+  });
+
   testWidgets('comparison tab renders loaded backtest data', (tester) async {
     final state = PortfolioState();
     addTearDown(state.dispose);

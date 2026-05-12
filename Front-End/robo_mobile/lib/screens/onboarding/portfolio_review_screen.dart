@@ -34,10 +34,95 @@ typedef PortfolioReviewVolatilityHistoryFetcher
 
 const double _initialPortfolioCashAmount = 10000000;
 
-/// Post-frontier confirmation screen. Layout per 2026-05-05 user notes
+/// Allocation screen shown after the EF screen. Displays the donut chart
+/// with the user's chosen portfolio weights. A "다음" button advances to
+/// [PortfolioReviewScreen] (comparison + volatility tabs).
+class PortfolioAllocationScreen extends StatefulWidget {
+  final OnboardingFrontierSelection selection;
+
+  const PortfolioAllocationScreen({
+    super.key,
+    required this.selection,
+  });
+
+  @override
+  State<PortfolioAllocationScreen> createState() =>
+      _PortfolioAllocationScreenState();
+}
+
+class _PortfolioAllocationScreenState
+    extends State<PortfolioAllocationScreen> {
+  late final List<AssetWeight> _assets;
+  late final List<DonutSegment> _segments;
+
+  @override
+  void initState() {
+    super.initState();
+    _assets = resolveAssetWeights(widget.selection);
+    _segments = _assets
+        .map((a) => DonutSegment(
+              weight: a.weight,
+              color: WeRoboColors.assetColor(a.cls),
+              label: a.label,
+              tickers: [
+                if (a.tickers.isNotEmpty)
+                  for (final t in a.tickers)
+                    DonutTicker(
+                      symbol: t,
+                      weight: a.weight / a.tickers.length,
+                    ),
+              ],
+            ))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Scaffold(
+      backgroundColor: tc.background,
+      appBar: AppBar(
+        backgroundColor: tc.background,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+          onPressed: () => Navigator.maybePop(context),
+        ),
+        centerTitle: true,
+        title: Text(
+          '포트폴리오 비중',
+          style: WeRoboTypography.heading2.themed(context),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: _DonutAndListColumn(segments: _segments),
+          ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: WeRoboSpacing.bottomButton,
+          child: ElevatedButton(
+            onPressed: () => Navigator.of(context).push(
+              WeRoboMotion.fadeRoute(
+                PortfolioReviewScreen(selection: widget.selection),
+              ),
+            ),
+            child: const Text('다음'),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Post-frontier comparison screen. Layout per 2026-05-05 user notes
 /// (and rev F–J 2026-05-04):
-///   - Centered "포트폴리오 상세" page title
-///   - Donut centered with tap-for-details (slice → asset breakdown)
+///   - Centered "내 포트폴리오를 시장과 비교한다면?" page title
 ///   - Tabs: 포트폴리오 비교 (default) / 변동성 (secondary)
 ///   - 3-year default time range with pinch-zoom
 ///   - Bottom CTA: 투자 확정
@@ -64,8 +149,6 @@ class PortfolioReviewScreen extends StatefulWidget {
 class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  late final List<AssetWeight> _assets;
-  late final List<DonutSegment> _segments;
   MobileComparisonBacktestResponse? _comparisonBacktest;
   MobileVolatilityHistoryResponse? _volatilityHistory;
   bool _didRequestComparisonBacktest = false;
@@ -78,26 +161,6 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _assets = resolveAssetWeights(widget.selection);
-    _segments = _assets
-        .map((a) => DonutSegment(
-              weight: a.weight,
-              color: WeRoboColors.assetColor(a.cls),
-              label: a.label,
-              tickers: [
-                // The frontier preview only carries the slice's overall
-                // weight, so we split it evenly across the constituent
-                // tickers. Once a per-ticker weight feed is wired this can
-                // be replaced with the real values.
-                if (a.tickers.isNotEmpty)
-                  for (final t in a.tickers)
-                    DonutTicker(
-                      symbol: t,
-                      weight: a.weight / a.tickers.length,
-                    ),
-              ],
-            ))
-        .toList();
   }
 
   @override
@@ -131,6 +194,7 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
     final state = PortfolioStateProvider.of(context);
     final comparisonBacktest = _comparisonBacktest ?? state.backtest;
     return Scaffold(
+      backgroundColor: tc.background,
       appBar: AppBar(
         backgroundColor: tc.background,
         elevation: 0,
@@ -140,8 +204,8 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
         ),
         centerTitle: true,
         title: Text(
-          '포트폴리오 상세',
-          style: WeRoboTypography.heading3.themed(context),
+          '내 포트폴리오를 시장과 비교한다면?',
+          style: WeRoboTypography.heading2.themed(context),
         ),
       ),
       body: SafeArea(
@@ -151,8 +215,6 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               const SizedBox(height: 16),
-              _DonutAndListColumn(segments: _segments),
-              const SizedBox(height: 24),
               _CompareVolatilityTabs(
                 controller: _tabController,
                 selection: widget.selection,

@@ -163,7 +163,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (!mounted) return;
     navigator.push(
       WeRoboMotion.fadeRoute(
-        PortfolioReviewScreen(selection: resolvedSelection),
+        PortfolioAllocationScreen(selection: resolvedSelection),
       ),
     );
   }
