@@ -381,6 +381,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 rangeDigestMode: _isRangeDigestMode,
                 selectedDigestRange: _selectedDigestRange,
                 onRangeSelectionChanged: _setDigestRange,
+                onEnterRangeDigestMode: _enterRangeDigestMode,
                 onExitRangeDigestMode: _exitRangeDigestMode,
               ),
             ),
@@ -396,7 +397,6 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                   rangeDigest: _rangeDigest,
                   rangeDigestLoading: _rangeDigestLoading,
                   rangeDigestError: _rangeDigestError,
-                  onEnterRangeDigestMode: _enterRangeDigestMode,
                   onExitRangeDigestMode: _exitRangeDigestMode,
                   onRetryRangeDigest: _selectedDigestRange == null
                       ? null
@@ -573,6 +573,7 @@ class _PortfolioHeroChart extends StatefulWidget {
   final bool rangeDigestMode;
   final _ChartRangeSelection? selectedDigestRange;
   final ValueChanged<_ChartRangeSelection?> onRangeSelectionChanged;
+  final VoidCallback onEnterRangeDigestMode;
   final VoidCallback onExitRangeDigestMode;
 
   const _PortfolioHeroChart({
@@ -581,6 +582,7 @@ class _PortfolioHeroChart extends StatefulWidget {
     required this.rangeDigestMode,
     required this.selectedDigestRange,
     required this.onRangeSelectionChanged,
+    required this.onEnterRangeDigestMode,
     required this.onExitRangeDigestMode,
   });
 
@@ -1285,11 +1287,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
           current: headerCurrentValue,
         ),
 
-        if (widget.rangeDigestMode) ...[
-          const SizedBox(height: 14),
-          _RangeDigestModeChip(onExit: widget.onExitRangeDigestMode),
-        ],
-
         const SizedBox(height: 20),
 
         // Chart (edge-to-edge)
@@ -1466,6 +1463,16 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                       ),
                     ),
                   ),
+                  Positioned(
+                    right: 0,
+                    top: 8,
+                    child: _RangeDigestChartAiButton(
+                      active: widget.rangeDigestMode,
+                      onTap: widget.rangeDigestMode
+                          ? widget.onExitRangeDigestMode
+                          : widget.onEnterRangeDigestMode,
+                    ),
+                  ),
                   if (rangeDateLabelData != null)
                     Positioned(
                       left: rangeDateLabelData.x,
@@ -1619,54 +1626,58 @@ class _RangeDigestChartDateLabel extends StatelessWidget {
   }
 }
 
-class _RangeDigestModeChip extends StatelessWidget {
-  final VoidCallback onExit;
+class _RangeDigestChartAiButton extends StatelessWidget {
+  final bool active;
+  final VoidCallback onTap;
 
-  const _RangeDigestModeChip({required this.onExit});
+  const _RangeDigestChartAiButton({
+    required this.active,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    return Container(
-      key: const Key('range_digest_mode_chip'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: WeRoboColors.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: WeRoboColors.primary.withValues(alpha: 0.22),
-        ),
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.auto_graph_rounded,
-            size: 17,
-            color: WeRoboColors.primary,
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        key: Key(active ? 'range_digest_exit' : 'range_digest_chart_ai_button'),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+        decoration: BoxDecoration(
+          color:
+              active ? WeRoboColors.primary : tc.card.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: active
+                ? WeRoboColors.primary
+                : WeRoboColors.primary.withValues(alpha: 0.28),
           ),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              '구간을 드래그해서 선택하세요',
-              style: WeRoboTypography.bodySmall.copyWith(
-                color: tc.textPrimary,
-                fontWeight: FontWeight.w700,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              active ? Icons.close_rounded : Icons.auto_awesome_rounded,
+              size: 15,
+              color: active ? WeRoboColors.white : WeRoboColors.primary,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              active ? '선택중' : 'AI',
+              style: WeRoboTypography.caption.copyWith(
+                color: active ? WeRoboColors.white : WeRoboColors.primary,
+                fontWeight: FontWeight.w800,
               ),
             ),
-          ),
-          IconButton(
-            key: const Key('range_digest_exit'),
-            onPressed: onExit,
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
-            icon: Icon(
-              Icons.close_rounded,
-              size: 18,
-              color: tc.textSecondary,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1789,7 +1800,6 @@ class _PortfolioIssueFeed extends StatelessWidget {
   final MobileRangeDigestResponse? rangeDigest;
   final bool rangeDigestLoading;
   final String? rangeDigestError;
-  final VoidCallback onEnterRangeDigestMode;
   final VoidCallback onExitRangeDigestMode;
   final VoidCallback? onRetryRangeDigest;
   final VoidCallback? onRangeDigestDetailTap;
@@ -1803,7 +1813,6 @@ class _PortfolioIssueFeed extends StatelessWidget {
     required this.rangeDigest,
     required this.rangeDigestLoading,
     required this.rangeDigestError,
-    required this.onEnterRangeDigestMode,
     required this.onExitRangeDigestMode,
     this.onRetryRangeDigest,
     this.onRangeDigestDetailTap,
@@ -1893,14 +1902,6 @@ class _PortfolioIssueFeed extends StatelessWidget {
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.only(left: 16),
-            child: Container(
-              height: 1,
-              color: tc.border.withValues(alpha: 0.3),
-            ),
-          ),
-          _RangeDigestEntryRow(onTap: onEnterRangeDigestMode),
         ],
       ),
     );
@@ -1999,50 +2000,6 @@ class _DigestAiSummary {
     return driver.contributionWon >= 0
         ? '$name$josa $won 기여했어요.'
         : '$name$josa $won 영향을 줬어요.';
-  }
-}
-
-class _RangeDigestEntryRow extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const _RangeDigestEntryRow({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Pressable(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: SizedBox(
-          height: 32,
-          child: Row(
-            children: [
-              Icon(
-                Icons.timeline_rounded,
-                size: 20,
-                color: WeRoboColors.primary,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  '구간분석',
-                  style: WeRoboTypography.bodySmall.copyWith(
-                    color: tc.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 18,
-                color: tc.textTertiary,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 }
 
