@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robo_mobile/app/portfolio_state.dart';
 import 'package:robo_mobile/app/theme.dart';
+import 'package:robo_mobile/models/chart_data.dart';
 import 'package:robo_mobile/models/mobile_backend_models.dart';
+import 'package:robo_mobile/models/portfolio_data.dart';
 import 'package:robo_mobile/screens/home/portfolio_tab.dart';
+import 'package:robo_mobile/screens/onboarding/widgets/portfolio_charts.dart';
 
 void main() {
   MobileSectorAllocation sector({
@@ -149,6 +152,71 @@ void main() {
       expect(rebalanceDates, hasLength(2));
       expect(rebalanceDates.first, DateTime(2026, 3, 1));
       expect(rebalanceDates.last, DateTime(2026, 3, 2));
+    });
+  });
+
+  group('volatility view market benchmark', () {
+    List<ChartPoint> makePoints(int count) {
+      return List.generate(
+        count,
+        (i) => ChartPoint(
+          date: DateTime(2025, 1, 1).add(Duration(days: i * 7)),
+          value: 0.10 + i * 0.001,
+        ),
+      );
+    }
+
+    testWidgets(
+        'renders market benchmark legend label when market data is present',
+        (tester) async {
+      final portfolioPoints = makePoints(10);
+      final marketPoints = makePoints(10);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WeRoboTheme.light,
+          home: Scaffold(
+            body: SizedBox(
+              height: 400,
+              child: PortfolioCharts(
+                type: InvestmentType.balanced,
+                volatilityPoints: portfolioPoints,
+                marketVolatilityPoints: marketPoints,
+                useFallbackMock: false,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('시장 변동성'), findsOneWidget);
+      expect(find.text('내 포트폴리오 변동성'), findsOneWidget);
+    });
+
+    testWidgets(
+        'does not render market benchmark legend when market data is absent',
+        (tester) async {
+      final portfolioPoints = makePoints(10);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: WeRoboTheme.light,
+          home: Scaffold(
+            body: SizedBox(
+              height: 400,
+              child: PortfolioCharts(
+                type: InvestmentType.balanced,
+                volatilityPoints: portfolioPoints,
+                useFallbackMock: false,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.text('시장 변동성'), findsNothing);
     });
   });
 }

@@ -48,6 +48,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
   bool _isLoadingHistory = false;
   InvestmentType? _loadedHistoryType;
   List<ChartPoint>? _volatilityPoints;
+  List<ChartPoint>? _marketVolatilityPoints;
 
   // Card 7 backtest fetch guard
   String? _loadedBacktestSignature;
@@ -164,6 +165,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
         type.riskCode;
 
     List<ChartPoint>? volPoints;
+    List<ChartPoint>? marketPoints;
 
     try {
       final volResponse =
@@ -189,12 +191,26 @@ class _PortfolioTabState extends State<PortfolioTab> {
         volPoints,
         startDate: portfolioStartedAt,
       );
+      if (volResponse.benchmarkPoints != null &&
+          volResponse.benchmarkPoints!.isNotEmpty) {
+        marketPoints = volResponse.benchmarkPoints!
+            .map((p) => ChartPoint(
+                  date: p.date,
+                  value: p.volatility,
+                ))
+            .toList();
+        marketPoints = filterChartPointsFromStartDate(
+          marketPoints,
+          startDate: portfolioStartedAt,
+        );
+      }
     } catch (_) {}
 
     if (!mounted) return;
     setState(() {
       _isLoadingHistory = false;
       _volatilityPoints = volPoints;
+      _marketVolatilityPoints = marketPoints;
     });
   }
 
@@ -281,6 +297,7 @@ class _PortfolioTabState extends State<PortfolioTab> {
               _TrendView(
                 type: type,
                 volatilityPoints: _volatilityPoints,
+                marketVolatilityPoints: _marketVolatilityPoints,
                 comparisonLines: comparisonLines,
                 rebalanceDates: rebalanceDates,
                 expectedAnnualReturn: portfolioState.expectedReturn,
@@ -598,6 +615,7 @@ class _AllocationView extends StatelessWidget {
 class _TrendView extends StatelessWidget {
   final InvestmentType type;
   final List<ChartPoint>? volatilityPoints;
+  final List<ChartPoint>? marketVolatilityPoints;
   final List<ChartLine> comparisonLines;
   final List<DateTime> rebalanceDates;
   final double? expectedAnnualReturn;
@@ -606,6 +624,7 @@ class _TrendView extends StatelessWidget {
   const _TrendView({
     required this.type,
     this.volatilityPoints,
+    this.marketVolatilityPoints,
     required this.comparisonLines,
     required this.rebalanceDates,
     this.expectedAnnualReturn,
@@ -630,6 +649,7 @@ class _TrendView extends StatelessWidget {
       child: PortfolioCharts(
         type: type,
         volatilityPoints: volatilityPoints,
+        marketVolatilityPoints: marketVolatilityPoints,
         comparisonLines: comparisonLines.isNotEmpty ? comparisonLines : null,
         rebalanceDates: rebalanceDates.isNotEmpty ? rebalanceDates : null,
         expectedAnnualReturn: expectedAnnualReturn,

@@ -352,6 +352,7 @@ class _PortfolioComparisonChartState extends State<PortfolioComparisonChart>
 class PortfolioCharts extends StatefulWidget {
   final InvestmentType type;
   final List<ChartPoint>? volatilityPoints;
+  final List<ChartPoint>? marketVolatilityPoints;
   final List<ChartLine>? comparisonLines;
   final List<DateTime>? rebalanceDates;
   final double? expectedAnnualReturn;
@@ -361,6 +362,7 @@ class PortfolioCharts extends StatefulWidget {
     super.key,
     required this.type,
     this.volatilityPoints,
+    this.marketVolatilityPoints,
     this.comparisonLines,
     this.rebalanceDates,
     this.expectedAnnualReturn,
@@ -377,6 +379,7 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
     return _VolReturnView(
       type: widget.type,
       volatilityPoints: widget.volatilityPoints,
+      marketVolatilityPoints: widget.marketVolatilityPoints,
       useFallbackMock: widget.useFallbackMock,
     );
   }
@@ -387,11 +390,13 @@ class _PortfolioChartsState extends State<PortfolioCharts> {
 class _VolReturnView extends StatefulWidget {
   final InvestmentType type;
   final List<ChartPoint>? volatilityPoints;
+  final List<ChartPoint>? marketVolatilityPoints;
   final bool useFallbackMock;
 
   const _VolReturnView({
     required this.type,
     this.volatilityPoints,
+    this.marketVolatilityPoints,
     required this.useFallbackMock,
   });
 
@@ -446,10 +451,19 @@ class _VolReturnViewState extends State<_VolReturnView>
             : 0.137;
   }
 
+  List<ChartPoint>? get _marketPoints {
+    final all = widget.marketVolatilityPoints;
+    if (all == null || all.isEmpty) return null;
+    final filtered = _filterByRange(all);
+    return filtered.isEmpty ? null : filtered;
+  }
+
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     final points = _points;
+    final marketPoints = _marketPoints;
+    final hasMarket = marketPoints != null && marketPoints.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -516,6 +530,7 @@ class _VolReturnViewState extends State<_VolReturnView>
                               ),
                               painter: _AreaChartPainter(
                                 points: points,
+                                marketPoints: marketPoints,
                                 progress: _drawCtrl.value,
                                 color: WeRoboColors.primary,
                                 touchIndex: _touchIndex,
@@ -535,8 +550,53 @@ class _VolReturnViewState extends State<_VolReturnView>
                     },
                   ),
           ),
+          if (hasMarket) ...[
+            const SizedBox(height: 8),
+            _VolatilityLegend(marketColor: tc.textSecondary),
+          ],
           const SizedBox(height: 4),
         ],
+      ),
+    );
+  }
+}
+
+class _VolatilityLegend extends StatelessWidget {
+  final Color marketColor;
+
+  const _VolatilityLegend({required this.marketColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _LegendSwatch(color: WeRoboColors.primary),
+        const SizedBox(width: 4),
+        Text('내 포트폴리오 변동성',
+            style: WeRoboTypography.caption.copyWith(color: marketColor)),
+        const SizedBox(width: 12),
+        _LegendSwatch(color: marketColor),
+        const SizedBox(width: 4),
+        Text('시장 변동성',
+            style: WeRoboTypography.caption.copyWith(color: marketColor)),
+      ],
+    );
+  }
+}
+
+class _LegendSwatch extends StatelessWidget {
+  final Color color;
+  const _LegendSwatch({required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 16,
+      height: 2,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(1),
       ),
     );
   }
@@ -563,6 +623,7 @@ class _EmptyChartState extends StatelessWidget {
 
 class _AreaChartPainter extends CustomPainter {
   final List<ChartPoint> points;
+  final List<ChartPoint>? marketPoints;
   final double progress;
   final Color color;
   final int? touchIndex;
@@ -577,6 +638,7 @@ class _AreaChartPainter extends CustomPainter {
 
   _AreaChartPainter({
     required this.points,
+    this.marketPoints,
     required this.progress,
     required this.color,
     this.touchIndex,
@@ -606,6 +668,13 @@ class _AreaChartPainter extends CustomPainter {
       if (baselineValue! < minY) minY = baselineValue!;
       if (baselineValue! > maxY) maxY = baselineValue!;
     }
+    final mktValues = marketPoints?.map((p) => p.value).toList();
+    if (mktValues != null && mktValues.isNotEmpty) {
+      final mktMin = mktValues.reduce(min);
+      final mktMax = mktValues.reduce(max);
+      if (mktMin < minY) minY = mktMin;
+      if (mktMax > maxY) maxY = mktMax;
+    }
     final rangeY = (maxY - minY).clamp(0.001, double.infinity);
 
     // Grid
@@ -631,6 +700,34 @@ class _AreaChartPainter extends CustomPainter {
       );
       _drawText(
           canvas, baselineLabel ?? '', Offset(padL + 4, y - 14), labelStyle);
+    }
+
+    // Market benchmark line (drawn first, behind portfolio area)
+    if (mktValues != null && mktValues.isNotEmpty) {
+      final mktPathPoints = _interpolatedPathPoints(
+        n: mktValues.length,
+        progress: progress,
+        xAt: (i) => padL + w * i / (mktValues.length - 1),
+        yAt: (i) => h - ((mktValues[i] - minY) / rangeY) * h,
+      );
+      if (mktPathPoints != null) {
+        final mktPath = Path();
+        for (int i = 0; i < mktPathPoints.length; i++) {
+          final pt = mktPathPoints[i];
+          if (i == 0) {
+            mktPath.moveTo(pt.dx, pt.dy);
+          } else {
+            mktPath.lineTo(pt.dx, pt.dy);
+          }
+        }
+        final mktPaint = Paint()
+          ..color = gridColor.withValues(alpha: 0.7)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round;
+        canvas.drawPath(mktPath, mktPaint);
+      }
     }
 
     // Build path with smooth interpolation
@@ -670,7 +767,7 @@ class _AreaChartPainter extends CustomPainter {
       ..shader = gradient.createShader(Rect.fromLTWH(padL, 0, w, h));
     canvas.drawPath(areaPath, areaPaint);
 
-    // Line
+    // Portfolio line
     final linePaint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -691,17 +788,33 @@ class _AreaChartPainter extends CustomPainter {
         ..strokeWidth = 1;
       canvas.drawLine(Offset(tx, 0), Offset(tx, h), crossPaint);
 
-      // Dot
+      // Dot (portfolio)
       canvas.drawCircle(Offset(tx, ty), 5, Paint()..color = color);
       canvas.drawCircle(Offset(tx, ty), 3, Paint()..color = tooltipBackground);
+
+      // Dot (market, nearest point by index)
+      String mktStr = '';
+      if (mktValues != null && mktValues.isNotEmpty) {
+        final mktTi = ti.clamp(0, mktValues.length - 1);
+        final mktTy = h - ((mktValues[mktTi] - minY) / rangeY) * h;
+        final mktTx = padL + w * mktTi / (mktValues.length - 1);
+        canvas.drawCircle(
+          Offset(mktTx, mktTy),
+          4,
+          Paint()..color = gridColor.withValues(alpha: 0.7),
+        );
+        mktStr =
+            '\n시장 변동성: ${(mktValues[mktTi] * 100).toStringAsFixed(1)}%';
+      }
 
       // Tooltip
       final date = points[ti].date;
       final dateStr =
-          '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+          '${date.year}-${date.month.toString().padLeft(2, '0')}'
+          '-${date.day.toString().padLeft(2, '0')}';
       final valStr = '${(values[ti] * 100).toStringAsFixed(1)}%';
       _drawTooltip(canvas, Offset(tx, ty - 28),
-          '$dateStr\n$valueLabel: $valStr', size.width);
+          '$dateStr\n$valueLabel: $valStr$mktStr', size.width);
     }
 
     // X-axis date labels
@@ -788,6 +901,7 @@ class _AreaChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _AreaChartPainter old) =>
       old.points != points ||
+      old.marketPoints != marketPoints ||
       old.progress != progress ||
       old.color != color ||
       old.touchIndex != touchIndex ||
