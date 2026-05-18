@@ -267,7 +267,9 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
       return;
     }
     final state = PortfolioStateProvider.of(context);
-    final startedAt = widget.now?.call() ?? DateTime.now();
+    final startedAt = PortfolioState.prototypeAccountStartDate(
+      widget.now?.call() ?? DateTime.now(),
+    );
     state.recordFrontierSelection(widget.selection);
     setState(() {
       _isConfirmingInvestment = true;

@@ -69,6 +69,14 @@ void main() {
       expect(notifyCount, 0);
     });
 
+    test('prototypeAccountStartDate uses March 1 of the current year', () {
+      final startDate = PortfolioState.prototypeAccountStartDate(
+        DateTime(2026, 5, 19, 14, 30),
+      );
+
+      expect(startDate, DateTime(2026, 3, 1));
+    });
+
     test('setFromDotT maps correctly', () {
       state.setFromDotT(0.1);
       expect(state.type, InvestmentType.safe);

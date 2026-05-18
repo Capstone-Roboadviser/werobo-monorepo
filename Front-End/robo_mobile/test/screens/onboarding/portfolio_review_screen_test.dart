@@ -157,7 +157,7 @@ void main() {
     expect(find.text('시장'), findsOneWidget);
   });
 
-  testWidgets('confirm investment creates account with 10m from today',
+  testWidgets('confirm investment creates account with 10m from March 1',
       (tester) async {
     final state = PortfolioState();
     addTearDown(state.dispose);
@@ -203,10 +203,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(createdAmount, 10000000);
-    expect(createdStartedAt, today);
+    expect(createdStartedAt, DateTime(2026, 3, 1));
     expect(state.frontierSelection, isNotNull);
     expect(state.accountDashboard?.summary?.investedAmount, 10000000);
-    expect(state.accountDashboard?.summary?.startedAt, '2026-05-12');
+    expect(state.accountDashboard?.summary?.startedAt, '2026-03-01');
     expect(find.byKey(const Key('home-screen')), findsOneWidget);
   });
 }

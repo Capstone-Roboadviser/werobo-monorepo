@@ -108,6 +108,10 @@ class PortfolioState extends ChangeNotifier {
   static const String _welcomeBannerSeenKey = 'werobo.welcome_banner_seen';
   static const String _alertFrequencyKey = 'alertFrequency';
 
+  static DateTime prototypeAccountStartDate(DateTime now) {
+    return DateTime(now.year, 3, 1);
+  }
+
   InvestmentType _type = InvestmentType.balanced;
   MobileRecommendationResponse? _recommendation;
   MobileComparisonBacktestResponse? _backtest;
@@ -715,7 +719,7 @@ class PortfolioState extends ChangeNotifier {
       portfolioCode: selection.classificationCode,
       portfolioLabel: portfolio.label,
       initialCashAmount: initialCashAmount,
-      startedAt: startedAt ?? selection.asOfDate,
+      startedAt: startedAt ?? prototypeAccountStartDate(DateTime.now()),
     );
     setAccountDashboard(dashboard);
     return dashboard;
