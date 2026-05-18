@@ -841,6 +841,7 @@ class MobileFrontierPreviewResponse {
   final String recommendedPortfolioCode;
   final String dataSource;
   final DateTime? asOfDate;
+  final double? marketBenchmarkVolatility;
   final int totalPointCount;
   final double minVolatility;
   final double maxVolatility;
@@ -851,6 +852,7 @@ class MobileFrontierPreviewResponse {
     required this.recommendedPortfolioCode,
     required this.dataSource,
     required this.asOfDate,
+    this.marketBenchmarkVolatility,
     required this.totalPointCount,
     required this.minVolatility,
     required this.maxVolatility,
@@ -866,6 +868,9 @@ class MobileFrontierPreviewResponse {
           json['recommended_portfolio_code']?.toString() ?? '',
       dataSource: json['data_source']?.toString() ?? '',
       asOfDate: _parseOptionalDate(json['as_of_date']),
+      marketBenchmarkVolatility: json['market_benchmark_volatility'] == null
+          ? null
+          : _asDouble(json['market_benchmark_volatility']),
       totalPointCount: (json['total_point_count'] as num?)?.toInt() ?? 0,
       minVolatility: _asDouble(json['min_volatility']),
       maxVolatility: _asDouble(json['max_volatility']),
@@ -905,6 +910,20 @@ class MobileFrontierPreviewResponse {
     return total / points.length;
   }
 
+  ({int percentDiff, bool isRiskier})? marketBenchmarkRiskComparison(
+    MobileFrontierPreviewPoint? point,
+  ) {
+    final benchmark = marketBenchmarkVolatility;
+    if (point == null || benchmark == null || benchmark <= 0) {
+      return null;
+    }
+    final diff = (point.volatility - benchmark) / benchmark;
+    return (
+      percentDiff: (diff.abs() * 100).round(),
+      isRiskier: diff > 0,
+    );
+  }
+
   MobileFrontierPreviewPoint? pointByIndex(int index) {
     for (final point in points) {
       if (point.index == index) {
@@ -931,6 +950,8 @@ class MobileFrontierPreviewResponse {
       'recommended_portfolio_code': recommendedPortfolioCode,
       'data_source': dataSource,
       'as_of_date': _dateToJson(asOfDate),
+      if (marketBenchmarkVolatility != null)
+        'market_benchmark_volatility': marketBenchmarkVolatility,
       'total_point_count': totalPointCount,
       'min_volatility': minVolatility,
       'max_volatility': maxVolatility,

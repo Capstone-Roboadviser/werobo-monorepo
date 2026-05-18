@@ -186,6 +186,11 @@ class FrontierPreviewResponse(BaseModel):
     resolved_profile: ResolvedProfileItemResponse = Field(..., description="사용자 판정 결과")
     recommended_portfolio_code: str = Field(..., description="사용자에게 추천되는 대표 포트폴리오 코드", examples=["balanced"])
     data_source: str = Field(..., description="계산에 사용한 데이터 소스", examples=["managed_universe"])
+    market_benchmark_volatility: float | None = Field(
+        default=None,
+        description="시장대비 위험도 계산에 사용할 6자산 동일가중 벤치마크 연 변동성",
+        examples=[0.1042],
+    )
     total_point_count: int = Field(..., description="내부에서 계산된 전체 frontier 포인트 수", examples=[80])
     min_volatility: float = Field(..., description="frontier 최소 변동성", examples=[0.0415])
     max_volatility: float = Field(..., description="frontier 최대 변동성", examples=[0.1918])

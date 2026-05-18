@@ -145,19 +145,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
     final preview = resolvedSelection.preview;
     if (preview != null && preview.points.isNotEmpty) {
-      final points = preview.points;
-      final averageVol =
-          points.map((p) => p.volatility).reduce((a, b) => a + b) /
-              points.length;
-      final diffPp =
-          (resolvedSelection.targetVolatility - averageVol) * 100;
-      if (diffPp >= 30) {
-        final confirmed = await showRiskAckDialog(
-          context: context,
-          marketVolPct: averageVol * 100,
-          userVolPct: resolvedSelection.targetVolatility * 100,
-        );
-        if (confirmed != true) return;
+      final marketVol = preview.marketBenchmarkVolatility;
+      if (marketVol != null && marketVol > 0) {
+        final diffPp = (resolvedSelection.targetVolatility - marketVol) * 100;
+        if (diffPp >= 30) {
+          final confirmed = await showRiskAckDialog(
+            context: context,
+            marketVolPct: marketVol * 100,
+            userVolPct: resolvedSelection.targetVolatility * 100,
+          );
+          if (confirmed != true) return;
+        }
       }
     }
     if (!mounted) return;
@@ -506,32 +504,20 @@ class _FrontierBodyState extends State<_FrontierBody> {
     String plainText,
     Color color,
   }) get _riskComparison {
-    final points = _preview.points;
-    if (points.isEmpty) {
+    final comparison = _preview.marketBenchmarkRiskComparison(
+      _selectedPreviewPoint,
+    );
+    if (comparison == null) {
+      final label = _previewIsAuthoritative ? '시장 기준 없음' : '시장 기준 확인 중';
       return (
         emphasis: null,
-        suffix: '시장 평균 수준',
-        plainText: '시장 평균 수준',
+        suffix: label,
+        plainText: label,
         color: WeRoboColors.accent,
       );
     }
-    final averageVol =
-        points.map((p) => p.volatility).reduce((a, b) => a + b) / points.length;
-    final selected = _selectedPreviewPoint;
-    if (selected == null || averageVol == 0) {
-      return (
-        emphasis: null,
-        suffix: '시장 평균 수준',
-        plainText: '시장 평균 수준',
-        color: WeRoboColors.accent,
-      );
-    }
-    // Spec (capstone 2026-05-12): use absolute percentage-point gap
-    // between portfolio and market volatility. ≥30pp riskier flips
-    // the color to warning blue; under that stays green.
-    final diffPp = (selected.volatility - averageVol) * 100;
-    final percentDiff = diffPp.abs().round();
-    final isRiskier = diffPp > 0;
+    final percentDiff = comparison.percentDiff;
+    final isRiskier = comparison.isRiskier;
     if (percentDiff == 0) {
       return (
         emphasis: null,
@@ -540,7 +526,7 @@ class _FrontierBodyState extends State<_FrontierBody> {
         color: WeRoboColors.accent,
       );
     }
-    final color = isRiskier && diffPp >= 30
+    final color = isRiskier && percentDiff >= 30
         ? WeRoboColors.lossBlue
         : WeRoboColors.accent;
     final emphasis = '$percentDiff%';

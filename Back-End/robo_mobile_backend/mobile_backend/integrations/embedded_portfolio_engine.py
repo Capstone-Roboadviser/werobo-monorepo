@@ -120,6 +120,26 @@ class EmbeddedPortfolioEngineAdapter:
     def _serialize_as_of_date(as_of_date: date | None) -> str | None:
         return None if as_of_date is None else as_of_date.isoformat()
 
+    def _latest_market_benchmark_volatility(
+        self,
+        *,
+        data_source: SimulationDataSource,
+        rolling_window: int = 20,
+    ) -> float | None:
+        try:
+            response = self.portfolio_analytics_service.build_benchmark_volatility_history(
+                data_source=self._to_core_data_source(data_source),
+                rolling_window=rolling_window,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to build market benchmark volatility for frontier preview"
+            )
+            return None
+        if not response.points:
+            return None
+        return round(float(response.points[-1].value), 4)
+
     def _build_portfolio_id(
         self,
         *,
@@ -686,6 +706,7 @@ class EmbeddedPortfolioEngineAdapter:
         data_source: SimulationDataSource,
         propensity_score: float | None,
         sample_points: int | None,
+        market_benchmark_volatility: float | None,
     ) -> dict[str, object]:
         frontier_points = list(snapshot_payload["frontier_points"])
         representative_indices = {
@@ -711,6 +732,7 @@ class EmbeddedPortfolioEngineAdapter:
             ),
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
+            "market_benchmark_volatility": market_benchmark_volatility,
             "total_point_count": len(frontier_points),
             "min_volatility": float(frontier_points[0]["volatility"]),
             "max_volatility": float(frontier_points[-1]["volatility"]),
@@ -974,6 +996,9 @@ class EmbeddedPortfolioEngineAdapter:
                 data_source=data_source,
                 propensity_score=propensity_score,
                 sample_points=sample_points,
+                market_benchmark_volatility=self._latest_market_benchmark_volatility(
+                    data_source=data_source,
+                ),
             )
         if data_source == SimulationDataSource.MANAGED_UNIVERSE:
             self._log_managed_universe_snapshot_lookup(
@@ -1021,6 +1046,9 @@ class EmbeddedPortfolioEngineAdapter:
             ),
             "recommended_portfolio_code": resolved_profile.value,
             "data_source": data_source.value,
+            "market_benchmark_volatility": self._latest_market_benchmark_volatility(
+                data_source=data_source,
+            ),
             "as_of_date": self._serialize_as_of_date(as_of_date),
             "total_point_count": len(context.frontier_points),
             "min_volatility": round(float(context.frontier_points[0].volatility), 4),

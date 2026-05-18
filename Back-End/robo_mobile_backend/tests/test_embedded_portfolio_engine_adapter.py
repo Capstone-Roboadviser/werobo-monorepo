@@ -127,6 +127,14 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
         adapter.RISK_FREE_RATE = 0.02
         adapter.FRONTIER_SNAPSHOT_SCHEMA_VERSION = 2
         adapter.profile_service = ProfileService()
+        adapter._to_core_data_source = lambda value: value
+        adapter.portfolio_analytics_service = SimpleNamespace(
+            build_benchmark_volatility_history=lambda **kwargs: PortfolioHistorySeries(
+                points=[],
+                earliest_data_date="",
+                latest_data_date="",
+            ),
+        )
         adapter.portfolio_service = SimpleNamespace(
             mapping_service=SimpleNamespace(
                 build_portfolio_id=lambda profile, target_volatility: (
@@ -222,6 +230,36 @@ class EmbeddedPortfolioEngineAdapterTests(unittest.TestCase):
                 },
             ],
         )
+
+    def test_build_frontier_preview_includes_market_benchmark_volatility(self) -> None:
+        adapter, _ = self._build_fake_adapter()
+
+        def fake_benchmark_history(*, data_source, rolling_window):
+            self.assertEqual(data_source, SimulationDataSource.STOCK_COMBINATION_DEMO)
+            self.assertEqual(rolling_window, 20)
+            return PortfolioHistorySeries(
+                points=[
+                    PortfolioHistoryPoint(date="2026-04-01", value=0.08765),
+                    PortfolioHistoryPoint(date="2026-04-02", value=0.09876),
+                ],
+                earliest_data_date="2020-01-02",
+                latest_data_date="2026-04-02",
+            )
+
+        adapter._to_core_data_source = lambda value: value
+        adapter.portfolio_analytics_service = SimpleNamespace(
+            build_benchmark_volatility_history=fake_benchmark_history,
+        )
+
+        response = adapter.build_frontier_preview(
+            resolved_profile=RiskProfile.BALANCED,
+            investment_horizon=InvestmentHorizon.MEDIUM,
+            data_source=SimulationDataSource.STOCK_COMBINATION_DEMO,
+            propensity_score=45.0,
+            sample_points=3,
+        )
+
+        self.assertEqual(response["market_benchmark_volatility"], 0.0988)
 
     def test_build_frontier_selection_returns_selected_portfolio(self) -> None:
         adapter, _ = self._build_fake_adapter()
