@@ -647,9 +647,10 @@ class PortfolioState extends ChangeNotifier {
     await prefs.remove(_portfolioBootstrapStorageKey);
     await prefs.remove(_digestSeenDateKey);
     await prefs.remove(_welcomeBannerSeenKey);
-    // Note: _alertFrequency is intentionally NOT cleared here — it's a
-    // device-level preference that should survive logout/login on the same
-    // device.
+    // Note: _alertFrequency and _storySeen are intentionally NOT cleared
+    // here — they are device-level preferences that should survive
+    // logout/login on the same device. The onboarding story plays once per
+    // device, not per account.
   }
 
   void setTypeAndRecommendation(

@@ -7,6 +7,7 @@ import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../home/home_shell.dart';
 import 'login_screen.dart';
+import 'story_flow_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -80,12 +81,23 @@ class _SplashScreenState extends State<SplashScreen>
       if (!mounted) {
         return;
       }
-      final destination =
-          state.canAutoEnterHome ? const HomeShell() : const LoginScreen();
+      final Widget destination;
+      final String target;
+      if (state.canAutoEnterHome) {
+        destination = const HomeShell();
+        target = 'home';
+      } else if (!state.hasSeenStory) {
+        destination = const StoryFlowScreen();
+        target = 'story';
+      } else {
+        destination = const LoginScreen();
+        target = 'login';
+      }
       logAction('route from splash', {
-        'target': state.canAutoEnterHome ? 'home' : 'login',
+        'target': target,
         'loggedIn': state.isLoggedIn,
         'hasPortfolio': state.hasCompletedPortfolioSetup,
+        'hasSeenStory': state.hasSeenStory,
       });
       Navigator.of(context).pushReplacement(
         WeRoboMotion.fadeRoute(destination),
