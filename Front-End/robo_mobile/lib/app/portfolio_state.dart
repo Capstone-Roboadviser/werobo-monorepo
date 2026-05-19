@@ -236,6 +236,65 @@ class PortfolioState extends ChangeNotifier {
     return best;
   }
 
+  /// Day-over-day portfolio return as a fraction (e.g., 0.0084 = +0.84%).
+  /// Uses the last two `accountHistory` points (sorted by date). Returns null
+  /// when fewer than 2 points exist or the prior value is non-positive.
+  double? get dailyReturn {
+    final history = accountHistory;
+    if (history.length < 2) return null;
+    final sorted = [...history]..sort((a, b) => a.date.compareTo(b.date));
+    final prior = sorted[sorted.length - 2].portfolioValue;
+    final latest = sorted.last.portfolioValue;
+    if (prior <= 0) return null;
+    return (latest / prior) - 1.0;
+  }
+
+  /// Top N contributors by |weight * 1-day asset return|, descending. Uses
+  /// the last two earnings-history points. Returns an empty list when data
+  /// is missing or no asset clears the 0.05% absolute-contribution threshold.
+  List<ContributionEntry> topContributorsOverDay(int n) {
+    final history = _earningsHistory;
+    final portfolio = selectedPortfolio;
+    if (history == null || portfolio == null) return const [];
+    if (history.points.length < 2) return const [];
+
+    final weights = <AssetClass, double>{};
+    for (final alloc in portfolio.sectorAllocations) {
+      final cls = _assetCodeToAssetClass(alloc.assetCode);
+      if (cls == null) continue;
+      weights[cls] = (weights[cls] ?? 0.0) + alloc.weight;
+    }
+    if (weights.isEmpty) return const [];
+
+    final sorted = [...history.points]..sort((a, b) => a.date.compareTo(b.date));
+    final prior = sorted[sorted.length - 2];
+    final latest = sorted.last;
+
+    final entries = <ContributionEntry>[];
+    weights.forEach((cls, weight) {
+      final code = _assetClassToEarningsCode(cls);
+      if (code == null) return;
+      final endValue = latest.assetEarnings[code];
+      final startValue = prior.assetEarnings[code];
+      if (endValue == null || startValue == null || startValue == 0) return;
+      final assetReturn = (endValue / startValue) - 1.0;
+      final impact = weight * assetReturn;
+      // Lower threshold than 30d window — 1-day moves are smaller.
+      if (impact.abs() < 0.0005) return;
+      entries.add(ContributionEntry(
+        cls: cls,
+        label: cls.koLabel,
+        weight: weight,
+        assetReturn: assetReturn,
+        krwImpact: impact,
+      ));
+    });
+    entries.sort(
+      (a, b) => b.krwImpact.abs().compareTo(a.krwImpact.abs()),
+    );
+    return entries.take(n).toList();
+  }
+
   /// Portfolio volatility spike: most-recent point >= 1.5x trailing-30d avg.
   /// Returns null when no spike, no data, or insufficient history.
   VolatilitySpike? get portfolioVolatilitySpike {

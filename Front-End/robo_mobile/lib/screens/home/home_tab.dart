@@ -423,6 +423,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                 _PortfolioIssueFeed(
                   digest: issueDigest,
                   latestInsight: issueInsight,
+                  dailyReturn: state.dailyReturn,
+                  dailyContributors: state.topContributorsOverDay(2),
                   rangeDigestMode: _isRangeDigestMode,
                   selectedDigestRange: _selectedDigestRange,
                   rangeDigest: _rangeDigest,
@@ -1716,6 +1718,8 @@ class _RangeDigestChartAiButton extends StatelessWidget {
 class _PortfolioIssueFeed extends StatelessWidget {
   final MobileDigestResponse? digest;
   final RebalanceInsight? latestInsight;
+  final double? dailyReturn;
+  final List<ContributionEntry> dailyContributors;
   final bool rangeDigestMode;
   final _ChartRangeSelection? selectedDigestRange;
   final MobileRangeDigestResponse? rangeDigest;
@@ -1729,6 +1733,8 @@ class _PortfolioIssueFeed extends StatelessWidget {
   const _PortfolioIssueFeed({
     required this.digest,
     required this.latestInsight,
+    required this.dailyReturn,
+    required this.dailyContributors,
     required this.rangeDigestMode,
     required this.selectedDigestRange,
     required this.rangeDigest,
@@ -1762,166 +1768,66 @@ class _PortfolioIssueFeed extends StatelessWidget {
     }
 
     final tc = WeRoboThemeColors.of(context);
-    final summary = _DigestAiSummary.from(
-      digest: digest,
-      latestInsight: latestInsight,
-    );
+    // Daily digest replaces the old AI summary card (UIUX 2026-05-20 spec).
+    // One short card: yesterday's return and the two assets that mattered most.
+    final pct = dailyReturn;
+    final hasPct = pct != null;
+    final isGain = hasPct && pct >= 0;
+    final pctColor = isGain ? _gainColor : _lossColor;
+    final pctText = hasPct
+        ? '${isGain ? '+' : '-'}${(pct.abs() * 100).toStringAsFixed(2)}%'
+        : '—';
+    final contributorText = dailyContributors.isEmpty
+        ? null
+        : dailyContributors.map((c) => c.label).join(', ');
 
     return Container(
-      key: const Key('portfolio_digest_ai_summary'),
+      key: const Key('portfolio_daily_digest'),
       decoration: BoxDecoration(
         color: tc.surface,
         borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
         border: Border.all(color: tc.border, width: 1),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Pressable(
-            onTap: onDigestTap,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: Pressable(
+        onTap: onDigestTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.auto_awesome_rounded,
-                        size: 18,
-                        color: WeRoboColors.primary,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        summary.meta,
-                        style: WeRoboTypography.caption.copyWith(
-                          color: tc.textTertiary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
                   Text(
-                    summary.title,
-                    style: WeRoboTypography.heading3.copyWith(
-                      color: tc.textPrimary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    summary.body,
-                    maxLines: 3,
-                    overflow: TextOverflow.ellipsis,
+                    '어제 대비 ',
                     style: WeRoboTypography.bodySmall.copyWith(
                       color: tc.textSecondary,
-                      height: 1.45,
+                    ),
+                  ),
+                  Text(
+                    pctText,
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: hasPct ? pctColor : tc.textTertiary,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
               ),
-            ),
+              if (contributorText != null) ...[
+                const SizedBox(height: 4),
+                Text(
+                  '강세: $contributorText',
+                  style: WeRoboTypography.caption.copyWith(
+                    color: tc.textSecondary,
+                  ),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  static String _digestPeriodLabel(MobileDigestResponse digest) {
-    final start = DateTime.tryParse(digest.periodStart);
-    final end = DateTime.tryParse(digest.periodEnd);
-    if (start == null || end == null) return '최근 7일';
-    final days = end.difference(start).inDays.abs();
-    if (days >= 27) return '최근 한 달';
-    if (days >= 10) return '최근 $days일';
-    return '최근 7일';
-  }
-
-  static List<DigestDriver> _topContributions(MobileDigestResponse? digest) {
-    if (digest?.available != true) return const [];
-    final items = [
-      ...digest!.drivers,
-      ...digest.detractors,
-    ]..sort(
-        (a, b) => b.contributionWon.abs().compareTo(a.contributionWon.abs()),
-      );
-    return items.take(2).toList();
-  }
-
-  static String _josaSubject(String name) {
-    if (name.isEmpty) return '가';
-    final code = name.codeUnitAt(name.length - 1);
-    if (code >= 0xAC00 && code <= 0xD7A3) {
-      return (code - 0xAC00) % 28 == 0 ? '가' : '이';
-    }
-    return '가';
-  }
-}
-
-class _DigestAiSummary {
-  final String title;
-  final String meta;
-  final String body;
-
-  const _DigestAiSummary({
-    required this.title,
-    required this.meta,
-    required this.body,
-  });
-
-  factory _DigestAiSummary.from({
-    required MobileDigestResponse? digest,
-    required RebalanceInsight? latestInsight,
-  }) {
-    final periodLabel = digest == null
-        ? '최근 변화'
-        : _PortfolioIssueFeed._digestPeriodLabel(digest);
-    final returnPct = digest?.totalReturnPct ?? 0;
-    final title = returnPct > 0.1
-        ? '왜 올랐을까?'
-        : returnPct < -0.1
-            ? '왜 내려갔을까?'
-            : '왜 큰 변화가 없었을까?';
-    return _DigestAiSummary(
-      title: title,
-      meta: 'AI 요약 · $periodLabel',
-      body: _bodyFor(digest: digest, latestInsight: latestInsight),
-    );
-  }
-
-  static String _bodyFor({
-    required MobileDigestResponse? digest,
-    required RebalanceInsight? latestInsight,
-  }) {
-    final contributions = _PortfolioIssueFeed._topContributions(digest);
-    if (contributions.isNotEmpty) {
-      return contributions.map(_driverSentence).join('\n');
-    }
-
-    final narrative = digest?.narrativeKo?.trim();
-    if (digest?.hasNarrative == true &&
-        narrative != null &&
-        narrative.isNotEmpty) {
-      return narrative;
-    }
-
-    final insightText = latestInsight?.explanationText?.trim();
-    if (insightText != null && insightText.isNotEmpty) {
-      return insightText;
-    }
-
-    return '이 기간 특별한 요인이 없었어요. 포트폴리오는 평소 변동 범위 안에서 움직였어요.';
-  }
-
-  static String _driverSentence(DigestDriver driver) {
-    final name = driver.nameKo.isNotEmpty ? driver.nameKo : driver.ticker;
-    final josa = _PortfolioIssueFeed._josaSubject(name);
-    final won = _formatSignedWon(driver.contributionWon);
-    return driver.contributionWon >= 0
-        ? '$name$josa $won 기여했어요.'
-        : '$name$josa $won 영향을 줬어요.';
-  }
 }
 
 class _RangeDigestIssueCard extends StatelessWidget {
