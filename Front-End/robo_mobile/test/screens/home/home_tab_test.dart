@@ -206,7 +206,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     final logo = find.byKey(const Key('home_werobo_logo'));
-    final totalProfit = find.text('총손익');
+    final totalProfit = find.text('총 손익');
 
     expect(logo, findsOneWidget);
     expect(totalProfit, findsOneWidget);
@@ -237,9 +237,9 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    final investedLabel = find.text('투자금액');
+    final investedLabel = find.text('투자 금액');
     final investedAmount = find.text('10,000,000 원');
-    final currentLabel = find.text('평가금액');
+    final currentLabel = find.text('평가 금액');
     final currentAmount = find.text('10,500,000 원');
 
     expect(investedLabel, findsOneWidget);
@@ -271,8 +271,8 @@ void main() {
     expect(currentAmountStyle.color, tc.textPrimary);
     expect(investedAmountStyle.fontSize, investedLabelStyle.fontSize);
     expect(currentAmountStyle.fontSize, currentLabelStyle.fontSize);
-    expect(investedAmountStyle.fontWeight, FontWeight.w400);
-    expect(currentAmountStyle.fontWeight, FontWeight.w400);
+    expect(investedAmountStyle.fontWeight, FontWeight.w500);
+    expect(currentAmountStyle.fontWeight, FontWeight.w500);
   });
 
   testWidgets('digest banner hidden when digest is unavailable',

@@ -4,10 +4,11 @@ import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../services/mobile_backend_api.dart';
-import 'home_tab.dart';
-import 'portfolio_grid_tab.dart';
+import 'activity_hub_page.dart';
 import 'community_tab.dart';
+import 'home_tab.dart';
 import 'news_tab.dart';
+import 'portfolio_grid_tab.dart';
 import 'settings_tab.dart';
 
 class HomeShell extends StatefulWidget {
@@ -163,7 +164,7 @@ class _HomeShellState extends State<HomeShell> {
             right: 0,
             child: SafeArea(
               child: Padding(
-                padding: EdgeInsets.only(top: 12, right: 16),
+                padding: EdgeInsets.only(top: 0, right: 16),
                 child: _GlobalNotificationIcon(),
               ),
             ),
@@ -325,8 +326,8 @@ class _AlertDot extends StatelessWidget {
 }
 
 /// Bell icon overlay rendered above every HomeShell tab so notifications
-/// are reachable from any screen (UIUX 2026-05-20 spec). Tapping reuses the
-/// same `showNotificationsSheet` entry point as the legacy in-tab bell.
+/// are reachable from any screen (UIUX 2026-05-20 spec). Tapping pushes the
+/// full ActivityHubPage directly (the old dropdown sheet was removed).
 class _GlobalNotificationIcon extends StatelessWidget {
   const _GlobalNotificationIcon();
 
@@ -336,21 +337,13 @@ class _GlobalNotificationIcon extends StatelessWidget {
     final hasUnread = state.unreadInsightCount > 0;
     final tc = WeRoboThemeColors.of(context);
     return Pressable(
-      onTap: () => showNotificationsSheet(context),
-      child: Container(
+      onTap: () => Navigator.push(
+        context,
+        WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
+      ),
+      child: SizedBox(
         width: 40,
         height: 40,
-        decoration: BoxDecoration(
-          color: tc.surface,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.06),
-              blurRadius: 6,
-              offset: const Offset(0, 1),
-            ),
-          ],
-        ),
         child: Stack(
           alignment: Alignment.center,
           clipBehavior: Clip.none,
@@ -359,13 +352,13 @@ class _GlobalNotificationIcon extends StatelessWidget {
               hasUnread
                   ? Icons.notifications_rounded
                   : Icons.notifications_none_rounded,
-              size: 22,
+              size: 24,
               color: tc.textPrimary,
             ),
             if (hasUnread)
               const Positioned(
-                top: 8,
-                right: 10,
+                top: 6,
+                right: 8,
                 child: _AlertDot(),
               ),
           ],
