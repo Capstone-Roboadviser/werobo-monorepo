@@ -64,7 +64,7 @@ class PortfolioGridTab extends StatelessWidget {
                 Expanded(
                   child: _PortfolioTile(
                     label: '비교',
-                    icon: Icons.compare_arrows_rounded,
+                    icon: Icons.balance_rounded,
                     color: tc.surface,
                     onTap: () => Navigator.push(
                       context,
