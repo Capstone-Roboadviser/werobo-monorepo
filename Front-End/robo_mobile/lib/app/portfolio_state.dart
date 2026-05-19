@@ -106,6 +106,7 @@ class PortfolioState extends ChangeNotifier {
   static const int _frontierPreviewStorageVersion = 3;
   static const String _digestSeenDateKey = 'werobo.digest_seen_date';
   static const String _welcomeBannerSeenKey = 'werobo.welcome_banner_seen';
+  static const String _storySeenKey = 'werobo.story_seen';
   static const String _alertFrequencyKey = 'alertFrequency';
 
   static DateTime prototypeAccountStartDate(DateTime now) {
@@ -128,6 +129,7 @@ class PortfolioState extends ChangeNotifier {
   List<RebalanceInsight> _insights = [];
   String? _digestSeenDate;
   bool _welcomeBannerSeen = false;
+  bool _storySeen = false;
   MobileDigestResponse? _weeklyDigest;
   AlertFrequency _alertFrequency = AlertFrequency.normal;
   // Forward-compat for the deferred home dashboard rework: backend will flip
@@ -161,6 +163,7 @@ class PortfolioState extends ChangeNotifier {
   String? get digestSeenDate => _digestSeenDate;
   bool get hasSeenCurrentDigest => _digestSeenDate != null;
   bool get welcomeBannerSeen => _welcomeBannerSeen;
+  bool get hasSeenStory => _storySeen;
   MobileDigestResponse? get weeklyDigest => _weeklyDigest;
   bool get isWeeklyDigestAvailable => _weeklyDigest?.available == true;
   AlertFrequency get alertFrequency => _alertFrequency;
@@ -494,6 +497,7 @@ class PortfolioState extends ChangeNotifier {
     await _restorePortfolioBootstrapFromPrefs(prefs);
     _digestSeenDate = prefs.getString(_digestSeenDateKey);
     _welcomeBannerSeen = prefs.getBool(_welcomeBannerSeenKey) ?? false;
+    _storySeen = prefs.getBool(_storySeenKey) ?? false;
     await _restoreAlertFrequency();
   }
 
@@ -785,6 +789,14 @@ class PortfolioState extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_welcomeBannerSeenKey, true);
+  }
+
+  Future<void> markStorySeen() async {
+    if (_storySeen) return;
+    _storySeen = true;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_storySeenKey, true);
   }
 
   Future<void> markDigestSeen(String digestDate) async {
