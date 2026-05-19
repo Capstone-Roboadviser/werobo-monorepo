@@ -116,15 +116,15 @@ class DriverCard extends StatelessWidget {
   String _formatWon(double won) {
     final abs = won.abs().round();
     if (abs >= 100000000) {
-      return '₩${(won / 100000000).toStringAsFixed(1)}억';
+      return '${(won / 100000000).toStringAsFixed(1)}억 원';
     }
     if (abs >= 10000) {
-      return '₩${(won / 10000).toStringAsFixed(1)}만';
+      return '${(won / 10000).toStringAsFixed(1)}만 원';
     }
     final formatted = abs.toString().replaceAllMapped(
       RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
       (m) => '${m[1]},',
     );
-    return won < 0 ? '-₩$formatted' : '₩$formatted';
+    return won < 0 ? '-$formatted 원' : '$formatted 원';
   }
 }

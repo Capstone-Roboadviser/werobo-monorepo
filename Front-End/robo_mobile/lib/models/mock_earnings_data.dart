@@ -189,7 +189,7 @@ class MockEarningsData {
 
   /// Generate mock daily cumulative return points from Mar 3, 2025
   /// to today, simulating the earnings-history API endpoint.
-  /// Base investment: ₩100,000,000.
+  /// Base investment: 100,000,000 원.
   static List<ChartPoint> dailyCumulativePoints({
     required String riskCode,
     double baseInvestment = 100000000,

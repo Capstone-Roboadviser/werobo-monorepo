@@ -24,8 +24,9 @@ import 'widgets/insight_transition_chart.dart';
 
 // Korean convention (per Eugene): red for gain, blue for loss. This is the
 // opposite of the Korean stock sign convention but matches the meeting spec.
-const Color _gainColor = Color(0xFFE5455F);
-const Color _lossColor = Color(0xFF3182F6);
+// Values from the UIUX-2026-05-20 spec.
+const Color _gainColor = Color(0xFFFF0200);
+const Color _lossColor = Color(0xFF267ACF);
 
 typedef RangeDigestApiOverride = Future<MobileRangeDigestResponse> Function({
   required String accessToken,
@@ -1243,7 +1244,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final pnlColor = isGain ? _gainColor : _lossColor;
     final sign = isGain ? '+' : '-';
     final formattedPnl =
-        '$sign₩${_formatCurrency(displayChange.abs().toInt())}';
+        '$sign${_formatCurrency(displayChange.abs().toInt())} 원';
     final formattedPct = '($sign${displayChangePct.abs().toStringAsFixed(2)}%)';
     final investedAmount = accountSummary?.investedAmount ?? startValue;
     final headerCurrentValue = crosshairValue ?? currentValue;
@@ -2254,7 +2255,7 @@ class _InvestedVsCurrentStack extends StatelessWidget {
             Text('투자금액', style: labelStyle),
             const SizedBox(width: 8),
             Text(
-              '₩${_formatCurrency(invested.toInt())}',
+              '${_formatCurrency(invested.toInt())} 원',
               style: amountStyle,
             ),
           ],
@@ -2266,7 +2267,7 @@ class _InvestedVsCurrentStack extends StatelessWidget {
             Text('평가금액', style: labelStyle),
             const SizedBox(width: 8),
             Text(
-              '₩${_formatCurrency(current.toInt())}',
+              '${_formatCurrency(current.toInt())} 원',
               style: amountStyle,
             ),
           ],
@@ -2877,7 +2878,7 @@ String _formatCurrency(int amount) {
 
 String _formatSignedWon(double amount) {
   final sign = amount >= 0 ? '+' : '-';
-  return '$sign₩${_formatCurrency(amount.abs().round())}';
+  return '$sign${_formatCurrency(amount.abs().round())} 원';
 }
 
 String _formatSignedPercent(double percentage) {

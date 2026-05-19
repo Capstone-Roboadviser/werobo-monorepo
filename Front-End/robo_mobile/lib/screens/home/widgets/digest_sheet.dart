@@ -485,7 +485,7 @@ class _SummaryCard extends StatelessWidget {
           RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
           (m) => '${m[1]},',
         );
-    return won < 0 ? '-₩$formatted' : '₩$formatted';
+    return won < 0 ? '-$formatted 원' : '$formatted 원';
   }
 }
 

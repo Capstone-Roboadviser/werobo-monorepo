@@ -238,9 +238,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     final investedLabel = find.text('투자금액');
-    final investedAmount = find.text('₩10,000,000');
+    final investedAmount = find.text('10,000,000 원');
     final currentLabel = find.text('평가금액');
-    final currentAmount = find.text('₩10,500,000');
+    final currentAmount = find.text('10,500,000 원');
 
     expect(investedLabel, findsOneWidget);
     expect(investedAmount, findsOneWidget);
@@ -506,7 +506,7 @@ void main() {
     expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
     expect(find.text('왜 올랐을까?'), findsOneWidget);
     expect(
-      find.textContaining('미국 가치주가 +₩600,000 기여했어요'),
+      find.textContaining('미국 가치주가 +600,000 원 기여했어요'),
       findsOneWidget,
     );
   });

@@ -292,13 +292,13 @@ class _DetailValueToggle extends StatelessWidget {
                   width: _chipSize + 2,
                   child: Center(
                     child: Text(
-                      '₩',
+                      '원',
                       style: WeRoboTypography.bodySmall.copyWith(
                         color: showAmounts
                             ? tc.textPrimary
                             : tc.textTertiary,
                         fontWeight: FontWeight.w700,
-                        fontFamily: WeRoboFonts.english,
+                        fontFamily: WeRoboFonts.body,
                       ),
                     ),
                   ),
@@ -378,7 +378,7 @@ String _formatWonValue(double? baseValue, double percentage) {
     return '-';
   }
   final amount = (baseValue * percentage / 100).round();
-  return '₩${_formatCurrency(amount)}';
+  return '${_formatCurrency(amount)} 원';
 }
 
 String _formatCurrency(int amount) {

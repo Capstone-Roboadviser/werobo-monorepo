@@ -184,7 +184,7 @@ void main() {
     expect(find.text('입금 현황'), findsOneWidget);
     expect(find.text('예비 현금'), findsOneWidget);
     expect(find.text('포트폴리오 구성 비중에는 포함되지 않아요.'), findsOneWidget);
-    expect(find.text('₩25,000'), findsOneWidget);
+    expect(find.text('25,000 원'), findsOneWidget);
   });
 
   group('volatility view market benchmark', () {

@@ -437,5 +437,5 @@ String _formatWon(double amount) {
     }
     buffer.write(value[i]);
   }
-  return '₩$buffer';
+  return '$buffer 원';
 }
