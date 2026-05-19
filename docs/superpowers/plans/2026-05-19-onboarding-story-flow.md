@@ -26,7 +26,7 @@
 - `Front-End/robo_mobile/test/screens/onboarding/story_flow_screen_test.dart` — end-to-end widget test
 
 **Modified files:**
-- `Front-End/robo_mobile/lib/app/portfolio_state.dart` — add `hasSeenStory` getter, `_storySeenKey`, `markStorySeen()`, restore in `restorePersistedState`, wipe in `clearAuthAndPortfolioState`-style methods (keep semantics consistent with `_welcomeBannerSeen`)
+- `Front-End/robo_mobile/lib/app/portfolio_state.dart` — add `hasSeenStory` getter, `_storySeenKey`, `markStorySeen()`, restore in `restorePersistedState`. Do NOT wipe in `clearAllPersistedState` — the story is a device-level intro (matches `_alertFrequency` precedent), not per-account. Test pins this behavior.
 - `Front-End/robo_mobile/lib/app/theme.dart` — add `WeRoboColors.dangerRed = Color(0xFFFF0200)` after the existing status colors (line ~31)
 - `Front-End/robo_mobile/lib/screens/onboarding/splash_screen.dart` — extend `_scheduleNavigation` to branch on `!hasSeenStory` and route to `StoryFlowScreen`
 
