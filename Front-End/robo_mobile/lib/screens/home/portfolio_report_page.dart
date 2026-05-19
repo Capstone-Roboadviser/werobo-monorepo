@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
+import 'portfolio_report_detail_page.dart';
 
 /// 리포트 sub-screen — three drill-down sections (월간/주간/일간) summarising
-/// portfolio activity. UIUX 2026-05-20 spec; full content lands in Phase E.
+/// portfolio activity. Tapping a section opens the matching detail page
+/// with return-distribution chart and past-period archive.
 class PortfolioReportPage extends StatelessWidget {
   const PortfolioReportPage({super.key});
 
@@ -54,16 +56,19 @@ class PortfolioReportPage extends StatelessWidget {
                   _ReportSection(
                     label: '월간 리포트',
                     returnPct: monthReturn,
+                    onTap: () => _openDetail(context, ReportPeriod.monthly),
                   ),
                   const SizedBox(height: 12),
                   _ReportSection(
                     label: '주간 리포트',
                     returnPct: null,
+                    onTap: () => _openDetail(context, ReportPeriod.weekly),
                   ),
                   const SizedBox(height: 12),
                   _ReportSection(
                     label: '일간 리포트',
                     returnPct: dailyReturn,
+                    onTap: () => _openDetail(context, ReportPeriod.daily),
                   ),
                 ],
               ),
@@ -73,13 +78,27 @@ class PortfolioReportPage extends StatelessWidget {
       ),
     );
   }
+
+  void _openDetail(BuildContext context, ReportPeriod period) {
+    Navigator.push(
+      context,
+      WeRoboMotion.fadeRoute<void>(
+        PortfolioReportDetailPage(period: period),
+      ),
+    );
+  }
 }
 
 class _ReportSection extends StatelessWidget {
   final String label;
   final double? returnPct;
+  final VoidCallback onTap;
 
-  const _ReportSection({required this.label, required this.returnPct});
+  const _ReportSection({
+    required this.label,
+    required this.returnPct,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -91,30 +110,40 @@ class _ReportSection extends StatelessWidget {
     final text = hasPct
         ? '${isGain ? '+' : '-'}${(pct.abs() * 100).toStringAsFixed(2)}%'
         : '—';
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: tc.surface,
-        borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
-        border: Border.all(color: tc.border, width: 1),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: WeRoboTypography.heading3.copyWith(
-              color: tc.textPrimary,
+    return Pressable(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: tc.surface,
+          borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
+          border: Border.all(color: tc.border, width: 1),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: WeRoboTypography.heading3.copyWith(
+                  color: tc.textPrimary,
+                ),
+              ),
             ),
-          ),
-          Text(
-            text,
-            style: WeRoboTypography.body.copyWith(
-              color: hasPct ? color : tc.textTertiary,
-              fontWeight: FontWeight.w700,
+            Text(
+              text,
+              style: WeRoboTypography.body.copyWith(
+                color: hasPct ? color : tc.textTertiary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: tc.textTertiary,
+            ),
+          ],
+        ),
       ),
     );
   }
