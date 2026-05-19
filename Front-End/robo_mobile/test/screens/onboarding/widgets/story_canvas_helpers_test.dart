@@ -90,9 +90,10 @@ void main() {
       }
     });
 
-    test('red dot (index 0) fades out across [0.7, 1.0] as the circle takes over', () {
+    test('red dot (index 0) stays opaque through morph window then snaps off at 1.0', () {
       expect(storyDotOpacity(0, 0.7), 1.0);
-      expect(storyDotOpacity(0, 0.85), closeTo(0.5, 1e-9));
+      expect(storyDotOpacity(0, 0.85), 1.0);
+      expect(storyDotOpacity(0, 0.999), 1.0);
       expect(storyDotOpacity(0, 1.0), 0);
     });
 
@@ -135,6 +136,23 @@ void main() {
     test('fades out across [5.5, 6.0]', () {
       expect(storyChipOpacity(0, 5.75), closeTo(0.5, 1e-9));
       expect(storyChipOpacity(0, 6.0), 0);
+    });
+  });
+
+  group('storyWobbleScale', () {
+    test('full amplitude across the intro window [0, 0.3]', () {
+      expect(storyWobbleScale(0), 1.0);
+      expect(storyWobbleScale(0.3), 1.0);
+    });
+
+    test('settles 1 → 0 across [0.3, 0.7] before the red-dot morph begins', () {
+      expect(storyWobbleScale(0.5), closeTo(0.5, 1e-9));
+      expect(storyWobbleScale(0.7), 0);
+    });
+
+    test('stays at 0 past 0.7 so morph + later pages are still', () {
+      expect(storyWobbleScale(1.0), 0);
+      expect(storyWobbleScale(4.0), 0);
     });
   });
 }

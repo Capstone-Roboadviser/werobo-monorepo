@@ -49,8 +49,9 @@ class _StoryFlowScreenState extends State<StoryFlowScreen> {
     ),
     _StoryPageData(
       headline:
-          '최적의 자산 배분으로, 최선의 전략으로,\n보다 안정적이면서 높은 수익률을\nWeRobo가 제공하겠습니다.',
+          '최적의 자산 배분으로,\n최선의 전략으로,\n보다 안정적이면서 높은 수익률을\nWeRobo가 제공하겠습니다.',
       description: null,
+      centered: true,
     ),
   ];
 
@@ -157,7 +158,12 @@ class _StoryFlowScreenState extends State<StoryFlowScreen> {
 class _StoryPageData {
   final String headline;
   final String? description;
-  const _StoryPageData({required this.headline, this.description});
+  final bool centered;
+  const _StoryPageData({
+    required this.headline,
+    this.description,
+    this.centered = false,
+  });
 }
 
 class _StoryPage extends StatelessWidget {
@@ -166,22 +172,36 @@ class _StoryPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final headlineText = Text(
+      data.headline,
+      textAlign: TextAlign.center,
+      style: const TextStyle(
+        fontSize: 22,
+        fontWeight: FontWeight.w800,
+        color: WeRoboColors.primary,
+        height: 1.4,
+      ),
+    );
+
+    if (data.centered) {
+      // Headline sits in the upper-middle so it balances the bottom-anchored
+      // CTA. Pure center looks bottom-heavy against an empty top half.
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Align(
+          alignment: const Alignment(0, -0.3),
+          child: headlineText,
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(height: 64),
-          Text(
-            data.headline,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-              color: WeRoboColors.primary,
-              height: 1.4,
-            ),
-          ),
+          headlineText,
           const Spacer(),
           if (data.description != null)
             Padding(

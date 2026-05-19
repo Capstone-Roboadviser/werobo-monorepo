@@ -63,13 +63,20 @@ void main() {
     final state = await pumpStoryFlow(tester);
 
     // Jump the PageView directly to page index 6 (spec page 7, CTA page).
+    // Bounded pumps instead of pumpAndSettle because StoryCanvas runs an
+    // infinitely-repeating float AnimationController that never lets
+    // pumpAndSettle return.
     final pageView = tester.widget<PageView>(find.byType(PageView));
     pageView.controller!.jumpToPage(6);
-    await tester.pumpAndSettle();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     // At progress 6.0, storyCtaOpacity == 1.0, so IgnorePointer is off
     // and the button is tappable.
     await tester.tap(find.text('투자 시작하기'));
+    // After tap, _exitToLogin awaits markStorySeen then pushReplaces. Once
+    // StoryFlowScreen is disposed the float controller is gone, so
+    // pumpAndSettle finishes normally.
     await tester.pumpAndSettle();
 
     expect(find.byType(LoginScreen), findsOneWidget);
@@ -86,7 +93,9 @@ void main() {
     expect(find.textContaining('분산투자'), findsNothing);
 
     await tester.fling(find.byType(PageView), const Offset(-400, 0), 1000);
-    await tester.pumpAndSettle();
+    // Bounded pumps — see note on the CTA test above.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
 
     // After swiping left once, page 2's headline should now be on screen.
     expect(find.textContaining('분산투자'), findsWidgets);
