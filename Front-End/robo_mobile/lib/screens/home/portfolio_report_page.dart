@@ -106,11 +106,22 @@ class _ReportSection extends StatelessWidget {
     final tc = WeRoboThemeColors.of(context);
     final pct = returnPct;
     final hasPct = pct != null;
-    final isGain = hasPct && pct >= 0;
-    final color = isGain ? WeRoboColors.gainRed : WeRoboColors.lossBlue;
-    final text = hasPct
-        ? '${isGain ? '+' : '-'}${(pct.abs() * 100).toStringAsFixed(2)}%'
-        : '—';
+    final magnitude = hasPct ? pct.abs() * 100 : 0.0;
+    // Anything below 0.005% rounds to "0.00%" — render as neutral instead
+    // of forcing a sign + gain/loss color on what is effectively zero.
+    final isZero = hasPct && magnitude < 0.005;
+    final isGain = hasPct && !isZero && pct > 0;
+    final isLoss = hasPct && !isZero && pct < 0;
+    final color = isGain
+        ? WeRoboColors.gainRed
+        : isLoss
+            ? WeRoboColors.lossBlue
+            : tc.textTertiary;
+    final text = !hasPct
+        ? '—'
+        : isZero
+            ? '0.00%'
+            : '${isGain ? '+' : '-'}${magnitude.toStringAsFixed(2)}%';
     return Pressable(
       onTap: onTap,
       child: Container(
@@ -133,7 +144,7 @@ class _ReportSection extends StatelessWidget {
             Text(
               text,
               style: WeRoboTypography.body.copyWith(
-                color: hasPct ? color : tc.textTertiary,
+                color: color,
                 fontWeight: FontWeight.w700,
               ),
             ),
