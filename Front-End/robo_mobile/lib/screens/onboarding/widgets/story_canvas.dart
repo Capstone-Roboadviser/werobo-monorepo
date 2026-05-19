@@ -203,12 +203,16 @@ class _StartButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Override the global elevatedButtonTheme's minimumSize so the button
+    // shrinks to fit its content instead of spanning full width.
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
         backgroundColor: WeRoboColors.primaryLight,
         foregroundColor: WeRoboColors.primary,
         padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 16),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
         ),
@@ -385,4 +389,10 @@ class _StoryPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _StoryPainter oldDelegate) =>
       oldDelegate.progress != progress;
+
+  // CustomPaint with no child claims hits by default (painter.hitTest
+  // returns null which the framework reads as true). Override to false
+  // so swipe gestures fall through to the PageView underneath.
+  @override
+  bool? hitTest(Offset position) => false;
 }

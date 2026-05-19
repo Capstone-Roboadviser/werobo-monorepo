@@ -75,4 +75,20 @@ void main() {
     expect(find.byType(LoginScreen), findsOneWidget);
     expect(state.hasSeenStory, true);
   });
+
+  testWidgets('swipe gesture advances the PageView (canvas passes hits through)',
+      (tester) async {
+    // Regression: the StoryCanvas sits visually above the PageView in the
+    // Stack. Its `CustomPaint` painter must NOT claim hits, otherwise
+    // horizontal swipes are absorbed and the PageView never advances.
+    await pumpStoryFlow(tester);
+    expect(find.text('시장에는 수많은 자산들이 있습니다.'), findsOneWidget);
+    expect(find.textContaining('분산투자'), findsNothing);
+
+    await tester.fling(find.byType(PageView), const Offset(-400, 0), 1000);
+    await tester.pumpAndSettle();
+
+    // After swiping left once, page 2's headline should now be on screen.
+    expect(find.textContaining('분산투자'), findsWidgets);
+  });
 }
