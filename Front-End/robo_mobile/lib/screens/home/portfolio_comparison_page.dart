@@ -18,6 +18,7 @@ class PortfolioComparisonPage extends StatelessWidget {
     final tc = WeRoboThemeColors.of(context);
     final state = PortfolioStateProvider.of(context);
     final (mine, market) = _computeMetricsPair(state);
+    final periodLabel = _formatPeriod(state);
 
     final rows = <_MetricSpec>[
       _MetricSpec(
@@ -132,7 +133,8 @@ class PortfolioComparisonPage extends StatelessWidget {
 
     final hasAnyMine = rows.any((r) => r.mine != null);
     final caveat = hasAnyMine
-        ? '백테스트 시계열 기준이며, 시장 라인은 동일 기간 자산군 등가중 바스켓입니다.'
+        ? '실현 수익률 기준. 시장은 동일 기간 자산군 등가중 바스켓이며, '
+            '예상 수치(비중 화면)와는 측정 방식이 달라 차이가 날 수 있습니다.'
         : '백테스트 데이터를 불러오는 중입니다.';
 
     return Scaffold(
@@ -164,9 +166,26 @@ class PortfolioComparisonPage extends StatelessWidget {
                     color: WeRoboColors.primary,
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    '비교',
-                    style: WeRoboTypography.heading2.themed(context),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '비교',
+                          style: WeRoboTypography.heading2.themed(context),
+                        ),
+                        if (periodLabel != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            '실현 · $periodLabel',
+                            style: WeRoboTypography.caption.copyWith(
+                              color: tc.textTertiary,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -288,6 +307,22 @@ class PortfolioComparisonPage extends StatelessWidget {
   static String _percent(double v) =>
       '${(v * 100).toStringAsFixed(2)}%';
   static String _decimal(double v) => v.toStringAsFixed(2);
+
+  /// "YY.MM.DD - YY.MM.DD" formatting for the realized backtest window.
+  /// Returns null when the backtest isn't loaded yet so the subtitle hides
+  /// instead of rendering placeholders.
+  static String? _formatPeriod(PortfolioState state) {
+    final bt = state.backtest;
+    if (bt == null) return null;
+    String fmt(DateTime d) {
+      final yy = (d.year % 100).toString().padLeft(2, '0');
+      final mm = d.month.toString().padLeft(2, '0');
+      final dd = d.day.toString().padLeft(2, '0');
+      return '$yy.$mm.$dd';
+    }
+
+    return '${fmt(bt.startDate)} - ${fmt(bt.endDate)}';
+  }
 }
 
 class _ComparisonHeader extends StatelessWidget {
