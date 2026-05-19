@@ -160,12 +160,6 @@ class PortfolioComparisonPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Icon(
-                    Icons.balance_rounded,
-                    size: 24,
-                    color: WeRoboColors.primary,
-                  ),
-                  const SizedBox(width: 8),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
