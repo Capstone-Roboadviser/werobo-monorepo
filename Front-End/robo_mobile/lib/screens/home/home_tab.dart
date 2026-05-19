@@ -365,12 +365,14 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
           children: [
             const SizedBox(height: 12),
 
-            // Header row: WeRobo wordmark left, notification icon right.
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
+            // Wordmark only — the notification bell lives in HomeShell as a
+            // global overlay (UIUX 2026-05-20 spec). Right-pad so the
+            // wordmark doesn't sit underneath the bell.
+            Padding(
+              padding: const EdgeInsets.only(right: 48),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
                   'WeRobo',
                   key: const Key('home_werobo_logo'),
                   style: WeRoboTypography.logo.copyWith(
@@ -379,10 +381,7 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
                     height: 1.1,
                   ),
                 ),
-                _NotificationIconButton(
-                  hasUnread: state.unreadInsightCount > 0,
-                ),
-              ],
+              ),
             ),
             const SizedBox(height: 8),
 
@@ -3027,27 +3026,6 @@ class _DigestBanner extends StatelessWidget {
   }
 }
 
-// ─── Notification icon ──────────────────────────────────────
-
-class _NotificationIconButton extends StatelessWidget {
-  final bool hasUnread;
-  const _NotificationIconButton({this.hasUnread = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Pressable(
-      onTap: () => showNotificationsSheet(context),
-      child: Icon(
-        hasUnread
-            ? Icons.notifications_rounded
-            : Icons.notifications_none_rounded,
-        size: 24,
-        color: tc.textSecondary,
-      ),
-    );
-  }
-}
 
 // ─── Notification dropdown sheet ────────────────────────────
 

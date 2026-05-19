@@ -150,9 +150,25 @@ class _HomeShellState extends State<HomeShell> {
     final tc = WeRoboThemeColors.of(context);
     return Scaffold(
       backgroundColor: tc.background,
-      body: IndexedStack(
-        index: _currentTab,
-        children: _tabs,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _currentTab,
+            children: _tabs,
+          ),
+          // Global notification bell (pinned per UIUX 2026-05-20 spec).
+          // Shows on every tab; HomeTab also stops drawing its own bell.
+          const Positioned(
+            top: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.only(top: 12, right: 16),
+                child: _GlobalNotificationIcon(),
+              ),
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: Container(
         color: tc.background,
@@ -303,6 +319,57 @@ class _AlertDot extends StatelessWidget {
       decoration: const BoxDecoration(
         color: WeRoboColors.primary,
         shape: BoxShape.circle,
+      ),
+    );
+  }
+}
+
+/// Bell icon overlay rendered above every HomeShell tab so notifications
+/// are reachable from any screen (UIUX 2026-05-20 spec). Tapping reuses the
+/// same `showNotificationsSheet` entry point as the legacy in-tab bell.
+class _GlobalNotificationIcon extends StatelessWidget {
+  const _GlobalNotificationIcon();
+
+  @override
+  Widget build(BuildContext context) {
+    final state = PortfolioStateProvider.of(context);
+    final hasUnread = state.unreadInsightCount > 0;
+    final tc = WeRoboThemeColors.of(context);
+    return Pressable(
+      onTap: () => showNotificationsSheet(context),
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: tc.surface,
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 6,
+              offset: const Offset(0, 1),
+            ),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          clipBehavior: Clip.none,
+          children: [
+            Icon(
+              hasUnread
+                  ? Icons.notifications_rounded
+                  : Icons.notifications_none_rounded,
+              size: 22,
+              color: tc.textPrimary,
+            ),
+            if (hasUnread)
+              const Positioned(
+                top: 8,
+                right: 10,
+                child: _AlertDot(),
+              ),
+          ],
+        ),
       ),
     );
   }
