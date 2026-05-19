@@ -16,6 +16,7 @@ class PortfolioReportPage extends StatelessWidget {
     final tc = WeRoboThemeColors.of(context);
     final state = PortfolioStateProvider.of(context);
     final monthReturn = state.trailingMonthReturn;
+    final weekReturn = state.trailingWeekReturn;
     final dailyReturn = state.dailyReturn;
 
     return Scaffold(
@@ -61,7 +62,7 @@ class PortfolioReportPage extends StatelessWidget {
                   const SizedBox(height: 12),
                   _ReportSection(
                     label: '주간 리포트',
-                    returnPct: null,
+                    returnPct: weekReturn,
                     onTap: () => _openDetail(context, ReportPeriod.weekly),
                   ),
                   const SizedBox(height: 12),
