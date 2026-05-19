@@ -187,6 +187,23 @@ class PortfolioState extends ChangeNotifier {
     return (end / start) - 1.0;
   }
 
+  /// Trailing-7-day portfolio return as a fraction (e.g. 0.012 = +1.2%).
+  /// Returns null when fewer than 5 daily points exist in the window — same
+  /// "at least one trading week" threshold used to gate the weekly view.
+  double? get trailingWeekReturn {
+    final history = accountHistory;
+    if (history.length < 5) return null;
+    final now = DateTime.now();
+    final cutoff = now.subtract(const Duration(days: 7));
+    final window = history.where((p) => !p.date.isBefore(cutoff)).toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    if (window.length < 5) return null;
+    final start = window.first.portfolioValue;
+    final end = window.last.portfolioValue;
+    if (start <= 0) return null;
+    return (end / start) - 1.0;
+  }
+
   /// Top contributor by |weight * cumulative return| over the last 30 days.
   /// Returns null when earnings history is unavailable or no asset clears the
   /// 0.5% absolute-contribution threshold.
