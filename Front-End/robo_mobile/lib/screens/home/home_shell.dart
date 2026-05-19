@@ -5,7 +5,7 @@ import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../services/mobile_backend_api.dart';
 import 'home_tab.dart';
-import 'portfolio_tab.dart';
+import 'portfolio_grid_tab.dart';
 import 'community_tab.dart';
 import 'news_tab.dart';
 import 'settings_tab.dart';
@@ -63,7 +63,7 @@ class _HomeShellState extends State<HomeShell> {
 
   static const _tabs = [
     HomeTab(),
-    PortfolioTab(),
+    PortfolioGridTab(),
     CommunityTab(),
     NewsTab(),
     MoreTab(),

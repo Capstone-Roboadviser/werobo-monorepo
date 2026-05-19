@@ -62,6 +62,7 @@ flutter:
 
   assets:
     - assets/icons/
+    - assets/icons/asset_class/
 
   fonts:
     - family: Jalnan
