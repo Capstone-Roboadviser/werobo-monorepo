@@ -30,6 +30,10 @@ class WeRoboColors {
   static const Color warning = Color(0xFFFBBF24);
   static const Color error = Color(0xFFEF4444);
 
+  /// Hot red used by the risk gauge's high zone and (later) the home-tab
+  /// loss indicator. Sourced from the UIUX-2026-05-19 spec.
+  static const Color dangerRed = Color(0xFFFF0200);
+
   // Korean financial convention: red = gain (up), blue = loss/warning (down).
   static const Color gainRed = Color(0xFFE5455F);
   static const Color lossBlue = Color(0xFF3182F6);
