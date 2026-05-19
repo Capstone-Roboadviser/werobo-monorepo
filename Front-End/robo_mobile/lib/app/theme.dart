@@ -35,8 +35,9 @@ class WeRoboColors {
   static const Color dangerRed = Color(0xFFFF0200);
 
   // Korean financial convention: red = gain (up), blue = loss/warning (down).
-  static const Color gainRed = Color(0xFFE5455F);
-  static const Color lossBlue = Color(0xFF3182F6);
+  // Values from the UIUX-2026-05-20 spec.
+  static const Color gainRed = Color(0xFFFF0200);
+  static const Color lossBlue = Color(0xFF267ACF);
 
   // Asset class colors. One distinct hue per asset class so users learn
   // each color over time. Order matches AssetClass enum (defensive to

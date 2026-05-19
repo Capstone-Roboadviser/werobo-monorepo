@@ -25,9 +25,9 @@ void main() {
       expect(insight.hasRealChanges, isTrue);
       expect(
         insight.cashFlowSummary,
-        '매도 ₩700,000 · 매수 ₩520,000 · 예비현금 ₩180,000',
+        '매도 700,000 원 · 매수 520,000 원 · 예비현금 180,000 원',
       );
-      expect(insight.historySummary, contains('예비현금 ₩180,000'));
+      expect(insight.historySummary, contains('예비현금 180,000 원'));
     });
 
     test('does not treat carried reserve cash alone as new activity', () {

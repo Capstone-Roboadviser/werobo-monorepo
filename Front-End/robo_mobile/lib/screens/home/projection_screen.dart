@@ -25,7 +25,7 @@ class _ProjectionScreenState extends State<ProjectionScreen>
   static const _debounceMs = 200;
 
   // Ruler slider stops (in Won). Each step = 10만원.
-  static const _rulerMax = 30000000.0; // ₩3,000만
+  static const _rulerMax = 30000000.0; // 3,000만 원
   static const _rulerSteps = 30; // 30 steps × 10만 = 3,000만
 
   late AnimationController _animCtrl;
@@ -514,17 +514,17 @@ class _ProjectionScreenState extends State<ProjectionScreen>
   }
 
   static String _formatWonDisplay(double value) {
-    if (value.isNaN || value.isInfinite) return '₩0';
+    if (value.isNaN || value.isInfinite) return '0 원';
     final abs = value.abs();
     if (abs >= 1e8) {
       final eok = value / 1e8;
-      return '₩${eok.toStringAsFixed(1)}억';
+      return '${eok.toStringAsFixed(1)}억 원';
     }
     if (abs >= 1e4) {
       final man = (value / 1e4).round();
-      return '₩${_addCommas(man)}만';
+      return '${_addCommas(man)}만 원';
     }
-    return '₩${_addCommas(value.round())}';
+    return '${_addCommas(value.round())} 원';
   }
 
   static String _addCommas(num value) {
@@ -749,14 +749,14 @@ class _RulerSliderState extends State<_RulerSlider> {
   }
 
   static String _formatRulerValue(double value) {
-    if (value <= 0) return '₩0';
+    if (value <= 0) return '0 원';
     if (value >= 1e8) {
-      return '₩${(value / 1e8).toStringAsFixed(1)}억';
+      return '${(value / 1e8).toStringAsFixed(1)}억 원';
     }
     if (value >= 1e4) {
       final man = (value / 1e4).round();
-      return '₩$man만';
+      return '$man만 원';
     }
-    return '₩${value.round()}';
+    return '${value.round()} 원';
   }
 }

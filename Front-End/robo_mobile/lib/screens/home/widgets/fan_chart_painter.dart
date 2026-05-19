@@ -276,16 +276,16 @@ class FanChartPainter extends CustomPainter {
 
   /// Format for tooltip values.
   static String _formatWon(double value) {
-    if (value.isNaN || value.isInfinite) return '₩0';
+    if (value.isNaN || value.isInfinite) return '0 원';
     final abs = value.abs();
     if (abs >= 1e8) {
-      return '₩${(value / 1e8).toStringAsFixed(1)}억';
+      return '${(value / 1e8).toStringAsFixed(1)}억 원';
     }
     if (abs >= 1e4) {
       final man = (value / 1e4).round();
-      return '₩${_addCommas(man)}만';
+      return '${_addCommas(man)}만 원';
     }
-    return '₩${_addCommas(value.round())}';
+    return '${_addCommas(value.round())} 원';
   }
 
   static String _addCommas(num value) {

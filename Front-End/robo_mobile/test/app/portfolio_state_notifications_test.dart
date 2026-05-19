@@ -50,6 +50,39 @@ void main() {
     });
   });
 
+  group('dailyReturn', () {
+    test('returns null when fewer than 2 history points exist', () {
+      final state = PortfolioState();
+      state.debugSetAccountDashboard(_dashboardWith(const []));
+      expect(state.dailyReturn, isNull);
+
+      state.debugSetAccountDashboard(_dashboardWith([
+        _point(DateTime(2026, 5, 12), 100),
+      ]));
+      expect(state.dailyReturn, isNull);
+    });
+
+    test('returns the day-over-day percent change from the last two points',
+        () {
+      final state = PortfolioState();
+      state.debugSetAccountDashboard(_dashboardWith([
+        _point(DateTime(2026, 5, 11), 100),
+        _point(DateTime(2026, 5, 12), 100.84),
+      ]));
+      expect(state.dailyReturn, closeTo(0.0084, 1e-9));
+    });
+
+    test('handles unsorted history by sorting before picking last two', () {
+      final state = PortfolioState();
+      // Insert latest first to verify the helper sorts before slicing.
+      state.debugSetAccountDashboard(_dashboardWith([
+        _point(DateTime(2026, 5, 12), 99),
+        _point(DateTime(2026, 5, 11), 100),
+      ]));
+      expect(state.dailyReturn, closeTo(-0.01, 1e-9));
+    });
+  });
+
   group('topContributorOver30d', () {
     test('returns null when earnings history is missing', () {
       final state = PortfolioState();

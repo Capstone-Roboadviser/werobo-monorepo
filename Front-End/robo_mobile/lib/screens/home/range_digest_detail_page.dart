@@ -340,7 +340,7 @@ String _formatCurrency(int amount) {
 
 String _formatSignedWon(double amount) {
   final sign = amount >= 0 ? '+' : '-';
-  return '$sign₩${_formatCurrency(amount.abs().round())}';
+  return '$sign${_formatCurrency(amount.abs().round())} 원';
 }
 
 String _formatSignedPercent(double percentage) {

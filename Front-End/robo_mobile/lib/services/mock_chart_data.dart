@@ -84,7 +84,7 @@ class MockChartData {
   ];
 
   /// Portfolio value history for the home chart.
-  /// Returns ~600 daily points (~20 months) of ₩-denominated values.
+  /// Returns ~600 daily points (~20 months) of 원-denominated values.
   static List<ChartPoint> portfolioValue(InvestmentType type) {
     final base = type == InvestmentType.safe
         ? 10000000.0
@@ -118,7 +118,7 @@ class MockChartData {
   }
 
   /// Cost basis (cumulative deposits) for the home chart.
-  /// Step function: starts at base, adds ₩500,000 every ~90 days.
+  /// Step function: starts at base, adds 500,000 원 every ~90 days.
   static List<ChartPoint> costBasis(InvestmentType type) {
     const days = 600;
     const depositInterval = 90;

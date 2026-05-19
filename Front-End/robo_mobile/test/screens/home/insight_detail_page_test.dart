@@ -81,6 +81,6 @@ void main() {
 
     expect(find.text('Vanguard Total Intl Bond ETF'), findsOneWidget);
     expect(find.text('iShares TIPS Bond ETF'), findsOneWidget);
-    expect(find.text('매도 ₩22,113'), findsOneWidget);
+    expect(find.text('매도 22,113 원'), findsOneWidget);
   });
 }

@@ -238,9 +238,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     final investedLabel = find.text('투자금액');
-    final investedAmount = find.text('₩10,000,000');
+    final investedAmount = find.text('10,000,000 원');
     final currentLabel = find.text('평가금액');
-    final currentAmount = find.text('₩10,500,000');
+    final currentAmount = find.text('10,500,000 원');
 
     expect(investedLabel, findsOneWidget);
     expect(investedAmount, findsOneWidget);
@@ -321,9 +321,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
-    expect(find.text('AI 요약 · 최근 한 달'), findsOneWidget);
-    expect(find.text('왜 내려갔을까?'), findsOneWidget);
-    expect(find.textContaining('영향을 줬어요'), findsAtLeastNWidgets(1));
+    // AI 요약 card replaced with daily digest card (UIUX 2026-05-20).
+    expect(find.text('AI 요약 · 최근 한 달'), findsNothing);
+    expect(find.text('왜 내려갔을까?'), findsNothing);
+    expect(
+      find.byKey(const Key('portfolio_daily_digest')),
+      findsOneWidget,
+    );
     expect(find.textContaining('시장 변동성이 평소보다'), findsNothing);
     expect(find.text('이번 주 다이제스트가 도착했어요'), findsNothing);
   });
@@ -349,9 +353,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
-    expect(find.text('AI 요약 · 최근 한 달'), findsOneWidget);
-    expect(find.text('왜 내려갔을까?'), findsOneWidget);
-    expect(find.textContaining('영향을 줬어요'), findsAtLeastNWidgets(1));
+    // AI 요약 card replaced with daily digest card (UIUX 2026-05-20).
+    expect(find.text('AI 요약 · 최근 한 달'), findsNothing);
+    expect(find.text('왜 내려갔을까?'), findsNothing);
+    expect(
+      find.byKey(const Key('portfolio_daily_digest')),
+      findsOneWidget,
+    );
     expect(find.textContaining('시장 변동성이 평소보다'), findsNothing);
     expect(find.text('더 보기'), findsNothing);
     expect(find.text('구간분석'), findsNothing);
@@ -409,8 +417,11 @@ void main() {
 
     expect(find.text('주간 다이제스트'), findsNothing);
     expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
-    expect(find.text('AI 요약 · 최근 7일'), findsOneWidget);
-    expect(find.text('왜 올랐을까?'), findsOneWidget);
+    // AI 요약 card was replaced with a daily digest line (UIUX 2026-05-20).
+    expect(
+      find.byKey(const Key('portfolio_daily_digest')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('labels monthly fallback digest by response period',
@@ -438,7 +449,13 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    expect(find.text('AI 요약 · 최근 한 달'), findsOneWidget);
+    // AI 요약 meta line removed — daily digest card no longer derives a
+    // period label from the weekly/monthly digest response.
+    expect(find.text('AI 요약 · 최근 한 달'), findsNothing);
+    expect(
+      find.byKey(const Key('portfolio_daily_digest')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('folds unread algorithm signal into issue timeline only',
@@ -504,9 +521,10 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     expect(find.text('포트폴리오 주요 이슈 알림'), findsNothing);
-    expect(find.text('왜 올랐을까?'), findsOneWidget);
+    // Daily digest card replaces the AI summary; contributor names now flow
+    // through state.topContributorsOverDay, not the weekly digest's drivers.
     expect(
-      find.textContaining('미국 가치주가 +₩600,000 기여했어요'),
+      find.byKey(const Key('portfolio_daily_digest')),
       findsOneWidget,
     );
   });
@@ -826,7 +844,11 @@ void main() {
     await tester.tap(find.byKey(const Key('range_digest_exit')));
     await tester.pump();
 
-    expect(find.text('AI 요약 · 최근 7일'), findsOneWidget);
+    // AI 요약 card replaced with daily digest card (UIUX 2026-05-20).
+    expect(
+      find.byKey(const Key('portfolio_daily_digest')),
+      findsOneWidget,
+    );
     expect(find.byIcon(Icons.crop_free_rounded), findsNothing);
   });
 

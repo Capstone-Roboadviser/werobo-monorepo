@@ -711,11 +711,11 @@ class _PortfolioValueToggle extends StatelessWidget {
                   width: _chipSize + 2,
                   child: Center(
                     child: Text(
-                      '₩',
+                      '원',
                       style: WeRoboTypography.bodySmall.copyWith(
                         color: showAmounts ? tc.textPrimary : tc.textTertiary,
                         fontWeight: FontWeight.w700,
-                        fontFamily: WeRoboFonts.english,
+                        fontFamily: WeRoboFonts.body,
                       ),
                     ),
                   ),
@@ -864,7 +864,7 @@ class _DepositsPanel extends StatelessWidget {
           label: '최근 입금',
           valueText: latestAmount == null
               ? '아직 입금 내역이 없어요'
-              : '₩${_formatCurrency(latestAmount.round())}'
+              : '${_formatCurrency(latestAmount.round())} 원'
                   ' · ${_formatKoreanMonthDay(latestDate!)}',
         ),
         Divider(
@@ -876,7 +876,7 @@ class _DepositsPanel extends StatelessWidget {
           label: '예정 입금',
           valueText: upcomingDate == null
               ? '예정된 입금이 없어요'
-              : '₩${_formatCurrency(upcomingAmount.round())}'
+              : '${_formatCurrency(upcomingAmount.round())} 원'
                   ' · ${_formatKoreanMonthDay(upcomingDate)}',
         ),
         const SizedBox(height: 16),
@@ -1069,14 +1069,14 @@ String _formatWonFromRatio(double? baseValue, double percentage) {
     return '-';
   }
   final amount = (baseValue * percentage / 100).round();
-  return '₩${_formatCurrency(amount)}';
+  return '${_formatCurrency(amount)} 원';
 }
 
 String _formatWonAmount(double? amount) {
   if (amount == null) {
     return '-';
   }
-  return '₩${_formatCurrency(amount.round())}';
+  return '${_formatCurrency(amount.round())} 원';
 }
 
 double? _portfolioAllocationBaseValue(MobileAccountSummary? summary) {

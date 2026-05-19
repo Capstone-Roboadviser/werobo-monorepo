@@ -155,7 +155,7 @@ Focus ring is now orange-tinted (was sky-blue-tinted) at 30% alpha. Required for
 - **Asset bubbles on frontier:** fixed-radius circles labeled with 자산군 name. **No size-growth animation, no % labels.** Position by `AssetClass` enum order along the curve, not raw (vol, return) coords.
 - **Stats card:** 3-column with hairline dividers. Optional subtitle for plain-language risk label.
 - **Issue timeline (new):** vertical feed on home tab. Each item: 8px tonal dot (orange = active alert, gray = info), timestamp (Gothic A1 caption), headline (Noto Sans KR body), expandable detail. Sorted newest first.
-- **Contribution tooltip (new):** elevated card on graph tap. Shows TOP-2 contributing assets (asset name + 비중 × 수익률 = ₩ figure) + optional 2σ-outlier badge. Dismiss on outside tap.
+- **Contribution tooltip (new):** elevated card on graph tap. Shows TOP-2 contributing assets (asset name + 비중 × 수익률 = 원 figure) + optional 2σ-outlier badge. Dismiss on outside tap.
 - **Alert frequency selector (new):** 3-segment control in settings. Plain labels (자주 받기 / 보통 / 중요할 때만). Internal σ never displayed.
 - **Navigation:** bottom tab bar with 4 items (홈 / 포트폴리오 / 커뮤니티 / 설정). Active = primary color with `#FFC091` (tier 5) tinted background. Pill-style page indicators for onboarding.
 
@@ -228,7 +228,7 @@ The questionnaire-based onboarding is **eliminated**. Risk preference is capture
 - **포트폴리오 주요 이슈 알림 timeline** below the graph — vertical feed of asset news, market volatility warnings, and algorithm signals.
 - **Contribution tooltip** on graph tap — clicking a volatile point shows the TOP-2 contributing assets (비중 × 수익률) and a 2σ-outlier badge if applicable.
 
-**Kept:** 포트폴리오 구성 list (with %/₩ toggle), pie sector tap → ETF tickers in center, plain-language commentary, auto-rebalancing toggle, 로그인 없이 둘러보기 preview mode.
+**Kept:** 포트폴리오 구성 list (with %/원 toggle), pie sector tap → ETF tickers in center, plain-language commentary, auto-rebalancing toggle, 로그인 없이 둘러보기 preview mode.
 
 ### Pie chart sectors
 Tap a sector to see constituent ETF tickers in the center. Builds trust through transparency. Unchanged from prior system.
