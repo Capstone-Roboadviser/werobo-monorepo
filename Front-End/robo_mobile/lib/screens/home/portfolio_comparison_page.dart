@@ -247,13 +247,32 @@ class PortfolioComparisonPage extends StatelessWidget {
         ? null
         : _toReturnPoints(marketLine.points);
 
+    // Turnover proxy: my portfolio is drift-rebalanced based on the backtest
+    // metadata; the 시장 line is a passive equal-weight basket and so has
+    // zero strategic turnover.
+    final spanDays = bt.endDate.difference(bt.startDate).inDays;
+    final mineTurnover = estimateAnnualTurnover(
+      rebalanceEvents: bt.rebalanceDates.length,
+      spanDays: spanDays,
+      driftThreshold: bt.rebalancePolicy?.driftThreshold,
+    );
+
     final mine = computeMetrics(
       series: portfolioSeries,
       benchmark: marketSeries,
+      turnover: mineTurnover,
     );
+    // Pass the market as its own benchmark so the column shows the
+    // definitional values (alpha=0, beta=1, correlation=1, treynor=excess
+    // return). Information ratio stays null because tracking error vs self
+    // is zero.
     final market = marketSeries == null
         ? PortfolioMetrics.empty
-        : computeMetrics(series: marketSeries);
+        : computeMetrics(
+            series: marketSeries,
+            benchmark: marketSeries,
+            turnover: 0.0,
+          );
 
     return (mine, market);
   }

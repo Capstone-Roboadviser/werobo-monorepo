@@ -177,6 +177,26 @@ PortfolioMetrics computeMetrics({
   );
 }
 
+/// Rough annual turnover proxy from drift-rebalance metadata. We don't have
+/// per-event weight changes client-side, so this approximates: each
+/// rebalance event trades ~2× drift_threshold worth (one drifted asset
+/// sold, replacement bought). Annualized by the actual elapsed span.
+///
+/// Returns 0 when no rebalance events occurred (true buy-and-hold).
+/// Returns null when the span is non-positive (insufficient data).
+double? estimateAnnualTurnover({
+  required int rebalanceEvents,
+  required int spanDays,
+  required double? driftThreshold,
+  double defaultThreshold = 0.05,
+}) {
+  if (spanDays <= 0) return null;
+  if (rebalanceEvents <= 0) return 0.0;
+  final years = spanDays / 365.25;
+  final threshold = driftThreshold ?? defaultThreshold;
+  return (rebalanceEvents / years) * threshold * 2;
+}
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 List<double> _periodicReturns(List<ReturnPoint> series) {
