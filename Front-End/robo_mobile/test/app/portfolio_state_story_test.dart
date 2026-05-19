@@ -40,5 +40,17 @@ void main() {
       await fresh.restorePersistedState();
       expect(fresh.hasSeenStory, true);
     });
+
+    test('survives clearAllPersistedState (device-level preference)', () async {
+      await state.markStorySeen();
+      expect(state.hasSeenStory, true);
+      await state.clearAllPersistedState(notify: false);
+      // hasSeenStory is intentionally device-level: the onboarding story
+      // plays once per device, not per account. Logging out should not
+      // make it replay on the same device.
+      expect(state.hasSeenStory, true);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('werobo.story_seen'), true);
+    });
   });
 }
