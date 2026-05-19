@@ -35,12 +35,8 @@ class InsightHistoryPage extends StatelessWidget {
                       context,
                       (route) => route.isFirst,
                     ),
-                    child: Container(
+                    child: Padding(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: tc.card,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
                       child: Icon(
                         Icons.arrow_back_ios_new_rounded,
                         size: 20,

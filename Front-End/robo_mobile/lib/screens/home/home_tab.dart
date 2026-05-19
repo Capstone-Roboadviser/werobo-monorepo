@@ -1244,8 +1244,6 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     final isGain = displayChange >= 0;
     final pnlColor = isGain ? _gainColor : _lossColor;
     final sign = isGain ? '+' : '-';
-    final formattedPnl =
-        '$sign${_formatCurrency(displayChange.abs().toInt())} 원';
     final formattedPct = '($sign${displayChangePct.abs().toStringAsFixed(2)}%)';
     final investedAmount = accountSummary?.investedAmount ?? startValue;
     final headerCurrentValue = crosshairValue ?? currentValue;
@@ -1253,53 +1251,102 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 총손익 label (wordmark moved up next to the notification icon)
-        Text(
-          '총손익',
-          style: WeRoboTypography.caption.copyWith(
-            color: tc.textSecondary,
-            fontSize: 13,
+        // Hero card. Full-width within the SingleChildScrollView's 24px
+        // gutter for now — the proper edge-to-edge restructure is queued as
+        // a follow-up (requires reworking the parent's horizontal padding).
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+          decoration: BoxDecoration(
+            color: tc.surface,
+            borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
+            border: Border.all(color: tc.border, width: 1),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Hero header row: label on left, amount + 원 + percent on right.
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(
+                    '총 손익',
+                    style: WeRoboTypography.body.copyWith(
+                      color: tc.textSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text(
+                            // Just the signed number — 원 and percent ride
+                            // beside it at smaller sizes.
+                            '$sign${_formatCurrency(displayChange.abs().toInt())}',
+                            style: TextStyle(
+                              fontFamily: WeRoboFonts.english,
+                              fontSize: 30,
+                              fontWeight: FontWeight.w700,
+                              color: pnlColor,
+                              letterSpacing: -0.5,
+                              height: 1.2,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '원',
+                            style: WeRoboTypography.bodySmall.copyWith(
+                              color: pnlColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            formattedPct,
+                            style: TextStyle(
+                              fontFamily: WeRoboFonts.english,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                              color: pnlColor,
+                              height: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // Inset card: 투자금액 / 평가금액 with vertically aligned labels.
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: tc.background,
+                  borderRadius:
+                      BorderRadius.circular(WeRoboColors.radiusM),
+                ),
+                child: _InvestedVsCurrentStack(
+                  invested: investedAmount,
+                  current: headerCurrentValue,
+                ),
+              ),
+            ],
           ),
         ),
-        const SizedBox(height: 6),
-
-        // Total return (won) + percent, baseline aligned
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              formattedPnl,
-              style: TextStyle(
-                fontFamily: WeRoboFonts.english,
-                fontSize: 34,
-                fontWeight: FontWeight.w700,
-                color: pnlColor,
-                letterSpacing: -0.5,
-                height: 1.2,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              formattedPct,
-              style: TextStyle(
-                fontFamily: WeRoboFonts.english,
-                fontSize: 22,
-                fontWeight: FontWeight.w600,
-                color: pnlColor,
-                height: 1.2,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Invested vs current value stack
-        _InvestedVsCurrentStack(
-          invested: investedAmount,
-          current: headerCurrentValue,
-        ),
-
         const SizedBox(height: 20),
 
         // Chart (edge-to-edge)
@@ -2141,42 +2188,45 @@ class _InvestedVsCurrentStack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
-    final labelStyle = WeRoboTypography.bodySmall.copyWith(
+    final labelStyle = WeRoboTypography.body.copyWith(
       color: tc.textSecondary,
+      fontWeight: FontWeight.w500,
     );
-    // Spec: numbers match the label's bodySmall size, stay black, NOT bold.
-    final amountStyle = WeRoboTypography.bodySmall.copyWith(
+    final amountStyle = WeRoboTypography.body.copyWith(
       color: tc.textPrimary,
-      fontWeight: FontWeight.w400,
+      fontWeight: FontWeight.w500,
       fontFamily: WeRoboFonts.english,
     );
+    // Each row: label + (?) help icon on the left, amount on the right
+    // (spaceBetween). Both amounts hug the right edge so they line up.
+    Widget row(String label, String amount) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(label, style: labelStyle),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.help_outline_rounded,
+                size: 16,
+                color: tc.textTertiary,
+              ),
+            ],
+          ),
+          Text(amount, style: amountStyle),
+        ],
+      );
+    }
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('투자금액', style: labelStyle),
-            const SizedBox(width: 8),
-            Text(
-              '${_formatCurrency(invested.toInt())} 원',
-              style: amountStyle,
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('평가금액', style: labelStyle),
-            const SizedBox(width: 8),
-            Text(
-              '${_formatCurrency(current.toInt())} 원',
-              style: amountStyle,
-            ),
-          ],
-        ),
+        row('투자 금액', '${_formatCurrency(invested.toInt())} 원'),
+        const SizedBox(height: 6),
+        row('평가 금액', '${_formatCurrency(current.toInt())} 원'),
       ],
     );
   }
@@ -3508,12 +3558,8 @@ class _ComingSoonPage extends StatelessWidget {
                 children: [
                   Pressable(
                     onTap: () => Navigator.pop(context),
-                    child: Container(
+                    child: Padding(
                       padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: tc.card,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
                       child: Icon(
                         Icons.arrow_back_ios_new_rounded,
                         size: 20,

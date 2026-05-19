@@ -36,7 +36,12 @@ List<DateTime> buildHomePortfolioRebalanceDates(
 }
 
 class PortfolioTab extends StatefulWidget {
-  const PortfolioTab({super.key});
+  /// Optional widget rendered at the very top of the scroll view, above the
+  /// portfolio stats card. Used by `PortfolioWeightsPage` to inject a
+  /// strategy-message pill that scrolls with the rest of the content.
+  final Widget? leading;
+
+  const PortfolioTab({super.key, this.leading});
 
   @override
   State<PortfolioTab> createState() => _PortfolioTabState();
@@ -239,9 +244,11 @@ class _PortfolioTabState extends State<PortfolioTab> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(height: 20),
-            Text('내 포트폴리오', style: WeRoboTypography.heading2.themed(context)),
-            const SizedBox(height: 12),
+            if (widget.leading != null) ...[
+              widget.leading!,
+              const SizedBox(height: 12),
+            ] else
+              const SizedBox(height: 8),
 
             // Portfolio type selector
             if (!portfolioState.hasPrototypeAccount &&
