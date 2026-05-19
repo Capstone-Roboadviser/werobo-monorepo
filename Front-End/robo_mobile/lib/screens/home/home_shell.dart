@@ -157,18 +157,17 @@ class _HomeShellState extends State<HomeShell> {
             index: _currentTab,
             children: _tabs,
           ),
-          // Global notification bell (pinned per UIUX 2026-05-20 spec).
-          // Shows on every tab; HomeTab also stops drawing its own bell.
-          const Positioned(
-            top: 0,
-            right: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(top: 0, right: 16),
-                child: _GlobalNotificationIcon(),
+          if (_currentTab == 0)
+            const Positioned(
+              top: 0,
+              right: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 0, right: 16),
+                  child: _GlobalNotificationIcon(),
+                ),
               ),
             ),
-          ),
         ],
       ),
       bottomNavigationBar: Container(
@@ -325,9 +324,8 @@ class _AlertDot extends StatelessWidget {
   }
 }
 
-/// Bell icon overlay rendered above every HomeShell tab so notifications
-/// are reachable from any screen (UIUX 2026-05-20 spec). Tapping pushes the
-/// full ActivityHubPage directly (the old dropdown sheet was removed).
+/// Bell icon overlay shown on the Home tab. Tapping pushes the full
+/// ActivityHubPage directly (no dropdown sheet).
 class _GlobalNotificationIcon extends StatelessWidget {
   const _GlobalNotificationIcon();
 
