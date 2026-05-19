@@ -261,4 +261,52 @@ void main() {
       expect(m.turnover, closeTo(0.42, 1e-12));
     });
   });
+
+  group('estimateAnnualTurnover', () {
+    test('returns 0 when no rebalance events occurred', () {
+      final t = estimateAnnualTurnover(
+        rebalanceEvents: 0,
+        spanDays: 365,
+        driftThreshold: 0.05,
+      );
+      expect(t, closeTo(0.0, 1e-12));
+    });
+
+    test('scales linearly with rebalance frequency and drift threshold', () {
+      // 4 events over 365 days at 5% drift → annualized ≈ 4 × 0.05 × 2 = 0.40
+      final t = estimateAnnualTurnover(
+        rebalanceEvents: 4,
+        spanDays: 365,
+        driftThreshold: 0.05,
+      );
+      // span = 365/365.25 years ≈ 0.9993; 4/0.9993 × 0.05 × 2 ≈ 0.4003
+      expect(t, isNotNull);
+      expect(t!, closeTo(0.4003, 1e-3));
+    });
+
+    test('uses the default drift threshold when none is provided', () {
+      final tDefault = estimateAnnualTurnover(
+        rebalanceEvents: 2,
+        spanDays: 365,
+        driftThreshold: null,
+      );
+      final tExplicit = estimateAnnualTurnover(
+        rebalanceEvents: 2,
+        spanDays: 365,
+        driftThreshold: 0.05,
+      );
+      expect(tDefault, isNotNull);
+      expect(tExplicit, isNotNull);
+      expect(tDefault!, closeTo(tExplicit!, 1e-9));
+    });
+
+    test('returns null when span is non-positive', () {
+      final t = estimateAnnualTurnover(
+        rebalanceEvents: 1,
+        spanDays: 0,
+        driftThreshold: 0.05,
+      );
+      expect(t, isNull);
+    });
+  });
 }
