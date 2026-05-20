@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../app/debug_page_logger.dart';
@@ -83,10 +84,15 @@ class _SplashScreenState extends State<SplashScreen>
       }
       final Widget destination;
       final String target;
+      // In debug builds, always replay the onboarding story when we'd
+      // otherwise land on login so we can iterate on it without clearing
+      // SharedPreferences each run. canAutoEnterHome still wins so the
+      // normal "skip to home" dev loop isn't disrupted.
+      final shouldReplayStory = kDebugMode || !state.hasSeenStory;
       if (state.canAutoEnterHome) {
         destination = const HomeShell();
         target = 'home';
-      } else if (!state.hasSeenStory) {
+      } else if (shouldReplayStory) {
         destination = const StoryFlowScreen();
         target = 'story';
       } else {
