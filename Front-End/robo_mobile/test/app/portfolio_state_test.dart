@@ -106,7 +106,37 @@ void main() {
       expect(state.currentUser?.email, 'user@example.com');
       expect(state.type, InvestmentType.balanced);
       expect(state.recommendation?.recommendedPortfolioCode, 'balanced');
-      expect(state.canAutoEnterHome, true);
+      expect(state.canAutoEnterHome, false);
+    });
+
+    test('canAutoEnterHome stays false for accounts that finished setup',
+        () async {
+      await state.setAuthSession(
+        MobileAuthSession(
+          accessToken: 'token-3',
+          tokenType: 'bearer',
+          expiresAt: '2099-01-01T00:00:00Z',
+          user: const MobileAuthUser(
+            id: 3,
+            email: 'existing@example.com',
+            name: '기존사용자',
+            provider: AuthProviderType.password,
+            createdAt: '2026-04-13T00:00:00Z',
+          ),
+        ),
+      );
+      state.setAccountDashboard(
+        const MobileAccountDashboard(
+          hasAccount: true,
+          summary: null,
+          history: [],
+          recentActivity: [],
+        ),
+      );
+
+      expect(state.isLoggedIn, true);
+      expect(state.hasPrototypeAccount, true);
+      expect(state.canAutoEnterHome, false);
     });
 
     test('setAuthSession persists provider-aware session', () async {

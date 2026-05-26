@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
@@ -6,7 +5,6 @@ import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
-import '../home/home_shell.dart';
 import 'onboarding_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -63,32 +61,11 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  void _navigateToHome() {
-    Navigator.of(context).pushAndRemoveUntil(
-      WeRoboMotion.fadeRoute(const HomeShell()),
-      (_) => false,
-    );
-  }
-
   Future<void> _navigateAfterAuthenticated() async {
-    final state = PortfolioStateProvider.of(context);
-    try {
-      await state.refreshAccountDashboard(notify: true);
-    } catch (_) {}
     if (!mounted) {
       return;
     }
-    if (state.hasPrototypeAccount) {
-      logAction('skip onboarding after login', {
-        'reason': 'existing_account',
-      });
-      // Kick off the comparison-backtest fetch in parallel with the
-      // navigation animation so the home chart can animate all four
-      // lines together as soon as it mounts.
-      unawaited(HomeShell.prefetchBacktest(state));
-      _navigateToHome();
-      return;
-    }
+    logAction('continue to onboarding after auth');
     _navigateToOnboarding();
   }
 

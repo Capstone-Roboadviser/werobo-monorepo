@@ -413,8 +413,10 @@ class PortfolioState extends ChangeNotifier {
   bool get hasPrototypeAccount => _accountDashboard?.hasAccount == true;
   bool get hasCompletedPortfolioSetup =>
       _frontierSelection != null || _recommendation != null;
-  bool get canAutoEnterHome =>
-      isLoggedIn && (hasCompletedPortfolioSetup || hasPrototypeAccount);
+  // Keep the completed account data, but do not use it to bypass onboarding.
+  // The prototype flow intentionally replays onboarding after app restart/login
+  // so users can review the frontier before entering home.
+  bool get canAutoEnterHome => false;
 
   /// The selected portfolio from the API recommendation.
   MobilePortfolioRecommendation? get selectedPortfolio {
