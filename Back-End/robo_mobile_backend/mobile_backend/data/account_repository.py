@@ -582,7 +582,9 @@ class PortfolioAccountRepository:
                 )
             connection.commit()
 
-    def mark_insight_read(self, insight_id: int) -> dict[str, object] | None:
+    def mark_insight_read(
+        self, insight_id: int, account_id: int
+    ) -> dict[str, object] | None:
         self._ensure_ready()
         with self._connect() as connection:
             with connection.cursor() as cursor:
@@ -590,7 +592,7 @@ class PortfolioAccountRepository:
                     """
                     UPDATE rebalance_insights
                     SET read_at = NOW()
-                    WHERE id = %s AND read_at IS NULL
+                    WHERE id = %s AND account_id = %s AND read_at IS NULL
                     RETURNING
                         id,
                         account_id,
@@ -601,7 +603,7 @@ class PortfolioAccountRepository:
                         read_at,
                         TO_CHAR(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') AS created_at
                     """,
-                    (insight_id,),
+                    (insight_id, account_id),
                 )
                 row = cursor.fetchone()
             connection.commit()

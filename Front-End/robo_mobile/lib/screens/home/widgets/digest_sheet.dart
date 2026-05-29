@@ -153,14 +153,16 @@ class _DigestSheetState extends State<DigestSheet> {
           MobileBackendApi.instance.fetchDigest(accessToken: token),
           Future<void>.delayed(minDuration),
         ]);
-        if (mounted) {
-          final result = results[0] as MobileDigestResponse;
-          await state.markDigestSeen(result.digestDate);
-          setState(() {
-            _digest = result;
-            _loading = false;
-          });
-        }
+        final result = results[0] as MobileDigestResponse;
+        if (!mounted) return;
+        // markDigestSeen awaits SharedPreferences; the sheet is dismissible and
+        // can be closed during that gap, so re-check mounted before setState.
+        await state.markDigestSeen(result.digestDate);
+        if (!mounted) return;
+        setState(() {
+          _digest = result;
+          _loading = false;
+        });
       }
     } on MobileBackendException catch (e) {
       if (mounted) {
@@ -169,6 +171,15 @@ class _DigestSheetState extends State<DigestSheet> {
               ? '다이제스트를 만들기 위한 최근 데이터가 아직 부족합니다. '
                   '다음 가격 갱신 후 다시 확인해주세요.'
               : e.message;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      // Backstop: any other error (e.g. a TimeoutException or a parse error)
+      // must still clear the spinner instead of wedging it on forever.
+      if (mounted) {
+        setState(() {
+          _error = '다이제스트를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.';
           _loading = false;
         });
       }

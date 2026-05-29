@@ -1121,8 +1121,12 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
       return;
     }
 
-    final normalizedStart = math.min(startIdx, endIdx);
-    final normalizedEnd = math.max(startIdx, endIdx);
+    // Indices were captured against a possibly longer valuePts (an async data
+    // update can shrink the list mid-drag), so re-clamp to the current length
+    // before indexing to avoid a RangeError. Mirrors the painter's clamping.
+    final maxIndex = valuePts.length - 1;
+    final normalizedStart = math.min(startIdx, endIdx).clamp(0, maxIndex).toInt();
+    final normalizedEnd = math.max(startIdx, endIdx).clamp(0, maxIndex).toInt();
     if (normalizedEnd - normalizedStart < 1) {
       widget.onRangeSelectionChanged(null);
       return;

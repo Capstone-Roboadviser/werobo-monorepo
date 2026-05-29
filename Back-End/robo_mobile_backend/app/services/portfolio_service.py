@@ -508,14 +508,19 @@ class PortfolioSimulationService:
 
         selected_point_index = select_frontier_point_index(context.frontier_points, target_volatility)
         selected_point = context.frontier_points[selected_point_index]
-        optimization_weights = self._weights_for_optimization(selected_point.weights, context.instruments)
+        # Use selected_point.weights directly. The optimizer keys these by the
+        # same labels that index expected_returns/covariance (uppercase tickers
+        # on the stock paths, lowercase codes on the asset-assumptions path).
+        # Routing them through _weights_for_optimization() uppercases the keys,
+        # which silently zeroed every metric and risk contribution on the
+        # asset-assumptions path (lowercase index never matched the keys).
         metrics = portfolio_metrics_from_weights(
-            optimization_weights,
+            selected_point.weights,
             context.expected_returns,
             context.covariance,
             RISK_FREE_RATE,
         )
-        contribution_map = risk_contributions(optimization_weights, context.covariance)
+        contribution_map = risk_contributions(selected_point.weights, context.covariance)
         allocations = self._build_sector_allocations(
             stock_weights=selected_point.weights,
             sector_risk_contributions=self._aggregate_sector_risk_contributions(
@@ -551,7 +556,7 @@ class PortfolioSimulationService:
                 "개별 종목 유니버스를 구성한 뒤 효율적 투자선을 계산하고 있습니다."
             )
             selected_average_correlation = self._estimate_selected_average_correlation(
-                optimization_weights,
+                selected_point.weights,
                 context.covariance,
             )
             if selected_average_correlation is not None:

@@ -1710,29 +1710,29 @@ def render_admin_page() -> HTMLResponse:
     function renderVersionDetail(detail, host) {
       const roleRows = (detail.asset_roles || []).map((item) => `
         <tr>
-          <td>${item.asset_name}</td>
-          <td><span class="mono">${item.asset_code}</span></td>
-          <td>${item.role_name}</td>
-          <td><span class="mono">${item.role_key}</span></td>
-          <td><span class="mono">${item.selection_mode}</span></td>
-          <td><span class="mono">${item.weighting_mode}</span></td>
-          <td><span class="mono">${item.return_mode}</span></td>
+          <td>${escapeHtml(item.asset_name)}</td>
+          <td><span class="mono">${escapeHtml(item.asset_code)}</span></td>
+          <td>${escapeHtml(item.role_name)}</td>
+          <td><span class="mono">${escapeHtml(item.role_key)}</span></td>
+          <td><span class="mono">${escapeHtml(item.selection_mode)}</span></td>
+          <td><span class="mono">${escapeHtml(item.weighting_mode)}</span></td>
+          <td><span class="mono">${escapeHtml(item.return_mode)}</span></td>
         </tr>
       `).join('');
       const rows = detail.instruments.map((item) => `
         <tr>
-          <td><span class="mono" style="color:var(--accent); font-weight:600;">${item.ticker}</span></td>
-          <td>${item.name}</td>
-          <td><span class="mono">${item.sector_code}</span></td>
-          <td>${item.sector_name}</td>
-          <td>${item.market}</td>
-          <td><span class="mono">${item.currency}</span></td>
-          <td><span class="mono">${item.base_weight ?? '—'}</span></td>
+          <td><span class="mono" style="color:var(--accent); font-weight:600;">${escapeHtml(item.ticker)}</span></td>
+          <td>${escapeHtml(item.name)}</td>
+          <td><span class="mono">${escapeHtml(item.sector_code)}</span></td>
+          <td>${escapeHtml(item.sector_name)}</td>
+          <td>${escapeHtml(item.market)}</td>
+          <td><span class="mono">${escapeHtml(item.currency)}</span></td>
+          <td><span class="mono">${escapeHtml(String(item.base_weight ?? '—'))}</span></td>
         </tr>
       `).join('');
       host.innerHTML = `
         <div class="notice">
-          <strong style="color:var(--fg); font-family:var(--font-ui);">${detail.version_name}</strong>  ·  종목 ${detail.instrument_count}개  ·  ${detail.is_active ? '<span class="pill ok" style="margin-left:6px;">Active</span>' : '<span class="pill warn" style="margin-left:6px;">Inactive</span>'}
+          <strong style="color:var(--fg); font-family:var(--font-ui);">${escapeHtml(detail.version_name)}</strong>  ·  종목 ${detail.instrument_count}개  ·  ${detail.is_active ? '<span class="pill ok" style="margin-left:6px;">Active</span>' : '<span class="pill warn" style="margin-left:6px;">Inactive</span>'}
         </div>
         <div class="detail-section-label">Asset Roles</div>
         <div class="detail-table-wrap">
@@ -1774,14 +1774,14 @@ def render_admin_page() -> HTMLResponse:
     function renderReadiness(readiness) {
       const host = $('#readiness-panel');
       const issues = readiness.issues.length
-        ? '<ul class="readiness-list">' + readiness.issues.map((item) => `<li>${item}</li>`).join('') + '</ul>'
+        ? '<ul class="readiness-list">' + readiness.issues.map((item) => `<li>${escapeHtml(String(item))}</li>`).join('') + '</ul>'
         : '<div style="color:var(--fg-3);">문제 없음</div>';
       const shortHistory = readiness.short_history_instruments.length
-        ? '<ul class="readiness-list">' + readiness.short_history_instruments.map((item) => `<li>${item.ticker} · ${item.history_years}년 · ${item.first_price_date || '-'} ~ ${item.last_price_date || '-'}</li>`).join('') + '</ul>'
+        ? '<ul class="readiness-list">' + readiness.short_history_instruments.map((item) => `<li>${escapeHtml(String(item.ticker))} · ${escapeHtml(String(item.history_years))}년 · ${escapeHtml(String(item.first_price_date || '-'))} ~ ${escapeHtml(String(item.last_price_date || '-'))}</li>`).join('') + '</ul>'
         : '<div style="color:var(--fg-3);">짧은 이력 종목 없음</div>';
       host.innerHTML = `
         <strong style="color:var(--fg); font-family:var(--font-ui);">${readiness.ready ? '준비 완료' : '준비 미완료'}</strong>
-        <div style="margin-top:6px;">${readiness.summary}</div>
+        <div style="margin-top:6px;">${escapeHtml(readiness.summary)}</div>
         <div style="margin-top:10px;"><strong style="font-family:var(--font-mono); font-size:var(--text-2xs); text-transform:uppercase; letter-spacing:0.12em; color:var(--fg-3);">이슈</strong>${issues}</div>
         <div style="margin-top:10px;"><strong style="font-family:var(--font-mono); font-size:var(--text-2xs); text-transform:uppercase; letter-spacing:0.12em; color:var(--fg-3);">짧은 이력 종목</strong>${shortHistory}</div>
       `;

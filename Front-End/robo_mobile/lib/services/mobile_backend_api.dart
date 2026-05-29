@@ -689,6 +689,10 @@ class MobileBackendApi {
       throw const MobileBackendException(
         '네트워크 연결을 확인해주세요.',
       );
+    } on TimeoutException {
+      throw const MobileBackendException(
+        '요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.',
+      );
     }
     final responseBody = response.body;
     final dynamic decoded;
@@ -736,6 +740,10 @@ class MobileBackendApi {
     } on SocketException {
       throw const MobileBackendException(
         '네트워크 연결을 확인해주세요.',
+      );
+    } on TimeoutException {
+      throw const MobileBackendException(
+        '요청 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.',
       );
     }
     final responseBody = response.body;

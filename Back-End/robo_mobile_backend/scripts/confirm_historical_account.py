@@ -168,7 +168,7 @@ def main() -> int:
         investment_horizon=investment_horizon,
         data_source=data_source,
         target_volatility=None,
-        point_index=int(preview_point["index"]),
+        selected_point_index=int(preview_point["index"]),
         as_of_date=as_of_date,
     )
     portfolio = selection.get("portfolio")

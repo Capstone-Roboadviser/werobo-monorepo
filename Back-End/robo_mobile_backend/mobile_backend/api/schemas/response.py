@@ -350,4 +350,8 @@ class ComparisonBacktestResponse(BaseModel):
     end_date: str = Field(..., description="전체 비교 종료일", examples=["2026-03-31"])
     split_ratio: float = Field(..., description="학습/테스트 분할 비율", examples=[0.7])
     rebalance_dates: list[str] = Field(default_factory=list, description="리밸런싱 발생일 목록")
+    rebalance_policy: RebalancePolicyResponse | None = Field(
+        default=None,
+        description="백테스트에 적용된 리밸런싱 정책 (drift_threshold 등은 앱의 회전율 계산에 사용됨)",
+    )
     lines: list[ComparisonLineResponse] = Field(default_factory=list, description="안정형/균형형/성장형 및 벤치마크 비교 라인")

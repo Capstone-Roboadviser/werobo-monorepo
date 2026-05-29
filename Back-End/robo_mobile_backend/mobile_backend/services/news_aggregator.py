@@ -19,18 +19,32 @@ def fetch_news_for_tickers(
     Gracefully returns empty results on any failure.
     """
     results: dict[str, list[str]] = {}
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    pool = ThreadPoolExecutor(max_workers=4)
+    try:
         futures = {}
         for ticker in tickers[:6]:
             futures[pool.submit(_fetch_for_ticker, ticker, max_headlines_per_ticker)] = ticker
-        for future in as_completed(futures, timeout=NEWS_TIMEOUT_SECONDS + 1):
-            ticker = futures[future]
-            try:
-                headlines = future.result(timeout=0.1)
-                if headlines:
-                    results[ticker] = headlines
-            except Exception:
-                logger.debug("news fetch failed for %s", ticker, exc_info=True)
+        try:
+            for future in as_completed(futures, timeout=NEWS_TIMEOUT_SECONDS + 1):
+                ticker = futures[future]
+                try:
+                    headlines = future.result(timeout=0.1)
+                    if headlines:
+                        results[ticker] = headlines
+                except Exception:
+                    logger.debug("news fetch failed for %s", ticker, exc_info=True)
+        except Exception:
+            # as_completed() raises TimeoutError from the generator itself when
+            # futures are still pending at the deadline. That escapes the inner
+            # try and, unguarded, 500s the digest endpoint. Return whatever
+            # completed so the digest degrades gracefully (the docstring's
+            # "gracefully returns empty results on any failure" contract).
+            logger.debug("news fetch timed out; returning partial results", exc_info=True)
+    finally:
+        # Do not block on slow/stuck network threads (yfinance/feedparser have
+        # no per-call timeout); drop pending work and let any in-flight workers
+        # finish in the background instead of holding up the response.
+        pool.shutdown(wait=False, cancel_futures=True)
     return results
 
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date
+
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
 from mobile_backend.integrations.embedded_portfolio_engine import EmbeddedPortfolioEngineAdapter
 from mobile_backend.services.profile_service import ProfileService
@@ -63,6 +65,7 @@ class MobilePortfolioService:
         investment_horizon: InvestmentHorizon,
         data_source: SimulationDataSource,
         sample_points: int | None,
+        as_of_date: date | None = None,
     ) -> dict[str, object]:
         resolved_profile = self.profile_service.resolve_risk_profile(
             propensity_score=propensity_score,
@@ -74,6 +77,7 @@ class MobilePortfolioService:
             data_source=data_source,
             propensity_score=propensity_score,
             sample_points=sample_points,
+            as_of_date=as_of_date,
         )
 
     def build_frontier_selection(
@@ -85,6 +89,7 @@ class MobilePortfolioService:
         data_source: SimulationDataSource,
         target_volatility: float | None,
         selected_point_index: int | None,
+        as_of_date: date | None = None,
     ) -> dict[str, object]:
         resolved_profile = self._resolve_profile_or_default(
             propensity_score=propensity_score,
@@ -97,6 +102,7 @@ class MobilePortfolioService:
             propensity_score=propensity_score,
             target_volatility=target_volatility,
             selected_point_index=selected_point_index,
+            as_of_date=as_of_date,
         )
 
     def build_volatility_history(

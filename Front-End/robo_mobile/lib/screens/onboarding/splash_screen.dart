@@ -66,9 +66,12 @@ class _SplashScreenState extends State<SplashScreen>
     super.dispose();
   }
 
-  Future<void> _scheduleNavigation() async {
+  void _scheduleNavigation() {
     final state = PortfolioStateProvider.of(context);
-    await state.validateAuthSession();
+    // Refresh the auth session in the background. It makes a network call that
+    // can hang up to the API client's 75s timeout, so it must not block the
+    // splash; the 2s display timer starts immediately regardless of the result.
+    unawaited(state.validateAuthSession());
     _navigationTimer = Timer(const Duration(milliseconds: 2000), () {
       if (!mounted) {
         return;

@@ -17,7 +17,11 @@ from mobile_backend.services.account_service import (
     PortfolioAccountNotFoundError,
     PortfolioAccountService,
 )
-from mobile_backend.services.auth_service import AuthService, AuthUnauthorizedError
+from mobile_backend.services.auth_service import (
+    AuthConfigurationError,
+    AuthService,
+    AuthUnauthorizedError,
+)
 from mobile_backend.services.digest_service import (
     DigestService,
     InsufficientDataError,
@@ -33,6 +37,7 @@ DIGEST_ERROR_RESPONSES = {
     401: {"model": ErrorResponse, "description": "인증 실패"},
     404: {"model": ErrorResponse, "description": "자산 계정을 찾지 못함"},
     422: {"model": ErrorResponse, "description": "데이터 부족"},
+    503: {"model": ErrorResponse, "description": "자산 저장소 미구성"},
 }
 
 
@@ -48,6 +53,8 @@ def _current_user_id(authorization: str | None) -> int:
         raise
     except AuthUnauthorizedError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except AuthConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get(

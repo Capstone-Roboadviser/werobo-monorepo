@@ -38,6 +38,7 @@ class _ProjectionScreenState extends State<ProjectionScreen>
   bool _isMonthly = false; // false = one-time, true = monthly
   double _depositAmount = 0;
   int? _touchIndex;
+  final GlobalKey _chartKey = GlobalKey();
 
   @override
   void initState() {
@@ -378,6 +379,7 @@ class _ProjectionScreenState extends State<ProjectionScreen>
                   height: 250,
                   child: result != null
                       ? GestureDetector(
+                          key: _chartKey,
                           onPanUpdate: (d) =>
                               _onChartPan(d, result),
                           onPanEnd: (_) =>
@@ -504,10 +506,17 @@ class _ProjectionScreenState extends State<ProjectionScreen>
   }
 
   void _onChartPan(DragUpdateDetails d, ProjectionResult result) {
-    final box = context.findRenderObject() as RenderBox?;
+    // Measure the chart itself (keyed), not the enclosing Scaffold, and use the
+    // painter's real horizontal pads (FanChartPainter: padL 52, padR 16).
+    // d.localPosition is already local to this GestureDetector (== the chart),
+    // so only the left pad is subtracted.
+    final box = _chartKey.currentContext?.findRenderObject() as RenderBox?;
     if (box == null) return;
-    final chartWidth = box.size.width - 24 * 2 - 48 - 16;
-    final localX = d.localPosition.dx - 24 - 48;
+    const padL = 52.0;
+    const padR = 16.0;
+    final chartWidth = box.size.width - padL - padR;
+    if (chartWidth <= 0) return;
+    final localX = d.localPosition.dx - padL;
     final frac = (localX / chartWidth).clamp(0.0, 1.0);
     final idx = (frac * (result.length - 1)).round();
     setState(() => _touchIndex = idx);

@@ -11,7 +11,11 @@ from mobile_backend.services.account_service import (
     PortfolioAccountService,
     PortfolioAccountValidationError,
 )
-from mobile_backend.services.auth_service import AuthService, AuthUnauthorizedError
+from mobile_backend.services.auth_service import (
+    AuthConfigurationError,
+    AuthService,
+    AuthUnauthorizedError,
+)
 
 
 router = APIRouter(prefix="/api/v1/account", tags=["account"])
@@ -37,6 +41,8 @@ def _current_user_id(authorization: str | None) -> int:
         raise
     except AuthUnauthorizedError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except AuthConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 def _handle_account_error(exc: Exception) -> None:

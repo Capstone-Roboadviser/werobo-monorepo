@@ -14,7 +14,11 @@ from mobile_backend.services.account_service import (
     PortfolioAccountNotFoundError,
     PortfolioAccountService,
 )
-from mobile_backend.services.auth_service import AuthService, AuthUnauthorizedError
+from mobile_backend.services.auth_service import (
+    AuthConfigurationError,
+    AuthService,
+    AuthUnauthorizedError,
+)
 from mobile_backend.services.insight_text_service import color_for_sector
 
 router = APIRouter(prefix="/api/v1/insights", tags=["insights"])
@@ -24,6 +28,7 @@ auth_service = AuthService()
 INSIGHT_ERROR_RESPONSES = {
     401: {"model": ErrorResponse, "description": "인증 실패"},
     404: {"model": ErrorResponse, "description": "자산 계정을 찾지 못함"},
+    503: {"model": ErrorResponse, "description": "자산 저장소 미구성"},
 }
 
 
@@ -39,6 +44,8 @@ def _current_user_id(authorization: str | None) -> int:
         raise
     except AuthUnauthorizedError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except AuthConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 def _build_ticker_metadata(account: dict[str, object]) -> dict[str, dict[str, str]]:
@@ -249,7 +256,7 @@ def mark_insight_read(
     account = account_service.repository.get_account_by_user_id(user_id)
     if account is None:
         raise HTTPException(status_code=404, detail="자산 계정을 찾지 못했습니다.")
-    result = account_service.repository.mark_insight_read(insight_id)
+    result = account_service.repository.mark_insight_read(insight_id, int(account["id"]))
     if result is None:
         raise HTTPException(status_code=404, detail="인사이트를 찾지 못했거나 이미 읽음 처리되었습니다.")
     cash_entries = account_service.repository.list_rebalance_cash_entries(int(account["id"]))

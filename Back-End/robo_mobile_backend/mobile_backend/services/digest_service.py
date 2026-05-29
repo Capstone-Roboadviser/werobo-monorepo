@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from datetime import date, datetime, timedelta, timezone
 
@@ -37,6 +38,28 @@ def _digest_period_label(period_days: int) -> str:
     if period_days >= 28:
         return "최근 한 달"
     return "최근 7일"
+
+
+def _portfolio_value_on_or_before(
+    snapshots: list[dict], target_date: date
+) -> float:
+    """Return the portfolio value at the start of a period.
+
+    Picks the latest snapshot whose date is on or before ``target_date``
+    (snapshots are ordered ascending), falling back to the earliest snapshot
+    when none predate it. Used so digest attribution is scaled by the
+    start-of-period value, matching compute_attribution's documented contract
+    instead of the end-of-period value (which overstated won amounts by 1+R).
+    """
+    if not snapshots:
+        return 0.0
+    target_iso = target_date.isoformat()
+    chosen = snapshots[0]
+    for snapshot in snapshots:
+        snapshot_date = str(snapshot.get("snapshot_date", ""))
+        if snapshot_date and snapshot_date <= target_iso:
+            chosen = snapshot
+    return float(chosen.get("portfolio_value", 0) or 0)
 
 
 class DigestError(Exception):
@@ -242,6 +265,7 @@ def _digest_trigger_stats(
     stock_allocations: list[dict],
     total_return_pct: float,
     baseline_end_date: date,
+    period_days: int,
 ) -> dict[str, float | None]:
     sigma_pct = _portfolio_window_sigma_pct(
         prices_df,
@@ -251,13 +275,32 @@ def _digest_trigger_stats(
     if sigma_pct is None:
         threshold_pct = DIGEST_FALLBACK_THRESHOLD_PCT
         sigma_multiple = None
+        period_sigma_pct = None
     else:
-        threshold_pct = sigma_pct * DIGEST_TRIGGER_SIGMA_MULTIPLIER
-        sigma_multiple = abs(total_return_pct) / sigma_pct if sigma_pct > 0 else None
+        # sigma_pct is the volatility of fixed ~weekly (DIGEST_PERIOD_DAYS)
+        # windows, but total_return_pct spans the candidate period. Scale the
+        # sigma to the period horizon (sqrt-of-time, anchored to the weekly
+        # window) so the threshold and the reported multiple stay dimensionally
+        # consistent. Without this the ~30-day monthly fallback compared a
+        # month-long return against a ~weekly sigma, overstating the multiple
+        # and loosening the trigger gate by ~2x. The weekly path is unchanged
+        # (scale == 1 when period_days == DIGEST_PERIOD_DAYS).
+        scale = math.sqrt(max(period_days, 1) / DIGEST_PERIOD_DAYS)
+        period_sigma_pct = sigma_pct * scale
+        threshold_pct = period_sigma_pct * DIGEST_TRIGGER_SIGMA_MULTIPLIER
+        sigma_multiple = (
+            abs(total_return_pct) / period_sigma_pct
+            if period_sigma_pct > 0
+            else None
+        )
     return {
-        "baseline_volatility_pct": None if sigma_pct is None else round(sigma_pct, 4),
+        "baseline_volatility_pct": (
+            None if period_sigma_pct is None else round(period_sigma_pct, 4)
+        ),
         "trigger_threshold_pct": round(threshold_pct, 4),
-        "trigger_sigma_multiple": None if sigma_multiple is None else round(sigma_multiple, 4),
+        "trigger_sigma_multiple": (
+            None if sigma_multiple is None else round(sigma_multiple, 4)
+        ),
     }
 
 
@@ -597,11 +640,12 @@ class DigestService:
             raise InsufficientDataError("아직 충분한 데이터가 없습니다.")
 
         prices_by_ticker = _prices_by_ticker(digest_prices_df)
+        period_days = (end_date - start_date).days
         attributions = compute_attribution(
             stock_allocations=stock_allocations,
             prices_by_ticker=prices_by_ticker,
             portfolio_value=portfolio_value,
-            period_days=(end_date - start_date).days,
+            period_days=period_days,
         )
 
         if not attributions:
@@ -617,6 +661,7 @@ class DigestService:
             stock_allocations=stock_allocations,
             total_return_pct=total_return_pct,
             baseline_end_date=start_date,
+            period_days=period_days,
         )
         trigger_threshold_pct = float(
             trigger_stats["trigger_threshold_pct"]
@@ -629,7 +674,6 @@ class DigestService:
         elif total_return_pct <= -trigger_threshold_pct:
             drivers = []
 
-        period_days = (end_date - start_date).days
         return {
             "period_start": start_date.isoformat(),
             "period_end": end_date.isoformat(),
@@ -745,13 +789,11 @@ class DigestService:
         if not stock_allocations:
             raise InsufficientDataError("포트폴리오에 종목이 없습니다.")
 
-        # Get portfolio value from latest snapshot
+        # Load snapshots; digest attribution is scaled by the start-of-period
+        # value (see _portfolio_value_on_or_before), not the latest value.
         snapshots = self.account_repo.list_snapshots(account_id)
         if not snapshots:
             raise InsufficientDataError("아직 충분한 데이터가 없습니다.")
-
-        latest_snapshot = snapshots[-1]
-        portfolio_value = float(latest_snapshot.get("portfolio_value", 0))
 
         # Compute date range
         end_date = datetime.now(timezone.utc).date()
@@ -774,7 +816,7 @@ class DigestService:
         weekly_candidate = self._build_period_candidate(
             prices_df=prices_df,
             stock_allocations=stock_allocations,
-            portfolio_value=portfolio_value,
+            portfolio_value=_portfolio_value_on_or_before(snapshots, start_date),
             start_date=start_date,
             end_date=end_date,
         )
@@ -785,7 +827,9 @@ class DigestService:
                 monthly_candidate = self._build_period_candidate(
                     prices_df=prices_df,
                     stock_allocations=stock_allocations,
-                    portfolio_value=portfolio_value,
+                    portfolio_value=_portfolio_value_on_or_before(
+                        snapshots, fallback_start_date
+                    ),
                     start_date=fallback_start_date,
                     end_date=end_date,
                 )
