@@ -46,10 +46,10 @@ WeRobo is a robo-advisor mobile app built with Flutter. It helps users find opti
 ## Design System
 
 ### Colors (defined in `lib/app/theme.dart`)
-**주 색상 (Primary — Neon Carrot orange):**
-- primary: `#FE9337`
-- primaryDark: `#E07A1F` (pressed)
-- primaryLight: `#FFC091` (= assetTier5)
+**주 색상 (Primary — deep navy):**
+- primary: `#0614A7`
+- primaryDark: `#0713A7` (CTA / pressed)
+- primaryLight: `#EFF2F7` (pressed / secondary)
 
 **Asset tonal palette (5-tier monochromatic, defensive→aggressive):**
 - assetTier5 / `#FFC091`: 현금성자산

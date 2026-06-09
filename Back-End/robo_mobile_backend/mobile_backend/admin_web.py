@@ -881,6 +881,7 @@ def render_admin_page() -> HTMLResponse:
     <nav class="rail-nav">
       <a href="/admin" aria-current="page">관리</a>
       <a href="/admin/comparison">비교 보드</a>
+      <a href="/admin/comparison/usmv-overlay">Overlay 비교</a>
     </nav>
     <div class="theme-toggle" role="group" aria-label="테마 전환">
       <button type="button" data-theme-set="light" aria-pressed="true">DAY</button>

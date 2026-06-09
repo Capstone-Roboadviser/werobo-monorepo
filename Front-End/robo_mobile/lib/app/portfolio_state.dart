@@ -8,6 +8,7 @@ import 'comparison_backtest_chart_mapper.dart';
 import 'debug_page_logger.dart';
 import 'theme.dart' show AssetClass, AssetClassLabel;
 import '../models/chart_data.dart';
+import '../models/investor_profile.dart';
 import '../models/mobile_backend_models.dart';
 import '../models/portfolio_data.dart';
 import '../models/rebalance_insight.dart';
@@ -108,6 +109,7 @@ class PortfolioState extends ChangeNotifier {
   static const String _welcomeBannerSeenKey = 'werobo.welcome_banner_seen';
   static const String _storySeenKey = 'werobo.story_seen';
   static const String _alertFrequencyKey = 'alertFrequency';
+  static const String _investorProfileKey = 'werobo.investor_profile';
 
   static DateTime prototypeAccountStartDate(DateTime now) {
     return DateTime(now.year, 3, 1);
@@ -137,6 +139,7 @@ class PortfolioState extends ChangeNotifier {
   // unread dot. No production consumer triggers this today (MVP scope), but
   // the flag + setter are exposed so debug/test paths can simulate the badge.
   bool _hasUnreadEmergencyAlert = false;
+  InvestorProfile? _investorProfile;
 
   /// Injectable wall-clock seam. Production uses [DateTime.now]; tests pass a
   /// fixed clock so the trailing-window getters ([trailingMonthReturn],
@@ -176,6 +179,7 @@ class PortfolioState extends ChangeNotifier {
   bool get isWeeklyDigestAvailable => _weeklyDigest?.available == true;
   AlertFrequency get alertFrequency => _alertFrequency;
   bool get hasUnreadEmergencyAlert => _hasUnreadEmergencyAlert;
+  InvestorProfile? get investorProfile => _investorProfile;
 
   // ─── Notification-row derived getters ─────────────────────────────────────
 
@@ -584,6 +588,16 @@ class PortfolioState extends ChangeNotifier {
     _digestSeenDate = prefs.getString(_digestSeenDateKey);
     _welcomeBannerSeen = prefs.getBool(_welcomeBannerSeenKey) ?? false;
     _storySeen = prefs.getBool(_storySeenKey) ?? false;
+    final investorProfileRaw = prefs.getString(_investorProfileKey);
+    if (investorProfileRaw != null) {
+      try {
+        _investorProfile = InvestorProfile.fromJson(
+          jsonDecode(investorProfileRaw) as Map<String, dynamic>,
+        );
+      } catch (_) {
+        _investorProfile = null;
+      }
+    }
     await _restoreAlertFrequency();
   }
 
@@ -595,6 +609,13 @@ class PortfolioState extends ChangeNotifier {
     // Fire-and-forget so persistence/notify aren't blocked on telemetry.
     unawaited(AlertAnalytics.instance.recordPreferenceChange(f));
     notifyListeners();
+  }
+
+  Future<void> setInvestorProfile(InvestorProfile profile) async {
+    _investorProfile = profile;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_investorProfileKey, jsonEncode(profile.toJson()));
   }
 
   /// Clears the unread 긴급-alert flag (e.g., once the user opens the home

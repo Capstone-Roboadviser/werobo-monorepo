@@ -85,12 +85,24 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   double _selectedDotT = 0.45;
   OnboardingFrontierSelection? _frontierSelection;
-  late final Future<MobileFrontierPreviewResponse?> _frontierPreviewFuture;
+  late Future<MobileFrontierPreviewResponse?> _frontierPreviewFuture;
+  double _propensityScore = 45.0;
+  bool _previewStarted = false;
 
   @override
   void initState() {
     super.initState();
     logPageEnter('OnboardingScreen');
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_previewStarted) return;
+    _previewStarted = true;
+    _propensityScore =
+        PortfolioStateProvider.of(context).investorProfile?.propensityScore ??
+            45.0;
     _frontierPreviewFuture = _fetchFrontierPreview();
   }
 
@@ -99,7 +111,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   Future<MobileFrontierPreviewResponse?> _fetchFrontierPreview() async {
     try {
       final preview = await MobileBackendApi.instance.fetchFrontierPreview(
-        propensityScore: 45.0,
+        propensityScore: _propensityScore,
         samplePoints: _frontierPreviewSamplePoints,
         asOfDate: widget.asOfDate,
       );

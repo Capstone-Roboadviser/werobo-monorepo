@@ -4,6 +4,7 @@ import 'app/portfolio_state.dart';
 import 'app/theme.dart';
 import 'app/theme_state.dart';
 import 'screens/home/home_shell.dart';
+import 'screens/onboarding/portfolio_design_screen.dart';
 import 'screens/onboarding/splash_screen.dart';
 
 Future<void> main() async {
@@ -53,6 +54,7 @@ class _WeRoboAppState extends State<WeRoboApp> {
             initialRoute: '/',
             routes: {
               '/': (_) => const SplashScreen(),
+              '/portfolio-design': (_) => const PortfolioDesignScreen(),
               '/home': (_) => const HomeShell(),
             },
           ),

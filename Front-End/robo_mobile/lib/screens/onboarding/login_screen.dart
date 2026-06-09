@@ -5,7 +5,7 @@ import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
-import 'onboarding_screen.dart';
+import 'survey_flow_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -55,9 +55,9 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  void _navigateToOnboarding() {
+  void _navigateToSurvey() {
     Navigator.of(context).pushReplacement(
-      WeRoboMotion.fadeRoute(const OnboardingScreen()),
+      WeRoboMotion.fadeRoute(const SurveyFlowScreen()),
     );
   }
 
@@ -66,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen>
       return;
     }
     logAction('continue to onboarding after auth');
-    _navigateToOnboarding();
+    _navigateToSurvey();
   }
 
   void _onSocialLogin(String provider) {
@@ -502,7 +502,7 @@ class _LoginScreenState extends State<LoginScreen>
                       TextButton(
                         onPressed: () {
                           logAction('continue without login');
-                          _navigateToOnboarding();
+                          _navigateToSurvey();
                         },
                         child: Text(
                           '로그인 없이 둘러보기',

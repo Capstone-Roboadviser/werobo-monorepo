@@ -4,6 +4,7 @@ import 'package:robo_mobile/app/portfolio_state.dart';
 import 'package:robo_mobile/app/theme.dart';
 import 'package:robo_mobile/models/mobile_backend_models.dart';
 import 'package:robo_mobile/screens/onboarding/onboarding_screen.dart';
+import 'package:robo_mobile/screens/onboarding/portfolio_design_screen.dart';
 import 'package:robo_mobile/screens/onboarding/portfolio_review_screen.dart';
 
 void main() {
@@ -168,14 +169,14 @@ void main() {
     DateTime? createdStartedAt;
 
     await tester.pumpWidget(
-      MaterialApp(
-        theme: WeRoboTheme.light,
-        routes: {
-          '/home': (_) => const SizedBox(key: Key('home-screen')),
-        },
-        home: PortfolioStateProvider(
-          state: state,
-          child: PortfolioReviewScreen(
+      PortfolioStateProvider(
+        state: state,
+        child: MaterialApp(
+          theme: WeRoboTheme.light,
+          routes: {
+            '/home': (_) => const SizedBox(key: Key('home-screen')),
+          },
+          home: PortfolioReviewScreen(
             selection: _selection(),
             now: () => today,
             resolveFrontierSelection: ({
@@ -200,14 +201,18 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.text('투자 확정'));
-    await tester.pumpAndSettle();
+    // Confirm now advances to the 포트폴리오 설계 screen (inserted right before
+    // home). Its chart runs a perpetual pulse animation, so pump in bounded
+    // steps rather than pumpAndSettle (which would never settle).
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
 
     expect(createdAmount, 10000000);
     expect(createdStartedAt, DateTime(2026, 3, 1));
     expect(state.frontierSelection, isNotNull);
     expect(state.accountDashboard?.summary?.investedAmount, 10000000);
     expect(state.accountDashboard?.summary?.startedAt, '2026-03-01');
-    expect(find.byKey(const Key('home-screen')), findsOneWidget);
+    expect(find.byType(PortfolioDesignScreen), findsOneWidget);
   });
 }
 

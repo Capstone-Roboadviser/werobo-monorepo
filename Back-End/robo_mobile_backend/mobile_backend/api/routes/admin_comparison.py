@@ -17,6 +17,11 @@ from app.data.stock_repository import StockDataRepository
 from app.services.portfolio_analytics_service import PortfolioAnalyticsService
 from app.services.portfolio_service import PortfolioSimulationService
 from mobile_backend.domain.enums import InvestmentHorizon, RiskProfile, SimulationDataSource
+from mobile_backend.services.usmv_overlay_comparison_service import (
+    DEFAULT_OVERLAY_MAX_WEIGHT,
+    DEFAULT_SAMPLE_POINTS,
+    UsmvOverlayComparisonService,
+)
 
 
 router = APIRouter(prefix="/admin/api/comparison", tags=["admin"])
@@ -79,6 +84,24 @@ class BacktestRequest(BaseModel):
     start_date: date | None = Field(
         default=None,
         description="백테스트 시작일. 이 날짜 이후 가격만 사용합니다.",
+    )
+
+
+class UsmvOverlayImpactRequest(BaseModel):
+    version_id: int = Field(..., description="대상 유니버스 버전 ID")
+    start_date: date | None = Field(default=None, description="비교 시작일")
+    end_date: date | None = Field(default=None, description="비교 종료일")
+    sample_points: int = Field(
+        default=DEFAULT_SAMPLE_POINTS,
+        ge=3,
+        le=101,
+        description="frontier 샘플 포인트 수",
+    )
+    overlay_max_weight: float = Field(
+        default=DEFAULT_OVERLAY_MAX_WEIGHT,
+        ge=0,
+        le=1,
+        description="USMV overlay synthetic asset 최대 비중",
     )
 
 
@@ -884,6 +907,29 @@ def get_backtest(payload: BacktestRequest) -> dict[str, object]:
             for line in result.lines
         ],
     }
+
+
+# ── USMV overlay impact ──
+
+
+@router.post("/usmv-overlay-impact")
+def get_usmv_overlay_impact(payload: UsmvOverlayImpactRequest) -> dict[str, object]:
+    _raise_if_refresh_running(payload.version_id)
+    try:
+        service = UsmvOverlayComparisonService(
+            managed_universe_service=managed_universe_service,
+        )
+        return service.build_overlay_impact(
+            version_id=payload.version_id,
+            start_date=None if payload.start_date is None else payload.start_date.isoformat(),
+            end_date=None if payload.end_date is None else payload.end_date.isoformat(),
+            sample_points=payload.sample_points,
+            overlay_max_weight=payload.overlay_max_weight,
+        )
+    except RuntimeError as exc:
+        raise _http_422(exc) from exc
+    except ValueError as exc:
+        raise _http_422(exc) from exc
 
 
 # ── Snapshot CRUD ──
