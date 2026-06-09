@@ -3,14 +3,16 @@ import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/investor_profile.dart';
-import 'onboarding_screen.dart';
+import '../../services/mobile_backend_api.dart';
+import 'portfolio_design_screen.dart';
 import 'survey_flow_screen.dart';
 import 'widgets/risk_level_scale.dart';
 
 String _pct(double f) => (f * 100).round().toString();
 
 /// 투자 적합성 판정 결과. Shows the computed [InvestorProfile], persists it on
-/// confirm, and routes into the existing efficient-frontier onboarding.
+/// confirm, fetches the profile-tailored efficient frontier, then routes
+/// straight to [PortfolioDesignScreen]: the single chart step before home.
 class SurveyResultScreen extends StatefulWidget {
   final InvestorProfile profile;
   const SurveyResultScreen({super.key, required this.profile});
@@ -20,6 +22,8 @@ class SurveyResultScreen extends StatefulWidget {
 }
 
 class _SurveyResultScreenState extends State<SurveyResultScreen> {
+  bool _starting = false;
+
   @override
   void initState() {
     super.initState();
@@ -32,11 +36,27 @@ class _SurveyResultScreenState extends State<SurveyResultScreen> {
     super.dispose();
   }
 
-  void _start() {
+  Future<void> _start() async {
+    if (_starting) return;
     logAction('survey result confirm', {'level': widget.profile.level.name});
-    PortfolioStateProvider.of(context).setInvestorProfile(widget.profile);
-    Navigator.of(context).pushReplacement(
-      WeRoboMotion.fadeRoute(const OnboardingScreen()),
+    final state = PortfolioStateProvider.of(context);
+    final navigator = Navigator.of(context);
+    setState(() => _starting = true);
+    await state.setInvestorProfile(widget.profile);
+    // Fetch the profile-tailored efficient frontier so the design screen
+    // opens on real data instead of its synthetic fallback curve.
+    try {
+      final preview = await MobileBackendApi.instance.fetchFrontierPreview(
+        propensityScore: widget.profile.propensityScore,
+        samplePoints: 301,
+      );
+      state.setFrontierPreview(preview);
+    } catch (_) {
+      // Network/parse failure: PortfolioDesignScreen renders its fallback.
+    }
+    if (!mounted) return;
+    navigator.pushReplacement(
+      WeRoboMotion.fadeRoute(const PortfolioDesignScreen()),
     );
   }
 
@@ -110,8 +130,17 @@ class _SurveyResultScreenState extends State<SurveyResultScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _start,
-                  child: const Text('내 포트폴리오 설계 시작하기'),
+                  onPressed: _starting ? null : _start,
+                  child: _starting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: WeRoboColors.white,
+                          ),
+                        )
+                      : const Text('내 포트폴리오 설계 시작하기'),
                 ),
               ),
             ),
