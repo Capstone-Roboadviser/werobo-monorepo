@@ -135,6 +135,9 @@ class UsmvOverlayComparisonService:
         frontier_comparison = self._frontier_comparison(
             baseline_bundle.frontier_points,
             augmented_bundle.frontier_points,
+            labels=augmented_labels,
+            colors=augmented_colors,
+            instruments=instruments,
         )
         performance_lines = self._performance_lines(
             returns=augmented_returns,
@@ -295,10 +298,18 @@ class UsmvOverlayComparisonService:
         self,
         baseline_points: list[FrontierPoint],
         augmented_points: list[FrontierPoint],
+        *,
+        labels: dict[str, str],
+        colors: dict[str, str],
+        instruments: list[StockInstrument],
     ) -> dict[str, object]:
         if not baseline_points or not augmented_points:
             return {
                 "same_risk_points": [],
+                "max_sharpe_composition": {
+                    "basis": "asset_max_sharpe_equal_weight_members",
+                    "assets": [],
+                },
                 "summary": {
                     "matched_point_count": 0,
                     "improved_point_count": 0,
@@ -381,10 +392,18 @@ class UsmvOverlayComparisonService:
             index=augmented_max_index,
             include_overlay_weight=True,
         )
+        max_sharpe_composition = self._max_sharpe_composition(
+            baseline_point=baseline_max_payload,
+            augmented_point=augmented_max_payload,
+            labels=labels,
+            colors=colors,
+            instruments=instruments,
+        )
         improved_count = sum(delta > 1e-8 for delta in expected_deltas)
 
         return {
             "same_risk_points": same_risk_points,
+            "max_sharpe_composition": max_sharpe_composition,
             "summary": {
                 "matched_point_count": len(same_risk_points),
                 "improved_point_count": int(improved_count),
@@ -413,6 +432,109 @@ class UsmvOverlayComparisonService:
                 "best_point": best_point,
             },
         }
+
+    def _max_sharpe_composition(
+        self,
+        *,
+        baseline_point: dict[str, object],
+        augmented_point: dict[str, object],
+        labels: dict[str, str],
+        colors: dict[str, str],
+        instruments: list[StockInstrument],
+    ) -> dict[str, object]:
+        baseline_weights = dict(baseline_point.get("weights") or {})
+        augmented_weights = dict(augmented_point.get("weights") or {})
+        instruments_by_asset: dict[str, list[StockInstrument]] = {}
+        for instrument in instruments:
+            instruments_by_asset.setdefault(instrument.sector_code, []).append(
+                instrument
+            )
+        for members in instruments_by_asset.values():
+            members.sort(key=lambda instrument: instrument.ticker.upper())
+
+        ordered_codes = list(
+            dict.fromkeys(
+                [
+                    *labels.keys(),
+                    *baseline_weights.keys(),
+                    *augmented_weights.keys(),
+                    OVERLAY_CODE,
+                ]
+            )
+        )
+        rows: list[dict[str, object]] = []
+        for code in ordered_codes:
+            baseline_weight = round(float(baseline_weights.get(code, 0.0)), 6)
+            augmented_weight = round(float(augmented_weights.get(code, 0.0)), 6)
+            if baseline_weight <= 1e-8 and augmented_weight <= 1e-8:
+                continue
+            rows.append(
+                {
+                    "code": code,
+                    "label": labels.get(code, code),
+                    "color": colors.get(code, "#64748b"),
+                    "baseline_weight": baseline_weight,
+                    "with_overlay_weight": augmented_weight,
+                    "delta_weight": round(augmented_weight - baseline_weight, 6),
+                    "instruments": self._instrument_composition_rows(
+                        asset_code=code,
+                        baseline_weight=baseline_weight,
+                        augmented_weight=augmented_weight,
+                        instruments=instruments_by_asset.get(code, []),
+                    ),
+                }
+            )
+
+        rows.sort(
+            key=lambda row: max(
+                float(row["baseline_weight"]),
+                float(row["with_overlay_weight"]),
+            ),
+            reverse=True,
+        )
+        return {
+            "basis": "asset_max_sharpe_equal_weight_members",
+            "assets": rows,
+        }
+
+    @staticmethod
+    def _instrument_composition_rows(
+        *,
+        asset_code: str,
+        baseline_weight: float,
+        augmented_weight: float,
+        instruments: list[StockInstrument],
+    ) -> list[dict[str, object]]:
+        if asset_code == OVERLAY_CODE:
+            return [
+                {
+                    "ticker": OVERLAY_TICKER,
+                    "name": OVERLAY_LABEL,
+                    "baseline_weight": 0.0,
+                    "with_overlay_weight": augmented_weight,
+                    "delta_weight": augmented_weight,
+                    "synthetic": True,
+                }
+            ]
+        if not instruments:
+            return []
+        member_count = len(instruments)
+        baseline_member_weight = round(baseline_weight / member_count, 6)
+        augmented_member_weight = round(augmented_weight / member_count, 6)
+        return [
+            {
+                "ticker": instrument.ticker.upper(),
+                "name": instrument.name,
+                "baseline_weight": baseline_member_weight,
+                "with_overlay_weight": augmented_member_weight,
+                "delta_weight": round(
+                    augmented_member_weight - baseline_member_weight,
+                    6,
+                ),
+                "synthetic": False,
+            }
+            for instrument in instruments
+        ]
 
     def _performance_lines(
         self,

@@ -145,5 +145,32 @@ def test_overlay_impact_builds_baseline_and_augmented_frontiers(tmp_path) -> Non
     assert summary["with_overlay_max_sharpe"]["overlay_weight"] >= 0
     assert "matched_points" not in result
 
+    composition = comparison["max_sharpe_composition"]
+    assert composition["basis"] == "asset_max_sharpe_equal_weight_members"
+    asset_rows = composition["assets"]
+    overlay_row = next(row for row in asset_rows if row["code"] == "usmv_overlay")
+    assert overlay_row["baseline_weight"] == 0
+    assert overlay_row["with_overlay_weight"] > 0
+    assert overlay_row["instruments"] == [
+        {
+            "ticker": "USMV_OVERLAY",
+            "name": "USMV Overlay",
+            "baseline_weight": 0.0,
+            "with_overlay_weight": overlay_row["with_overlay_weight"],
+            "delta_weight": overlay_row["with_overlay_weight"],
+            "synthetic": True,
+        }
+    ]
+    defensive_row = next(row for row in asset_rows if row["code"] == "defensive")
+    assert defensive_row["instruments"][0]["ticker"] == "AAA"
+    assert (
+        defensive_row["instruments"][0]["baseline_weight"]
+        == defensive_row["baseline_weight"]
+    )
+    assert (
+        defensive_row["instruments"][0]["with_overlay_weight"]
+        == defensive_row["with_overlay_weight"]
+    )
+
     line_keys = {line["key"] for line in result["performance_lines"]}
     assert line_keys == {"baseline_same_risk", "with_overlay_same_risk"}

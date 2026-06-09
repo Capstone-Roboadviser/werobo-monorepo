@@ -144,6 +144,13 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
     th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
     th:first-child, td:first-child { text-align: left; }
     th { color: var(--fg-3); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: 0.08em; text-transform: uppercase; }
+    .asset-cell { display: inline-flex; align-items: center; gap: 8px; }
+    .asset-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+    .nested-cell { background: var(--surface-2); padding: 0; }
+    details { padding: var(--sp-3) var(--sp-4); }
+    summary { cursor: pointer; color: var(--fg-2); font-weight: 500; }
+    .nested-table { margin-top: var(--sp-2); font-size: var(--text-xs); }
+    .nested-table th, .nested-table td { padding: 7px 8px; }
     .empty { padding: var(--sp-6); color: var(--fg-3); text-align: center; font-family: var(--font-mono); font-size: var(--text-sm); }
     @media (max-width: 980px) {
       .form-grid, .metric-grid { grid-template-columns: 1fr; }
@@ -256,10 +263,40 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
         </table>
       </div>
     </section>
+
+    <section id="composition-card" class="card" hidden>
+      <div class="card-head">
+        <div>
+          <span class="eyebrow">Max Sharpe Composition</span>
+          <h2>Max Sharpe 구성 비교</h2>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>자산군 단위</th>
+              <th>기존 유니버스</th>
+              <th>Overlay 포함 유니버스</th>
+              <th>차이</th>
+              <th>종목 단위</th>
+            </tr>
+          </thead>
+          <tbody id="composition-body"></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 
   <script>
     const $ = sel => document.querySelector(sel);
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    })[ch]);
     const fmtPct = (value, digits = 1) => Number.isFinite(value) ? `${(value * 100).toFixed(digits)}%` : '-';
     const fmtSignedPct = (value, digits = 1) => {
       if (!Number.isFinite(value)) return '-';
@@ -368,9 +405,11 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
       $('#summary-card').hidden = false;
       $('#chart-card').hidden = false;
       $('#table-card').hidden = false;
+      $('#composition-card').hidden = false;
       renderMetrics(result);
       renderFrontierChart(result);
       renderSummaryTable(result);
+      renderCompositionTable(result);
     }
 
     function renderMetrics(result) {
@@ -518,6 +557,61 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
           <td>${row.delta}</td>
         </tr>
       `).join('');
+    }
+
+    function renderCompositionTable(result) {
+      const rows = result.frontier_comparison?.max_sharpe_composition?.assets || [];
+      if (!rows.length) {
+        $('#composition-body').innerHTML = '<tr><td colspan="5" class="empty">구성 데이터 없음</td></tr>';
+        return;
+      }
+      $('#composition-body').innerHTML = rows.map(row => {
+        const instruments = row.instruments || [];
+        const instrumentRows = instruments.length
+          ? instruments.map(instrument => `
+              <tr>
+                <td>${escapeHtml(instrument.ticker)}</td>
+                <td>${escapeHtml(instrument.name)}</td>
+                <td>${fmtWeight(instrument.baseline_weight)}</td>
+                <td>${fmtWeight(instrument.with_overlay_weight)}</td>
+                <td>${fmtSignedPct(instrument.delta_weight)}</td>
+              </tr>
+            `).join('')
+          : '<tr><td colspan="5" class="empty">종목 데이터 없음</td></tr>';
+        return `
+          <tr>
+            <td>
+              <span class="asset-cell">
+                <span class="asset-dot" style="background:${escapeHtml(row.color)}"></span>
+                <span>${escapeHtml(row.label)}</span>
+              </span>
+            </td>
+            <td>${fmtWeight(row.baseline_weight)}</td>
+            <td>${fmtWeight(row.with_overlay_weight)}</td>
+            <td>${fmtSignedPct(row.delta_weight)}</td>
+            <td>${instruments.length}개</td>
+          </tr>
+          <tr>
+            <td colspan="5" class="nested-cell">
+              <details>
+                <summary>종목 단위</summary>
+                <table class="nested-table">
+                  <thead>
+                    <tr>
+                      <th>티커</th>
+                      <th>종목명</th>
+                      <th>기존</th>
+                      <th>포함</th>
+                      <th>차이</th>
+                    </tr>
+                  </thead>
+                  <tbody>${instrumentRows}</tbody>
+                </table>
+              </details>
+            </td>
+          </tr>
+        `;
+      }).join('');
     }
 
     document.addEventListener('DOMContentLoaded', async () => {
