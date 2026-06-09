@@ -5,6 +5,7 @@ import 'package:robo_mobile/app/pressable.dart';
 import 'package:robo_mobile/app/theme.dart';
 import 'package:robo_mobile/app/theme_state.dart';
 import 'package:robo_mobile/screens/home/home_shell.dart';
+import 'package:robo_mobile/screens/home/portfolio_analysis_tab.dart';
 import 'package:robo_mobile/screens/onboarding/widgets/vestor_pie_chart.dart';
 
 void main() {
@@ -147,6 +148,42 @@ void main() {
 
     expect(find.text('수익률 (연환산)'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('analysis tab text is not truncated with ellipsis',
+      (tester) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(393, 852),
+          textScaler: TextScaler.linear(1.15),
+        ),
+        child: buildSubject(),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.widgetWithText(Pressable, '분석'));
+    await tester.pump(const Duration(milliseconds: 150));
+
+    for (final label in ['요약', '자산배분', '성과', '보유자산']) {
+      await tester.tap(find.text(label).first);
+      await tester.pump(const Duration(milliseconds: 250));
+
+      final analysisTexts = find.descendant(
+        of: find.byType(PortfolioAnalysisTab),
+        matching: find.byType(Text),
+      );
+      for (final element in analysisTexts.evaluate()) {
+        final text = element.widget as Text;
+        expect(text.overflow, isNot(TextOverflow.ellipsis));
+      }
+    }
   });
 
   testWidgets('news navigation item opens the news tab', (tester) async {

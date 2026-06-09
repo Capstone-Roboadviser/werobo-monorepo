@@ -5,7 +5,10 @@ import 'package:robo_mobile/app/theme.dart';
 import 'package:robo_mobile/models/mobile_backend_models.dart';
 import 'package:robo_mobile/screens/onboarding/onboarding_screen.dart';
 import 'package:robo_mobile/screens/onboarding/portfolio_design_screen.dart';
+import 'package:robo_mobile/screens/onboarding/portfolio_market_comparison_screen.dart';
 import 'package:robo_mobile/screens/onboarding/portfolio_review_screen.dart';
+import 'package:robo_mobile/screens/onboarding/survey_result_screen.dart';
+import 'package:robo_mobile/models/investor_profile.dart';
 
 void main() {
   testWidgets('allocation screen renders donut chart', (tester) async {
@@ -214,6 +217,125 @@ void main() {
     expect(state.accountDashboard?.summary?.startedAt, '2026-03-01');
     expect(find.byType(PortfolioDesignScreen), findsOneWidget);
   });
+
+  testWidgets('survey result starts directly on portfolio design screen',
+      (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+
+    await tester.pumpWidget(
+      PortfolioStateProvider(
+        state: state,
+        child: MaterialApp(
+          theme: WeRoboTheme.light,
+          home: SurveyResultScreen(profile: _investorProfile()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('내 포트폴리오 설계 시작하기'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.byType(PortfolioDesignScreen), findsOneWidget);
+    expect(find.byType(OnboardingScreen), findsNothing);
+  });
+
+  testWidgets('portfolio design confirm opens market comparison summary',
+      (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    state.setBacktest(_comparisonBacktest());
+
+    await tester.pumpWidget(
+      PortfolioStateProvider(
+        state: state,
+        child: MaterialApp(
+          theme: WeRoboTheme.light,
+          home: PortfolioDesignScreen(selection: _selection()),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('AI 추천 지점을 보여주세요'));
+    await tester.pump();
+    await tester.tap(find.text('포트폴리오 확인하기'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.byType(PortfolioMarketComparisonScreen), findsOneWidget);
+    expect(find.textContaining('시장과 비교해 보세요'), findsOneWidget);
+  });
+
+  testWidgets('market comparison next creates account and enters home',
+      (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    state.setBacktest(_comparisonBacktest());
+    final today = DateTime(2026, 5, 12, 14, 30);
+    double? createdAmount;
+    DateTime? createdStartedAt;
+
+    await tester.pumpWidget(
+      PortfolioStateProvider(
+        state: state,
+        child: MaterialApp(
+          theme: WeRoboTheme.light,
+          routes: {
+            '/home': (_) => const SizedBox(key: Key('home-screen')),
+          },
+          home: PortfolioMarketComparisonScreen(
+            selection: _selection(),
+            now: () => today,
+            resolveFrontierSelection: ({
+              required PortfolioState state,
+              required OnboardingFrontierSelection selection,
+            }) async =>
+                _frontierSelectionResponse(asOfDate: selection.asOfDate),
+            createInitialAccount: ({
+              required PortfolioState state,
+              required MobileFrontierSelectionResponse selection,
+              required double initialCashAmount,
+              required DateTime startedAt,
+            }) async {
+              createdAmount = initialCashAmount;
+              createdStartedAt = startedAt;
+              return _accountDashboard(startedAt: startedAt);
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('누적 수익률'), findsOneWidget);
+    expect(find.text('변동성'), findsOneWidget);
+    expect(find.text('MDD'), findsOneWidget);
+
+    await tester.tap(find.text('다음'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(createdAmount, 10000000);
+    expect(createdStartedAt, DateTime(2026, 3, 1));
+    expect(state.frontierSelection, isNotNull);
+    expect(state.accountDashboard?.summary?.investedAmount, 10000000);
+    expect(find.byKey(const Key('home-screen')), findsOneWidget);
+  });
+}
+
+InvestorProfile _investorProfile() {
+  return const InvestorProfile(
+    level: RiskLevel.stableGrowth,
+    rawScore: 16,
+    propensityScore: 50,
+    expectedReturnMin: 0.04,
+    expectedReturnMax: 0.10,
+    maxRisk: 0.14,
+    answers: {},
+  );
 }
 
 OnboardingFrontierSelection _selection() {

@@ -5,7 +5,7 @@ import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
 import 'frontier_selection_resolver.dart';
-import 'portfolio_review_screen.dart';
+import 'portfolio_design_screen.dart';
 import 'widgets/asset_weight.dart';
 import 'widgets/efficient_frontier_chart.dart';
 import 'widgets/risk_ack_dialog.dart';
@@ -173,7 +173,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (!mounted) return;
     navigator.push(
       WeRoboMotion.fadeRoute(
-        PortfolioAllocationScreen(selection: resolvedSelection),
+        PortfolioDesignScreen(selection: resolvedSelection),
       ),
     );
   }

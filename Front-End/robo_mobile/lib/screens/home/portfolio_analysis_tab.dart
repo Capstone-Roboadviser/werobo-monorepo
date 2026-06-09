@@ -168,8 +168,6 @@ class _AnalysisTabBar extends StatelessWidget {
                   child: Text(
                     tabs[i],
                     textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: WeRoboTypography.bodySmall.copyWith(
                       color: selectedIndex == i
                           ? WeRoboColors.primary
@@ -435,8 +433,6 @@ class _AllocationLegend extends StatelessWidget {
                 Expanded(
                   child: Text(
                     category.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: WeRoboTypography.bodySmall.copyWith(
                       color: tc.textPrimary,
                       fontWeight: FontWeight.w800,
@@ -496,15 +492,17 @@ class _MetricGrid extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final columns = constraints.maxWidth < 340 ? 2 : 4;
+        final useTwoColumns = constraints.maxWidth < 430;
+        final resolvedColumns = useTwoColumns ? 2 : columns;
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           itemCount: metrics.length,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
+            crossAxisCount: resolvedColumns,
             mainAxisSpacing: 10,
             crossAxisSpacing: 10,
-            childAspectRatio: columns == 2 ? 1.55 : 0.92,
+            mainAxisExtent: resolvedColumns == 2 ? 106 : 118,
           ),
           itemBuilder: (context, index) => _MetricCard(data: metrics[index]),
         );
@@ -534,22 +532,22 @@ class _MetricCard extends StatelessWidget {
         children: [
           Text(
             data.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
             style: WeRoboTypography.caption.copyWith(
               color: tc.textSecondary,
               fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 8),
-          Text(
-            data.value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: WeRoboTypography.body.copyWith(
-              color: data.color ?? tc.textPrimary,
-              fontWeight: FontWeight.w900,
-              fontFamily: WeRoboFonts.english,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              data.value,
+              style: WeRoboTypography.body.copyWith(
+                color: data.color ?? tc.textPrimary,
+                fontWeight: FontWeight.w900,
+                fontFamily: WeRoboFonts.english,
+              ),
             ),
           ),
         ],
@@ -705,8 +703,6 @@ class _SummaryMetric extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
             style: WeRoboTypography.bodySmall.copyWith(
               color: valueColor ?? tc.textPrimary,
               fontWeight: FontWeight.w900,
@@ -761,8 +757,6 @@ class _HoldingRow extends StatelessWidget {
                 children: [
                   Text(
                     detail.category.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: WeRoboTypography.bodySmall.copyWith(
                       color: tc.textPrimary,
                       fontWeight: FontWeight.w900,
@@ -771,8 +765,6 @@ class _HoldingRow extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(
                     detail.tickers.map((t) => t.symbol).take(3).join(', '),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                     style: WeRoboTypography.caption.copyWith(
                       color: tc.textSecondary,
                     ),

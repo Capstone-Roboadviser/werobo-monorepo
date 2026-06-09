@@ -7,8 +7,8 @@ import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
-import '../home/home_shell.dart';
 import 'onboarding_screen.dart' show OnboardingFrontierSelection;
+import 'portfolio_market_comparison_screen.dart';
 import 'widgets/risk_return_frontier_chart.dart';
 
 /// Disabled-CTA / out-of-range gray used by the design.
@@ -83,8 +83,9 @@ class _PortfolioDesignScreenState extends State<PortfolioDesignScreen> {
     // straight into the over-risk warning.
     final pick = widget.selection?.selectedPointIndex ??
         state.onboardingFrontierSelection?.selectedPointIndex;
-    final pickPos =
-        pick != null ? _preview.positionForPointIndex(pick) : _recommendedPosition;
+    final pickPos = pick != null
+        ? _preview.positionForPointIndex(pick)
+        : _recommendedPosition;
     _selectedPosition = (pickPos >= _inRangeLow && pickPos <= _inRangeHigh)
         ? pickPos
         : _recommendedPosition;
@@ -106,7 +107,8 @@ class _PortfolioDesignScreenState extends State<PortfolioDesignScreen> {
   Color get _accent =>
       _outOfRange ? kFrontierAccentOrange : kFrontierAccentBlue;
 
-  String get _returnStr => '+${(_sel.expectedReturn * 100).toStringAsFixed(1)}%';
+  String get _returnStr =>
+      '+${(_sel.expectedReturn * 100).toStringAsFixed(1)}%';
   String get _volStr => '±${(_sel.volatility * 100).toStringAsFixed(1)}%';
   // The frontier feed carries no drawdown figures, so we derive them from
   // volatility. The factors below reproduce the capstone design's numbers
@@ -144,17 +146,32 @@ class _PortfolioDesignScreenState extends State<PortfolioDesignScreen> {
   }
 
   Future<void> _confirm() async {
-    final state = PortfolioStateProvider.of(context);
     final navigator = Navigator.of(context);
     logAction('portfolio design confirm', {
       'position': _selectedPosition,
       'pointIndex': _sel.index,
       'inRange': !_outOfRange,
     });
-    // Warm the home dashboard's comparison backtest (idempotent / safe).
-    await HomeShell.prefetchBacktest(state);
     if (!mounted) return;
-    navigator.pushNamedAndRemoveUntil('/home', (_) => false);
+    navigator.pushReplacement(
+      WeRoboMotion.fadeRoute(
+        PortfolioMarketComparisonScreen(selection: _currentSelection()),
+      ),
+    );
+  }
+
+  OnboardingFrontierSelection _currentSelection() {
+    final normalizedT =
+        _points.length <= 1 ? 0.0 : _selectedPosition / (_points.length - 1);
+    return OnboardingFrontierSelection(
+      normalizedT: normalizedT,
+      selectedPointIndex: _sel.index,
+      targetVolatility: _sel.volatility,
+      dataSource: _preview.dataSource,
+      asOfDate: _preview.asOfDate ?? widget.selection?.asOfDate,
+      isAuthoritative: true,
+      preview: _preview,
+    );
   }
 
   @override
@@ -524,7 +541,12 @@ final MobileFrontierPreviewResponse _fallbackPreview =
   'points': <Map<String, dynamic>>[
     {'index': 0, 'volatility': 0.05, 'expected_return': 0.045},
     {'index': 1, 'volatility': 0.07, 'expected_return': 0.058},
-    {'index': 2, 'volatility': 0.09, 'expected_return': 0.069, 'is_recommended': true},
+    {
+      'index': 2,
+      'volatility': 0.09,
+      'expected_return': 0.069,
+      'is_recommended': true
+    },
     {'index': 3, 'volatility': 0.11, 'expected_return': 0.078},
     {'index': 4, 'volatility': 0.13, 'expected_return': 0.086},
     {'index': 5, 'volatility': 0.15, 'expected_return': 0.092},

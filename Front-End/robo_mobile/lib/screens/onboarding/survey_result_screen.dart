@@ -3,7 +3,7 @@ import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/investor_profile.dart';
-import 'onboarding_screen.dart';
+import 'portfolio_design_screen.dart';
 import 'survey_flow_screen.dart';
 import 'widgets/risk_level_scale.dart';
 
@@ -36,7 +36,7 @@ class _SurveyResultScreenState extends State<SurveyResultScreen> {
     logAction('survey result confirm', {'level': widget.profile.level.name});
     PortfolioStateProvider.of(context).setInvestorProfile(widget.profile);
     Navigator.of(context).pushReplacement(
-      WeRoboMotion.fadeRoute(const OnboardingScreen()),
+      WeRoboMotion.fadeRoute(const PortfolioDesignScreen()),
     );
   }
 
