@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import '../../app/debug_page_logger.dart';
 import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
-import 'story_flow_screen.dart';
+import 'onboarding_flow_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -77,13 +77,13 @@ class _SplashScreenState extends State<SplashScreen>
         return;
       }
       logAction('route from splash', {
-        'target': 'story',
+        'target': 'onboarding',
         'loggedIn': state.isLoggedIn,
         'hasPortfolio': state.hasCompletedPortfolioSetup,
         'hasSeenStory': state.hasSeenStory,
       });
       Navigator.of(context).pushReplacement(
-        WeRoboMotion.fadeRoute(const StoryFlowScreen()),
+        WeRoboMotion.fadeRoute(const OnboardingFlowScreen()),
       );
     });
   }
