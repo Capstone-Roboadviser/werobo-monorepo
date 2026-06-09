@@ -132,13 +132,13 @@ class UsmvOverlayComparisonService:
             sample_points=sample_points,
         )
 
-        matched_points = self._matched_points(
+        frontier_comparison = self._frontier_comparison(
             baseline_bundle.frontier_points,
             augmented_bundle.frontier_points,
         )
         performance_lines = self._performance_lines(
             returns=augmented_returns,
-            matched_points=matched_points,
+            comparison_summary=frontier_comparison["summary"],
         )
 
         return {
@@ -158,7 +158,7 @@ class UsmvOverlayComparisonService:
             },
             "baseline": self._serialize_bundle(baseline_bundle),
             "with_overlay": self._serialize_bundle(augmented_bundle),
-            "matched_points": matched_points,
+            "frontier_comparison": frontier_comparison,
             "performance_lines": performance_lines,
         }
 
@@ -291,26 +291,29 @@ class UsmvOverlayComparisonService:
             ],
         }
 
-    def _matched_points(
+    def _frontier_comparison(
         self,
         baseline_points: list[FrontierPoint],
         augmented_points: list[FrontierPoint],
     ) -> dict[str, object]:
         if not baseline_points or not augmented_points:
-            return {}
-        indices = {
-            "conservative": 0,
-            "balanced": (len(baseline_points) - 1) // 2,
-            "growth": len(baseline_points) - 1,
-        }
-        labels = {
-            "conservative": "안정형",
-            "balanced": "균형형",
-            "growth": "성장형",
-        }
-        result: dict[str, object] = {}
-        for key, index in indices.items():
-            baseline = baseline_points[index]
+            return {
+                "same_risk_points": [],
+                "summary": {
+                    "matched_point_count": 0,
+                    "improved_point_count": 0,
+                    "improved_point_share": 0.0,
+                    "average_delta_expected_return": 0.0,
+                    "best_delta_expected_return": 0.0,
+                    "average_delta_sharpe": 0.0,
+                    "average_overlay_weight": 0.0,
+                    "max_overlay_weight": 0.0,
+                    "best_point": None,
+                },
+            }
+
+        same_risk_points: list[dict[str, object]] = []
+        for index, baseline in enumerate(baseline_points):
             augmented = min(
                 augmented_points,
                 key=lambda point: abs(point.volatility - baseline.volatility),
@@ -325,38 +328,81 @@ class UsmvOverlayComparisonService:
                 index=augmented_points.index(augmented),
                 include_overlay_weight=True,
             )
-            result[key] = {
-                "label": labels[key],
-                "baseline": baseline_payload,
-                "with_overlay": augmented_payload,
-                "delta_expected_return": round(
-                    augmented.expected_return - baseline.expected_return,
+            same_risk_points.append(
+                {
+                    "baseline_index": index,
+                    "with_overlay_index": augmented_points.index(augmented),
+                    "baseline": baseline_payload,
+                    "with_overlay": augmented_payload,
+                    "delta_expected_return": round(
+                        augmented.expected_return - baseline.expected_return,
+                        6,
+                    ),
+                    "delta_volatility": round(
+                        augmented.volatility - baseline.volatility,
+                        6,
+                    ),
+                    "delta_sharpe": round(
+                        self._sharpe(augmented) - self._sharpe(baseline),
+                        6,
+                    ),
+                }
+            )
+
+        expected_deltas = [
+            float(point["delta_expected_return"]) for point in same_risk_points
+        ]
+        sharpe_deltas = [float(point["delta_sharpe"]) for point in same_risk_points]
+        overlay_weights = [
+            float(point["with_overlay"]["overlay_weight"])
+            for point in same_risk_points
+        ]
+        best_point = max(
+            same_risk_points,
+            key=lambda point: float(point["delta_expected_return"]),
+        )
+        improved_count = sum(delta > 1e-8 for delta in expected_deltas)
+
+        return {
+            "same_risk_points": same_risk_points,
+            "summary": {
+                "matched_point_count": len(same_risk_points),
+                "improved_point_count": int(improved_count),
+                "improved_point_share": round(
+                    improved_count / len(same_risk_points),
                     6,
                 ),
-                "delta_volatility": round(augmented.volatility - baseline.volatility, 6),
-                "delta_sharpe": round(
-                    self._sharpe(augmented) - self._sharpe(baseline),
+                "average_delta_expected_return": round(
+                    float(np.mean(expected_deltas)),
                     6,
                 ),
-            }
-        return result
+                "best_delta_expected_return": round(
+                    float(best_point["delta_expected_return"]),
+                    6,
+                ),
+                "average_delta_sharpe": round(float(np.mean(sharpe_deltas)), 6),
+                "average_overlay_weight": round(float(np.mean(overlay_weights)), 6),
+                "max_overlay_weight": round(float(np.max(overlay_weights)), 6),
+                "best_point": best_point,
+            },
+        }
 
     def _performance_lines(
         self,
         *,
         returns: pd.DataFrame,
-        matched_points: dict[str, object],
+        comparison_summary: dict[str, object],
     ) -> list[dict[str, object]]:
-        balanced = matched_points.get("balanced")
-        if not isinstance(balanced, dict):
+        best_point = comparison_summary.get("best_point")
+        if not isinstance(best_point, dict):
             return []
-        baseline = balanced.get("baseline")
-        augmented = balanced.get("with_overlay")
+        baseline = best_point.get("baseline")
+        augmented = best_point.get("with_overlay")
         if not isinstance(baseline, dict) or not isinstance(augmented, dict):
             return []
-        lines = [
+        return [
             self._performance_line(
-                key="baseline_balanced",
+                key="baseline_same_risk",
                 label="기존 유니버스",
                 color="#f97316",
                 style="solid",
@@ -364,26 +410,14 @@ class UsmvOverlayComparisonService:
                 weights=dict(baseline["weights"]),
             ),
             self._performance_line(
-                key="with_overlay_balanced",
-                label="Overlay 포함",
+                key="with_overlay_same_risk",
+                label="Overlay 포함 유니버스",
                 color=OVERLAY_COLOR,
                 style="solid",
                 returns=returns,
                 weights=dict(augmented["weights"]),
             ),
         ]
-        if OVERLAY_CODE in returns.columns:
-            lines.append(
-                self._performance_line(
-                    key="overlay",
-                    label=OVERLAY_LABEL,
-                    color="#94a3b8",
-                    style="dashed",
-                    returns=returns,
-                    weights={OVERLAY_CODE: 1.0},
-                )
-            )
-        return lines
 
     @staticmethod
     def _performance_line(

@@ -127,13 +127,12 @@ def test_overlay_impact_builds_baseline_and_augmented_frontiers(tmp_path) -> Non
     assert max(augmented_weights) > 0
     assert max(augmented_weights) <= 0.300001
 
-    balanced = result["matched_points"]["balanced"]
-    assert balanced["baseline"]["volatility"] > 0
-    assert balanced["with_overlay"]["volatility"] > 0
-    assert balanced["with_overlay"]["overlay_weight"] >= 0
-    assert "delta_expected_return" in balanced
+    comparison = result["frontier_comparison"]
+    summary = comparison["summary"]
+    assert summary["matched_point_count"] == len(result["baseline"]["frontier_points"])
+    assert summary["average_overlay_weight"] >= 0
+    assert "best_point" in summary
+    assert "matched_points" not in result
 
     line_keys = {line["key"] for line in result["performance_lines"]}
-    assert {"baseline_balanced", "with_overlay_balanced", "overlay"}.issubset(
-        line_keys
-    )
+    assert line_keys == {"baseline_same_risk", "with_overlay_same_risk"}

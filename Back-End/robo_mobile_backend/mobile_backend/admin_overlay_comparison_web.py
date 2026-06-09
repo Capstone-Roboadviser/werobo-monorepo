@@ -134,9 +134,8 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
     .metric .value { margin-top: 6px; font-size: var(--text-xl); font-weight: 600; color: var(--fg); }
     .metric .value.pos { color: var(--pos); }
     .metric .value.neg { color: var(--neg); }
-    .chart-grid { display: grid; grid-template-columns: minmax(360px, 1fr) minmax(360px, 1fr); gap: var(--sp-4); }
-    .chart-wrap { min-height: 380px; }
-    svg { width: 100%; height: 360px; display: block; }
+    .chart-wrap { min-height: 420px; }
+    svg { width: 100%; height: 420px; display: block; }
     .legend { display: flex; gap: var(--sp-3); flex-wrap: wrap; margin-top: var(--sp-2); color: var(--fg-2); font-size: var(--text-xs); }
     .legend-item { display: inline-flex; align-items: center; gap: 6px; }
     .swatch { width: 18px; height: 2px; display: inline-block; border-radius: 999px; }
@@ -147,7 +146,7 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
     th { color: var(--fg-3); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: 0.08em; text-transform: uppercase; }
     .empty { padding: var(--sp-6); color: var(--fg-3); text-align: center; font-family: var(--font-mono); font-size: var(--text-sm); }
     @media (max-width: 980px) {
-      .form-grid, .metric-grid, .chart-grid { grid-template-columns: 1fr; }
+      .form-grid, .metric-grid { grid-template-columns: 1fr; }
       .rail { align-items: flex-start; flex-direction: column; }
       .shell { padding: var(--sp-4); }
     }
@@ -176,7 +175,7 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
       <div>
         <span class="eyebrow">Admin · Overlay Impact</span>
         <h1>USMV Overlay 유니버스 효과</h1>
-        <p class="subtitle">기존 유니버스와 `portfolio_USMV_overlay`를 새 자산군으로 추가한 유니버스를 같은 기간, 같은 위험도 기준으로 비교합니다.</p>
+        <p class="subtitle">`portfolio_USMV_overlay`를 기존 유니버스에 넣었을 때와 넣지 않았을 때의 Efficient Frontier를 같은 기간, 같은 제약조건으로 비교합니다.</p>
       </div>
     </header>
 
@@ -216,8 +215,8 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
     <section id="summary-card" class="card" hidden>
       <div class="card-head">
         <div>
-          <span class="eyebrow">Same Risk · Balanced</span>
-          <h2>균형형 기준 변화</h2>
+          <span class="eyebrow">Universe Delta</span>
+          <h2>프론티어 전체 비교</h2>
         </div>
       </div>
       <div class="metric-grid" id="metrics"></div>
@@ -226,44 +225,34 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
     <section id="chart-card" class="card" hidden>
       <div class="card-head">
         <div>
-          <span class="eyebrow">Frontier · Backtest</span>
-          <h2>비교 차트</h2>
+          <span class="eyebrow">Efficient Frontier</span>
+          <h2>기존 유니버스 vs Overlay 포함 유니버스</h2>
         </div>
       </div>
-      <div class="chart-grid">
-        <div class="chart-wrap">
-          <svg id="frontier-svg" role="img" aria-label="efficient frontier comparison"></svg>
-          <div class="legend" id="frontier-legend"></div>
-        </div>
-        <div class="chart-wrap">
-          <svg id="performance-svg" role="img" aria-label="performance comparison"></svg>
-          <div class="legend" id="performance-legend"></div>
-        </div>
+      <div class="chart-wrap">
+        <svg id="frontier-svg" role="img" aria-label="efficient frontier comparison"></svg>
+        <div class="legend" id="frontier-legend"></div>
       </div>
     </section>
 
     <section id="table-card" class="card" hidden>
       <div class="card-head">
         <div>
-          <span class="eyebrow">Matched Points</span>
-          <h2>같은 위험도 매칭</h2>
+          <span class="eyebrow">Same Risk Summary</span>
+          <h2>자산군 추가 효과</h2>
         </div>
       </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>구간</th>
-              <th>기존 기대수익</th>
-              <th>포함 기대수익</th>
-              <th>Δ 기대수익</th>
-              <th>기존 변동성</th>
-              <th>포함 변동성</th>
-              <th>Overlay 비중</th>
-              <th>Δ Sharpe</th>
+              <th>항목</th>
+              <th>기존 유니버스</th>
+              <th>Overlay 포함 유니버스</th>
+              <th>차이</th>
             </tr>
           </thead>
-          <tbody id="matched-body"></tbody>
+          <tbody id="summary-body"></tbody>
         </table>
       </div>
     </section>
@@ -376,17 +365,16 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
       $('#table-card').hidden = false;
       renderMetrics(result);
       renderFrontierChart(result);
-      renderPerformanceChart(result.performance_lines || []);
-      renderMatchedTable(result.matched_points || {});
+      renderSummaryTable(result);
     }
 
     function renderMetrics(result) {
-      const balanced = result.matched_points?.balanced;
+      const summary = result.frontier_comparison?.summary || {};
       const metrics = [
-        ['Δ 기대수익', fmtSignedPct(balanced?.delta_expected_return), balanced?.delta_expected_return],
-        ['Δ 변동성', fmtSignedPct(balanced?.delta_volatility), -balanced?.delta_volatility],
-        ['Overlay 비중', fmtWeight(balanced?.with_overlay?.overlay_weight), balanced?.with_overlay?.overlay_weight],
-        ['Δ Sharpe', Number.isFinite(balanced?.delta_sharpe) ? `${balanced.delta_sharpe > 0 ? '+' : ''}${balanced.delta_sharpe.toFixed(2)}` : '-', balanced?.delta_sharpe],
+        ['평균 Δ 기대수익', fmtSignedPct(summary.average_delta_expected_return), summary.average_delta_expected_return],
+        ['최대 Δ 기대수익', fmtSignedPct(summary.best_delta_expected_return), summary.best_delta_expected_return],
+        ['개선 지점', `${summary.improved_point_count ?? 0}/${summary.matched_point_count ?? 0}`, summary.improved_point_count],
+        ['평균 Overlay 비중', fmtWeight(summary.average_overlay_weight), summary.average_overlay_weight],
       ];
       $('#metrics').innerHTML = metrics.map(([label, value, raw]) => {
         const cls = Number(raw) > 0 ? 'pos' : (Number(raw) < 0 ? 'neg' : '');
@@ -424,32 +412,11 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
       });
     }
 
-    function renderPerformanceChart(lines) {
-      const series = lines.map(line => ({
-        key: line.key,
-        label: line.label,
-        color: line.color,
-        points: line.points || [],
-        style: line.style,
-      }));
-      const values = series.flatMap(line => line.points.map((point, index) => ({ ...point, index })));
-      drawXYChart({
-        svg: $('#performance-svg'),
-        legend: $('#performance-legend'),
-        series,
-        values,
-        xValue: p => p.index,
-        yValue: p => p.return_pct,
-        yFormatter: v => `${v.toFixed(0)}%`,
-        xFormatter: () => '',
-      });
-    }
-
     function drawXYChart({ svg, legend, series, values, xValue, yValue, xFormatter, yFormatter }) {
       while (svg.firstChild) svg.removeChild(svg.firstChild);
       legend.innerHTML = '';
       const C = chartColors();
-      const W = 720, H = 360, padL = 48, padR = 24, padT = 22, padB = 34;
+      const W = 960, H = 420, padL = 56, padR = 28, padT = 24, padB = 40;
       svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
       if (!values.length) {
         const empty = svgEl('text', { x: W / 2, y: H / 2, fill: C.axis, 'text-anchor': 'middle', 'font-size': '12' });
@@ -503,18 +470,43 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
       });
     }
 
-    function renderMatchedTable(matched) {
-      const rows = ['conservative', 'balanced', 'growth'].map(key => matched[key]).filter(Boolean);
-      $('#matched-body').innerHTML = rows.map(row => `
+    function renderSummaryTable(result) {
+      const summary = result.frontier_comparison?.summary || {};
+      const best = summary.best_point;
+      const bestBaseline = best?.baseline || {};
+      const bestOverlay = best?.with_overlay || {};
+      const rows = [
+        {
+          label: '전체 프론티어 평균',
+          baseline: `${summary.matched_point_count ?? 0}개 동일 위험점`,
+          overlay: `평균 Overlay ${fmtWeight(summary.average_overlay_weight)}`,
+          delta: fmtSignedPct(summary.average_delta_expected_return),
+        },
+        {
+          label: '가장 개선된 동일 위험점',
+          baseline: `${fmtPct(bestBaseline.expected_return)} / ${fmtPct(bestBaseline.volatility)}`,
+          overlay: `${fmtPct(bestOverlay.expected_return)} / ${fmtPct(bestOverlay.volatility)}`,
+          delta: fmtSignedPct(best?.delta_expected_return),
+        },
+        {
+          label: 'Overlay 채택',
+          baseline: '-',
+          overlay: `최대 ${fmtWeight(summary.max_overlay_weight)}`,
+          delta: `${summary.improved_point_count ?? 0}/${summary.matched_point_count ?? 0}개 지점 개선`,
+        },
+        {
+          label: 'Sharpe 변화',
+          baseline: '-',
+          overlay: '-',
+          delta: Number.isFinite(summary.average_delta_sharpe) ? `${summary.average_delta_sharpe > 0 ? '+' : ''}${summary.average_delta_sharpe.toFixed(2)}` : '-',
+        },
+      ];
+      $('#summary-body').innerHTML = rows.map(row => `
         <tr>
           <td>${row.label}</td>
-          <td>${fmtPct(row.baseline.expected_return)}</td>
-          <td>${fmtPct(row.with_overlay.expected_return)}</td>
-          <td>${fmtSignedPct(row.delta_expected_return)}</td>
-          <td>${fmtPct(row.baseline.volatility)}</td>
-          <td>${fmtPct(row.with_overlay.volatility)}</td>
-          <td>${fmtWeight(row.with_overlay.overlay_weight)}</td>
-          <td>${Number.isFinite(row.delta_sharpe) ? `${row.delta_sharpe > 0 ? '+' : ''}${row.delta_sharpe.toFixed(2)}` : '-'}</td>
+          <td>${row.baseline}</td>
+          <td>${row.overlay}</td>
+          <td>${row.delta}</td>
         </tr>
       `).join('');
     }
