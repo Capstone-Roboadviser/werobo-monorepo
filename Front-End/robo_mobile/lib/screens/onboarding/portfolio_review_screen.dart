@@ -8,6 +8,7 @@ import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
 import 'frontier_selection_resolver.dart';
 import 'onboarding_screen.dart' show OnboardingFrontierSelection;
+import 'portfolio_design_screen.dart';
 import 'widgets/asset_weight.dart';
 import 'widgets/donut_chart.dart';
 import 'widgets/portfolio_charts.dart';
@@ -291,7 +292,13 @@ class _PortfolioReviewScreenState extends State<PortfolioReviewScreen>
         return;
       }
       state.setAccountDashboard(dashboard);
-      Navigator.of(context).pushNamedAndRemoveUntil('/home', (_) => false);
+      // Insert the 기대수익/리스크 설정 (포트폴리오 설계) step right before the home
+      // dashboard. Its "포트폴리오 확인하기" CTA completes the jump to /home.
+      Navigator.of(context).pushReplacement(
+        WeRoboMotion.fadeRoute(
+          PortfolioDesignScreen(selection: widget.selection),
+        ),
+      );
     } catch (_) {
       if (!mounted) {
         return;
