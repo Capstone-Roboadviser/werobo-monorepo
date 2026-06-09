@@ -5,8 +5,8 @@ import '../../app/theme.dart';
 import 'account_page.dart';
 import 'settings_page.dart';
 
-/// "전체" tab (formerly 설정). Top-level account / app links. The actual
-/// 설정 page (보안, 알림 설정, 다크 모드) lives behind the "설정" row.
+/// Settings tab. Hosts top-level account / app links; detailed settings
+/// (보안, 알림 설정, 다크 모드) live behind the "설정" row.
 class MoreTab extends StatelessWidget {
   const MoreTab({super.key});
 
@@ -19,7 +19,7 @@ class MoreTab extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 20),
-            Text('전체', style: WeRoboTypography.heading2.themed(context)),
+            Text('설정', style: WeRoboTypography.heading2.themed(context)),
             const SizedBox(height: 24),
             _MoreItem(
               icon: Icons.person_outline_rounded,
@@ -93,8 +93,7 @@ class _MoreItem extends StatelessWidget {
             Expanded(
               child: Text(
                 label,
-                style: WeRoboTypography.body
-                    .copyWith(color: tc.textPrimary),
+                style: WeRoboTypography.body.copyWith(color: tc.textPrimary),
               ),
             ),
             Icon(

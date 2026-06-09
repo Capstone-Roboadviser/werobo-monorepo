@@ -6,9 +6,9 @@ import '../../app/theme.dart';
 import '../../services/mobile_backend_api.dart';
 import 'activity_hub_page.dart';
 import 'community_tab.dart';
-import 'home_tab.dart';
+import 'home_dashboard_tab.dart';
 import 'news_tab.dart';
-import 'portfolio_grid_tab.dart';
+import 'portfolio_analysis_tab.dart';
 import 'settings_tab.dart';
 
 class HomeShell extends StatefulWidget {
@@ -25,8 +25,8 @@ class HomeShell extends StatefulWidget {
     final onboardingPick = state.onboardingFrontierSelection;
     final selectedPointIndex =
         selection?.selectedPointIndex ?? onboardingPick?.selectedPointIndex;
-    final targetVolatility = selection?.selectedTargetVolatility ??
-        onboardingPick?.targetVolatility;
+    final targetVolatility =
+        selection?.selectedTargetVolatility ?? onboardingPick?.targetVolatility;
     final stockWeights = portfolio?.stockWeights;
     if (selectedPointIndex == null &&
         targetVolatility == null &&
@@ -63,8 +63,8 @@ class _HomeShellState extends State<HomeShell> {
   bool _digestFetched = false;
 
   static const _tabs = [
-    HomeTab(),
-    PortfolioGridTab(),
+    HomeDashboardTab(),
+    PortfolioAnalysisTab(),
     CommunityTab(),
     NewsTab(),
     MoreTab(),
@@ -157,7 +157,7 @@ class _HomeShellState extends State<HomeShell> {
             index: _currentTab,
             children: _tabs,
           ),
-          if (_currentTab == 0)
+          if (_currentTab == 1)
             const Positioned(
               top: 0,
               right: 0,
@@ -194,11 +194,11 @@ class _HomeShellState extends State<HomeShell> {
                 ),
                 Expanded(
                   child: _NavItem(
-                    icon: Icons.pie_chart_rounded,
-                    label: '포트폴리오',
+                    icon: Icons.analytics_rounded,
+                    label: '분석',
                     isActive: _currentTab == 1,
                     onTap: () {
-                      logAction('tab selected', {'tab': 'portfolio'});
+                      logAction('tab selected', {'tab': 'analysis'});
                       setState(() => _currentTab = 1);
                     },
                   ),
@@ -227,11 +227,11 @@ class _HomeShellState extends State<HomeShell> {
                 ),
                 Expanded(
                   child: _NavItem(
-                    icon: Icons.menu_rounded,
-                    label: '전체',
+                    icon: Icons.settings_rounded,
+                    label: '설정',
                     isActive: _currentTab == 4,
                     onTap: () {
-                      logAction('tab selected', {'tab': 'more'});
+                      logAction('tab selected', {'tab': 'settings'});
                       setState(() => _currentTab = 4);
                     },
                   ),
