@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:robo_mobile/app/portfolio_state.dart';
@@ -334,6 +336,79 @@ void main() {
     expect(createdStartedAt, DateTime(2026, 3, 1));
     expect(state.frontierSelection, isNotNull);
     expect(state.accountDashboard?.summary?.investedAmount, 10000000);
+    expect(find.byKey(const Key('home-screen')), findsOneWidget);
+  });
+
+  testWidgets('market comparison renders without waiting for backtest',
+      (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    final neverCompletes = Completer<MobileComparisonBacktestResponse>();
+
+    await tester.pumpWidget(
+      PortfolioStateProvider(
+        state: state,
+        child: MaterialApp(
+          theme: WeRoboTheme.light,
+          home: PortfolioMarketComparisonScreen(
+            selection: _selection(),
+            fetchComparisonBacktest: ({
+              required PortfolioState state,
+              required OnboardingFrontierSelection selection,
+            }) =>
+                neverCompletes.future,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('누적 수익률을 비교'), findsOneWidget);
+    expect(find.text('비교 데이터를 불러오는 중이에요'), findsNothing);
+    expect(find.textContaining('기간:'), findsOneWidget);
+  });
+
+  testWidgets('market comparison next does not wait for home prefetch',
+      (tester) async {
+    final state = PortfolioState();
+    addTearDown(state.dispose);
+    final today = DateTime(2026, 5, 12, 14, 30);
+    final neverCompletes = Completer<void>();
+
+    await tester.pumpWidget(
+      PortfolioStateProvider(
+        state: state,
+        child: MaterialApp(
+          theme: WeRoboTheme.light,
+          routes: {
+            '/home': (_) => const SizedBox(key: Key('home-screen')),
+          },
+          home: PortfolioMarketComparisonScreen(
+            selection: _selection(),
+            now: () => today,
+            resolveFrontierSelection: ({
+              required PortfolioState state,
+              required OnboardingFrontierSelection selection,
+            }) async =>
+                _frontierSelectionResponse(asOfDate: selection.asOfDate),
+            createInitialAccount: ({
+              required PortfolioState state,
+              required MobileFrontierSelectionResponse selection,
+              required double initialCashAmount,
+              required DateTime startedAt,
+            }) async =>
+                _accountDashboard(startedAt: startedAt),
+            prefetchHomeBacktest: (_) => neverCompletes.future,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.tap(find.text('다음'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+
     expect(find.byKey(const Key('home-screen')), findsOneWidget);
   });
 }

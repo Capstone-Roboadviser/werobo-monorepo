@@ -25,6 +25,16 @@ typedef PortfolioMarketAccountCreator = Future<MobileAccountDashboard>
   required DateTime startedAt,
 });
 
+typedef PortfolioMarketBacktestFetcher
+    = Future<MobileComparisonBacktestResponse> Function({
+  required PortfolioState state,
+  required OnboardingFrontierSelection selection,
+});
+
+typedef PortfolioMarketHomePrefetcher = Future<void> Function(
+  PortfolioState state,
+);
+
 const double _initialPortfolioCashAmount = 10000000;
 
 class PortfolioMarketComparisonScreen extends StatefulWidget {
@@ -32,6 +42,8 @@ class PortfolioMarketComparisonScreen extends StatefulWidget {
   final DateTime Function()? now;
   final PortfolioMarketSelectionResolver? resolveFrontierSelection;
   final PortfolioMarketAccountCreator? createInitialAccount;
+  final PortfolioMarketBacktestFetcher? fetchComparisonBacktest;
+  final PortfolioMarketHomePrefetcher? prefetchHomeBacktest;
 
   const PortfolioMarketComparisonScreen({
     super.key,
@@ -39,6 +51,8 @@ class PortfolioMarketComparisonScreen extends StatefulWidget {
     this.now,
     this.resolveFrontierSelection,
     this.createInitialAccount,
+    this.fetchComparisonBacktest,
+    this.prefetchHomeBacktest,
   });
 
   @override
@@ -50,7 +64,6 @@ class _PortfolioMarketComparisonScreenState
     extends State<PortfolioMarketComparisonScreen> {
   MobileComparisonBacktestResponse? _comparisonBacktest;
   bool _didRequestComparisonBacktest = false;
-  bool _isLoadingComparisonBacktest = false;
   bool _isConfirming = false;
 
   @override
@@ -63,7 +76,6 @@ class _PortfolioMarketComparisonScreenState
     if (existingBacktest != null) {
       _comparisonBacktest = existingBacktest;
     } else {
-      _isLoadingComparisonBacktest = true;
       unawaited(_fetchComparisonBacktest(state));
     }
   }
@@ -73,7 +85,10 @@ class _PortfolioMarketComparisonScreenState
     final tc = WeRoboThemeColors.of(context);
     final backtest =
         _comparisonBacktest ?? PortfolioStateProvider.of(context).backtest;
-    final chartData = _comparisonChartData(backtest);
+    final chartData = _comparisonChartData(
+      backtest,
+      selection: widget.selection,
+    );
     final summary = _ComparisonSummary.fromBacktest(
       backtest,
       selection: widget.selection,
@@ -109,9 +124,11 @@ class _PortfolioMarketComparisonScreenState
                       ),
                       const SizedBox(height: 24),
                       _ComparisonCard(
-                        isLoading: _isLoadingComparisonBacktest,
                         chartData: chartData,
-                        periodText: _periodText(backtest),
+                        periodText: _periodText(
+                          backtest,
+                          selection: widget.selection,
+                        ),
                       ),
                       const SizedBox(height: 14),
                       Row(
@@ -183,26 +200,25 @@ class _PortfolioMarketComparisonScreenState
 
   Future<void> _fetchComparisonBacktest(PortfolioState state) async {
     try {
-      final response = await MobileBackendApi.instance.fetchComparisonBacktest(
-        preferredDataSource: widget.selection.dataSource,
-        investmentHorizon:
-            widget.selection.preview?.resolvedProfile.investmentHorizon ??
-                state.recommendation?.resolvedProfile.investmentHorizon ??
-                'medium',
-        selectedPointIndex: widget.selection.selectedPointIndex,
-        targetVolatility: _apiTargetVolatility(widget.selection),
-      );
+      final fetcher = widget.fetchComparisonBacktest;
+      final response = fetcher != null
+          ? await fetcher(state: state, selection: widget.selection)
+          : await MobileBackendApi.instance.fetchComparisonBacktest(
+              preferredDataSource: widget.selection.dataSource,
+              investmentHorizon:
+                  widget.selection.preview?.resolvedProfile.investmentHorizon ??
+                      state.recommendation?.resolvedProfile.investmentHorizon ??
+                      'medium',
+              selectedPointIndex: widget.selection.selectedPointIndex,
+              targetVolatility: _apiTargetVolatility(widget.selection),
+            );
       if (!mounted) return;
       state.setBacktest(response);
       setState(() {
         _comparisonBacktest = response;
-        _isLoadingComparisonBacktest = false;
       });
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _isLoadingComparisonBacktest = false;
-      });
+      // Keep the instant fallback chart on screen if the live comparison fails.
     }
   }
 
@@ -231,7 +247,9 @@ class _PortfolioMarketComparisonScreenState
       );
       if (!mounted) return;
       state.setAccountDashboard(dashboard);
-      await HomeShell.prefetchBacktest(state);
+      final prefetcher =
+          widget.prefetchHomeBacktest ?? HomeShell.prefetchBacktest;
+      unawaited(prefetcher(state).catchError((_) {}));
       if (!mounted) return;
       navigator.pushNamedAndRemoveUntil('/home', (_) => false);
     } catch (_) {
@@ -291,7 +309,6 @@ class _PortfolioMarketComparisonScreenState
 }
 
 class _ComparisonCard extends StatelessWidget {
-  final bool isLoading;
   final ({
     List<List<double>> seriesData,
     List<DateTime> timeAxis,
@@ -300,7 +317,6 @@ class _ComparisonCard extends StatelessWidget {
   final String periodText;
 
   const _ComparisonCard({
-    required this.isLoading,
     required this.chartData,
     required this.periodText,
   });
@@ -348,14 +364,12 @@ class _ComparisonCard extends StatelessWidget {
           const SizedBox(height: 12),
           SizedBox(
             height: 230,
-            child: isLoading
-                ? const _LoadingChart()
-                : PortfolioComparisonChart(
-                    seriesData: chartData.seriesData,
-                    timeAxis: chartData.timeAxis,
-                    seriesLabels: chartData.labels,
-                    initialRange: TimeRange.all,
-                  ),
+            child: PortfolioComparisonChart(
+              seriesData: chartData.seriesData,
+              timeAxis: chartData.timeAxis,
+              seriesLabels: chartData.labels,
+              initialRange: TimeRange.all,
+            ),
           ),
         ],
       ),
@@ -522,34 +536,6 @@ class _StepDots extends StatelessWidget {
   }
 }
 
-class _LoadingChart extends StatelessWidget {
-  const _LoadingChart();
-
-  @override
-  Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            '비교 데이터를 불러오는 중이에요',
-            style: WeRoboTypography.caption.copyWith(
-              color: tc.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ComparisonSummary {
   final double portfolioReturn;
   final double marketReturn;
@@ -614,13 +600,12 @@ extension on OnboardingFrontierSelection {
   List<List<double>> seriesData,
   List<DateTime> timeAxis,
   List<String> labels,
-}) _comparisonChartData(MobileComparisonBacktestResponse? response) {
+}) _comparisonChartData(
+  MobileComparisonBacktestResponse? response, {
+  required OnboardingFrontierSelection selection,
+}) {
   if (response == null || response.lines.isEmpty) {
-    return (
-      seriesData: const <List<double>>[],
-      timeAxis: const <DateTime>[],
-      labels: const <String>[],
-    );
+    return _fallbackComparisonChartData(selection);
   }
 
   final axisLine = response.lines.firstWhere(
@@ -628,11 +613,7 @@ extension on OnboardingFrontierSelection {
     orElse: () => response.lines.first,
   );
   if (axisLine.points.isEmpty) {
-    return (
-      seriesData: const <List<double>>[],
-      timeAxis: const <DateTime>[],
-      labels: const <String>[],
-    );
+    return _fallbackComparisonChartData(selection);
   }
   final timeAxis = [for (final point in axisLine.points) point.date];
   final seriesData = <List<double>>[];
@@ -642,10 +623,32 @@ extension on OnboardingFrontierSelection {
     seriesData.add([for (final point in line.points) point.returnPct]);
     labels.add(line.label);
   }
+  if (seriesData.isEmpty || labels.isEmpty) {
+    return _fallbackComparisonChartData(selection);
+  }
   return (
     seriesData: seriesData,
     timeAxis: timeAxis,
     labels: labels,
+  );
+}
+
+({
+  List<List<double>> seriesData,
+  List<DateTime> timeAxis,
+  List<String> labels,
+}) _fallbackComparisonChartData(OnboardingFrontierSelection selection) {
+  final end = selection.asOfDate ?? DateTime.now();
+  final start = DateTime(end.year - 1, end.month, end.day);
+  final portfolioReturn = selection.previewReturn;
+  final marketReturn = portfolioReturn * 0.33;
+  return (
+    seriesData: [
+      [0, portfolioReturn],
+      [0, marketReturn],
+    ],
+    timeAxis: [start, end],
+    labels: const ['포트폴리오', '시장'],
   );
 }
 
@@ -710,8 +713,15 @@ double? _annualizedVolatility(MobileComparisonLine? line) {
   return math.sqrt(variance) * math.sqrt(252);
 }
 
-String _periodText(MobileComparisonBacktestResponse? response) {
-  if (response == null) return '기간 준비 중';
+String _periodText(
+  MobileComparisonBacktestResponse? response, {
+  required OnboardingFrontierSelection selection,
+}) {
+  if (response == null) {
+    final end = selection.asOfDate ?? DateTime.now();
+    final start = DateTime(end.year - 1, end.month, end.day);
+    return '기간: ${_ym(start)} ~ ${_ym(end)}';
+  }
   return '기간: ${_ym(response.startDate)} ~ ${_ym(response.endDate)}';
 }
 
