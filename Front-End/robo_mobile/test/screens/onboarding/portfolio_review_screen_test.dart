@@ -9,8 +9,13 @@ import 'package:robo_mobile/screens/onboarding/portfolio_market_comparison_scree
 import 'package:robo_mobile/screens/onboarding/portfolio_review_screen.dart';
 import 'package:robo_mobile/screens/onboarding/survey_result_screen.dart';
 import 'package:robo_mobile/models/investor_profile.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('allocation screen renders donut chart', (tester) async {
     final state = PortfolioState();
     addTearDown(state.dispose);
@@ -228,7 +233,14 @@ void main() {
         state: state,
         child: MaterialApp(
           theme: WeRoboTheme.light,
-          home: SurveyResultScreen(profile: _investorProfile()),
+          home: SurveyResultScreen(
+            profile: _investorProfile(),
+            fetchFrontierPreview: ({
+              required double propensityScore,
+              required int samplePoints,
+            }) async =>
+                _selection().preview!,
+          ),
         ),
       ),
     );

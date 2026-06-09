@@ -25,16 +25,16 @@ MobileAccountHistoryPoint _point(DateTime d, double value) {
 void main() {
   group('trailingMonthReturn', () {
     test('returns positive percent when value rose over 30 days', () {
-      final state = PortfolioState();
       final now = DateTime(2026, 5, 12);
+      final state = PortfolioState(clock: () => now);
       final history = [
         for (int i = 30; i >= 0; i--)
           _point(now.subtract(Duration(days: i)), 100.0 + (30 - i) * 0.5),
       ];
       state.debugSetAccountDashboard(_dashboardWith(history));
-      // Value moved from ~100 to 115 over the window (exact start point
-      // depends on the time-of-day cutoff, so we verify direction and
-      // rough magnitude).
+      // With the clock pinned to 2026-05-12, the 30-day window spans the full
+      // synthetic history (2026-04-12 → 2026-05-12), so the value moves from
+      // 100 to 115: +15%.
       expect(state.trailingMonthReturn, closeTo(0.15, 0.01));
     });
 
@@ -47,6 +47,21 @@ void main() {
       ];
       state.debugSetAccountDashboard(_dashboardWith(history));
       expect(state.trailingMonthReturn, isNull);
+    });
+  });
+
+  group('trailingWeekReturn', () {
+    test('returns positive percent when value rose over the trailing week', () {
+      final now = DateTime(2026, 5, 12);
+      final state = PortfolioState(clock: () => now);
+      final history = [
+        for (int i = 7; i >= 0; i--)
+          _point(now.subtract(Duration(days: i)), 100.0 + (7 - i) * 1.0),
+      ];
+      state.debugSetAccountDashboard(_dashboardWith(history));
+      // With the clock pinned to 2026-05-12, the 7-day window spans
+      // 2026-05-05 → 2026-05-12, so the value moves from 100 to 107: +7%.
+      expect(state.trailingWeekReturn, closeTo(0.07, 0.01));
     });
   });
 

@@ -141,6 +141,14 @@ class PortfolioState extends ChangeNotifier {
   bool _hasUnreadEmergencyAlert = false;
   InvestorProfile? _investorProfile;
 
+  /// Injectable wall-clock seam. Production uses [DateTime.now]; tests pass a
+  /// fixed clock so the trailing-window getters ([trailingMonthReturn],
+  /// [trailingWeekReturn]) stay deterministic instead of drifting as the real
+  /// date advances past a test's synthetic history.
+  final DateTime Function() _clock;
+
+  PortfolioState({DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
+
   InvestmentType get type => _type;
   MobileRecommendationResponse? get recommendation => _recommendation;
   MobileComparisonBacktestResponse? get backtest => _backtest;
@@ -180,7 +188,7 @@ class PortfolioState extends ChangeNotifier {
   double? get trailingMonthReturn {
     final history = accountHistory;
     if (history.length < 20) return null;
-    final now = DateTime.now();
+    final now = _clock();
     final cutoff = now.subtract(const Duration(days: 30));
     final window = history.where((p) => !p.date.isBefore(cutoff)).toList()
       ..sort((a, b) => a.date.compareTo(b.date));
@@ -197,7 +205,7 @@ class PortfolioState extends ChangeNotifier {
   double? get trailingWeekReturn {
     final history = accountHistory;
     if (history.length < 5) return null;
-    final now = DateTime.now();
+    final now = _clock();
     final cutoff = now.subtract(const Duration(days: 7));
     final window = history.where((p) => !p.date.isBefore(cutoff)).toList()
       ..sort((a, b) => a.date.compareTo(b.date));
