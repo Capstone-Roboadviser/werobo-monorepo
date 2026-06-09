@@ -61,6 +61,48 @@ def test_comparison_basis_date_windows_exposes_valid_window(monkeypatch) -> None
     assert window["train_return_rows"] == MINIMUM_HISTORY_ROWS
 
 
+def test_usmv_overlay_impact_route_delegates_to_service(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class StubOverlayService:
+        def __init__(self, *, managed_universe_service):
+            captured["managed_universe_service"] = managed_universe_service
+
+        def build_overlay_impact(self, **kwargs):
+            captured.update(kwargs)
+            return {
+                "version_id": kwargs["version_id"],
+                "overlay": {"code": "usmv_overlay"},
+            }
+
+    fake_service = object()
+    monkeypatch.setattr(comparison_routes, "managed_universe_service", fake_service)
+    monkeypatch.setattr(
+        comparison_routes,
+        "UsmvOverlayComparisonService",
+        StubOverlayService,
+    )
+    monkeypatch.setattr(comparison_routes, "_raise_if_refresh_running", lambda _: None)
+
+    response = comparison_routes.get_usmv_overlay_impact(
+        comparison_routes.UsmvOverlayImpactRequest(
+            version_id=7,
+            start_date="2023-01-04",
+            end_date="2026-04-16",
+            sample_points=21,
+            overlay_max_weight=0.25,
+        )
+    )
+
+    assert response["overlay"]["code"] == "usmv_overlay"
+    assert captured["managed_universe_service"] is fake_service
+    assert captured["version_id"] == 7
+    assert captured["start_date"] == "2023-01-04"
+    assert captured["end_date"] == "2026-04-16"
+    assert captured["sample_points"] == 21
+    assert captured["overlay_max_weight"] == 0.25
+
+
 def test_comparison_basis_date_windows_ignores_forward_filled_gaps(
     monkeypatch,
 ) -> None:
