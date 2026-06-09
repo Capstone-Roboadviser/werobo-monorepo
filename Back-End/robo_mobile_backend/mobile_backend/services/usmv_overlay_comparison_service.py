@@ -308,6 +308,9 @@ class UsmvOverlayComparisonService:
                     "average_delta_sharpe": 0.0,
                     "average_overlay_weight": 0.0,
                     "max_overlay_weight": 0.0,
+                    "baseline_max_sharpe": None,
+                    "with_overlay_max_sharpe": None,
+                    "delta_max_sharpe": 0.0,
                     "best_point": None,
                 },
             }
@@ -361,6 +364,23 @@ class UsmvOverlayComparisonService:
             same_risk_points,
             key=lambda point: float(point["delta_expected_return"]),
         )
+        baseline_max_index, baseline_max_point = max(
+            enumerate(baseline_points),
+            key=lambda item: self._sharpe(item[1]),
+        )
+        augmented_max_index, augmented_max_point = max(
+            enumerate(augmented_points),
+            key=lambda item: self._sharpe(item[1]),
+        )
+        baseline_max_payload = self._serialize_frontier_point(
+            baseline_max_point,
+            index=baseline_max_index,
+        )
+        augmented_max_payload = self._serialize_frontier_point(
+            augmented_max_point,
+            index=augmented_max_index,
+            include_overlay_weight=True,
+        )
         improved_count = sum(delta > 1e-8 for delta in expected_deltas)
 
         return {
@@ -383,6 +403,13 @@ class UsmvOverlayComparisonService:
                 "average_delta_sharpe": round(float(np.mean(sharpe_deltas)), 6),
                 "average_overlay_weight": round(float(np.mean(overlay_weights)), 6),
                 "max_overlay_weight": round(float(np.max(overlay_weights)), 6),
+                "baseline_max_sharpe": baseline_max_payload,
+                "with_overlay_max_sharpe": augmented_max_payload,
+                "delta_max_sharpe": round(
+                    float(augmented_max_payload["sharpe_ratio"])
+                    - float(baseline_max_payload["sharpe_ratio"]),
+                    6,
+                ),
                 "best_point": best_point,
             },
         }

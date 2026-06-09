@@ -266,6 +266,11 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
       const pct = value * 100;
       return `${pct > 0 ? '+' : ''}${pct.toFixed(digits)}%`;
     };
+    const fmtNumber = (value, digits = 2) => Number.isFinite(value) ? value.toFixed(digits) : '-';
+    const fmtSignedNumber = (value, digits = 2) => {
+      if (!Number.isFinite(value)) return '-';
+      return `${value > 0 ? '+' : ''}${value.toFixed(digits)}`;
+    };
     const fmtWeight = value => Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : '-';
     const svgNS = 'http://www.w3.org/2000/svg';
     const svgEl = (name, attrs = {}) => {
@@ -370,11 +375,13 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
 
     function renderMetrics(result) {
       const summary = result.frontier_comparison?.summary || {};
+      const baselineMax = summary.baseline_max_sharpe || {};
+      const overlayMax = summary.with_overlay_max_sharpe || {};
       const metrics = [
-        ['평균 Δ 기대수익', fmtSignedPct(summary.average_delta_expected_return), summary.average_delta_expected_return],
-        ['최대 Δ 기대수익', fmtSignedPct(summary.best_delta_expected_return), summary.best_delta_expected_return],
-        ['개선 지점', `${summary.improved_point_count ?? 0}/${summary.matched_point_count ?? 0}`, summary.improved_point_count],
-        ['평균 Overlay 비중', fmtWeight(summary.average_overlay_weight), summary.average_overlay_weight],
+        ['기존 Max Sharpe', fmtNumber(baselineMax.sharpe_ratio), baselineMax.sharpe_ratio],
+        ['포함 Max Sharpe', fmtNumber(overlayMax.sharpe_ratio), overlayMax.sharpe_ratio],
+        ['Max Sharpe 개선폭', fmtSignedNumber(summary.delta_max_sharpe), summary.delta_max_sharpe],
+        ['Max Sharpe Overlay 비중', fmtWeight(overlayMax.overlay_weight), overlayMax.overlay_weight],
       ];
       $('#metrics').innerHTML = metrics.map(([label, value, raw]) => {
         const cls = Number(raw) > 0 ? 'pos' : (Number(raw) < 0 ? 'neg' : '');
@@ -475,6 +482,8 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
       const best = summary.best_point;
       const bestBaseline = best?.baseline || {};
       const bestOverlay = best?.with_overlay || {};
+      const baselineMax = summary.baseline_max_sharpe || {};
+      const overlayMax = summary.with_overlay_max_sharpe || {};
       const rows = [
         {
           label: '전체 프론티어 평균',
@@ -495,10 +504,10 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
           delta: `${summary.improved_point_count ?? 0}/${summary.matched_point_count ?? 0}개 지점 개선`,
         },
         {
-          label: 'Sharpe 변화',
-          baseline: '-',
-          overlay: '-',
-          delta: Number.isFinite(summary.average_delta_sharpe) ? `${summary.average_delta_sharpe > 0 ? '+' : ''}${summary.average_delta_sharpe.toFixed(2)}` : '-',
+          label: 'Max Sharpe',
+          baseline: fmtNumber(baselineMax.sharpe_ratio),
+          overlay: `${fmtNumber(overlayMax.sharpe_ratio)} · Overlay ${fmtWeight(overlayMax.overlay_weight)}`,
+          delta: fmtSignedNumber(summary.delta_max_sharpe),
         },
       ];
       $('#summary-body').innerHTML = rows.map(row => `

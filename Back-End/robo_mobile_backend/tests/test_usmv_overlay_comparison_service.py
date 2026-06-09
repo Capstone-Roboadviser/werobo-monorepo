@@ -132,6 +132,17 @@ def test_overlay_impact_builds_baseline_and_augmented_frontiers(tmp_path) -> Non
     assert summary["matched_point_count"] == len(result["baseline"]["frontier_points"])
     assert summary["average_overlay_weight"] >= 0
     assert "best_point" in summary
+    assert summary["baseline_max_sharpe"]["sharpe_ratio"] > 0
+    assert summary["with_overlay_max_sharpe"]["sharpe_ratio"] > 0
+    assert (
+        summary["delta_max_sharpe"]
+        == round(
+            summary["with_overlay_max_sharpe"]["sharpe_ratio"]
+            - summary["baseline_max_sharpe"]["sharpe_ratio"],
+            6,
+        )
+    )
+    assert summary["with_overlay_max_sharpe"]["overlay_weight"] >= 0
     assert "matched_points" not in result
 
     line_keys = {line["key"] for line in result["performance_lines"]}
