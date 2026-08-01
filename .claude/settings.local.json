@@ -8,7 +8,8 @@
       "Bash(mv Front-End/robo_mobile Front-End/robo_mobile_old)",
       "Bash(brew upgrade:*)",
       "Bash(git pull:*)",
-      "Bash(python -m pytest tests/test_portfolio_analytics_service.py -x --tb=short)"
+      "Bash(python -m pytest tests/test_portfolio_analytics_service.py -x --tb=short)",
+      "mcp__bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a__list_repos"
     ]
   }
 }
