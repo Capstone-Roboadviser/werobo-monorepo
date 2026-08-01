@@ -9,7 +9,11 @@
       "Bash(brew upgrade:*)",
       "Bash(git pull:*)",
       "Bash(python -m pytest tests/test_portfolio_analytics_service.py -x --tb=short)",
-      "mcp__bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a__list_repos"
+      "mcp__bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a__list_repos",
+      "mcp__bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a__add_repo",
+      "mcp__bf7c680d-5fdc-5ef4-b4a0-abadb619bf0a",
+      "mcp__65874451-5e48-4c3f-8095-60567a1d39f9",
+      "mcp__github"
     ]
   }
 }
