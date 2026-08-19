@@ -171,17 +171,24 @@ class _HomeShellState extends State<HomeShell> {
         ],
       ),
       bottomNavigationBar: Container(
-        color: tc.background,
+        key: const Key('main_bottom_navigation'),
+        decoration: const BoxDecoration(
+          color: _NavStyle.background,
+          border: Border(
+            top: BorderSide(color: _NavStyle.border, width: 1),
+          ),
+        ),
         child: SafeArea(
           top: false,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+          child: SizedBox(
+            height: 64,
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Expanded(
                   child: _NavItem(
-                    icon: Icons.home_rounded,
+                    icon: Icons.home_outlined,
+                    activeIcon: Icons.home_rounded,
                     label: '홈',
                     isActive: _currentTab == 0,
                     showAlertDot: PortfolioStateProvider.of(context)
@@ -192,9 +199,11 @@ class _HomeShellState extends State<HomeShell> {
                     },
                   ),
                 ),
+                const _NavDivider(),
                 Expanded(
                   child: _NavItem(
-                    icon: Icons.analytics_rounded,
+                    icon: Icons.analytics_outlined,
+                    activeIcon: Icons.analytics_rounded,
                     label: '분석',
                     isActive: _currentTab == 1,
                     onTap: () {
@@ -203,9 +212,11 @@ class _HomeShellState extends State<HomeShell> {
                     },
                   ),
                 ),
+                const _NavDivider(),
                 Expanded(
                   child: _NavItem(
-                    icon: Icons.forum_rounded,
+                    icon: Icons.forum_outlined,
+                    activeIcon: Icons.forum_rounded,
                     label: '커뮤니티',
                     isActive: _currentTab == 2,
                     onTap: () {
@@ -214,9 +225,11 @@ class _HomeShellState extends State<HomeShell> {
                     },
                   ),
                 ),
+                const _NavDivider(),
                 Expanded(
                   child: _NavItem(
-                    icon: Icons.article_rounded,
+                    icon: Icons.article_outlined,
+                    activeIcon: Icons.article_rounded,
                     label: '뉴스',
                     isActive: _currentTab == 3,
                     onTap: () {
@@ -225,9 +238,11 @@ class _HomeShellState extends State<HomeShell> {
                     },
                   ),
                 ),
+                const _NavDivider(),
                 Expanded(
                   child: _NavItem(
-                    icon: Icons.settings_rounded,
+                    icon: Icons.settings_outlined,
+                    activeIcon: Icons.settings_rounded,
                     label: '설정',
                     isActive: _currentTab == 4,
                     onTap: () {
@@ -245,8 +260,29 @@ class _HomeShellState extends State<HomeShell> {
   }
 }
 
+abstract final class _NavStyle {
+  static const background = Color(0xFF383D48);
+  static const border = Color(0xFF505661);
+  static const divider = Color(0xFF4A505B);
+  static const active = Color(0xFFC4CB18);
+  static const inactive = Color(0xFFD5D8DD);
+}
+
+class _NavDivider extends StatelessWidget {
+  const _NavDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 1,
+      child: ColoredBox(color: _NavStyle.divider),
+    );
+  }
+}
+
 class _NavItem extends StatelessWidget {
   final IconData icon;
+  final IconData activeIcon;
   final String label;
   final bool isActive;
   final bool showAlertDot;
@@ -254,6 +290,7 @@ class _NavItem extends StatelessWidget {
 
   const _NavItem({
     required this.icon,
+    required this.activeIcon,
     required this.label,
     required this.isActive,
     required this.onTap,
@@ -262,15 +299,15 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tc = WeRoboThemeColors.of(context);
-    final color = isActive ? WeRoboColors.primary : tc.textSecondary;
+    final color = isActive ? _NavStyle.active : _NavStyle.inactive;
 
     return Pressable(
       onTap: onTap,
       scale: 0.90,
       duration: const Duration(milliseconds: 100),
-      child: SizedBox(
-        height: 52,
+      child: Semantics(
+        selected: isActive,
+        button: true,
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -278,7 +315,7 @@ class _NavItem extends StatelessWidget {
               clipBehavior: Clip.none,
               alignment: Alignment.center,
               children: [
-                Icon(icon, size: 24, color: color),
+                Icon(isActive ? activeIcon : icon, size: 23, color: color),
                 if (showAlertDot)
                   const Positioned(
                     right: -4,
@@ -287,7 +324,7 @@ class _NavItem extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 3),
+            const SizedBox(height: 2),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
@@ -295,8 +332,8 @@ class _NavItem extends StatelessWidget {
                 maxLines: 1,
                 style: WeRoboTypography.caption.copyWith(
                   color: color,
-                  fontSize: 11,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                  fontSize: 10.5,
+                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                   height: 1.1,
                 ),
               ),
