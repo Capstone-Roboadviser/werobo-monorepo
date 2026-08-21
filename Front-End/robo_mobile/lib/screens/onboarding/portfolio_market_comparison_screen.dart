@@ -131,37 +131,42 @@ class _PortfolioMarketComparisonScreenState
                         ),
                       ),
                       const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _MetricCard(
-                              icon: Icons.show_chart_rounded,
-                              label: '누적 수익률',
-                              portfolioValue:
-                                  _signedPct(summary.portfolioReturn),
-                              marketValue: _signedPct(summary.marketReturn),
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(
+                              child: _MetricCard(
+                                icon: Icons.show_chart_rounded,
+                                label: '누적 수익률',
+                                portfolioValue:
+                                    _signedPct(summary.portfolioReturn),
+                                marketValue: _signedPct(summary.marketReturn),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _MetricCard(
-                              icon: Icons.shield_rounded,
-                              label: '변동성',
-                              portfolioValue:
-                                  _plainPct(summary.portfolioVolatility),
-                              marketValue: _plainPct(summary.marketVolatility),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _MetricCard(
+                                icon: Icons.shield_rounded,
+                                label: '변동성',
+                                portfolioValue:
+                                    _plainPct(summary.portfolioVolatility),
+                                marketValue:
+                                    _plainPct(summary.marketVolatility),
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: _MetricCard(
-                              icon: Icons.keyboard_double_arrow_down_rounded,
-                              label: 'MDD',
-                              portfolioValue: _signedPct(summary.portfolioMdd),
-                              marketValue: _signedPct(summary.marketMdd),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _MetricCard(
+                                icon: Icons.keyboard_double_arrow_down_rounded,
+                                label: 'MDD',
+                                portfolioValue:
+                                    _signedPct(summary.portfolioMdd),
+                                marketValue: _signedPct(summary.marketMdd),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 16),
                       const _RiskNote(),
@@ -388,6 +393,7 @@ class _MetricCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Container(
+      key: Key('comparison_metric_$label'),
       constraints: const BoxConstraints(minHeight: 118),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
       decoration: BoxDecoration(

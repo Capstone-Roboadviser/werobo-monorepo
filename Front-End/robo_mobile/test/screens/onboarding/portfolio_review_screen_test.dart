@@ -341,6 +341,11 @@ void main() {
 
   testWidgets('market comparison renders without waiting for backtest',
       (tester) async {
+    tester.view.physicalSize = const Size(430, 932);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final state = PortfolioState();
     addTearDown(state.dispose);
     final neverCompletes = Completer<MobileComparisonBacktestResponse>();
@@ -366,6 +371,19 @@ void main() {
     expect(find.text('누적 수익률을 비교'), findsOneWidget);
     expect(find.text('비교 데이터를 불러오는 중이에요'), findsNothing);
     expect(find.textContaining('기간:'), findsOneWidget);
+    final metricHeights = [
+      '누적 수익률',
+      '변동성',
+      'MDD',
+    ]
+        .map(
+          (label) => tester
+              .getSize(find.byKey(Key('comparison_metric_$label')))
+              .height,
+        )
+        .toList();
+    expect(metricHeights[1], metricHeights[0]);
+    expect(metricHeights[1], metricHeights[2]);
   });
 
   testWidgets('market comparison next does not wait for home prefetch',
