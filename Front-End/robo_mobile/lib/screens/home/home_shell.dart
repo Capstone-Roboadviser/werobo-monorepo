@@ -4,7 +4,6 @@ import '../../app/portfolio_state.dart';
 import '../../app/pressable.dart';
 import '../../app/theme.dart';
 import '../../services/mobile_backend_api.dart';
-import 'activity_hub_page.dart';
 import 'community_tab.dart';
 import 'home_dashboard_tab.dart';
 import 'news_tab.dart';
@@ -151,24 +150,9 @@ class _HomeShellState extends State<HomeShell> {
     final tc = WeRoboThemeColors.of(context);
     return Scaffold(
       backgroundColor: tc.background,
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _currentTab,
-            children: _tabs,
-          ),
-          if (_currentTab == 1)
-            const Positioned(
-              top: 0,
-              right: 0,
-              child: SafeArea(
-                child: Padding(
-                  padding: EdgeInsets.only(top: 0, right: 16),
-                  child: _GlobalNotificationIcon(),
-                ),
-              ),
-            ),
-        ],
+      body: IndexedStack(
+        index: _currentTab,
+        children: _tabs,
       ),
       bottomNavigationBar: Container(
         key: const Key('main_bottom_navigation'),
@@ -344,48 +328,6 @@ class _AlertDot extends StatelessWidget {
       decoration: const BoxDecoration(
         color: WeRoboColors.primary,
         shape: BoxShape.circle,
-      ),
-    );
-  }
-}
-
-/// Bell icon overlay shown on the Home tab. Tapping pushes the full
-/// ActivityHubPage directly (no dropdown sheet).
-class _GlobalNotificationIcon extends StatelessWidget {
-  const _GlobalNotificationIcon();
-
-  @override
-  Widget build(BuildContext context) {
-    final state = PortfolioStateProvider.of(context);
-    final hasUnread = state.unreadInsightCount > 0;
-    final tc = WeRoboThemeColors.of(context);
-    return Pressable(
-      onTap: () => Navigator.push(
-        context,
-        WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
-      ),
-      child: SizedBox(
-        width: 40,
-        height: 40,
-        child: Stack(
-          alignment: Alignment.center,
-          clipBehavior: Clip.none,
-          children: [
-            Icon(
-              hasUnread
-                  ? Icons.notifications_rounded
-                  : Icons.notifications_none_rounded,
-              size: 24,
-              color: tc.textPrimary,
-            ),
-            if (hasUnread)
-              const Positioned(
-                top: 6,
-                right: 8,
-                child: _AlertDot(),
-              ),
-          ],
-        ),
       ),
     );
   }

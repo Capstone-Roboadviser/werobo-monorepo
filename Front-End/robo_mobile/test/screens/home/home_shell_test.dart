@@ -167,6 +167,16 @@ void main() {
     expect(find.text('자산 배분 현황'), findsOneWidget);
     expect(find.text('수익률 (연환산)'), findsOneWidget);
     expect(find.text('성과 추이'), findsOneWidget);
+    expect(find.byKey(const Key('analysis_notification')), findsOneWidget);
+    expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.ios_share_rounded), findsNothing);
+    expect(
+      tester.getCenter(find.byKey(const Key('analysis_notification'))).dy,
+      closeTo(
+        tester.getCenter(find.byKey(const Key('analysis_header_title'))).dy,
+        1,
+      ),
+    );
   });
 
   testWidgets('analysis tab avoids overflow on compact screens',

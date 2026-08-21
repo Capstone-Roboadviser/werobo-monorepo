@@ -9,6 +9,7 @@ import '../../models/chart_data.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import '../onboarding/widgets/vestor_pie_chart.dart';
+import 'activity_hub_page.dart';
 import 'portfolio_allocation_detail_page.dart';
 import 'portfolio_tab.dart' show buildHomePortfolioComparisonLines;
 
@@ -94,6 +95,7 @@ class _AnalysisHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Row(
+      key: const Key('analysis_header'),
       children: [
         Pressable(
           onTap: onBack,
@@ -106,6 +108,7 @@ class _AnalysisHeader extends StatelessWidget {
         Expanded(
           child: Text(
             '포트폴리오 분석',
+            key: const Key('analysis_header_title'),
             textAlign: TextAlign.center,
             style: WeRoboTypography.heading3.copyWith(
               color: tc.textPrimary,
@@ -114,10 +117,14 @@ class _AnalysisHeader extends StatelessWidget {
           ),
         ),
         Pressable(
-          onTap: () {},
+          key: const Key('analysis_notification'),
+          onTap: () => Navigator.push(
+            context,
+            WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
+          ),
           child: Icon(
-            Icons.ios_share_rounded,
-            size: 24,
+            Icons.notifications_none_rounded,
+            size: 28,
             color: tc.textPrimary,
           ),
         ),
