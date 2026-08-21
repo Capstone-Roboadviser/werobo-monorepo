@@ -430,22 +430,40 @@ class _QuickInsightCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(text: '$label 비중이 '),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text.rich(
+                        key: const Key('quick_insight_first_line'),
                         TextSpan(
-                          text: '성장 기여의 $pct%',
-                          style: const TextStyle(color: WeRoboColors.primary),
+                          children: [
+                            TextSpan(text: '$label 비중이 '),
+                            TextSpan(
+                              text: '성장 기여의 $pct%',
+                              style: const TextStyle(
+                                color: WeRoboColors.primary,
+                              ),
+                            ),
+                            const TextSpan(text: '를'),
+                          ],
                         ),
-                        const TextSpan(text: '를\n차지하고 있어요.'),
-                      ],
-                    ),
-                    style: WeRoboTypography.bodySmall.copyWith(
-                      color: tc.textPrimary,
-                      fontWeight: FontWeight.w800,
-                      height: 1.35,
-                    ),
+                        style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          height: 1.35,
+                        ),
+                      ),
+                      Text(
+                        '차지하고 있어요.',
+                        key: const Key('quick_insight_second_line'),
+                        style: WeRoboTypography.bodySmall.copyWith(
+                          color: tc.textPrimary,
+                          fontWeight: FontWeight.w800,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Icon(

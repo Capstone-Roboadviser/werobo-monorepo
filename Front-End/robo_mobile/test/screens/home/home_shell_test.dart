@@ -84,14 +84,21 @@ void main() {
     await tester.pumpWidget(buildSubject());
     await tester.pump();
 
-    final insight = tester.widget<RichText>(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is RichText && widget.text.toPlainText().contains('성장 기여의'),
-      ),
+    final firstLineFinder = find.byKey(
+      const Key('quick_insight_first_line'),
     );
+    final secondLineFinder = find.byKey(
+      const Key('quick_insight_second_line'),
+    );
+    final firstLine = tester.widget<Text>(firstLineFinder);
+    final secondLine = tester.widget<Text>(secondLineFinder);
 
-    expect(insight.text.toPlainText(), contains('를\n차지하고 있어요.'));
+    expect(firstLine.textSpan!.toPlainText(), endsWith('%를'));
+    expect(secondLine.data, '차지하고 있어요.');
+    expect(
+      tester.getTopLeft(secondLineFinder).dy,
+      greaterThan(tester.getTopLeft(firstLineFinder).dy),
+    );
   });
 
   testWidgets('home dashboard stacks portfolio legend on compact screens',
