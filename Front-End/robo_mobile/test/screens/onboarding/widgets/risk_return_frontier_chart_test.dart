@@ -64,4 +64,41 @@ void main() {
 
     expect(result.map((item) => item.index), [0, 2, 3]);
   });
+
+  test('normalized display curve is smooth and always rises to the right', () {
+    const start = Offset(20, 180);
+    const end = Offset(320, 40);
+    var previous = smoothEfficientFrontierPointForT(
+      0,
+      start: start,
+      end: end,
+    );
+
+    expect(previous, start);
+    for (var step = 1; step <= 100; step++) {
+      final current = smoothEfficientFrontierPointForT(
+        step / 100,
+        start: start,
+        end: end,
+      );
+      expect(current.dx, greaterThan(previous.dx));
+      expect(current.dy, lessThan(previous.dy));
+      previous = current;
+    }
+    expect(previous, end);
+
+    final early = smoothEfficientFrontierPointForT(
+      0.1,
+      start: start,
+      end: end,
+    );
+    final late = smoothEfficientFrontierPointForT(
+      0.9,
+      start: start,
+      end: end,
+    );
+    final earlySlope = (early.dy - start.dy).abs() / (early.dx - start.dx);
+    final lateSlope = (end.dy - late.dy).abs() / (end.dx - late.dx);
+    expect(earlySlope, greaterThan(lateSlope));
+  });
 }

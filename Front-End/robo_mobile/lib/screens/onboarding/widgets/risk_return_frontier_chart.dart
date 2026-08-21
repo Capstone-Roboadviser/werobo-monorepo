@@ -80,10 +80,48 @@ List<MobileFrontierPreviewPoint> efficientFrontierDisplayPoints(
   return List<MobileFrontierPreviewPoint>.unmodifiable(envelope);
 }
 
+/// Position on the deliberately smooth display curve used by the chart.
+///
+/// Actual portfolio values still determine the axes, labels, and selection.
+/// Only the visual line is normalized to this single cubic curve so noisy
+/// optimizer samples can never introduce a visible corner or downturn.
+Offset smoothEfficientFrontierPointForT(
+  double t, {
+  required Offset start,
+  required Offset end,
+}) {
+  final progress = t.clamp(0.0, 1.0).toDouble();
+  final controls = _smoothFrontierControls(start, end);
+  final a = _lerpOffset(start, controls.first, progress);
+  final b = _lerpOffset(controls.first, controls.second, progress);
+  final c = _lerpOffset(controls.second, end, progress);
+  final d = _lerpOffset(a, b, progress);
+  final e = _lerpOffset(b, c, progress);
+  return _lerpOffset(d, e, progress);
+}
+
+({Offset first, Offset second}) _smoothFrontierControls(
+  Offset start,
+  Offset end,
+) {
+  final dx = end.dx - start.dx;
+  final dy = end.dy - start.dy;
+  return (
+    first: Offset(start.dx + dx * 0.16, start.dy + dy * 0.34),
+    second: Offset(start.dx + dx * 0.62, start.dy + dy * 0.87),
+  );
+}
+
+Offset _lerpOffset(Offset a, Offset b, double t) => Offset(
+      a.dx + (b.dx - a.dx) * t,
+      a.dy + (b.dy - a.dy) * t,
+    );
+
 /// Interactive efficient-frontier chart for the 기대수익률/리스크 설정 page
 /// (capstone §4.4). Plots the real (volatility, expected-return) frontier
-/// points, shades the user's suitable risk band, and lets the user drag a
-/// point left/right along the curve. The parent owns [selectedPosition];
+/// values, shades the user's suitable risk band, and lets the user drag a
+/// point left/right along a normalized smooth curve. The parent owns
+/// [selectedPosition];
 /// the chart maps a drag to the nearest point index and reports it via
 /// [onPositionChanged].
 class RiskReturnFrontierChart extends StatefulWidget {
@@ -299,8 +337,53 @@ class _RiskReturnPainter extends CustomPainter {
   double _y(double ret) =>
       plotRect.bottom - (ret - retBounds.min) / _retSpan * plotRect.height;
 
-  Offset _offsetAt(int i) =>
+  Offset _rawOffsetAt(int i) =>
       Offset(_x(points[i].volatility), _y(points[i].expectedReturn));
+
+  Offset get _curveStart => _rawOffsetAt(0);
+
+  Offset get _curveEnd => _rawOffsetAt(points.length - 1);
+
+  double _curveTAt(int i) {
+    final startVolatility = points.first.volatility;
+    final volatilitySpan = points.last.volatility - startVolatility;
+    if (volatilitySpan.abs() < 1e-9) return 0;
+    return ((points[i].volatility - startVolatility) / volatilitySpan)
+        .clamp(0.0, 1.0)
+        .toDouble();
+  }
+
+  Offset _offsetAt(int i) {
+    if (points.length < 2) return _rawOffsetAt(i);
+    return smoothEfficientFrontierPointForT(
+      _curveTAt(i),
+      start: _curveStart,
+      end: _curveEnd,
+    );
+  }
+
+  Path _curvePathTo(double t) {
+    final progress = t.clamp(0.0, 1.0).toDouble();
+    final start = _curveStart;
+    final end = _curveEnd;
+    final controls = _smoothFrontierControls(start, end);
+    final a = _lerpOffset(start, controls.first, progress);
+    final b = _lerpOffset(controls.first, controls.second, progress);
+    final c = _lerpOffset(controls.second, end, progress);
+    final d = _lerpOffset(a, b, progress);
+    final e = _lerpOffset(b, c, progress);
+    final destination = _lerpOffset(d, e, progress);
+    return Path()
+      ..moveTo(start.dx, start.dy)
+      ..cubicTo(
+        a.dx,
+        a.dy,
+        d.dx,
+        d.dy,
+        destination.dx,
+        destination.dy,
+      );
+  }
 
   int _clampPos(int i) => i.clamp(0, points.length - 1);
 
@@ -436,18 +519,10 @@ class _RiskReturnPainter extends CustomPainter {
 
   void _paintCurve(Canvas canvas) {
     if (points.length < 2) return;
-    final maxI = (reveal * (points.length - 1)).floor().clamp(
-          0,
-          points.length - 1,
-        );
-    if (maxI < 1) return;
-    final base = Path()..moveTo(_offsetAt(0).dx, _offsetAt(0).dy);
-    for (var i = 1; i <= maxI; i++) {
-      final o = _offsetAt(i);
-      base.lineTo(o.dx, o.dy);
-    }
+    final revealT = reveal.clamp(0.0, 1.0).toDouble();
+    if (revealT <= 0) return;
     canvas.drawPath(
-      base,
+      _curvePathTo(revealT),
       Paint()
         ..color = kFrontierAccentBlue.withValues(alpha: 0.30)
         ..style = PaintingStyle.stroke
@@ -455,15 +530,13 @@ class _RiskReturnPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round,
     );
-    final selI = _clampPos(selectedPosition).clamp(0, maxI);
-    if (selI >= 1) {
-      final hi = Path()..moveTo(_offsetAt(0).dx, _offsetAt(0).dy);
-      for (var i = 1; i <= selI; i++) {
-        final o = _offsetAt(i);
-        hi.lineTo(o.dx, o.dy);
-      }
+    final selectedT = math.min(
+      _curveTAt(_clampPos(selectedPosition)),
+      revealT,
+    );
+    if (selectedT > 0) {
       canvas.drawPath(
-        hi,
+        _curvePathTo(selectedT),
         Paint()
           ..color = accent
           ..style = PaintingStyle.stroke
