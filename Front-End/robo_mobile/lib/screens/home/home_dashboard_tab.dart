@@ -17,7 +17,6 @@ class HomeDashboardTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = PortfolioStateProvider.of(context);
-    final tc = WeRoboThemeColors.of(context);
     final summary = state.accountSummary;
     final userName = state.currentUser?.name.trim();
     final displayName = userName == null || userName.isEmpty ? '김투자' : userName;
@@ -50,28 +49,8 @@ class HomeDashboardTab extends StatelessWidget {
             _PortfolioCompositionCard(allocations: allocations),
             const SizedBox(height: 16),
             _QuickInsightCard(allocations: allocations),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Text(
-                  '시장 요약',
-                  style: WeRoboTypography.heading3.copyWith(
-                    color: tc.textPrimary,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '더보기',
-                  style: WeRoboTypography.bodySmall.copyWith(
-                    color: WeRoboColors.primary,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            const _MarketSummaryCards(),
+            const SizedBox(height: 16),
+            const _MarketSummarySection(),
           ],
         ),
       ),
@@ -154,7 +133,7 @@ class _AssetSummaryCard extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [Color(0xFF003ACB), Color(0xFF1476F2)],
         ),
-        boxShadow: WeRoboElevation.medium,
+        boxShadow: WeRoboElevation.raised(context),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -278,7 +257,7 @@ class _PortfolioCompositionCard extends StatelessWidget {
         color: tc.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: tc.border.withValues(alpha: 0.55)),
-        boxShadow: WeRoboElevation.subtle,
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -404,68 +383,126 @@ class _QuickInsightCard extends StatelessWidget {
     final top = allocations.isEmpty ? null : allocations.first;
     final label = top?.name ?? '미국 기술주';
     final pct = top?.percentage.round() ?? 62;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '빠른 인사이트',
-          style: WeRoboTypography.body.copyWith(
-            color: tc.textPrimary,
-            fontWeight: FontWeight.w900,
+    return Container(
+      key: const Key('quick_insight_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
+      decoration: BoxDecoration(
+        color: tc.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: tc.border),
+        boxShadow: WeRoboElevation.card(context),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '빠른 인사이트',
+            style: WeRoboTypography.body.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w900,
+            ),
           ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF2F5FC),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: tc.border.withValues(alpha: 0.28)),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? tc.surface
+                  : const Color(0xFFF3F6FC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: tc.border.withValues(alpha: 0.7)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: WeRoboColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.insights_rounded,
+                    size: 18,
+                    color: WeRoboColors.primary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(text: '$label 비중이 '),
+                        TextSpan(
+                          text: '성장 기여의 $pct%',
+                          style: const TextStyle(color: WeRoboColors.primary),
+                        ),
+                        const TextSpan(text: '를 차지하고 있어요.'),
+                      ],
+                    ),
+                    style: WeRoboTypography.bodySmall.copyWith(
+                      color: tc.textPrimary,
+                      fontWeight: FontWeight.w800,
+                      height: 1.35,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right_rounded,
+                  color: tc.textSecondary,
+                  size: 24,
+                ),
+              ],
+            ),
           ),
-          child: Row(
+        ],
+      ),
+    );
+  }
+}
+
+class _MarketSummarySection extends StatelessWidget {
+  const _MarketSummarySection();
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Container(
+      key: const Key('market_summary_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 15, 16, 16),
+      decoration: BoxDecoration(
+        color: tc.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: tc.border),
+        boxShadow: WeRoboElevation.card(context),
+      ),
+      child: Column(
+        children: [
+          Row(
             children: [
-              Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: WeRoboColors.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
+              Text(
+                '시장 요약',
+                style: WeRoboTypography.heading3.copyWith(
+                  color: tc.textPrimary,
+                  fontWeight: FontWeight.w800,
                 ),
-                child: const Icon(
-                  Icons.insights_rounded,
-                  size: 18,
+              ),
+              const Spacer(),
+              Text(
+                '더보기',
+                style: WeRoboTypography.bodySmall.copyWith(
                   color: WeRoboColors.primary,
+                  fontWeight: FontWeight.w800,
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(text: '$label 비중이 '),
-                      TextSpan(
-                        text: '성장 기여의 $pct%',
-                        style: const TextStyle(color: WeRoboColors.primary),
-                      ),
-                      const TextSpan(text: '를 차지하고 있어요.'),
-                    ],
-                  ),
-                  style: WeRoboTypography.bodySmall.copyWith(
-                    color: tc.textPrimary,
-                    fontWeight: FontWeight.w800,
-                    height: 1.35,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.chevron_right_rounded,
-                color: tc.textSecondary,
-                size: 24,
               ),
             ],
           ),
-        ),
-      ],
+          const SizedBox(height: 10),
+          const _MarketSummaryCards(),
+        ],
+      ),
     );
   }
 }
@@ -560,10 +597,11 @@ class _MarketMiniCard extends StatelessWidget {
       height: 102,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: tc.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: tc.border.withValues(alpha: 0.42)),
-        boxShadow: WeRoboElevation.subtle,
+        color: Theme.of(context).brightness == Brightness.dark
+            ? tc.surface
+            : const Color(0xFFF7F9FD),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tc.border.withValues(alpha: 0.8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

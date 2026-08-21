@@ -39,6 +39,7 @@ class SurveyOptionButton extends StatelessWidget {
               color: selected ? WeRoboColors.primary : tc.border,
               width: selected ? 1.5 : 1,
             ),
+            boxShadow: WeRoboElevation.card(context),
           ),
           child: Semantics(
             button: true,

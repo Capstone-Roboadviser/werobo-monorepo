@@ -14,8 +14,7 @@ class RebalanceTab extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 20),
-            Text('리밸런싱',
-                style: WeRoboTypography.heading2.themed(context)),
+            Text('리밸런싱', style: WeRoboTypography.heading2.themed(context)),
             const SizedBox(height: 8),
             Text('포트폴리오를 최적 상태로 유지합니다',
                 style: WeRoboTypography.bodySmall.themed(context)),
@@ -33,31 +32,27 @@ class RebalanceTab extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('다음 리밸런싱',
-                      style: WeRoboTypography.caption.copyWith(
-                          color: WeRoboColors.primary)),
+                      style: WeRoboTypography.caption
+                          .copyWith(color: WeRoboColors.primary)),
                   const SizedBox(height: 4),
                   Text('2026-07-01',
-                      style: WeRoboTypography.heading3.copyWith(
-                          color: tc.textPrimary)),
+                      style: WeRoboTypography.heading3
+                          .copyWith(color: tc.textPrimary)),
                   const SizedBox(height: 4),
                   Text('87일 남음',
-                      style: WeRoboTypography.bodySmall.copyWith(
-                          color: tc.textSecondary)),
+                      style: WeRoboTypography.bodySmall
+                          .copyWith(color: tc.textSecondary)),
                 ],
               ),
             ),
             const SizedBox(height: 20),
 
-            Text('리밸런싱 기록',
-                style: WeRoboTypography.heading3.themed(context)),
+            Text('리밸런싱 기록', style: WeRoboTypography.heading3.themed(context)),
             const SizedBox(height: 12),
 
-            _RebalanceRecord(
-                date: '2026-04-01', status: '완료', delta: '+1.2%'),
-            _RebalanceRecord(
-                date: '2026-01-02', status: '완료', delta: '+0.8%'),
-            _RebalanceRecord(
-                date: '2025-10-01', status: '완료', delta: '+2.1%'),
+            _RebalanceRecord(date: '2026-04-01', status: '완료', delta: '+1.2%'),
+            _RebalanceRecord(date: '2026-01-02', status: '완료', delta: '+0.8%'),
+            _RebalanceRecord(date: '2025-10-01', status: '완료', delta: '+2.1%'),
           ],
         ),
       ),
@@ -85,6 +80,8 @@ class _RebalanceRecord extends StatelessWidget {
       decoration: BoxDecoration(
         color: tc.card,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tc.border),
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Row(
         children: [
@@ -95,8 +92,7 @@ class _RebalanceRecord extends StatelessWidget {
               color: tc.accent.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(Icons.check_rounded,
-                size: 20, color: tc.accent),
+            child: Icon(Icons.check_rounded, size: 20, color: tc.accent),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -108,8 +104,7 @@ class _RebalanceRecord extends StatelessWidget {
                         color: tc.textPrimary,
                         fontWeight: FontWeight.w500,
                         fontFamily: WeRoboFonts.english)),
-                Text(status,
-                    style: WeRoboTypography.caption.themed(context)),
+                Text(status, style: WeRoboTypography.caption.themed(context)),
               ],
             ),
           ),

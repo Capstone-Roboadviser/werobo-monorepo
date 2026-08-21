@@ -275,7 +275,7 @@ class _LoginScreenState extends State<LoginScreen>
                         decoration: BoxDecoration(
                           color: tc.card,
                           borderRadius: BorderRadius.circular(20),
-                          boxShadow: WeRoboElevation.subtle,
+                          boxShadow: WeRoboElevation.card(context),
                         ),
                         child: Form(
                           key: _formKey,

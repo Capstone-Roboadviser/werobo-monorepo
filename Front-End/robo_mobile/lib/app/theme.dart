@@ -6,17 +6,17 @@ class WeRoboColors {
 
   // Primary — deep navy (#0614A7), key icon color (capstone 2026-05-12).
   static const Color primary = Color(0xFF0614A7);
-  static const Color primaryDark = Color(0xFF0713A7);    // CTA (확인/다음)
-  static const Color primaryLight = Color(0xFFEFF2F7);   // pressed/secondary
+  static const Color primaryDark = Color(0xFF0713A7); // CTA (확인/다음)
+  static const Color primaryLight = Color(0xFFEFF2F7); // pressed/secondary
 
   // 부 색상 — cool-tinted neutrals to harmonize with navy.
   static const Color white = Color(0xFFFFFFFF);
-  static const Color lightGray = Color(0xFFE2E5EE);   // cool hairline
+  static const Color lightGray = Color(0xFFE2E5EE); // cool hairline
   static const Color silver = Color(0xFF8E8E8E);
-  static const Color black = Color(0xFF1A1919);       // warm black
+  static const Color black = Color(0xFF1A1919); // warm black
 
   // Surfaces (cool-tinted to harmonize with navy).
-  static const Color background = Color(0xFFEDF1FA);
+  static const Color background = Color(0xFFF7F9FC);
   static const Color surface = white;
   static const Color card = white;
 
@@ -42,13 +42,13 @@ class WeRoboColors {
   // Asset class colors. One distinct hue per asset class so users learn
   // each color over time. Order matches AssetClass enum (defensive to
   // aggressive). Seven-hue palette from capstone 2026-05-12 spec.
-  static const Color assetCash = Color(0xFF870BE6);       // 현금성자산, purple
-  static const Color assetShortBond = Color(0xFF5568E3);  // 단기채권, blue
-  static const Color assetInfraBond = Color(0xFF85C410);  // 인프라채권, green
-  static const Color assetGold = Color(0xFFE6CC0B);       // 금, yellow
-  static const Color assetUSValue = Color(0xFF01A1D6);    // 미국가치주, cyan
-  static const Color assetUSGrowth = Color(0xFFFF708F);   // 미국성장주, pink
-  static const Color assetNewGrowth = Color(0xFFFF4141);  // 신성장주, red
+  static const Color assetCash = Color(0xFF870BE6); // 현금성자산, purple
+  static const Color assetShortBond = Color(0xFF5568E3); // 단기채권, blue
+  static const Color assetInfraBond = Color(0xFF85C410); // 인프라채권, green
+  static const Color assetGold = Color(0xFFE6CC0B); // 금, yellow
+  static const Color assetUSValue = Color(0xFF01A1D6); // 미국가치주, cyan
+  static const Color assetUSGrowth = Color(0xFFFF708F); // 미국성장주, pink
+  static const Color assetNewGrowth = Color(0xFFFF4141); // 신성장주, red
 
   // Navy brand shade aliases (tier5 = lightest, tier1 = primary). Used by
   // a few visual treatments outside the asset palette (glow color, gradient
@@ -63,17 +63,16 @@ class WeRoboColors {
   /// Ordered palette indexed by AssetClass. Use `assetColor(AssetClass)`
   /// for ergonomic lookup.
   static const List<Color> _assetPalette = [
-    assetCash,        // index 0, 현금성자산
-    assetShortBond,   // index 1, 단기채권
-    assetInfraBond,   // index 2, 인프라채권
-    assetGold,        // index 3, 금
-    assetUSValue,     // index 4, 미국가치주
-    assetUSGrowth,    // index 5, 미국성장주
-    assetNewGrowth,   // index 6, 신성장주
+    assetCash, // index 0, 현금성자산
+    assetShortBond, // index 1, 단기채권
+    assetInfraBond, // index 2, 인프라채권
+    assetGold, // index 3, 금
+    assetUSValue, // index 4, 미국가치주
+    assetUSGrowth, // index 5, 미국성장주
+    assetNewGrowth, // index 6, 신성장주
   ];
 
-  static Color assetColor(AssetClass cls) =>
-      _assetPalette[cls.index];
+  static Color assetColor(AssetClass cls) => _assetPalette[cls.index];
 
   // Social auth brand colors
   static const Color kakaoYellow = Color(0xFFFEE500);
@@ -111,8 +110,7 @@ class WeRoboSpacing {
   static const double xxxxl = 32;
 
   /// Standard horizontal screen padding.
-  static const EdgeInsets screenH =
-      EdgeInsets.symmetric(horizontal: xxl);
+  static const EdgeInsets screenH = EdgeInsets.symmetric(horizontal: xxl);
 
   /// Bottom button area: 24px sides, 32px bottom clearance.
   static const EdgeInsets bottomButton =
@@ -125,27 +123,27 @@ class WeRoboElevation {
 
   static const List<BoxShadow> subtle = [
     BoxShadow(
-      offset: Offset(0, 1),
-      blurRadius: 3,
-      color: Color(0x0A000000),
+      offset: Offset(0, 2),
+      blurRadius: 8,
+      color: Color(0x140B1F46),
     ),
     BoxShadow(
-      offset: Offset(0, 1),
-      blurRadius: 2,
-      color: Color(0x05000000),
+      offset: Offset(0, 0),
+      blurRadius: 1,
+      color: Color(0x120B1F46),
     ),
   ];
 
   static const List<BoxShadow> medium = [
     BoxShadow(
-      offset: Offset(0, 4),
-      blurRadius: 12,
-      color: Color(0x0F000000),
+      offset: Offset(0, 6),
+      blurRadius: 18,
+      color: Color(0x1A0B1F46),
     ),
     BoxShadow(
-      offset: Offset(0, 1),
-      blurRadius: 4,
-      color: Color(0x0A000000),
+      offset: Offset(0, 2),
+      blurRadius: 5,
+      color: Color(0x100B1F46),
     ),
   ];
 
@@ -170,6 +168,14 @@ class WeRoboElevation {
       color: Color(0x1F000000),
     ),
   ];
+
+  /// Card shadow that follows the active app brightness.
+  static List<BoxShadow> card(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? subtleDark : subtle;
+
+  /// Raised surface shadow that follows the active app brightness.
+  static List<BoxShadow> raised(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark ? mediumDark : medium;
 
   static const List<BoxShadow> mediumDark = [
     BoxShadow(
@@ -359,10 +365,10 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
   });
 
   static const light = WeRoboThemeColors(
-    background: Color(0xFFEDF1FA),   // cool blue tint, scaffold
-    surface: Color(0xFFFFFFFF),      // white frames, no border
-    card: Color(0xFFFFFFFF),         // inset frames also white
-    border: Color(0xFFE2E5EE),       // cool hairline
+    background: Color(0xFFF7F9FC), // near-white neutral scaffold
+    surface: Color(0xFFFFFFFF), // white frames, no border
+    card: Color(0xFFFFFFFF), // inset frames also white
+    border: Color(0xFFDFE5EF), // visible cool hairline
     textPrimary: Color(0xFF1A1919),
     textSecondary: Color(0xFF6B6B6B),
     textTertiary: Color(0xFF8E8E8E),
@@ -370,14 +376,14 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
   );
 
   static const dark = WeRoboThemeColors(
-    background: Color(0xFF1A1919),   // warm black (was #141414)
-    surface: Color(0xFF232020),      // warm card surface
-    card: Color(0xFF2A2625),         // warm inset card
-    border: Color(0xFF3A3636),       // warm hairline
-    textPrimary: Color(0xFFF0EEEC),  // warm off-white
+    background: Color(0xFF1A1919), // warm black (was #141414)
+    surface: Color(0xFF232020), // warm card surface
+    card: Color(0xFF2A2625), // warm inset card
+    border: Color(0xFF3A3636), // warm hairline
+    textPrimary: Color(0xFFF0EEEC), // warm off-white
     textSecondary: Color(0xFFA39E99),
     textTertiary: Color(0xFF7A7470),
-    accent: Color(0xFF34D399),       // green stays unchanged
+    accent: Color(0xFF34D399), // green stays unchanged
   );
 
   static WeRoboThemeColors of(BuildContext context) =>
@@ -414,10 +420,8 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
       card: Color.lerp(card, other.card, t)!,
       border: Color.lerp(border, other.border, t)!,
       textPrimary: Color.lerp(textPrimary, other.textPrimary, t)!,
-      textSecondary:
-          Color.lerp(textSecondary, other.textSecondary, t)!,
-      textTertiary:
-          Color.lerp(textTertiary, other.textTertiary, t)!,
+      textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
+      textTertiary: Color.lerp(textTertiary, other.textTertiary, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
     );
   }
@@ -488,6 +492,17 @@ class WeRoboTheme {
           textStyle: WeRoboTypography.button,
         ),
       ),
+      cardTheme: CardThemeData(
+        color: WeRoboThemeColors.light.card,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: const Color(0x240B1F46),
+        elevation: 3,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(WeRoboColors.radiusXL),
+          side: BorderSide(color: WeRoboThemeColors.light.border),
+        ),
+      ),
       extensions: const [WeRoboThemeColors.light],
     );
   }
@@ -504,16 +519,16 @@ class WeRoboTheme {
         error: WeRoboColors.error,
       ),
       textTheme: TextTheme(
-        headlineLarge: WeRoboTypography.heading1.copyWith(
-            color: WeRoboThemeColors.dark.textPrimary),
-        headlineMedium: WeRoboTypography.heading2.copyWith(
-            color: WeRoboThemeColors.dark.textPrimary),
-        headlineSmall: WeRoboTypography.heading3.copyWith(
-            color: WeRoboThemeColors.dark.textPrimary),
-        bodyLarge: WeRoboTypography.body.copyWith(
-            color: WeRoboThemeColors.dark.textSecondary),
-        bodyMedium: WeRoboTypography.bodySmall.copyWith(
-            color: WeRoboThemeColors.dark.textSecondary),
+        headlineLarge: WeRoboTypography.heading1
+            .copyWith(color: WeRoboThemeColors.dark.textPrimary),
+        headlineMedium: WeRoboTypography.heading2
+            .copyWith(color: WeRoboThemeColors.dark.textPrimary),
+        headlineSmall: WeRoboTypography.heading3
+            .copyWith(color: WeRoboThemeColors.dark.textPrimary),
+        bodyLarge: WeRoboTypography.body
+            .copyWith(color: WeRoboThemeColors.dark.textSecondary),
+        bodyMedium: WeRoboTypography.bodySmall
+            .copyWith(color: WeRoboThemeColors.dark.textSecondary),
         labelLarge: WeRoboTypography.button,
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -542,6 +557,17 @@ class WeRoboTheme {
           textStyle: WeRoboTypography.button,
         ),
       ),
+      cardTheme: CardThemeData(
+        color: WeRoboThemeColors.dark.card,
+        surfaceTintColor: Colors.transparent,
+        shadowColor: const Color(0x52000000),
+        elevation: 3,
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(WeRoboColors.radiusXL),
+          side: BorderSide(color: WeRoboThemeColors.dark.border),
+        ),
+      ),
       extensions: const [WeRoboThemeColors.dark],
     );
   }
@@ -550,13 +576,13 @@ class WeRoboTheme {
 /// Canonical order for portfolio asset classes. Order is defensive→aggressive
 /// to match the tonal palette (lightest tier = least risky).
 enum AssetClass {
-  cash,        // 현금성자산
-  shortBond,   // 단기채권
-  infraBond,   // 인프라채권
-  gold,        // 금
-  usValue,     // 미국가치주
-  usGrowth,    // 미국성장주
-  newGrowth,   // 신성장주
+  cash, // 현금성자산
+  shortBond, // 단기채권
+  infraBond, // 인프라채권
+  gold, // 금
+  usValue, // 미국가치주
+  usGrowth, // 미국성장주
+  newGrowth, // 신성장주
 }
 
 extension AssetClassLabel on AssetClass {

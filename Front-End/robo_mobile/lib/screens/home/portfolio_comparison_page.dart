@@ -192,9 +192,9 @@ class PortfolioComparisonPage extends StatelessWidget {
                   Container(
                     decoration: BoxDecoration(
                       color: tc.surface,
-                      borderRadius:
-                          BorderRadius.circular(WeRoboColors.radiusL),
+                      borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
                       border: Border.all(color: tc.border, width: 1),
+                      boxShadow: WeRoboElevation.card(context),
                     ),
                     child: Column(
                       children: [
@@ -256,9 +256,8 @@ class PortfolioComparisonPage extends StatelessWidget {
     }
 
     final portfolioSeries = _toReturnPoints(portfolioLine.points);
-    final marketSeries = marketLine == null
-        ? null
-        : _toReturnPoints(marketLine.points);
+    final marketSeries =
+        marketLine == null ? null : _toReturnPoints(marketLine.points);
 
     // Turnover proxy: my portfolio is drift-rebalanced based on the backtest
     // metadata; the 시장 line is a passive equal-weight basket and so has
@@ -298,8 +297,7 @@ class PortfolioComparisonPage extends StatelessWidget {
     ];
   }
 
-  static String _percent(double v) =>
-      '${(v * 100).toStringAsFixed(2)}%';
+  static String _percent(double v) => '${(v * 100).toStringAsFixed(2)}%';
   static String _decimal(double v) => v.toStringAsFixed(2);
 
   /// "YY.MM.DD - YY.MM.DD" formatting for the realized backtest window.

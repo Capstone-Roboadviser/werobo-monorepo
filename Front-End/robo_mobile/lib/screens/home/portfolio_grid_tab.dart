@@ -56,7 +56,8 @@ class PortfolioGridTab extends StatelessWidget {
                     color: tc.surface,
                     onTap: () => Navigator.push(
                       context,
-                      WeRoboMotion.fadeRoute<void>(const PortfolioWeightsPage()),
+                      WeRoboMotion.fadeRoute<void>(
+                          const PortfolioWeightsPage()),
                     ),
                   ),
                 ),
@@ -108,6 +109,7 @@ class _ReportCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: WeRoboColors.primary,
           borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
+          boxShadow: WeRoboElevation.raised(context),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -275,6 +277,7 @@ class _PortfolioTile extends StatelessWidget {
             color: color,
             borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
             border: Border.all(color: tc.border, width: 1),
+            boxShadow: WeRoboElevation.card(context),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,

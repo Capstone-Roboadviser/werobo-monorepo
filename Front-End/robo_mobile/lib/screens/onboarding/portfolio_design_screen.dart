@@ -181,7 +181,7 @@ class _PortfolioDesignScreenState extends State<PortfolioDesignScreen> {
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: tc.surface,
+        backgroundColor: tc.background,
         body: SafeArea(
           child: Column(
             children: [
@@ -208,7 +208,7 @@ class _PortfolioDesignScreenState extends State<PortfolioDesignScreen> {
                       ),
                       const SizedBox(height: 18),
                       _ChartCard(
-                        background: tc.background,
+                        background: tc.card,
                         child: Column(
                           children: [
                             SizedBox(
@@ -308,12 +308,15 @@ class _ChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
       decoration: BoxDecoration(
         color: background,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: tc.border),
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: child,
     );
@@ -379,8 +382,10 @@ class _StatTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: tc.background,
+        color: tc.card,
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: tc.border),
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

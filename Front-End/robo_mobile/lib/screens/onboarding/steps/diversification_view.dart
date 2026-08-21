@@ -151,8 +151,7 @@ class _DiversificationViewState extends State<DiversificationView>
                       painter: _DiversificationChartPainter(
                         // The solid red (stock-only) line draws left→right over
                         // the first ~70% of the entrance.
-                        entranceDraw:
-                            (reveal / 0.7).clamp(0.0, 1.0).toDouble(),
+                        entranceDraw: (reveal / 0.7).clamp(0.0, 1.0).toDouble(),
                         diversifiedT: _diversify.value,
                         smoothness: _smoothness.value,
                         gridColor: tc.border,
@@ -203,7 +202,7 @@ class _AssetAddCard extends StatelessWidget {
         color: tc.card,
         borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
         border: Border.all(color: tc.border),
-        boxShadow: WeRoboElevation.subtle,
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -485,8 +484,8 @@ class _DiversificationChartPainter extends CustomPainter {
     for (var i = 0; i < count; i++) {
       final t = i / (count - 1);
       final x = size.width * t;
-      final wavyNorm = 0.5 -
-          (wavyAmp / usableHeight) * math.sin(t * 2.2 * 2 * math.pi);
+      final wavyNorm =
+          0.5 - (wavyAmp / usableHeight) * math.sin(t * 2.2 * 2 * math.pi);
       final risingRipple =
           0.03 * math.sin(t * 1.5 * 2 * math.pi) * (1 - smoothness);
       final risingNorm =

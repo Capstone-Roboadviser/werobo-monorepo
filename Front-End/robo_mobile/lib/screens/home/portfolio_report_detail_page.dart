@@ -103,8 +103,7 @@ class PortfolioReportDetailPage extends StatelessWidget {
                   else
                     for (int i = 0; i < past.length; i++) ...[
                       _PastReportCard(report: past[i]),
-                      if (i != past.length - 1)
-                        const SizedBox(height: 12),
+                      if (i != past.length - 1) const SizedBox(height: 12),
                     ],
                 ],
               ),
@@ -440,10 +439,8 @@ class _CountsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final lossTotal =
-        distribution.lossBuckets.fold<int>(0, (a, b) => a + b);
-    final gainTotal =
-        distribution.gainBuckets.fold<int>(0, (a, b) => a + b);
+    final lossTotal = distribution.lossBuckets.fold<int>(0, (a, b) => a + b);
+    final gainTotal = distribution.gainBuckets.fold<int>(0, (a, b) => a + b);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -556,8 +553,8 @@ class _PastReportCard extends StatelessWidget {
         report.distribution.lossBuckets.fold<int>(0, (a, b) => a + b);
     final gainTotal =
         report.distribution.gainBuckets.fold<int>(0, (a, b) => a + b);
-    final total =
-        (lossTotal + gainTotal + report.distribution.zeroBucket).clamp(1, 1 << 30);
+    final total = (lossTotal + gainTotal + report.distribution.zeroBucket)
+        .clamp(1, 1 << 30);
     final lossPct = lossTotal / total;
     final gainPct = gainTotal / total;
     final neutralPct = 1.0 - lossPct - gainPct;
@@ -568,6 +565,7 @@ class _PastReportCard extends StatelessWidget {
         color: tc.surface,
         borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
         border: Border.all(color: tc.border, width: 1),
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -692,6 +690,7 @@ class _NoPastReportsCard extends StatelessWidget {
         color: tc.surface,
         borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
         border: Border.all(color: tc.border, width: 1),
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Text(
         '아직 표시할 지난 리포트가 없어요.',
@@ -822,11 +821,10 @@ List<_Report> _byMonth(Map<DateTime, double> returns, DateTime now) {
     final first = entries.first.key;
     final last = entries.last.key;
     return _Report(
-      titleLine: '${first.year}.${first.month.toString().padLeft(2, '0')}월 Report',
-      rangeLine:
-          '${_fullDate(first)} ~ ${_fullDate(last)}',
-      shortRangeLine:
-          '${_shortDate(first)} ~ ${_shortDate(last)}',
+      titleLine:
+          '${first.year}.${first.month.toString().padLeft(2, '0')}월 Report',
+      rangeLine: '${_fullDate(first)} ~ ${_fullDate(last)}',
+      shortRangeLine: '${_shortDate(first)} ~ ${_shortDate(last)}',
       distribution:
           _ReturnDistribution.fromReturns(entries.map((e) => e.value)),
     );
@@ -851,10 +849,8 @@ List<_Report> _byWeek(Map<DateTime, double> returns, DateTime now) {
     return _Report(
       titleLine: '${first.year}.${first.month.toString().padLeft(2, '0')}.'
           '${first.day.toString().padLeft(2, '0')} Report',
-      rangeLine:
-          '${_fullDate(first)} ~ ${_fullDate(last)}',
-      shortRangeLine:
-          '${_shortDate(first)} ~ ${_shortDate(last)}',
+      rangeLine: '${_fullDate(first)} ~ ${_fullDate(last)}',
+      shortRangeLine: '${_shortDate(first)} ~ ${_shortDate(last)}',
       distribution:
           _ReturnDistribution.fromReturns(entries.map((e) => e.value)),
     );
@@ -887,8 +883,7 @@ DateTime _mondayOf(DateTime d) {
 String _fullDate(DateTime d) =>
     '${d.year}.${d.month.toString().padLeft(2, '0')}.${d.day.toString().padLeft(2, '0')}';
 
-String _shortDate(DateTime d) =>
-    '${(d.year % 100).toString().padLeft(2, '0')}.'
+String _shortDate(DateTime d) => '${(d.year % 100).toString().padLeft(2, '0')}.'
     '${d.month.toString().padLeft(2, '0')}.'
     '${d.day.toString().padLeft(2, '0')}';
 
@@ -935,7 +930,7 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
         ),
         mk(
           '${prevMonthStart.year}.'
-              '${prevMonthStart.month.toString().padLeft(2, '0')}월 Report',
+          '${prevMonthStart.month.toString().padLeft(2, '0')}월 Report',
           prevMonthStart,
           prevMonthEnd,
           [42, 84, 109, 198, 179],
@@ -944,7 +939,7 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
         ),
         mk(
           '${twoMonthsAgoStart.year}.'
-              '${twoMonthsAgoStart.month.toString().padLeft(2, '0')}월 Report',
+          '${twoMonthsAgoStart.month.toString().padLeft(2, '0')}월 Report',
           twoMonthsAgoStart,
           twoMonthsAgoEnd,
           [36, 78, 114, 175, 192],
@@ -962,8 +957,8 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
       return [
         mk(
           '${thisMonday.year}.'
-              '${thisMonday.month.toString().padLeft(2, '0')}.'
-              '${thisMonday.day.toString().padLeft(2, '0')} Report',
+          '${thisMonday.month.toString().padLeft(2, '0')}.'
+          '${thisMonday.day.toString().padLeft(2, '0')} Report',
           thisMonday,
           thisSunday,
           [8, 18, 28, 52, 31],
@@ -972,8 +967,8 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
         ),
         mk(
           '${lastMonday.year}.'
-              '${lastMonday.month.toString().padLeft(2, '0')}.'
-              '${lastMonday.day.toString().padLeft(2, '0')} Report',
+          '${lastMonday.month.toString().padLeft(2, '0')}.'
+          '${lastMonday.day.toString().padLeft(2, '0')} Report',
           lastMonday,
           lastSunday,
           [6, 14, 24, 48, 35],
@@ -982,8 +977,8 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
         ),
         mk(
           '${twoMondayAgo.year}.'
-              '${twoMondayAgo.month.toString().padLeft(2, '0')}.'
-              '${twoMondayAgo.day.toString().padLeft(2, '0')} Report',
+          '${twoMondayAgo.month.toString().padLeft(2, '0')}.'
+          '${twoMondayAgo.day.toString().padLeft(2, '0')} Report',
           twoMondayAgo,
           twoSundayAgo,
           [5, 12, 22, 44, 39],
@@ -999,7 +994,7 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
       return [
         mk(
           '${today.year}.${today.month.toString().padLeft(2, '0')}.'
-              '${today.day.toString().padLeft(2, '0')} Report',
+          '${today.day.toString().padLeft(2, '0')} Report',
           today,
           today,
           [2, 3, 6, 9, 8],
@@ -1008,7 +1003,7 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
         ),
         mk(
           '${yesterday.year}.${yesterday.month.toString().padLeft(2, '0')}.'
-              '${yesterday.day.toString().padLeft(2, '0')} Report',
+          '${yesterday.day.toString().padLeft(2, '0')} Report',
           yesterday,
           yesterday,
           [1, 4, 7, 11, 7],
@@ -1017,7 +1012,7 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
         ),
         mk(
           '${twoDaysAgo.year}.${twoDaysAgo.month.toString().padLeft(2, '0')}.'
-              '${twoDaysAgo.day.toString().padLeft(2, '0')} Report',
+          '${twoDaysAgo.day.toString().padLeft(2, '0')} Report',
           twoDaysAgo,
           twoDaysAgo,
           [2, 4, 5, 10, 9],
@@ -1026,7 +1021,7 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
         ),
         mk(
           '${threeDaysAgo.year}.${threeDaysAgo.month.toString().padLeft(2, '0')}.'
-              '${threeDaysAgo.day.toString().padLeft(2, '0')} Report',
+          '${threeDaysAgo.day.toString().padLeft(2, '0')} Report',
           threeDaysAgo,
           threeDaysAgo,
           [3, 5, 6, 8, 6],
@@ -1036,4 +1031,3 @@ List<_Report> _previewReports(DateTime now, ReportPeriod period) {
       ];
   }
 }
-

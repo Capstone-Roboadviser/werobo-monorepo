@@ -91,7 +91,7 @@ class _SurveyResultScreenState extends State<SurveyResultScreen> {
     final tc = WeRoboThemeColors.of(context);
     final p = widget.profile;
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -238,6 +238,7 @@ class _RangeCard extends StatelessWidget {
         color: tc.card,
         borderRadius: BorderRadius.circular(WeRoboColors.radiusXL),
         border: Border.all(color: tc.border),
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

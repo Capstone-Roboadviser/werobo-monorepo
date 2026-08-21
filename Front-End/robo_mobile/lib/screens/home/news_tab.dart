@@ -67,7 +67,8 @@ class _NewsHeroCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: tc.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tc.border, width: 0.5),
+        border: Border.all(color: tc.border),
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Row(
         children: [
@@ -135,7 +136,8 @@ class _NewsCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: tc.card,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: tc.border, width: 0.5),
+          border: Border.all(color: tc.border),
+          boxShadow: WeRoboElevation.card(context),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

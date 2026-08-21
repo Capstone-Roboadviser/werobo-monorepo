@@ -130,6 +130,7 @@ class _ReportSection extends StatelessWidget {
           color: tc.surface,
           borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
           border: Border.all(color: tc.border, width: 1),
+          boxShadow: WeRoboElevation.card(context),
         ),
         child: Row(
           children: [

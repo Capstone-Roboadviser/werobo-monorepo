@@ -42,7 +42,8 @@ class _SurveyFlowScreenState extends State<SurveyFlowScreen> {
       _answers[question.id] = optionIndex;
       _advancing = true;
     });
-    logAction('survey answer', {'question': question.id, 'option': optionIndex});
+    logAction(
+        'survey answer', {'question': question.id, 'option': optionIndex});
     await Future<void>.delayed(WeRoboMotion.short);
     if (!mounted) return;
     if (_index >= kSurveyQuestions.length - 1) {
@@ -73,7 +74,7 @@ class _SurveyFlowScreenState extends State<SurveyFlowScreen> {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Scaffold(
-      backgroundColor: tc.surface,
+      backgroundColor: tc.background,
       body: SafeArea(
         child: Column(
           children: [
@@ -112,7 +113,8 @@ class _SurveyFlowScreenState extends State<SurveyFlowScreen> {
               padding: const EdgeInsets.only(bottom: WeRoboSpacing.xxl),
               child: Text(
                 kSurveyAutoAdvanceHint,
-                style: WeRoboTypography.caption.copyWith(color: tc.textTertiary),
+                style:
+                    WeRoboTypography.caption.copyWith(color: tc.textTertiary),
               ),
             ),
           ],
@@ -152,7 +154,8 @@ class _QuestionPage extends StatelessWidget {
             ),
           ),
           const SizedBox(height: WeRoboSpacing.sm),
-          Text(question.question, style: WeRoboTypography.heading2.themed(context)),
+          Text(question.question,
+              style: WeRoboTypography.heading2.themed(context)),
           const SizedBox(height: WeRoboSpacing.xxxl),
           for (var i = 0; i < question.options.length; i++)
             SurveyOptionButton(

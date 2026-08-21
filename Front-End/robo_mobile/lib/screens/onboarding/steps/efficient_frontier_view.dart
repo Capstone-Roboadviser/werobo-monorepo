@@ -71,7 +71,7 @@ class OnboardingFrontierView extends StatelessWidget {
               color: tc.card,
               borderRadius: BorderRadius.circular(WeRoboColors.radiusL),
               border: Border.all(color: tc.border),
-              boxShadow: WeRoboElevation.subtle,
+              boxShadow: WeRoboElevation.card(context),
             ),
             padding: const EdgeInsets.fromLTRB(
               WeRoboSpacing.md,
@@ -299,8 +299,7 @@ class _FrontierPainter extends CustomPainter {
       final cx = (anchor.dx + dx).clamp(plot.left, plot.right);
       final cy = (anchor.dy + dy).clamp(plot.top, plot.bottom);
       final r = (1.8 + rng.nextDouble() * 1.8) * progress;
-      final localT =
-          ((progress - i / count * 0.4) / (1 - 0.4)).clamp(0.0, 1.0);
+      final localT = ((progress - i / count * 0.4) / (1 - 0.4)).clamp(0.0, 1.0);
       dotPaint.color = scatterColor.withValues(alpha: 0.38 * localT);
       canvas.drawCircle(Offset(cx, cy), r, dotPaint);
     }
@@ -343,7 +342,8 @@ class _FrontierPainter extends CustomPainter {
           curveColor.withValues(alpha: 0.10),
           curveColor.withValues(alpha: 0.0),
         ],
-      ).createShader(Rect.fromLTRB(plot.left, plot.top, plot.right, plot.bottom));
+      ).createShader(
+          Rect.fromLTRB(plot.left, plot.top, plot.right, plot.bottom));
     canvas.drawPath(path, fill);
   }
 

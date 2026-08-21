@@ -388,6 +388,8 @@ class _PortfolioStatsCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: tc.card,
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: tc.border),
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Row(
         children: [
@@ -760,6 +762,8 @@ class _PortfolioAllocationRow extends StatelessWidget {
         decoration: BoxDecoration(
           color: tc.card,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: tc.border),
+          boxShadow: WeRoboElevation.card(context),
         ),
         child: Row(
           children: [

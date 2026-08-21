@@ -97,7 +97,7 @@ class _PortfolioMarketComparisonScreenState
     return PopScope(
       canPop: false,
       child: Scaffold(
-        backgroundColor: tc.surface,
+        backgroundColor: tc.background,
         body: SafeArea(
           child: Column(
             children: [
@@ -328,16 +328,10 @@ class _ComparisonCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
       decoration: BoxDecoration(
-        color: tc.background,
+        color: tc.card,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: tc.border),
-        boxShadow: [
-          BoxShadow(
-            color: WeRoboColors.black.withValues(alpha: 0.04),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,9 +391,10 @@ class _MetricCard extends StatelessWidget {
       constraints: const BoxConstraints(minHeight: 118),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
       decoration: BoxDecoration(
-        color: tc.background,
+        color: tc.card,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: tc.border),
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

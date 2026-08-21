@@ -36,6 +36,39 @@ void main() {
     }
   });
 
+  testWidgets('home uses elevated section cards and light navigation styling',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+    expect(scaffold.backgroundColor, WeRoboThemeColors.light.background);
+
+    for (final key in ['quick_insight_card', 'market_summary_card']) {
+      final container = tester.widget<Container>(find.byKey(Key(key)));
+      final decoration = container.decoration! as BoxDecoration;
+      expect(decoration.color, WeRoboThemeColors.light.card);
+      expect(decoration.border, isNotNull);
+      expect(decoration.boxShadow, isNotEmpty);
+    }
+
+    final navigation = tester.widget<Container>(
+      find.byKey(const Key('main_bottom_navigation')),
+    );
+    final navigationDecoration = navigation.decoration! as BoxDecoration;
+    expect(navigationDecoration.color, WeRoboThemeColors.light.surface);
+    expect(navigationDecoration.boxShadow, isNotEmpty);
+
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.home_rounded)).color,
+      WeRoboColors.primary,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.analytics_outlined)).color,
+      const Color(0xFF8B94A5),
+    );
+  });
+
   testWidgets('home opens the summary dashboard by default', (tester) async {
     await tester.pumpWidget(buildSubject());
     await tester.pump();

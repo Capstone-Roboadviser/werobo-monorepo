@@ -14,14 +14,13 @@ class CommunityTab extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
             child: Row(
               children: [
-                Text('커뮤니티',
-                    style: WeRoboTypography.heading2.themed(context)),
+                Text('커뮤니티', style: WeRoboTypography.heading2.themed(context)),
                 const Spacer(),
                 GestureDetector(
                   onTap: () {},
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
                       color: WeRoboColors.primary,
                       borderRadius: BorderRadius.circular(8),
@@ -132,9 +131,7 @@ class _CategoryChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: isActive ? WeRoboColors.primary : tc.card,
         borderRadius: BorderRadius.circular(20),
-        border: isActive
-            ? null
-            : Border.all(color: tc.border, width: 0.5),
+        border: isActive ? null : Border.all(color: tc.border, width: 0.5),
       ),
       child: Text(
         label,
@@ -176,6 +173,8 @@ class _PostCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: tc.card,
           borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: tc.border),
+          boxShadow: WeRoboElevation.card(context),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,8 +182,8 @@ class _PostCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
                     color: tagColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
@@ -196,9 +195,7 @@ class _PostCard extends StatelessWidget {
                           color: tagColor)),
                 ),
                 const Spacer(),
-                Text(time,
-                    style: WeRoboTypography.caption
-                        .themed(context)),
+                Text(time, style: WeRoboTypography.caption.themed(context)),
               ],
             ),
             const SizedBox(height: 10),
@@ -216,22 +213,19 @@ class _PostCard extends StatelessWidget {
             Row(
               children: [
                 Text(author,
-                    style: WeRoboTypography.caption.copyWith(
-                        color: tc.textSecondary)),
+                    style: WeRoboTypography.caption
+                        .copyWith(color: tc.textSecondary)),
                 const Spacer(),
                 Icon(Icons.favorite_border_rounded,
                     size: 14, color: tc.textTertiary),
                 const SizedBox(width: 3),
-                Text('$likes',
-                    style: WeRoboTypography.caption
-                        .themed(context)),
+                Text('$likes', style: WeRoboTypography.caption.themed(context)),
                 const SizedBox(width: 12),
                 Icon(Icons.chat_bubble_outline_rounded,
                     size: 14, color: tc.textTertiary),
                 const SizedBox(width: 3),
                 Text('$comments',
-                    style: WeRoboTypography.caption
-                        .themed(context)),
+                    style: WeRoboTypography.caption.themed(context)),
               ],
             ),
           ],

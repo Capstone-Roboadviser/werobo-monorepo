@@ -525,7 +525,7 @@ class _MetricCard extends StatelessWidget {
         color: tc.card,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: tc.border.withValues(alpha: 0.42)),
-        boxShadow: WeRoboElevation.subtle,
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -813,7 +813,7 @@ class _AnalysisCard extends StatelessWidget {
         color: tc.card,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: tc.border.withValues(alpha: 0.45)),
-        boxShadow: WeRoboElevation.subtle,
+        boxShadow: WeRoboElevation.card(context),
       ),
       child: child,
     );
