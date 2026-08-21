@@ -27,7 +27,7 @@ class _PortfolioAnalysisTabState extends State<PortfolioAnalysisTab> {
   Widget build(BuildContext context) {
     final state = PortfolioStateProvider.of(context);
     final tc = WeRoboThemeColors.of(context);
-    final tabs = ['요약', '자산배분', '성과', '보유자산'];
+    final tabs = ['요약', '자산배분', '성과'];
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -61,12 +61,8 @@ class _PortfolioAnalysisTabState extends State<PortfolioAnalysisTab> {
                     key: const ValueKey('allocation'),
                     state: state,
                   ),
-                2 => _PerformanceAnalysisPage(
+                _ => _PerformanceAnalysisPage(
                     key: const ValueKey('performance'),
-                    state: state,
-                  ),
-                _ => _HoldingsAnalysisPage(
-                    key: const ValueKey('holdings'),
                     state: state,
                   ),
               },
@@ -208,12 +204,7 @@ class _AssetAllocationAnalysisPage extends StatelessWidget {
           totalValue: _analysisTotalValue(state),
         ),
         const SizedBox(height: 12),
-        _MetricGrid(state: state),
-        const SizedBox(height: 12),
-        _PerformanceTrendCard(
-          title: '성과 추이',
-          lines: _analysisPerformanceLines(state),
-        ),
+        _HoldingsCard(state: state),
       ],
     );
   }
@@ -309,16 +300,17 @@ class _PerformanceAnalysisPage extends StatelessWidget {
   }
 }
 
-class _HoldingsAnalysisPage extends StatelessWidget {
+class _HoldingsCard extends StatelessWidget {
   final PortfolioState state;
 
-  const _HoldingsAnalysisPage({super.key, required this.state});
+  const _HoldingsCard({required this.state});
 
   @override
   Widget build(BuildContext context) {
     final details = _analysisDetails(state);
     final baseValue = _analysisTotalValue(state);
     return _AnalysisCard(
+      key: const Key('analysis_holdings_card'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -354,6 +346,7 @@ class _AllocationOverviewCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return _AnalysisCard(
+      key: const Key('analysis_allocation_overview_card'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -808,7 +801,7 @@ class _HoldingRow extends StatelessWidget {
 class _AnalysisCard extends StatelessWidget {
   final Widget child;
 
-  const _AnalysisCard({required this.child});
+  const _AnalysisCard({super.key, required this.child});
 
   @override
   Widget build(BuildContext context) {

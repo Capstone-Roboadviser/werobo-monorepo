@@ -165,8 +165,24 @@ void main() {
     expect(find.text('포트폴리오 분석'), findsOneWidget);
     expect(find.text('자산배분'), findsOneWidget);
     expect(find.text('자산 배분 현황'), findsOneWidget);
-    expect(find.text('수익률 (연환산)'), findsOneWidget);
-    expect(find.text('성과 추이'), findsOneWidget);
+    expect(find.byKey(const Key('analysis_holdings_card')), findsOneWidget);
+    expect(find.text('보유자산'), findsOneWidget);
+    expect(find.widgetWithText(Pressable, '보유자산'), findsNothing);
+    expect(find.text('수익률 (연환산)'), findsNothing);
+    expect(find.text('변동성'), findsNothing);
+    expect(find.text('샤프지수'), findsNothing);
+    expect(find.text('분산투자 점수'), findsNothing);
+    expect(find.text('성과 추이'), findsNothing);
+    expect(
+      tester.getTopLeft(find.byKey(const Key('analysis_holdings_card'))).dy,
+      greaterThan(
+        tester
+            .getBottomLeft(
+              find.byKey(const Key('analysis_allocation_overview_card')),
+            )
+            .dy,
+      ),
+    );
     expect(find.byKey(const Key('analysis_notification')), findsOneWidget);
     expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
     expect(find.byIcon(Icons.ios_share_rounded), findsNothing);
@@ -217,7 +233,7 @@ void main() {
     await tester.tap(find.widgetWithText(Pressable, '분석'));
     await tester.pump(const Duration(milliseconds: 150));
 
-    for (final label in ['요약', '성과', '보유자산', '자산배분']) {
+    for (final label in ['요약', '성과', '자산배분']) {
       await tester.tap(find.text(label).first);
       await tester.pump(const Duration(milliseconds: 250));
       expect(tester.takeException(), isNull);
@@ -246,6 +262,9 @@ void main() {
     await tester.tap(find.widgetWithText(Pressable, '분석'));
     await tester.pump(const Duration(milliseconds: 150));
 
+    await tester.tap(find.text('성과').first);
+    await tester.pump(const Duration(milliseconds: 250));
+
     expect(find.text('수익률 (연환산)'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -271,7 +290,7 @@ void main() {
     await tester.tap(find.widgetWithText(Pressable, '분석'));
     await tester.pump(const Duration(milliseconds: 150));
 
-    for (final label in ['요약', '자산배분', '성과', '보유자산']) {
+    for (final label in ['요약', '자산배분', '성과']) {
       await tester.tap(find.text(label).first);
       await tester.pump(const Duration(milliseconds: 250));
 
