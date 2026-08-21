@@ -81,6 +81,49 @@ void main() {
     expect(find.text('시장 요약'), findsOneWidget);
   });
 
+  testWidgets('home composition uses all canonical asset colors',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    const expectedNames = [
+      '현금성자산',
+      '미국 성장주',
+      '미국 가치주',
+      '금',
+      '신성장주',
+      '단기 채권',
+      '인프라 채권',
+    ];
+    const expectedColors = [
+      WeRoboColors.assetCash,
+      WeRoboColors.assetUSGrowth,
+      WeRoboColors.assetUSValue,
+      WeRoboColors.assetGold,
+      WeRoboColors.assetNewGrowth,
+      WeRoboColors.assetShortBond,
+      WeRoboColors.assetInfraBond,
+    ];
+
+    for (var index = 0; index < expectedNames.length; index++) {
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(Key('home_allocation_name_$index')),
+            )
+            .data,
+        expectedNames[index],
+      );
+      final colorDot = tester.widget<Container>(
+        find.byKey(Key('home_allocation_color_$index')),
+      );
+      expect(
+        (colorDot.decoration! as BoxDecoration).color,
+        expectedColors[index],
+      );
+    }
+  });
+
   testWidgets('dashboard header matches the prominent greeting layout',
       (tester) async {
     await tester.pumpWidget(buildSubject());
@@ -148,7 +191,7 @@ void main() {
     await tester.pump();
 
     final chartBottom = tester.getBottomLeft(find.byType(VestorPieChart)).dy;
-    final legendTop = tester.getTopLeft(find.text('주식 (ETF)')).dy;
+    final legendTop = tester.getTopLeft(find.text('현금성자산')).dy;
 
     expect(tester.takeException(), isNull);
     expect(legendTop, greaterThan(chartBottom));

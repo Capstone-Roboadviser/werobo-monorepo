@@ -19,7 +19,7 @@ class HomeDashboardTab extends StatelessWidget {
     final summary = state.accountSummary;
     final userName = state.currentUser?.name.trim();
     final displayName = userName == null || userName.isEmpty ? '김투자' : userName;
-    final allocations = _dashboardAllocations(summary);
+    final allocations = _dashboardAllocations(state);
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final horizontalPadding = screenWidth < 360 ? 18.0 : 24.0;
@@ -354,23 +354,25 @@ class _PortfolioLegend extends StatelessWidget {
     final tc = WeRoboThemeColors.of(context);
     return Column(
       children: [
-        for (final item in allocations.take(4))
+        for (var index = 0; index < allocations.length; index++)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 7),
             child: Row(
               children: [
                 Container(
+                  key: Key('home_allocation_color_$index'),
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: item.color,
+                    color: allocations[index].color,
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    item.name,
+                    allocations[index].name,
+                    key: Key('home_allocation_name_$index'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: WeRoboTypography.bodySmall.copyWith(
@@ -381,7 +383,7 @@ class _PortfolioLegend extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${item.percentage.round()}%',
+                  '${allocations[index].percentage.toStringAsFixed(1)}%',
                   style: WeRoboTypography.bodySmall.copyWith(
                     color: tc.textPrimary,
                     fontWeight: FontWeight.w900,
@@ -745,68 +747,58 @@ class _SparklinePainter extends CustomPainter {
   }
 }
 
-List<PortfolioCategory> _dashboardAllocations(MobileAccountSummary? summary) {
-  final source = summary?.sectorAllocations ?? const <MobileSectorAllocation>[];
-  if (source.isEmpty) {
-    return const [
-      PortfolioCategory(
-        name: '주식 (ETF)',
-        percentage: 55,
-        color: WeRoboColors.primary,
-      ),
-      PortfolioCategory(
-        name: '채권',
-        percentage: 25,
-        color: Color(0xFF3388FF),
-      ),
-      PortfolioCategory(
-        name: '대체투자',
-        percentage: 10,
-        color: WeRoboColors.assetGold,
-      ),
-      PortfolioCategory(
-        name: '현금',
-        percentage: 10,
-        color: Color(0xFF9AA6BF),
-      ),
+List<PortfolioCategory> _dashboardAllocations(PortfolioState state) {
+  final selectedCategories = state.categories;
+  if (selectedCategories.isNotEmpty) {
+    return selectedCategories;
+  }
+
+  final source = state.accountSummary?.sectorAllocations ??
+      const <MobileSectorAllocation>[];
+  if (source.isNotEmpty) {
+    return [
+      for (var index = 0; index < source.length; index++)
+        source[index].toCategory(index),
     ];
   }
 
-  final byName = <String, double>{};
-  for (final allocation in source) {
-    final name =
-        _dashboardAssetName(allocation.assetCode, allocation.assetName);
-    byName[name] = (byName[name] ?? 0) + allocation.weight;
-  }
-  final entries = byName.entries.toList()
-    ..sort((a, b) => b.value.compareTo(a.value));
-  final colors = [
-    WeRoboColors.primary,
-    const Color(0xFF3388FF),
-    const Color(0xFF66C7D9),
-    WeRoboColors.assetGold,
+  return const [
+    PortfolioCategory(
+      name: '현금성자산',
+      percentage: 30.6,
+      color: WeRoboColors.assetCash,
+    ),
+    PortfolioCategory(
+      name: '미국 성장주',
+      percentage: 28.8,
+      color: WeRoboColors.assetUSGrowth,
+    ),
+    PortfolioCategory(
+      name: '미국 가치주',
+      percentage: 21.1,
+      color: WeRoboColors.assetUSValue,
+    ),
+    PortfolioCategory(
+      name: '금',
+      percentage: 6.4,
+      color: WeRoboColors.assetGold,
+    ),
+    PortfolioCategory(
+      name: '신성장주',
+      percentage: 5.0,
+      color: WeRoboColors.assetNewGrowth,
+    ),
+    PortfolioCategory(
+      name: '단기 채권',
+      percentage: 5.1,
+      color: WeRoboColors.assetShortBond,
+    ),
+    PortfolioCategory(
+      name: '인프라 채권',
+      percentage: 3.1,
+      color: WeRoboColors.assetInfraBond,
+    ),
   ];
-  return [
-    for (var i = 0; i < math.min(entries.length, 4); i++)
-      PortfolioCategory(
-        name: entries[i].key,
-        percentage: entries[i].value * 100,
-        color: colors[i % colors.length],
-      ),
-  ];
-}
-
-String _dashboardAssetName(String code, String fallback) {
-  final normalized = code.toLowerCase();
-  if (normalized.contains('bond')) return '채권';
-  if (normalized.contains('cash')) return '현금';
-  if (normalized.contains('gold') || normalized.contains('infra')) {
-    return '대체투자';
-  }
-  if (normalized.contains('growth') || normalized.contains('value')) {
-    return '주식 (ETF)';
-  }
-  return fallback.isEmpty ? '기타' : fallback;
 }
 
 List<double> _sparklinePoints(List<MobileAccountHistoryPoint> history) {
