@@ -448,15 +448,40 @@ class WeRoboTheme {
   WeRoboTheme._();
 
   static ThemeData get light {
+    const whiteSurfaceScheme = ColorScheme.light(
+      primary: WeRoboColors.primary,
+      secondary: WeRoboColors.accent,
+      surface: WeRoboColors.white,
+      surfaceContainerLowest: WeRoboColors.white,
+      surfaceContainerLow: WeRoboColors.white,
+      surfaceContainer: WeRoboColors.white,
+      surfaceContainerHigh: WeRoboColors.white,
+      surfaceContainerHighest: WeRoboColors.white,
+      error: WeRoboColors.error,
+    );
+
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      scaffoldBackgroundColor: WeRoboThemeColors.light.background,
-      colorScheme: ColorScheme.light(
-        primary: WeRoboColors.primary,
-        secondary: WeRoboColors.accent,
-        surface: WeRoboThemeColors.light.surface,
-        error: WeRoboColors.error,
+      scaffoldBackgroundColor: WeRoboColors.white,
+      canvasColor: WeRoboColors.white,
+      cardColor: WeRoboColors.white,
+      colorScheme: whiteSurfaceScheme,
+      appBarTheme: const AppBarTheme(
+        backgroundColor: WeRoboColors.white,
+        surfaceTintColor: Colors.transparent,
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: WeRoboColors.white,
+        surfaceTintColor: Colors.transparent,
+      ),
+      dialogTheme: const DialogThemeData(
+        backgroundColor: WeRoboColors.white,
+        surfaceTintColor: Colors.transparent,
+      ),
+      drawerTheme: const DrawerThemeData(
+        backgroundColor: WeRoboColors.white,
+        surfaceTintColor: Colors.transparent,
       ),
       textTheme: const TextTheme(
         headlineLarge: WeRoboTypography.heading1,

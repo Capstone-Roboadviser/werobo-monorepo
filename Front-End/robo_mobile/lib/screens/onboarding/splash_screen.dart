@@ -91,7 +91,7 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: WeRoboColors.primary,
+      backgroundColor: WeRoboColors.white,
       body: Center(
         child: FadeTransition(
           opacity: _fadeIn,
@@ -99,7 +99,9 @@ class _SplashScreenState extends State<SplashScreen>
             scale: _scale,
             child: Text(
               'WeRobo',
-              style: WeRoboTypography.logo,
+              style: WeRoboTypography.logo.copyWith(
+                color: WeRoboColors.primary,
+              ),
             ),
           ),
         ),

@@ -42,7 +42,7 @@ void main() {
     await tester.pump();
 
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
-    expect(scaffold.backgroundColor, WeRoboThemeColors.light.background);
+    expect(scaffold.backgroundColor, Colors.white);
 
     for (final key in ['quick_insight_card', 'market_summary_card']) {
       final container = tester.widget<Container>(find.byKey(Key(key)));

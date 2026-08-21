@@ -68,6 +68,15 @@ void main() {
   }
 
   group('OnboardingFlowScreen chrome', () {
+    testWidgets('uses a pure white page background', (tester) async {
+      await pumpFlow(tester);
+
+      final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
+      expect(scaffold.backgroundColor, Colors.white);
+      expect(Theme.of(tester.element(find.byType(Scaffold).first)).canvasColor,
+          Colors.white);
+    });
+
     testWidgets('starts on step 1 with the 1/7 counter and first headline',
         (tester) async {
       await pumpFlow(tester);
