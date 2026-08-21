@@ -18,6 +18,68 @@ const Color kFrontierAccentOrange = Color(0xFFF59E0B);
 /// drawdown stat values and the warning banner so the danger cue is one hue.
 const Color kFrontierDangerCoral = Color(0xFFF04452);
 
+/// Returns the upper, economically efficient boundary of a frontier feed.
+///
+/// Optimizer output can contain duplicate-volatility points, tiny return
+/// reversals, or locally convex numerical noise. Connecting those samples
+/// directly makes the curve bend downward near its high-risk end. The chart
+/// should only offer portfolios on the increasing, concave upper envelope:
+/// more risk never produces a lower expected return, and marginal return
+/// gradually diminishes as risk rises.
+List<MobileFrontierPreviewPoint> efficientFrontierDisplayPoints(
+  List<MobileFrontierPreviewPoint> points,
+) {
+  const epsilon = 1e-9;
+  final ordered = points
+      .where(
+        (point) => point.volatility.isFinite && point.expectedReturn.isFinite,
+      )
+      .toList()
+    ..sort((a, b) {
+      final byVolatility = a.volatility.compareTo(b.volatility);
+      if (byVolatility != 0) return byVolatility;
+      return b.expectedReturn.compareTo(a.expectedReturn);
+    });
+
+  if (ordered.length < 2) {
+    return List<MobileFrontierPreviewPoint>.unmodifiable(ordered);
+  }
+
+  final increasing = <MobileFrontierPreviewPoint>[];
+  var bestReturn = -double.infinity;
+  var previousVolatility = -double.infinity;
+  for (final point in ordered) {
+    if ((point.volatility - previousVolatility).abs() <= epsilon) {
+      continue;
+    }
+    previousVolatility = point.volatility;
+    if (point.expectedReturn <= bestReturn + epsilon) {
+      continue;
+    }
+    increasing.add(point);
+    bestReturn = point.expectedReturn;
+  }
+
+  final envelope = <MobileFrontierPreviewPoint>[];
+  for (final point in increasing) {
+    while (envelope.length >= 2) {
+      final a = envelope[envelope.length - 2];
+      final b = envelope.last;
+      final previousSlope =
+          (b.expectedReturn - a.expectedReturn) / (b.volatility - a.volatility);
+      final nextSlope = (point.expectedReturn - b.expectedReturn) /
+          (point.volatility - b.volatility);
+      if (nextSlope <= previousSlope + epsilon) {
+        break;
+      }
+      envelope.removeLast();
+    }
+    envelope.add(point);
+  }
+
+  return List<MobileFrontierPreviewPoint>.unmodifiable(envelope);
+}
+
 /// Interactive efficient-frontier chart for the 기대수익률/리스크 설정 page
 /// (capstone §4.4). Plots the real (volatility, expected-return) frontier
 /// points, shades the user's suitable risk band, and lets the user drag a
@@ -159,8 +221,7 @@ class _RiskReturnFrontierChartState extends State<RiskReturnFrontierChart>
             widget.onDragStateChanged?.call(false);
           },
           child: AnimatedBuilder(
-            animation:
-                Listenable.merge([_revealController, _pulseController]),
+            animation: Listenable.merge([_revealController, _pulseController]),
             builder: (context, _) {
               return CustomPaint(
                 size: size,
@@ -225,10 +286,12 @@ class _RiskReturnPainter extends CustomPainter {
     required this.bandLabelColor,
   });
 
-  double get _volSpan =>
-      (volBounds.max - volBounds.min).abs() < 1e-9 ? 1 : volBounds.max - volBounds.min;
-  double get _retSpan =>
-      (retBounds.max - retBounds.min).abs() < 1e-9 ? 1 : retBounds.max - retBounds.min;
+  double get _volSpan => (volBounds.max - volBounds.min).abs() < 1e-9
+      ? 1
+      : volBounds.max - volBounds.min;
+  double get _retSpan => (retBounds.max - retBounds.min).abs() < 1e-9
+      ? 1
+      : retBounds.max - retBounds.min;
 
   double _x(double vol) =>
       plotRect.left + (vol - volBounds.min) / _volSpan * plotRect.width;

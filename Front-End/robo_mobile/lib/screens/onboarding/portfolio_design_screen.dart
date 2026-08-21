@@ -64,10 +64,16 @@ class _PortfolioDesignScreenState extends State<PortfolioDesignScreen> {
     _preview = (resolved != null && resolved.points.isNotEmpty)
         ? resolved
         : _fallbackPreview;
-    _points = _preview.points;
+    _points = efficientFrontierDisplayPoints(_preview.points);
 
     final n = _points.length;
-    _recommendedPosition = _preview.recommendedPreviewPosition;
+    final recommendedPoint = _preview.recommendedPoint;
+    _recommendedPosition = _points.indexWhere((point) => point.isRecommended);
+    if (_recommendedPosition < 0) {
+      _recommendedPosition = _nearestPositionForVolatility(
+        recommendedPoint?.volatility ?? _points.first.volatility,
+      );
+    }
     // Suitable band around the recommended point. Asymmetric (a touch more
     // headroom on the upside) so the recommended point sits left-of-center
     // in the clear band, matching the Figma layout.
@@ -83,12 +89,29 @@ class _PortfolioDesignScreenState extends State<PortfolioDesignScreen> {
     // straight into the over-risk warning.
     final pick = widget.selection?.selectedPointIndex ??
         state.onboardingFrontierSelection?.selectedPointIndex;
-    final pickPos = pick != null
-        ? _preview.positionForPointIndex(pick)
-        : _recommendedPosition;
+    final pickedPoint = pick == null ? null : _preview.pointByIndex(pick);
+    var pickPos = pick == null
+        ? _recommendedPosition
+        : _points.indexWhere((point) => point.index == pick);
+    if (pickPos < 0 && pickedPoint != null) {
+      pickPos = _nearestPositionForVolatility(pickedPoint.volatility);
+    }
     _selectedPosition = (pickPos >= _inRangeLow && pickPos <= _inRangeHigh)
         ? pickPos
         : _recommendedPosition;
+  }
+
+  int _nearestPositionForVolatility(double volatility) {
+    var bestPosition = 0;
+    var bestDistance = double.infinity;
+    for (var index = 0; index < _points.length; index++) {
+      final distance = (_points[index].volatility - volatility).abs();
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestPosition = index;
+      }
+    }
+    return bestPosition;
   }
 
   @override
