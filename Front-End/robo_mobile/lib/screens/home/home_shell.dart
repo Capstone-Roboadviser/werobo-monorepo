@@ -248,7 +248,7 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 abstract final class _NavStyle {
-  static const active = Color(0xFF1476F2);
+  static const active = WeRoboColors.primary;
   static const inactive = Color(0xFF8B94A5);
 }
 

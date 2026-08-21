@@ -36,6 +36,29 @@ void main() {
     }
   });
 
+  testWidgets('selected bottom navigation item uses the writing button navy',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.home_rounded)).color,
+      WeRoboColors.primary,
+    );
+
+    await tester.tap(find.widgetWithText(Pressable, '커뮤니티'));
+    await tester.pump(const Duration(milliseconds: 150));
+
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.forum_rounded)).color,
+      WeRoboColors.primary,
+    );
+    expect(
+      tester.widget<Icon>(find.byIcon(Icons.home_outlined)).color,
+      const Color(0xFF8B94A5),
+    );
+  });
+
   testWidgets('home uses white surfaces and the light bottom navigation',
       (tester) async {
     await tester.pumpWidget(buildSubject());
@@ -62,7 +85,7 @@ void main() {
 
     expect(
       tester.widget<Icon>(find.byIcon(Icons.home_rounded)).color,
-      const Color(0xFF1476F2),
+      WeRoboColors.primary,
     );
     expect(
       tester.widget<Icon>(find.byIcon(Icons.analytics_outlined)).color,
