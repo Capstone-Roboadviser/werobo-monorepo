@@ -16,7 +16,7 @@ class WeRoboColors {
   static const Color black = Color(0xFF1A1919); // warm black
 
   // Surfaces (cool-tinted to harmonize with navy).
-  static const Color background = Color(0xFFF7F9FC);
+  static const Color background = Color(0xFFFFFFFF);
   static const Color surface = white;
   static const Color card = white;
 
@@ -365,7 +365,7 @@ class WeRoboThemeColors extends ThemeExtension<WeRoboThemeColors> {
   });
 
   static const light = WeRoboThemeColors(
-    background: Color(0xFFF7F9FC), // near-white neutral scaffold
+    background: Color(0xFFFFFFFF), // pure white scaffold
     surface: Color(0xFFFFFFFF), // white frames, no border
     card: Color(0xFFFFFFFF), // inset frames also white
     border: Color(0xFFDFE5EF), // visible cool hairline

@@ -36,7 +36,7 @@ void main() {
     }
   });
 
-  testWidgets('home uses elevated section cards and light navigation styling',
+  testWidgets('home uses a white background and elevated section cards',
       (tester) async {
     await tester.pumpWidget(buildSubject());
     await tester.pump();
@@ -56,16 +56,15 @@ void main() {
       find.byKey(const Key('main_bottom_navigation')),
     );
     final navigationDecoration = navigation.decoration! as BoxDecoration;
-    expect(navigationDecoration.color, WeRoboThemeColors.light.surface);
-    expect(navigationDecoration.boxShadow, isNotEmpty);
+    expect(navigationDecoration.color, const Color(0xFF383D48));
 
     expect(
       tester.widget<Icon>(find.byIcon(Icons.home_rounded)).color,
-      WeRoboColors.primary,
+      const Color(0xFFC4CB18),
     );
     expect(
       tester.widget<Icon>(find.byIcon(Icons.analytics_outlined)).color,
-      const Color(0xFF8B94A5),
+      const Color(0xFFD5D8DD),
     );
   });
 

@@ -172,16 +172,11 @@ class _HomeShellState extends State<HomeShell> {
       ),
       bottomNavigationBar: Container(
         key: const Key('main_bottom_navigation'),
-        decoration: BoxDecoration(
-          color: tc.surface,
-          border: Border(top: BorderSide(color: tc.border, width: 1)),
-          boxShadow: const [
-            BoxShadow(
-              offset: Offset(0, -3),
-              blurRadius: 12,
-              color: Color(0x120B1F46),
-            ),
-          ],
+        decoration: const BoxDecoration(
+          color: _NavStyle.background,
+          border: Border(
+            top: BorderSide(color: _NavStyle.border, width: 1),
+          ),
         ),
         child: SafeArea(
           top: false,
@@ -204,6 +199,7 @@ class _HomeShellState extends State<HomeShell> {
                     },
                   ),
                 ),
+                const _NavDivider(),
                 Expanded(
                   child: _NavItem(
                     icon: Icons.analytics_outlined,
@@ -216,6 +212,7 @@ class _HomeShellState extends State<HomeShell> {
                     },
                   ),
                 ),
+                const _NavDivider(),
                 Expanded(
                   child: _NavItem(
                     icon: Icons.forum_outlined,
@@ -228,6 +225,7 @@ class _HomeShellState extends State<HomeShell> {
                     },
                   ),
                 ),
+                const _NavDivider(),
                 Expanded(
                   child: _NavItem(
                     icon: Icons.article_outlined,
@@ -240,6 +238,7 @@ class _HomeShellState extends State<HomeShell> {
                     },
                   ),
                 ),
+                const _NavDivider(),
                 Expanded(
                   child: _NavItem(
                     icon: Icons.settings_outlined,
@@ -262,8 +261,23 @@ class _HomeShellState extends State<HomeShell> {
 }
 
 abstract final class _NavStyle {
-  static const active = WeRoboColors.primary;
-  static const inactive = Color(0xFF8B94A5);
+  static const background = Color(0xFF383D48);
+  static const border = Color(0xFF505661);
+  static const divider = Color(0xFF4A505B);
+  static const active = Color(0xFFC4CB18);
+  static const inactive = Color(0xFFD5D8DD);
+}
+
+class _NavDivider extends StatelessWidget {
+  const _NavDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 1,
+      child: ColoredBox(color: _NavStyle.divider),
+    );
+  }
 }
 
 class _NavItem extends StatelessWidget {
