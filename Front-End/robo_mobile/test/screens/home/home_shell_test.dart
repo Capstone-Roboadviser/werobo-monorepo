@@ -79,6 +79,40 @@ void main() {
     expect(find.text('시장 요약'), findsOneWidget);
   });
 
+  testWidgets('dashboard header matches the prominent greeting layout',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    final headerFinder = find.byKey(const Key('dashboard_header'));
+    final greetingFinder = find.byKey(const Key('dashboard_greeting'));
+    final notificationFinder = find.byKey(
+      const Key('dashboard_notification'),
+    );
+    final greeting = tester.widget<Text>(greetingFinder);
+
+    expect(greeting.style!.fontSize, WeRoboTypography.heading2.fontSize);
+    expect(greeting.style!.fontWeight, FontWeight.w900);
+    expect(
+      tester.getTopLeft(greetingFinder).dx,
+      lessThan(tester.getTopLeft(notificationFinder).dx),
+    );
+    expect(
+      find.descendant(
+        of: headerFinder,
+        matching: find.byIcon(Icons.settings_outlined),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.descendant(
+        of: headerFinder,
+        matching: find.byIcon(Icons.notifications_none_rounded),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('quick insight keeps its closing phrase on the second line',
       (tester) async {
     await tester.pumpWidget(buildSubject());

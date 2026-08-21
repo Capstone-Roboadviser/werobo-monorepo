@@ -9,7 +9,6 @@ import '../../models/mobile_backend_models.dart';
 import '../../models/portfolio_data.dart';
 import '../onboarding/widgets/vestor_pie_chart.dart';
 import 'activity_hub_page.dart';
-import 'settings_page.dart';
 
 class HomeDashboardTab extends StatelessWidget {
   const HomeDashboardTab({super.key});
@@ -37,7 +36,11 @@ class HomeDashboardTab extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _DashboardHeader(displayName: displayName),
+            _DashboardHeader(
+              displayName: displayName,
+              hasUnread:
+                  state.unreadInsightCount > 0 || state.hasUnreadEmergencyAlert,
+            ),
             const SizedBox(height: 20),
             _AssetSummaryCard(
               currentValue: summary?.currentValue ?? 128250000,
@@ -60,46 +63,66 @@ class HomeDashboardTab extends StatelessWidget {
 
 class _DashboardHeader extends StatelessWidget {
   final String displayName;
+  final bool hasUnread;
 
-  const _DashboardHeader({required this.displayName});
+  const _DashboardHeader({
+    required this.displayName,
+    required this.hasUnread,
+  });
 
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
     return Row(
+      key: const Key('dashboard_header'),
       children: [
+        Expanded(
+          child: Text(
+            '안녕하세요, $displayName님 👋',
+            key: const Key('dashboard_greeting'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: WeRoboTypography.heading2.copyWith(
+              color: tc.textPrimary,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.4,
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
         Pressable(
+          key: const Key('dashboard_notification'),
           onTap: () => Navigator.push(
             context,
             WeRoboMotion.fadeRoute<void>(const ActivityHubPage()),
           ),
-          child: Icon(
-            Icons.notifications_none_rounded,
-            size: 28,
-            color: tc.textPrimary,
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            '안녕하세요, $displayName님 👋',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: WeRoboTypography.body.copyWith(
-              color: tc.textPrimary,
-              fontWeight: FontWeight.w800,
+          child: SizedBox(
+            width: 40,
+            height: 40,
+            child: Stack(
+              clipBehavior: Clip.none,
+              alignment: Alignment.center,
+              children: [
+                Icon(
+                  Icons.notifications_none_rounded,
+                  size: 30,
+                  color: tc.textPrimary,
+                ),
+                if (hasUnread)
+                  const Positioned(
+                    key: Key('dashboard_notification_dot'),
+                    top: 3,
+                    right: 3,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: WeRoboColors.error,
+                        shape: BoxShape.circle,
+                      ),
+                      child: SizedBox(width: 9, height: 9),
+                    ),
+                  ),
+              ],
             ),
-          ),
-        ),
-        Pressable(
-          onTap: () => Navigator.push(
-            context,
-            WeRoboMotion.fadeRoute<void>(const SettingsPage()),
-          ),
-          child: Icon(
-            Icons.settings_outlined,
-            size: 28,
-            color: tc.textPrimary,
           ),
         ),
       ],
