@@ -438,7 +438,7 @@ class _QuickInsightCard extends StatelessWidget {
                           text: '성장 기여의 $pct%',
                           style: const TextStyle(color: WeRoboColors.primary),
                         ),
-                        const TextSpan(text: '를 차지하고 있어요.'),
+                        const TextSpan(text: '를\n차지하고 있어요.'),
                       ],
                     ),
                     style: WeRoboTypography.bodySmall.copyWith(

@@ -79,6 +79,21 @@ void main() {
     expect(find.text('시장 요약'), findsOneWidget);
   });
 
+  testWidgets('quick insight keeps its closing phrase on the second line',
+      (tester) async {
+    await tester.pumpWidget(buildSubject());
+    await tester.pump();
+
+    final insight = tester.widget<RichText>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText && widget.text.toPlainText().contains('성장 기여의'),
+      ),
+    );
+
+    expect(insight.text.toPlainText(), contains('를\n차지하고 있어요.'));
+  });
+
   testWidgets('home dashboard stacks portfolio legend on compact screens',
       (tester) async {
     tester.view.physicalSize = const Size(320, 568);
