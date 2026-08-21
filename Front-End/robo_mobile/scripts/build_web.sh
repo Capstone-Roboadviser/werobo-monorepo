@@ -7,6 +7,7 @@ PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 FLUTTER_VERSION="$(tr -d '[:space:]' < "${PROJECT_DIR}/.flutter-version")"
 PROJECT_FLUTTER_BIN="${PROJECT_DIR}/.flutter-sdk/flutter/bin/flutter"
 WEB_BASE_HREF="${WEB_BASE_HREF:-/}"
+BUILD_VERSION="${GITHUB_SHA:-local}"
 
 if [ -x "${PROJECT_FLUTTER_BIN}" ] &&
   "${PROJECT_FLUTTER_BIN}" --version | head -n 1 | grep -q "Flutter ${FLUTTER_VERSION}"; then
@@ -29,4 +30,14 @@ export PATH="$(dirname "${FLUTTER_BIN}"):${PATH}"
 flutter --version
 flutter config --enable-web
 flutter pub get
-flutter build web --release --base-href "${WEB_BASE_HREF}"
+flutter build web \
+  --release \
+  --base-href "${WEB_BASE_HREF}" \
+  --web-define="BUILD_VERSION=${BUILD_VERSION}"
+
+# Flutter's legacy service worker can keep an older app shell alive after a
+# successful Pages deployment. Replace it with a one-time cleanup worker so
+# existing installations unregister it and reload the versioned web bundle.
+cp \
+  "${PROJECT_DIR}/web/flutter_service_worker_cleanup.js" \
+  "${PROJECT_DIR}/build/web/flutter_service_worker.js"
