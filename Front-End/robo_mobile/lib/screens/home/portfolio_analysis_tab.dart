@@ -414,25 +414,30 @@ class _AllocationLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final rankedCategories = [...categories]
+      ..sort((a, b) => b.percentage.compareTo(a.percentage));
+    final visibleCategories = rankedCategories.take(4).toList(growable: false);
     return Column(
       children: [
-        for (final category in categories.take(4))
+        for (var index = 0; index < visibleCategories.length; index++)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 9),
             child: Row(
               children: [
                 Container(
+                  key: Key('analysis_allocation_color_$index'),
                   width: 11,
                   height: 11,
                   decoration: BoxDecoration(
-                    color: category.color,
+                    color: visibleCategories[index].color,
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    category.name,
+                    visibleCategories[index].name,
+                    key: Key('analysis_allocation_name_$index'),
                     style: WeRoboTypography.bodySmall.copyWith(
                       color: tc.textPrimary,
                       fontWeight: FontWeight.w800,
@@ -441,7 +446,7 @@ class _AllocationLegend extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${category.percentage.toStringAsFixed(1)}%',
+                  '${visibleCategories[index].percentage.toStringAsFixed(1)}%',
                   style: WeRoboTypography.bodySmall.copyWith(
                     color: tc.textPrimary,
                     fontWeight: FontWeight.w900,
@@ -943,45 +948,49 @@ class _AnalysisLineChartPainter extends CustomPainter {
 
 List<PortfolioCategory> _analysisCategories(PortfolioState state) {
   final categories = state.categories;
-  if (categories.isNotEmpty) return categories.take(4).toList();
+  if (categories.isNotEmpty) return categories;
   final source = state.accountSummary?.sectorAllocations ??
       const <MobileSectorAllocation>[];
   if (source.isNotEmpty) {
-    final colors = [
-      WeRoboColors.primary,
-      const Color(0xFF4EB9A9),
-      const Color(0xFFFFA51F),
-      const Color(0xFF7693B8),
-    ];
     return [
-      for (var i = 0; i < math.min(source.length, 4); i++)
-        PortfolioCategory(
-          name: _friendlyAssetName(source[i].assetCode, source[i].assetName),
-          percentage: source[i].weight * 100,
-          color: colors[i],
-        ),
+      for (var i = 0; i < source.length; i++) source[i].toCategory(i),
     ];
   }
   return const [
     PortfolioCategory(
-      name: '주식 (ETF)',
-      percentage: 55,
-      color: WeRoboColors.primary,
+      name: '현금성자산',
+      percentage: 30.6,
+      color: WeRoboColors.assetCash,
     ),
     PortfolioCategory(
-      name: '채권',
-      percentage: 25,
-      color: Color(0xFF4EB9A9),
+      name: '미국 성장주',
+      percentage: 28.8,
+      color: WeRoboColors.assetUSGrowth,
     ),
     PortfolioCategory(
-      name: '대체투자',
-      percentage: 10,
-      color: Color(0xFFFFA51F),
+      name: '미국 가치주',
+      percentage: 21.1,
+      color: WeRoboColors.assetUSValue,
     ),
     PortfolioCategory(
-      name: '현금',
-      percentage: 10,
-      color: Color(0xFF7693B8),
+      name: '금',
+      percentage: 6.4,
+      color: WeRoboColors.assetGold,
+    ),
+    PortfolioCategory(
+      name: '신성장주',
+      percentage: 5.0,
+      color: WeRoboColors.assetNewGrowth,
+    ),
+    PortfolioCategory(
+      name: '단기 채권',
+      percentage: 5.1,
+      color: WeRoboColors.assetShortBond,
+    ),
+    PortfolioCategory(
+      name: '인프라 채권',
+      percentage: 3.1,
+      color: WeRoboColors.assetInfraBond,
     ),
   ];
 }
@@ -1119,19 +1128,6 @@ double _analysisTotalValue(PortfolioState state) {
 int _investorScore(double volatility) {
   final score = 100 - ((volatility / 0.25) * 40).round();
   return score.clamp(60, 96);
-}
-
-String _friendlyAssetName(String code, String fallback) {
-  final normalized = code.toLowerCase();
-  if (normalized.contains('bond')) return '채권';
-  if (normalized.contains('cash')) return '현금';
-  if (normalized.contains('gold') || normalized.contains('infra')) {
-    return '대체투자';
-  }
-  if (normalized.contains('growth') || normalized.contains('value')) {
-    return '주식 (ETF)';
-  }
-  return fallback.isEmpty ? '기타' : fallback;
 }
 
 String _formatWon(double value) {

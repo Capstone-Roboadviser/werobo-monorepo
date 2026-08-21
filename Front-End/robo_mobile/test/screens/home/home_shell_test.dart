@@ -229,6 +229,46 @@ void main() {
     expect(find.byKey(const Key('analysis_notification')), findsOneWidget);
     expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
     expect(find.byIcon(Icons.ios_share_rounded), findsNothing);
+
+    final analysisChart = tester.widget<VestorPieChart>(
+      find.descendant(
+        of: find.byKey(const Key('analysis_allocation_overview_card')),
+        matching: find.byType(VestorPieChart),
+      ),
+    );
+    expect(analysisChart.categories, hasLength(7));
+    expect(
+      analysisChart.categories.map((category) => category.name),
+      [
+        '현금성자산',
+        '미국 성장주',
+        '미국 가치주',
+        '금',
+        '신성장주',
+        '단기 채권',
+        '인프라 채권',
+      ],
+    );
+    const expectedLegendNames = [
+      '현금성자산',
+      '미국 성장주',
+      '미국 가치주',
+      '금',
+    ];
+    for (var index = 0; index < expectedLegendNames.length; index++) {
+      expect(
+        tester
+            .widget<Text>(
+              find.byKey(Key('analysis_allocation_name_$index')),
+            )
+            .data,
+        expectedLegendNames[index],
+      );
+    }
+    expect(
+      find.byKey(const Key('analysis_allocation_name_4')),
+      findsNothing,
+    );
     expect(
       tester.getCenter(find.byKey(const Key('analysis_notification'))).dy,
       closeTo(
