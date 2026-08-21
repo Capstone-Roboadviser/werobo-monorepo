@@ -81,28 +81,25 @@ void main() {
     expect(find.text('시장 요약'), findsOneWidget);
   });
 
-  testWidgets('home composition uses all canonical asset colors',
+  testWidgets('home donut keeps every asset while legend shows top four',
       (tester) async {
     await tester.pumpWidget(buildSubject());
     await tester.pump();
+
+    final chart = tester.widget<VestorPieChart>(find.byType(VestorPieChart));
+    expect(chart.categories, hasLength(7));
 
     const expectedNames = [
       '현금성자산',
       '미국 성장주',
       '미국 가치주',
       '금',
-      '신성장주',
-      '단기 채권',
-      '인프라 채권',
     ];
     const expectedColors = [
       WeRoboColors.assetCash,
       WeRoboColors.assetUSGrowth,
       WeRoboColors.assetUSValue,
       WeRoboColors.assetGold,
-      WeRoboColors.assetNewGrowth,
-      WeRoboColors.assetShortBond,
-      WeRoboColors.assetInfraBond,
     ];
 
     for (var index = 0; index < expectedNames.length; index++) {
@@ -122,6 +119,9 @@ void main() {
         expectedColors[index],
       );
     }
+
+    expect(find.byKey(const Key('home_allocation_name_4')), findsNothing);
+    expect(find.byKey(const Key('home_allocation_color_4')), findsNothing);
   });
 
   testWidgets('dashboard header matches the prominent greeting layout',

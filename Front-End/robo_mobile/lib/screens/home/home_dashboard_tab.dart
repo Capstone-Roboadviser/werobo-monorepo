@@ -352,9 +352,12 @@ class _PortfolioLegend extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tc = WeRoboThemeColors.of(context);
+    final visibleAllocations = [...allocations]
+      ..sort((a, b) => b.percentage.compareTo(a.percentage));
+    final topAllocations = visibleAllocations.take(4).toList(growable: false);
     return Column(
       children: [
-        for (var index = 0; index < allocations.length; index++)
+        for (var index = 0; index < topAllocations.length; index++)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 7),
             child: Row(
@@ -364,14 +367,14 @@ class _PortfolioLegend extends StatelessWidget {
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: allocations[index].color,
+                    color: topAllocations[index].color,
                     shape: BoxShape.circle,
                   ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    allocations[index].name,
+                    topAllocations[index].name,
                     key: Key('home_allocation_name_$index'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -383,7 +386,7 @@ class _PortfolioLegend extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  '${allocations[index].percentage.toStringAsFixed(1)}%',
+                  '${topAllocations[index].percentage.toStringAsFixed(1)}%',
                   style: WeRoboTypography.bodySmall.copyWith(
                     color: tc.textPrimary,
                     fontWeight: FontWeight.w900,
