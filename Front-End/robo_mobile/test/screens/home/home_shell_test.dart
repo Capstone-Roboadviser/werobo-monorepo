@@ -36,7 +36,7 @@ void main() {
     }
   });
 
-  testWidgets('home uses a white background and elevated section cards',
+  testWidgets('home uses white surfaces and the light bottom navigation',
       (tester) async {
     await tester.pumpWidget(buildSubject());
     await tester.pump();
@@ -56,15 +56,17 @@ void main() {
       find.byKey(const Key('main_bottom_navigation')),
     );
     final navigationDecoration = navigation.decoration! as BoxDecoration;
-    expect(navigationDecoration.color, const Color(0xFF383D48));
+    expect(navigationDecoration.color, Colors.white);
+    expect(navigationDecoration.border, isNotNull);
+    expect(navigationDecoration.boxShadow, isNotEmpty);
 
     expect(
       tester.widget<Icon>(find.byIcon(Icons.home_rounded)).color,
-      const Color(0xFFC4CB18),
+      const Color(0xFF1476F2),
     );
     expect(
       tester.widget<Icon>(find.byIcon(Icons.analytics_outlined)).color,
-      const Color(0xFFD5D8DD),
+      const Color(0xFF8B94A5),
     );
   });
 
