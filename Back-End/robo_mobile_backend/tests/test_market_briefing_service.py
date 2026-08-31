@@ -190,8 +190,9 @@ def test_weekly_market_report_matches_five_minute_report_structure():
     assert result.period_end == "2026-08-28"
     assert result.key_figures == []
     assert result.editorial_note == ""
+    assert result.one_line.startswith("금이 최근 3개월 기준 최고가로 오르고")
     assert len(result.events) == 5
-    assert result.events[0].title == "금값 사상 최고 — 열흘 새 +5.4%"
+    assert result.events[0].title == "금값, 5월 이후 처음 $4,600 돌파 — 열흘 새 약 5.4% 상승"
     assert result.events[-1].title == "미국 정부가 국채시장에 개입 — 장기 금리 잠시 하락"
     assert len(result.sector_flows) == 8
     assert result.sector_flows[4].recent_six_month_label == "+1~2%"
