@@ -4,11 +4,45 @@ import 'package:robo_mobile/app/portfolio_state.dart';
 import 'package:robo_mobile/app/pressable.dart';
 import 'package:robo_mobile/app/theme.dart';
 import 'package:robo_mobile/app/theme_state.dart';
+import 'package:robo_mobile/models/mobile_backend_models.dart';
+import 'package:robo_mobile/screens/home/home_dashboard_tab.dart';
 import 'package:robo_mobile/screens/home/home_shell.dart';
 import 'package:robo_mobile/screens/home/portfolio_analysis_tab.dart';
 import 'package:robo_mobile/screens/onboarding/widgets/vestor_pie_chart.dart';
 
 void main() {
+  MobileAccountHistoryPoint point(int day, double value) {
+    return MobileAccountHistoryPoint(
+      date: DateTime(2026, 8, day),
+      portfolioValue: value,
+      investedAmount: 10000000,
+      profitLoss: value - 10000000,
+      profitLossPct: value / 10000000 - 1,
+    );
+  }
+
+  test('flat account history uses a visible fallback sparkline', () {
+    final history = [for (var day = 1; day <= 12; day++) point(day, 10571089)];
+
+    final result = dashboardSparklinePoints(history);
+
+    expect(result.toSet().length, greaterThan(1));
+  });
+
+  test('sparkline preserves actual changing account history', () {
+    final history = [
+      point(1, 10000000),
+      point(2, 10050000),
+      point(3, 10020000),
+      point(4, 10110000),
+    ];
+
+    expect(
+      dashboardSparklinePoints(history),
+      [10000000, 10050000, 10020000, 10110000],
+    );
+  });
+
   Widget buildSubject() {
     final state = PortfolioState();
     final themeNotifier = ThemeNotifier();

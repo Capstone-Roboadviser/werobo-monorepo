@@ -46,7 +46,7 @@ class HomeDashboardTab extends StatelessWidget {
               currentValue: summary?.currentValue ?? 128250000,
               profitLoss: summary?.profitLoss ?? 1250000,
               profitLossPct: summary?.profitLossPct ?? 0.0109,
-              points: _sparklinePoints(state.accountHistory),
+              points: dashboardSparklinePoints(state.accountHistory),
             ),
             const SizedBox(height: 16),
             _PortfolioCompositionCard(allocations: allocations),
@@ -715,9 +715,12 @@ class _SparklinePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final values = points.isEmpty
-        ? const [0.3, 0.38, 0.34, 0.55, 0.41, 0.68, 0.62, 0.78]
-        : points;
+    const fallback = [0.3, 0.38, 0.34, 0.55, 0.41, 0.68, 0.62, 0.78];
+    final finitePoints = points.where((value) => value.isFinite).toList();
+    final rawValues = finitePoints.length < 2 ? fallback : finitePoints;
+    final rawMin = rawValues.reduce(math.min);
+    final rawMax = rawValues.reduce(math.max);
+    final values = (rawMax - rawMin).abs() <= 1.0 ? fallback : rawValues;
     final minValue = values.reduce(math.min);
     final maxValue = values.reduce(math.max);
     final span =
@@ -804,15 +807,58 @@ List<PortfolioCategory> _dashboardAllocations(PortfolioState state) {
   ];
 }
 
-List<double> _sparklinePoints(List<MobileAccountHistoryPoint> history) {
-  if (history.length < 2) {
-    return const [0.32, 0.38, 0.35, 0.48, 0.41, 0.57, 0.53, 0.66];
-  }
+const _dashboardFallbackSparkline = [
+  0.32,
+  0.38,
+  0.35,
+  0.48,
+  0.41,
+  0.57,
+  0.53,
+  0.66,
+];
+
+List<double> dashboardSparklinePoints(
+  List<MobileAccountHistoryPoint> history,
+) {
+  if (history.length < 2) return _dashboardFallbackSparkline;
+
   final sorted = [...history]..sort((a, b) => a.date.compareTo(b.date));
-  return sorted
-      .skip(math.max(0, sorted.length - 10))
+  final values = sorted
       .map((p) => p.portfolioValue)
+      .where((value) => value.isFinite)
       .toList();
+  if (values.length < 2) return _dashboardFallbackSparkline;
+
+  final recent = values.skip(math.max(0, values.length - 30)).toList();
+  if (_hasVisibleMovement(recent)) return _sampleSparkline(recent);
+
+  final changed = <double>[];
+  for (final value in values) {
+    if (changed.isEmpty || (value - changed.last).abs() > 1.0) {
+      changed.add(value);
+    }
+  }
+  if (_hasVisibleMovement(changed)) {
+    return _sampleSparkline(
+      changed.skip(math.max(0, changed.length - 16)).toList(),
+    );
+  }
+  return _dashboardFallbackSparkline;
+}
+
+bool _hasVisibleMovement(List<double> values) {
+  if (values.length < 2) return false;
+  return (values.reduce(math.max) - values.reduce(math.min)).abs() > 1.0;
+}
+
+List<double> _sampleSparkline(List<double> values) {
+  const maxPoints = 16;
+  if (values.length <= maxPoints) return values;
+  return List.generate(maxPoints, (index) {
+    final sourceIndex = (index * (values.length - 1) / (maxPoints - 1)).round();
+    return values[sourceIndex];
+  });
 }
 
 String _formatWon(double value) {
