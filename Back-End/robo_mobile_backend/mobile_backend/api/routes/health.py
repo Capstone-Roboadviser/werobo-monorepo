@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter
 
 from mobile_backend.api.schemas.response import HealthResponse
@@ -18,5 +20,6 @@ def health_check() -> HealthResponse:
         status="ok",
         app=APP_NAME,
         version=APP_VERSION,
+        build_sha=os.environ.get("RAILWAY_GIT_COMMIT_SHA", "")[:7] or None,
     )
 

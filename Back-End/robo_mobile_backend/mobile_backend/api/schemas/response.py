@@ -7,6 +7,11 @@ class HealthResponse(BaseModel):
     status: str = Field(..., description="서버 상태", examples=["ok"])
     app: str = Field(..., description="애플리케이션 이름", examples=["Robo Mobile Backend"])
     version: str = Field(..., description="배포된 백엔드 버전", examples=["0.1.0"])
+    build_sha: str | None = Field(
+        default=None,
+        description="현재 배포가 실행 중인 Git 커밋 식별자",
+        examples=["aafac24"],
+    )
 
 
 class ErrorResponse(BaseModel):
