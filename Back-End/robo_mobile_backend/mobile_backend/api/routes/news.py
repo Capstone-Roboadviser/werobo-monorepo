@@ -6,9 +6,11 @@ from fastapi import APIRouter, HTTPException, Query
 
 from mobile_backend.api.schemas.news import (
     AssetClassNewsResponse,
+    MarketBriefingResponse,
     NewsAssetClass,
 )
 from mobile_backend.services import news_service
+from mobile_backend.services import market_briefing_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/news", tags=["news"])
@@ -30,3 +32,23 @@ def get_asset_class_news(
         return news_service.fetch_news(cls)
     except news_service.NewsUnavailableError as exc:
         raise HTTPException(status_code=503, detail="news_unavailable") from exc
+
+
+@router.get(
+    "/market-briefing",
+    response_model=MarketBriefingResponse,
+    summary="미국 마감 시황 브리핑 조회",
+    description=(
+        "완료된 미국 정규장 종가로 지수·업종·시장지표를 계산하고, "
+        "검증된 뉴스 제목을 바탕으로 객관적 시황 브리핑을 반환합니다."
+    ),
+)
+def get_market_briefing() -> MarketBriefingResponse:
+    try:
+        return market_briefing_service.fetch_market_briefing()
+    except market_briefing_service.MarketBriefingUnavailableError as exc:
+        logger.warning("market briefing unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="market_briefing_unavailable",
+        ) from exc

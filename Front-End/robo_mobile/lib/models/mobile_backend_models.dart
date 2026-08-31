@@ -1104,6 +1104,192 @@ class MobileAssetClassNewsResponse {
   }
 }
 
+class MobileMarketIndex {
+  final String name;
+  final double close;
+  final double changePct;
+
+  const MobileMarketIndex({
+    required this.name,
+    required this.close,
+    required this.changePct,
+  });
+
+  factory MobileMarketIndex.fromJson(Map<String, dynamic> json) {
+    return MobileMarketIndex(
+      name: json['name']?.toString() ?? '',
+      close: _asDouble(json['close']),
+      changePct: _asDouble(json['chg_pct']),
+    );
+  }
+}
+
+class MobileMarketSector {
+  final String name;
+  final String etf;
+  final double changePct;
+
+  const MobileMarketSector({
+    required this.name,
+    required this.etf,
+    required this.changePct,
+  });
+
+  factory MobileMarketSector.fromJson(Map<String, dynamic> json) {
+    return MobileMarketSector(
+      name: json['name']?.toString() ?? '',
+      etf: json['etf']?.toString() ?? '',
+      changePct: _asDouble(json['chg_pct']),
+    );
+  }
+}
+
+class MobileMarketBreadth {
+  final int sectorsUp;
+  final int sectorsTotal;
+  final String marketTone;
+
+  const MobileMarketBreadth({
+    required this.sectorsUp,
+    required this.sectorsTotal,
+    required this.marketTone,
+  });
+
+  factory MobileMarketBreadth.fromJson(Map<String, dynamic> json) {
+    return MobileMarketBreadth(
+      sectorsUp: (json['sectors_up'] as num?)?.toInt() ?? 0,
+      sectorsTotal: (json['sectors_total'] as num?)?.toInt() ?? 0,
+      marketTone: json['market_tone']?.toString() ?? '',
+    );
+  }
+}
+
+class MobileMarketIndicator {
+  final String name;
+  final String level;
+  final String? change;
+
+  const MobileMarketIndicator({
+    required this.name,
+    required this.level,
+    this.change,
+  });
+
+  factory MobileMarketIndicator.fromJson(Map<String, dynamic> json) {
+    return MobileMarketIndicator(
+      name: json['name']?.toString() ?? '',
+      level: json['level']?.toString() ?? '',
+      change: json['chg']?.toString(),
+    );
+  }
+}
+
+class MobileMarketArticle {
+  final String title;
+  final String link;
+  final DateTime published;
+  final String source;
+
+  const MobileMarketArticle({
+    required this.title,
+    required this.link,
+    required this.published,
+    required this.source,
+  });
+
+  factory MobileMarketArticle.fromJson(Map<String, dynamic> json) {
+    return MobileMarketArticle(
+      title: json['title']?.toString() ?? '',
+      link: json['link']?.toString() ?? '',
+      published: _parseDate(json['published']),
+      source: json['source']?.toString() ?? '',
+    );
+  }
+}
+
+class MobileMarketBriefingItem {
+  final String title;
+  final String body;
+  final List<String> sourceTitles;
+
+  const MobileMarketBriefingItem({
+    required this.title,
+    required this.body,
+    required this.sourceTitles,
+  });
+
+  factory MobileMarketBriefingItem.fromJson(Map<String, dynamic> json) {
+    return MobileMarketBriefingItem(
+      title: json['title']?.toString() ?? '',
+      body: json['body']?.toString() ?? '',
+      sourceTitles: (json['source_titles'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+    );
+  }
+}
+
+class MobileMarketBriefingResponse {
+  final String asOf;
+  final DateTime generatedAt;
+  final String statusNote;
+  final String summary;
+  final List<MobileMarketIndex> indices;
+  final MobileMarketBreadth breadth;
+  final List<MobileMarketSector> sectors;
+  final List<MobileMarketIndicator> indicators;
+  final List<MobileMarketBriefingItem> briefing;
+  final List<MobileMarketArticle> articles;
+  final String generationMode;
+
+  const MobileMarketBriefingResponse({
+    required this.asOf,
+    required this.generatedAt,
+    required this.statusNote,
+    required this.summary,
+    required this.indices,
+    required this.breadth,
+    required this.sectors,
+    required this.indicators,
+    required this.briefing,
+    required this.articles,
+    required this.generationMode,
+  });
+
+  factory MobileMarketBriefingResponse.fromJson(Map<String, dynamic> json) {
+    return MobileMarketBriefingResponse(
+      asOf: json['as_of']?.toString() ?? '',
+      generatedAt: _parseDate(json['generated_at']),
+      statusNote: json['status_note']?.toString() ?? '',
+      summary: json['summary']?.toString() ?? '',
+      indices: (json['indices'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileMarketIndex.fromJson)
+          .toList(),
+      breadth: MobileMarketBreadth.fromJson(
+        json['breadth'] as Map<String, dynamic>? ?? const {},
+      ),
+      sectors: (json['sectors'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileMarketSector.fromJson)
+          .toList(),
+      indicators: (json['indicators'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileMarketIndicator.fromJson)
+          .toList(),
+      briefing: (json['briefing'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileMarketBriefingItem.fromJson)
+          .toList(),
+      articles: (json['articles'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileMarketArticle.fromJson)
+          .toList(),
+      generationMode: json['generation_mode']?.toString() ?? 'rules',
+    );
+  }
+}
+
 class MobileReturnPoint {
   final DateTime date;
   final double expectedReturn;

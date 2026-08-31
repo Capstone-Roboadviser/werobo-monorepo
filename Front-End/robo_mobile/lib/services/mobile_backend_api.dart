@@ -175,6 +175,14 @@ class MobileBackendApi {
     );
   }
 
+  Future<MobileMarketBriefingResponse> fetchMarketBriefing() {
+    return _get<MobileMarketBriefingResponse>(
+      path: '/news/market-briefing',
+      parser: MobileMarketBriefingResponse.fromJson,
+      timeout: _defaultTimeout,
+    );
+  }
+
   String _assetClassToApi(AssetClass cls) {
     switch (cls) {
       case AssetClass.cash:
