@@ -183,50 +183,32 @@ def test_market_briefing_route_returns_payload(client):
 
 def test_weekly_market_report_matches_five_minute_report_structure():
     market_briefing_service._WEEKLY_CACHE = None
-    with (
-        patch.object(
-            market_briefing_service,
-            "_weekly_close_frame",
-            return_value=_weekly_close_frame(),
-        ),
-        patch.object(market_briefing_service, "_fetch_articles", return_value=[]),
-        patch.dict("os.environ", {}, clear=True),
-    ):
-        result = market_briefing_service.fetch_weekly_market_report(
-            force_refresh=True
-        )
+    result = market_briefing_service.fetch_weekly_market_report(force_refresh=True)
 
     assert result.title == "이번 주 시장, 5분 요약"
-    assert len(result.key_figures) == 3
-    assert "편집 기준" in result.editorial_note
+    assert result.period_start == "2026-08-19"
+    assert result.period_end == "2026-08-28"
+    assert result.key_figures == []
+    assert result.editorial_note == ""
     assert len(result.events) == 5
-    assert len(result.sector_flows) == 6
+    assert result.events[0].title == "금값 사상 최고 — 열흘 새 +5.4%"
+    assert result.events[-1].title == "미국 정부가 국채시장에 개입 — 장기 금리 잠시 하락"
+    assert len(result.sector_flows) == 8
+    assert result.sector_flows[4].recent_six_month_label == "+1~2%"
     assert len(result.economy_signals) == 5
-    assert len(result.calendar) == 4
+    assert len(result.calendar) == 5
     assert len(result.glossary) == 3
-    assert result.generation_mode == "rules"
-    assert "실제 자금 유입액" in result.flow_summary
+    assert result.skill_sources == []
+    assert result.generation_mode == "static_pdf"
+    assert "금·비트코인 펀드" in result.flow_summary
 
 
 def test_weekly_market_report_route_returns_payload(client):
     market_briefing_service._WEEKLY_CACHE = None
-    with (
-        patch.object(
-            market_briefing_service,
-            "_weekly_close_frame",
-            return_value=_weekly_close_frame(),
-        ),
-        patch.object(market_briefing_service, "_fetch_articles", return_value=[]),
-        patch.object(
-            market_briefing_service,
-            "_economy_signals",
-            return_value=_economy_fixture(),
-        ),
-        patch.dict("os.environ", {}, clear=True),
-    ):
-        response = client.get("/api/v1/news/weekly-report")
+    response = client.get("/api/v1/news/weekly-report")
     assert response.status_code == 200
     assert len(response.json()["events"]) == 5
+    assert response.json()["generation_mode"] == "static_pdf"
 
 
 def test_weekly_percentage_validation_accepts_verified_headline_values():

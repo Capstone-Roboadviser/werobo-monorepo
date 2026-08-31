@@ -96,6 +96,8 @@ class WeeklySectorFlowResponse(BaseModel):
     etf: str
     recent_six_month_pct: float
     ytd_pct: float
+    recent_six_month_label: str | None = None
+    ytd_label: str | None = None
     note: str
 
 

@@ -868,7 +868,7 @@ def _generate_weekly_events(
         return fallback_one_line, fallback_events, fallback_other, "rules"
 
 
-def fetch_weekly_market_report(
+def _fetch_generated_weekly_market_report(
     force_refresh: bool = False,
 ) -> WeeklyMarketReportResponse:
     global _WEEKLY_CACHE
@@ -1064,3 +1064,234 @@ def fetch_weekly_market_report(
     )
     _WEEKLY_CACHE = (time.monotonic(), payload)
     return payload
+
+
+def fetch_weekly_market_report(
+    force_refresh: bool = False,
+) -> WeeklyMarketReportResponse:
+    """Return the supplied 2026-08-28 PDF report as a static news page.
+
+    The skill-based generator is intentionally paused. The user asked to ship
+    the sample PDF wording first and resume skill integration later.
+    """
+
+    del force_refresh
+    return WeeklyMarketReportResponse(
+        period_start="2026-08-19",
+        period_end="2026-08-28",
+        generated_at=datetime(2026, 8, 29, tzinfo=timezone.utc),
+        title="이번 주 시장, 5분 요약",
+        introduction=(
+            '숫자와 출처는 전부 확인된 것만 썼습니다. 모르는 건 "모름"이라고 적었고, '
+            "앞으로 오를지 내릴지는 말하지 않습니다. 읽는 데 5분."
+        ),
+        one_line=(
+            "금이 사상 최고가로 오르고, 기름값은 크게 내렸고, 엔비디아 실적 하나가 "
+            "기술주를 끌어올렸습니다. 미국 주식 전체는 거의 제자리(연초 대비 +14%)입니다."
+        ),
+        key_figures=[],
+        editorial_note="",
+        events=[
+            WeeklyEventResponse(
+                rank=1,
+                title="금값 사상 최고 — 열흘 새 +5.4%",
+                what_happened=(
+                    "금 1온스가 $4,365에서 $4,603으로. 5월 이후 처음 $4,600을 넘었습니다."
+                ),
+                why=(
+                    '① 미국 정부(재무부)가 "국채를 더 사들이겠다"고 발표 → 시중에 돈이 '
+                    "풀린다는 뜻 → 금값에 유리 ② 중국 등 각국 중앙은행이 21개월 연속 금을 "
+                    "사 모으는 중."
+                ),
+                meaning=(
+                    '금은 "불안할 때 사는 자산"입니다. 금이 오른다 = 큰손들이 보험을 사고 '
+                    "있다는 신호. 근데 이번엔 주식도 같이 올랐고 공포지수(VIX)는 오히려 "
+                    "내렸습니다. 보험을 사면서 동시에 주식도 사는, 흔치 않은 조합입니다."
+                ),
+                source_titles=["Yahoo 8/25"],
+            ),
+            WeeklyEventResponse(
+                rank=2,
+                title="기름값 급락 — 3일 만에 -7.6%",
+                what_happened="브렌트유 배럴당 $94 → $87.",
+                why=(
+                    '① OPEC·IEA가 "올해 석유 수요 전망"을 낮춤 ② 미국 원유 재고가 예상보다 '
+                    "많이 쌓임 ③ 이란과 오만이 호르무즈 해협(중동 석유가 지나가는 길목) "
+                    "임시 통행 협의 → 전쟁 걱정이 줄어듦."
+                ),
+                meaning=(
+                    "기름값 하락 = 물가 압력 완화 = 금리 인상 명분 약화. 주유비·항공료에도 "
+                    "시차를 두고 반영. 반대로 정유·에너지 회사 주식엔 불리합니다."
+                ),
+                source_titles=["OilPrice, Fortune 8/27"],
+            ),
+            WeeklyEventResponse(
+                rank=3,
+                title="엔비디아 실적 — 주가 +8.7%",
+                what_happened=(
+                    '분기 매출 약 $95B(예상 $91B), 다음 분기 전망 $107B(예상 $104B). '
+                    '"내년 매출 70% 성장" 발표 — 시장은 44%를 예상했었습니다.'
+                ),
+                why=(
+                    '엔비디아는 AI 반도체를 거의 독점하는 회사라, 이 회사 실적 = "AI 투자가 '
+                    '계속되나"의 답입니다. 답은 "예".'
+                ),
+                meaning=(
+                    "8/27 하루 미국 주식 상승분의 거의 전부가 엔비디아 한 종목이었습니다"
+                    '(시장 +0.66% 중 +0.61%). 지수는 올랐는데 종목 3개 중 2개는 내린 날. '
+                    '"시장이 좋다"와 "내 주식이 좋다"가 다를 수 있는 전형적인 날입니다.'
+                ),
+                source_titles=["CNBC 8/26"],
+            ),
+            WeeklyEventResponse(
+                rank=4,
+                title="알리바바 대규모 증자 — 주가 -10%",
+                what_happened=(
+                    "알리바바가 AI 투자 자금으로 $102억어치 새 주식을 발행. 기존 주주 몫이 "
+                    "희석돼 홍콩 주가 최대 -10%."
+                ),
+                why="",
+                meaning=(
+                    '중국 기술주 보유자만 직접 영향. 다만 "AI 투자에 이 정도 돈이 든다"는 '
+                    "신호로 읽힙니다."
+                ),
+                source_titles=["CNBC 8/24"],
+            ),
+            WeeklyEventResponse(
+                rank=5,
+                title="미국 정부가 국채시장에 개입 — 장기 금리 잠시 하락",
+                what_happened=(
+                    '30년 만기 국채 금리가 5.31%(19년 만에 최고)까지 오르자, 재무부가 8/19 '
+                    '"장기 국채를 회당 $20억 → $40억씩 사들이겠다"고 발표. 발표 당일 '
+                    "10년 금리 -0.06%p."
+                ),
+                why=(
+                    "국채 금리 = 미국 정부가 돈 빌리는 이자. 이게 오르면 주택담보대출·기업대출 "
+                    "금리도 오릅니다. 정부가 직접 국채를 사서 금리를 누르려 한 것."
+                ),
+                meaning=(
+                    '효과가 이틀 만에 사라졌습니다. 시장이 "그 정도론 부족하다"고 본 것 — '
+                    "이번 주 가장 주목할 이상 신호입니다."
+                ),
+                source_titles=["CNBC 8/19"],
+            ),
+        ],
+        other_items=[
+            "물가(PCE, 7월): 전체 물가 3.7%(예상 3.6%), 핵심 물가 3.3%(예상대로). 시장 반응 거의 없음.",
+            "캐나다 관세: 트럼프가 캐나다산 자동차·철강 관세를 2027년부터 50%로 올린다고 발표. 발효가 4개월 뒤라 시장은 아직 무반응.",
+            '한국: 코스피 -1.16%. 엔비디아 실적 발표 후 삼성전자·SK하이닉스에서 차익실현. "좋은 뉴스 나오면 판다" 패턴.',
+        ],
+        sector_flows=[
+            WeeklySectorFlowResponse(
+                name="기술 (반도체·소프트웨어)", etf="", recent_six_month_pct=34,
+                ytd_pct=31, recent_six_month_label="+34%", ytd_label="+31%",
+                note="엔비디아·AI 덕. 단 기술주 안에서 오르는 종목은 22%뿐 — 소수가 끌고 감",
+            ),
+            WeeklySectorFlowResponse(
+                name="에너지 (석유·가스)", etf="", recent_six_month_pct=15,
+                ytd_pct=41, recent_six_month_label="+15%", ytd_label="+41%",
+                note="연초 이후 1등. 근데 이번 주 기름값 급락으로 -2.3%",
+            ),
+            WeeklySectorFlowResponse(
+                name="헬스케어 (제약·병원)", etf="", recent_six_month_pct=10,
+                ytd_pct=12, recent_six_month_label="+10%", ytd_label="+12%",
+                note="최근 3개월 가장 많이 오름(+14%)",
+            ),
+            WeeklySectorFlowResponse(
+                name="금융 (은행·카드)", etf="", recent_six_month_pct=11,
+                ytd_pct=7, recent_six_month_label="+11%", ytd_label="+7%", note="",
+            ),
+            WeeklySectorFlowResponse(
+                name="소재·산업재", etf="", recent_six_month_pct=1.5,
+                ytd_pct=17, recent_six_month_label="+1~2%", ytd_label="+16~18%",
+                note="연초엔 좋았고 최근 정체",
+            ),
+            WeeklySectorFlowResponse(
+                name="경기소비 (아마존·여행·외식)", etf="", recent_six_month_pct=-1,
+                ytd_pct=-3, recent_six_month_label="-1%", ytd_label="-3%",
+                note="약세. 소비 여력 둔화",
+            ),
+            WeeklySectorFlowResponse(
+                name="통신 (구글·넷플릭스)", etf="", recent_six_month_pct=-4,
+                ytd_pct=-5, recent_six_month_label="-4%", ytd_label="-5%",
+                note="연초 이후 꼴찌",
+            ),
+            WeeklySectorFlowResponse(
+                name="유틸리티 (전기·가스)", etf="", recent_six_month_pct=-7,
+                ytd_pct=3, recent_six_month_label="-7%", ytd_label="+3%",
+                note="최근 가장 약함 — 금리 오르면 불리한 업종",
+            ),
+        ],
+        flow_summary=(
+            '상반기엔 에너지·소재·산업재 같은 "실물 경제" 업종이 올랐고, 최근 한 달은 '
+            "AI·기술주로 돈이 돌아왔습니다. 전기·통신·소비 업종은 계속 뒤처집니다.\n\n"
+            "자금 흐름(펀드 돈이 실제로 어디로 갔나): 8월 셋째 주엔 11개 업종 중 8개에서 "
+            "돈이 빠져나갔고, 금·비트코인 펀드로 들어갔습니다. 즉 주식 팔고 금 산 주가 "
+            "있었다는 뜻 — 1위 사건과 연결됩니다."
+        ),
+        economy_signals=[
+            WeeklyEconomySignalResponse(
+                signal="green", indicator="제조업 지수(ISM)", level="55.6 — 2022년 이후 최고",
+                meaning="공장이 잘 돌아감",
+            ),
+            WeeklyEconomySignalResponse(
+                signal="green", indicator="실업률", level="4.1%", meaning="일자리 안정",
+            ),
+            WeeklyEconomySignalResponse(
+                signal="yellow", indicator="물가", level="3.3~3.7% (목표 2%)", meaning="아직 높음",
+            ),
+            WeeklyEconomySignalResponse(
+                signal="yellow", indicator="기준금리", level="3.50~3.75%",
+                meaning='연준 위원 3명 "올려야". 금리 인하는 멀었음',
+            ),
+            WeeklyEconomySignalResponse(
+                signal="red", indicator="30년 국채 금리", level="5.3% (19년 최고)",
+                meaning="정부 빚 부담·대출금리 상승",
+            ),
+        ],
+        economy_summary=(
+            '경기는 좋은데 물가와 금리가 안 내려오는 상태. 교과서로는 "확장 후반부" — '
+            "보통 이 국면에선 에너지·헬스케어가 강하고 기술주는 약한데, 올해는 기술주가 "
+            "강한 게 교과서와 다른 점입니다."
+        ),
+        calendar=[
+            WeeklyCalendarItemResponse(
+                when_kst="8/28 금 밤 11시", what="워시 연준의장 첫 연설",
+                why='취임 후 첫 발언. "금리 올릴 수도"라고 하면 주식·채권 동시 하락 가능',
+            ),
+            WeeklyCalendarItemResponse(
+                when_kst="9/1 화 밤 11시", what="제조업 지수", why="55.6이 유지되나",
+            ),
+            WeeklyCalendarItemResponse(
+                when_kst="9/4 금 밤 9:30", what="미국 고용 발표",
+                why='일자리가 너무 좋으면 오히려 금리 인상 우려 ("좋은 뉴스가 나쁜 뉴스")',
+            ),
+            WeeklyCalendarItemResponse(
+                when_kst="9/11 금", what="물가(CPI)",
+                why='연준이 지목한 "다음 두 번의 물가" 중 첫 번째',
+            ),
+            WeeklyCalendarItemResponse(
+                when_kst="9/16 수 새벽 3시", what="연준 금리 결정",
+                why="동결 예상, 인상 확률 약 1/3",
+            ),
+        ],
+        glossary=[
+            WeeklyGlossaryItemResponse(
+                term="연준(Fed)", description="미국 중앙은행. 기준금리를 정함. 한국은행의 미국판.",
+            ),
+            WeeklyGlossaryItemResponse(
+                term="국채 금리", description="미국 정부가 돈 빌릴 때 내는 이자. 세상 모든 금리의 기준.",
+            ),
+            WeeklyGlossaryItemResponse(
+                term="VIX (공포지수)",
+                description="시장이 얼마나 불안한지. 15면 평온, 30 넘으면 공포. 지금 15.",
+            ),
+        ],
+        sources=[],
+        skill_sources=[],
+        disclaimer=(
+            "정보 제공 목적이며 투자 권유가 아닙니다. 데이터 기준: 미국 8/27 마감. "
+            "출처는 각 항목 링크. 확인 안 된 것은 쓰지 않았습니다."
+        ),
+        generation_mode="static_pdf",
+    )

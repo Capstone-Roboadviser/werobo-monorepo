@@ -1340,6 +1340,8 @@ class MobileWeeklySectorFlow {
   final String etf;
   final double recentSixMonthPct;
   final double ytdPct;
+  final String? recentSixMonthLabel;
+  final String? ytdLabel;
   final String note;
 
   const MobileWeeklySectorFlow({
@@ -1347,6 +1349,8 @@ class MobileWeeklySectorFlow {
     required this.etf,
     required this.recentSixMonthPct,
     required this.ytdPct,
+    this.recentSixMonthLabel,
+    this.ytdLabel,
     required this.note,
   });
 
@@ -1356,6 +1360,8 @@ class MobileWeeklySectorFlow {
       etf: json['etf']?.toString() ?? '',
       recentSixMonthPct: _asDouble(json['recent_six_month_pct']),
       ytdPct: _asDouble(json['ytd_pct']),
+      recentSixMonthLabel: json['recent_six_month_label']?.toString(),
+      ytdLabel: json['ytd_label']?.toString(),
       note: json['note']?.toString() ?? '',
     );
   }
