@@ -29,6 +29,12 @@ from mobile_backend.api.schemas.news import (
     MarketIndexResponse,
     MarketIndicatorResponse,
     MarketSectorResponse,
+    WeeklyCalendarItemResponse,
+    WeeklyEconomySignalResponse,
+    WeeklyEventResponse,
+    WeeklyGlossaryItemResponse,
+    WeeklyMarketReportResponse,
+    WeeklySectorFlowResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,6 +44,7 @@ _NEWS_TIMEOUT_SECONDS = 8.0
 _LLM_TIMEOUT_SECONDS = 30
 _GEMINI_MODEL = "gemini-2.5-flash"
 _CACHE: tuple[float, MarketBriefingResponse] | None = None
+_WEEKLY_CACHE: tuple[float, WeeklyMarketReportResponse] | None = None
 
 _INDEX_TICKERS = {
     "S&P 500": "^GSPC",
@@ -139,10 +146,13 @@ def _extract_source(entry) -> str:
     return "Google News"
 
 
-def _fetch_articles() -> list[MarketArticleResponse]:
+def _fetch_articles(
+    query: str = "US+stock+market+when:2d",
+    limit: int = 8,
+) -> list[MarketArticleResponse]:
     url = (
         "https://news.google.com/rss/search?"
-        "q=US+stock+market+when:2d&hl=en-US&gl=US&ceid=US:en"
+        f"q={query}&hl=en-US&gl=US&ceid=US:en"
     )
     try:
         response = httpx.get(url, timeout=_NEWS_TIMEOUT_SECONDS)
@@ -184,7 +194,7 @@ def _fetch_articles() -> list[MarketArticleResponse]:
             continue
         articles.append(article)
         seen.add(title)
-        if len(articles) == 8:
+        if len(articles) == limit:
             break
     return articles
 
@@ -398,4 +408,344 @@ def fetch_market_briefing(force_refresh: bool = False) -> MarketBriefingResponse
         generation_mode=generation_mode,
     )
     _CACHE = (time.monotonic(), payload)
+    return payload
+
+
+def _weekly_close_frame(tickers: list[str]) -> pd.DataFrame:
+    raw = yf.download(
+        tickers=tickers,
+        period="1y",
+        interval="1d",
+        auto_adjust=True,
+        progress=False,
+        group_by="column",
+        threads=True,
+    )
+    if raw.empty or "Close" not in raw:
+        raise MarketBriefingUnavailableError("weekly_prices_unavailable")
+    close = raw["Close"]
+    if isinstance(close, pd.Series):
+        close = close.to_frame(name=tickers[0])
+    close.index = pd.to_datetime(close.index)
+    cutoff = _completed_session_cutoff()
+    close = close[[idx.date() <= cutoff for idx in close.index]]
+    if len(close) < 10:
+        raise MarketBriefingUnavailableError("weekly_history_insufficient")
+    return close
+
+
+def _return_for_sessions(series: pd.Series, sessions: int) -> float:
+    clean = series.dropna()
+    if len(clean) <= sessions:
+        return 0.0
+    return _change_pct(float(clean.iloc[-sessions - 1]), float(clean.iloc[-1]))
+
+
+def _return_since(series: pd.Series, start: pd.Timestamp) -> float:
+    clean = series.dropna()
+    window = clean[clean.index >= start]
+    if len(window) < 2:
+        return 0.0
+    return _change_pct(float(window.iloc[0]), float(window.iloc[-1]))
+
+
+def _weekly_rule_events(
+    weekly_sectors: list[dict],
+    articles: list[MarketArticleResponse],
+) -> list[WeeklyEventResponse]:
+    ranked = sorted(weekly_sectors, key=lambda item: abs(item["weekly_pct"]), reverse=True)
+    events: list[WeeklyEventResponse] = []
+    for rank, item in enumerate(ranked[:5], start=1):
+        direction = "올랐습니다" if item["weekly_pct"] >= 0 else "내렸습니다"
+        events.append(
+            WeeklyEventResponse(
+                rank=rank,
+                title=f"{item['name']} 업종 — 이번 주 {item['weekly_pct']:+.2f}%",
+                what_happened=(
+                    f"{item['etf']}의 미국 마감 종가는 최근 5거래일 동안 "
+                    f"{abs(item['weekly_pct']):.2f}% {direction}"
+                ),
+                why="가격 데이터만으로 원인을 단정할 수 없어 확인하지 못했습니다.",
+                meaning=(
+                    "한 업종의 움직임만으로 미국 주식시장 전체의 방향을 판단할 수는 없습니다."
+                ),
+                source_titles=[],
+            )
+        )
+    if articles and events:
+        events[0].source_titles = [article.title for article in articles[:2]]
+    return events
+
+
+def _weekly_allowed_percentages(
+    indices: list[dict], sectors: list[dict]
+) -> set[str]:
+    values = [item["weekly_pct"] for item in [*indices, *sectors]]
+    values.extend(item["recent_six_month_pct"] for item in sectors)
+    values.extend(item["ytd_pct"] for item in sectors)
+    allowed: set[str] = set()
+    for value in values:
+        allowed.add(f"{abs(value):.1f}")
+        allowed.add(f"{abs(value):.2f}")
+    return allowed
+
+
+def _generate_weekly_events(
+    indices: list[dict],
+    sectors: list[dict],
+    articles: list[MarketArticleResponse],
+) -> tuple[str, list[WeeklyEventResponse], list[str], str]:
+    sp = next(item for item in indices if item["name"] == "S&P 500")
+    top = max(sectors, key=lambda item: item["weekly_pct"])
+    bottom = min(sectors, key=lambda item: item["weekly_pct"])
+    fallback_one_line = (
+        f"S&P 500은 이번 주 {sp['weekly_pct']:+.2f}% 움직였습니다. "
+        f"{top['name']} 업종이 가장 많이 올랐고, {bottom['name']} 업종의 등락률이 가장 낮았습니다."
+    )
+    fallback_events = _weekly_rule_events(sectors, articles)
+    fallback_other = [article.title for article in articles[5:8]]
+    api_key = os.environ.get("GOOGLE_API_KEY", "")
+    if not api_key:
+        return fallback_one_line, fallback_events, fallback_other, "rules"
+
+    facts = {
+        "indices": indices,
+        "sectors": [
+            {
+                "name": item["name"],
+                "etf": item["etf"],
+                "weekly_pct": item["weekly_pct"],
+            }
+            for item in sectors
+        ],
+        "headlines": [
+            {"title": article.title, "source": article.source}
+            for article in articles
+        ],
+    }
+    prompt = f"""
+아래 검증된 미국 마감 수치와 뉴스 제목만 사용해 초보자용 주간 시장 리포트 일부를 작성하세요.
+
+규칙:
+- one_line은 이번 주 핵심을 2문장으로 씁니다.
+- events는 영향이 큰 순서로 정확히 5개입니다.
+- 각 event는 title, what_happened, why, meaning, source_titles를 포함합니다.
+- what_happened는 확인된 사실, why는 제목에서 직접 확인되는 배경만 씁니다.
+- meaning은 시장 전체를 이해하는 교육적 설명이며 개인 자산·매매 권유를 넣지 않습니다.
+- 입력에 없는 숫자·날짜·회사 실적 수치를 만들지 않습니다.
+- 원인을 확인할 수 없으면 '원인을 확인하지 못했습니다'라고 씁니다.
+- source_titles는 입력 headline title을 글자 그대로만 사용합니다.
+- 전망, 매수·매도 권유, '유망', '견조한' 같은 평가어를 쓰지 않습니다.
+- 합쇼체로 쓰고 전문용어는 쉽게 풉니다.
+- other_items는 event에 포함되지 않은 제목을 최대 3개로 요약합니다.
+- JSON만 반환합니다:
+{{"one_line":"...","events":[{{"title":"...","what_happened":"...","why":"...","meaning":"...","source_titles":["..."]}}],"other_items":["..."]}}
+
+입력:
+{json.dumps(facts, ensure_ascii=False)}
+""".strip()
+    try:
+        import google.generativeai as genai
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(_GEMINI_MODEL)
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                response_mime_type="application/json",
+                temperature=0.1,
+            ),
+            request_options={"timeout": _LLM_TIMEOUT_SECONDS},
+        )
+        payload = json.loads(response.text)
+        one_line = str(payload.get("one_line") or "").strip()
+        raw_events = payload.get("events") or []
+        valid_titles = {article.title for article in articles}
+        combined = one_line + " " + " ".join(
+            " ".join(
+                str(item.get(key, ""))
+                for key in ("title", "what_happened", "why", "meaning")
+            )
+            for item in raw_events
+        )
+        used_numbers = set(re.findall(r"(?<!\d)(\d+(?:\.\d+)?)%", combined))
+        if (
+            not one_line
+            or len(raw_events) != 5
+            or not used_numbers.issubset(_weekly_allowed_percentages(indices, sectors))
+        ):
+            raise ValueError("weekly copy failed validation")
+        events: list[WeeklyEventResponse] = []
+        for rank, item in enumerate(raw_events, start=1):
+            source_titles = [
+                str(title)
+                for title in item.get("source_titles", [])
+                if str(title) in valid_titles
+            ]
+            event = WeeklyEventResponse(
+                rank=rank,
+                title=str(item.get("title") or "").strip(),
+                what_happened=str(item.get("what_happened") or "").strip(),
+                why=str(item.get("why") or "").strip(),
+                meaning=str(item.get("meaning") or "").strip(),
+                source_titles=source_titles,
+            )
+            if not all((event.title, event.what_happened, event.why, event.meaning)):
+                raise ValueError("weekly event is incomplete")
+            events.append(event)
+        other_items = [
+            str(item).strip() for item in (payload.get("other_items") or [])[:3]
+            if str(item).strip()
+        ]
+        return one_line, events, other_items, "gemini"
+    except Exception:
+        logger.warning("weekly report generation degraded to rules", exc_info=True)
+        return fallback_one_line, fallback_events, fallback_other, "rules"
+
+
+def fetch_weekly_market_report(
+    force_refresh: bool = False,
+) -> WeeklyMarketReportResponse:
+    global _WEEKLY_CACHE
+    if not force_refresh and _WEEKLY_CACHE is not None:
+        cached_at, cached = _WEEKLY_CACHE
+        if time.monotonic() - cached_at < _CACHE_TTL_SECONDS:
+            return cached
+
+    tickers = list(
+        dict.fromkeys(
+            [*_INDEX_TICKERS.values(), *_SECTOR_TICKERS.values(), *_INDICATOR_TICKERS.values()]
+        )
+    )
+    close = _weekly_close_frame(tickers)
+    period_end = close.index[-1]
+    period_start = close.index[-6] if len(close) >= 6 else close.index[0]
+    year_start = pd.Timestamp(year=period_end.year, month=1, day=1)
+    six_month_start = period_end - pd.DateOffset(months=6)
+
+    indices: list[dict] = []
+    for name, ticker in _INDEX_TICKERS.items():
+        indices.append(
+            {
+                "name": name,
+                "weekly_pct": _return_for_sessions(close[ticker], 5),
+            }
+        )
+
+    sector_data: list[dict] = []
+    for name, ticker in _SECTOR_TICKERS.items():
+        series = close[ticker]
+        sector_data.append(
+            {
+                "name": name,
+                "etf": ticker,
+                "weekly_pct": _return_for_sessions(series, 5),
+                "recent_six_month_pct": _return_since(series, six_month_start),
+                "ytd_pct": _return_since(series, year_start),
+            }
+        )
+
+    articles = _fetch_articles("US+stock+market+economy+when:10d", limit=16)
+    one_line, events, other_items, generation_mode = _generate_weekly_events(
+        indices, sector_data, articles
+    )
+
+    ranked_six_month = sorted(
+        sector_data, key=lambda item: item["recent_six_month_pct"], reverse=True
+    )
+    sector_flows: list[WeeklySectorFlowResponse] = []
+    for item in ranked_six_month:
+        if item["weekly_pct"] > 0.5:
+            note = "이번 주에도 상승했습니다."
+        elif item["weekly_pct"] < -0.5:
+            note = "이번 주에는 하락했습니다."
+        else:
+            note = "이번 주에는 큰 변화가 없었습니다."
+        sector_flows.append(
+            WeeklySectorFlowResponse(
+                name=item["name"],
+                etf=item["etf"],
+                recent_six_month_pct=item["recent_six_month_pct"],
+                ytd_pct=item["ytd_pct"],
+                note=note,
+            )
+        )
+
+    top_flow, bottom_flow = ranked_six_month[0], ranked_six_month[-1]
+    flow_summary = (
+        f"최근 6개월 가격 흐름은 {top_flow['name']} 업종이 가장 높고, "
+        f"{bottom_flow['name']} 업종이 가장 낮았습니다. 이는 실제 자금 유입액이 아니라 "
+        "업종 ETF의 마감 가격 흐름입니다."
+    )
+
+    vix = close["^VIX"].dropna()
+    rate = close["^TNX"].dropna()
+    sp_weekly = next(item["weekly_pct"] for item in indices if item["name"] == "S&P 500")
+    sectors_up = sum(item["weekly_pct"] > 0 for item in sector_data)
+    economy_signals = [
+        WeeklyEconomySignalResponse(
+            signal="green" if float(vix.iloc[-1]) < 20 else "yellow" if float(vix.iloc[-1]) < 30 else "red",
+            indicator=f"변동성지수(VIX) {float(vix.iloc[-1]):.2f}",
+            meaning="20 아래는 시장 불안이 비교적 낮고, 30 이상은 불안이 큰 구간입니다.",
+        ),
+        WeeklyEconomySignalResponse(
+            signal="yellow" if float(rate.iloc[-1]) < 5 else "red",
+            indicator=f"미국 10년 국채 금리 {float(rate.iloc[-1]):.2f}%",
+            meaning="장기 금리는 주택담보대출과 기업 자금 조달 비용에 영향을 줍니다.",
+        ),
+        WeeklyEconomySignalResponse(
+            signal="green" if sp_weekly > 0 else "red",
+            indicator=f"S&P 500 주간 {sp_weekly:+.2f}%",
+            meaning="미국 대형주 전체의 최근 5거래일 가격 흐름입니다.",
+        ),
+        WeeklyEconomySignalResponse(
+            signal="green" if sectors_up >= 7 else "yellow" if sectors_up >= 4 else "red",
+            indicator=f"상승 업종 {sectors_up}/11개",
+            meaning="상승이 일부 업종에만 집중됐는지 확인하는 폭 지표입니다.",
+        ),
+    ]
+    economy_summary = (
+        f"이번 주에는 11개 업종 중 {sectors_up}개가 올랐습니다. "
+        "신호등은 예측이 아니라 같은 기준으로 현재 상태를 정리한 표시입니다."
+    )
+
+    payload = WeeklyMarketReportResponse(
+        period_start=period_start.strftime("%Y-%m-%d"),
+        period_end=period_end.strftime("%Y-%m-%d"),
+        generated_at=datetime.now(timezone.utc),
+        title="이번 주 시장, 5분 요약",
+        introduction=(
+            "숫자와 출처를 확인한 내용만 담았습니다. 확인하지 못한 원인은 모른다고 적고, "
+            "앞으로 오를지 내릴지는 말하지 않습니다."
+        ),
+        one_line=one_line,
+        events=events,
+        other_items=other_items,
+        sector_flows=sector_flows,
+        flow_summary=flow_summary,
+        economy_signals=economy_signals,
+        economy_summary=economy_summary,
+        calendar=[],
+        glossary=[
+            WeeklyGlossaryItemResponse(
+                term="연준(Fed)",
+                description="미국 중앙은행입니다. 미국 기준금리를 정합니다.",
+            ),
+            WeeklyGlossaryItemResponse(
+                term="국채 금리",
+                description="미국 정부가 돈을 빌릴 때 내는 이자이며 여러 시장 금리의 기준입니다.",
+            ),
+            WeeklyGlossaryItemResponse(
+                term="VIX(공포지수)",
+                description="주식시장이 예상하는 단기 변동성입니다. 숫자가 높을수록 불안이 큰 구간입니다.",
+            ),
+        ],
+        sources=articles,
+        disclaimer=(
+            "정보 제공 목적이며 투자 권유가 아닙니다. 가격 데이터는 미국 마감 종가 기준이며, "
+            "출처가 확인되지 않은 내용은 작성하지 않습니다."
+        ),
+        generation_mode=generation_mode,
+    )
+    _WEEKLY_CACHE = (time.monotonic(), payload)
     return payload

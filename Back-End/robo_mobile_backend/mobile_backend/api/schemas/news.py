@@ -75,3 +75,57 @@ class MarketBriefingResponse(BaseModel):
     briefing: list[MarketBriefingItemResponse]
     articles: list[MarketArticleResponse]
     generation_mode: str
+
+
+class WeeklyEventResponse(BaseModel):
+    rank: int
+    title: str
+    what_happened: str
+    why: str
+    meaning: str
+    source_titles: list[str] = Field(default_factory=list)
+
+
+class WeeklySectorFlowResponse(BaseModel):
+    name: str
+    etf: str
+    recent_six_month_pct: float
+    ytd_pct: float
+    note: str
+
+
+class WeeklyEconomySignalResponse(BaseModel):
+    signal: str
+    indicator: str
+    meaning: str
+
+
+class WeeklyCalendarItemResponse(BaseModel):
+    when_kst: str
+    what: str
+    why: str
+
+
+class WeeklyGlossaryItemResponse(BaseModel):
+    term: str
+    description: str
+
+
+class WeeklyMarketReportResponse(BaseModel):
+    period_start: str
+    period_end: str
+    generated_at: datetime
+    title: str
+    introduction: str
+    one_line: str
+    events: list[WeeklyEventResponse]
+    other_items: list[str]
+    sector_flows: list[WeeklySectorFlowResponse]
+    flow_summary: str
+    economy_signals: list[WeeklyEconomySignalResponse]
+    economy_summary: str
+    calendar: list[WeeklyCalendarItemResponse]
+    glossary: list[WeeklyGlossaryItemResponse]
+    sources: list[MarketArticleResponse]
+    disclaimer: str
+    generation_mode: str

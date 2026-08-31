@@ -1290,6 +1290,204 @@ class MobileMarketBriefingResponse {
   }
 }
 
+class MobileWeeklyEvent {
+  final int rank;
+  final String title;
+  final String whatHappened;
+  final String why;
+  final String meaning;
+  final List<String> sourceTitles;
+
+  const MobileWeeklyEvent({
+    required this.rank,
+    required this.title,
+    required this.whatHappened,
+    required this.why,
+    required this.meaning,
+    required this.sourceTitles,
+  });
+
+  factory MobileWeeklyEvent.fromJson(Map<String, dynamic> json) {
+    return MobileWeeklyEvent(
+      rank: (json['rank'] as num?)?.toInt() ?? 0,
+      title: json['title']?.toString() ?? '',
+      whatHappened: json['what_happened']?.toString() ?? '',
+      why: json['why']?.toString() ?? '',
+      meaning: json['meaning']?.toString() ?? '',
+      sourceTitles: (json['source_titles'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+    );
+  }
+}
+
+class MobileWeeklySectorFlow {
+  final String name;
+  final String etf;
+  final double recentSixMonthPct;
+  final double ytdPct;
+  final String note;
+
+  const MobileWeeklySectorFlow({
+    required this.name,
+    required this.etf,
+    required this.recentSixMonthPct,
+    required this.ytdPct,
+    required this.note,
+  });
+
+  factory MobileWeeklySectorFlow.fromJson(Map<String, dynamic> json) {
+    return MobileWeeklySectorFlow(
+      name: json['name']?.toString() ?? '',
+      etf: json['etf']?.toString() ?? '',
+      recentSixMonthPct: _asDouble(json['recent_six_month_pct']),
+      ytdPct: _asDouble(json['ytd_pct']),
+      note: json['note']?.toString() ?? '',
+    );
+  }
+}
+
+class MobileWeeklyEconomySignal {
+  final String signal;
+  final String indicator;
+  final String meaning;
+
+  const MobileWeeklyEconomySignal({
+    required this.signal,
+    required this.indicator,
+    required this.meaning,
+  });
+
+  factory MobileWeeklyEconomySignal.fromJson(Map<String, dynamic> json) {
+    return MobileWeeklyEconomySignal(
+      signal: json['signal']?.toString() ?? 'yellow',
+      indicator: json['indicator']?.toString() ?? '',
+      meaning: json['meaning']?.toString() ?? '',
+    );
+  }
+}
+
+class MobileWeeklyCalendarItem {
+  final String whenKst;
+  final String what;
+  final String why;
+
+  const MobileWeeklyCalendarItem({
+    required this.whenKst,
+    required this.what,
+    required this.why,
+  });
+
+  factory MobileWeeklyCalendarItem.fromJson(Map<String, dynamic> json) {
+    return MobileWeeklyCalendarItem(
+      whenKst: json['when_kst']?.toString() ?? '',
+      what: json['what']?.toString() ?? '',
+      why: json['why']?.toString() ?? '',
+    );
+  }
+}
+
+class MobileWeeklyGlossaryItem {
+  final String term;
+  final String description;
+
+  const MobileWeeklyGlossaryItem({
+    required this.term,
+    required this.description,
+  });
+
+  factory MobileWeeklyGlossaryItem.fromJson(Map<String, dynamic> json) {
+    return MobileWeeklyGlossaryItem(
+      term: json['term']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+    );
+  }
+}
+
+class MobileWeeklyMarketReportResponse {
+  final String periodStart;
+  final String periodEnd;
+  final DateTime generatedAt;
+  final String title;
+  final String introduction;
+  final String oneLine;
+  final List<MobileWeeklyEvent> events;
+  final List<String> otherItems;
+  final List<MobileWeeklySectorFlow> sectorFlows;
+  final String flowSummary;
+  final List<MobileWeeklyEconomySignal> economySignals;
+  final String economySummary;
+  final List<MobileWeeklyCalendarItem> calendar;
+  final List<MobileWeeklyGlossaryItem> glossary;
+  final List<MobileMarketArticle> sources;
+  final String disclaimer;
+  final String generationMode;
+
+  const MobileWeeklyMarketReportResponse({
+    required this.periodStart,
+    required this.periodEnd,
+    required this.generatedAt,
+    required this.title,
+    required this.introduction,
+    required this.oneLine,
+    required this.events,
+    required this.otherItems,
+    required this.sectorFlows,
+    required this.flowSummary,
+    required this.economySignals,
+    required this.economySummary,
+    required this.calendar,
+    required this.glossary,
+    required this.sources,
+    required this.disclaimer,
+    required this.generationMode,
+  });
+
+  factory MobileWeeklyMarketReportResponse.fromJson(
+    Map<String, dynamic> json,
+  ) {
+    return MobileWeeklyMarketReportResponse(
+      periodStart: json['period_start']?.toString() ?? '',
+      periodEnd: json['period_end']?.toString() ?? '',
+      generatedAt: _parseDate(json['generated_at']),
+      title: json['title']?.toString() ?? '',
+      introduction: json['introduction']?.toString() ?? '',
+      oneLine: json['one_line']?.toString() ?? '',
+      events: (json['events'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileWeeklyEvent.fromJson)
+          .toList(),
+      otherItems: (json['other_items'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
+          .toList(),
+      sectorFlows: (json['sector_flows'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileWeeklySectorFlow.fromJson)
+          .toList(),
+      flowSummary: json['flow_summary']?.toString() ?? '',
+      economySignals: (json['economy_signals'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileWeeklyEconomySignal.fromJson)
+          .toList(),
+      economySummary: json['economy_summary']?.toString() ?? '',
+      calendar: (json['calendar'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileWeeklyCalendarItem.fromJson)
+          .toList(),
+      glossary: (json['glossary'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileWeeklyGlossaryItem.fromJson)
+          .toList(),
+      sources: (json['sources'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileMarketArticle.fromJson)
+          .toList(),
+      disclaimer: json['disclaimer']?.toString() ?? '',
+      generationMode: json['generation_mode']?.toString() ?? 'rules',
+    );
+  }
+}
+
 class MobileReturnPoint {
   final DateTime date;
   final double expectedReturn;

@@ -183,6 +183,14 @@ class MobileBackendApi {
     );
   }
 
+  Future<MobileWeeklyMarketReportResponse> fetchWeeklyMarketReport() {
+    return _get<MobileWeeklyMarketReportResponse>(
+      path: '/news/weekly-report',
+      parser: MobileWeeklyMarketReportResponse.fromJson,
+      timeout: _defaultTimeout,
+    );
+  }
+
   String _assetClassToApi(AssetClass cls) {
     switch (cls) {
       case AssetClass.cash:

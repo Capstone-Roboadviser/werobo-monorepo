@@ -39,6 +39,27 @@ def _close_frame() -> pd.DataFrame:
     )
 
 
+def _weekly_close_frame() -> pd.DataFrame:
+    tickers = list(
+        dict.fromkeys(
+            [
+                *market_briefing_service._INDEX_TICKERS.values(),
+                *market_briefing_service._SECTOR_TICKERS.values(),
+                *market_briefing_service._INDICATOR_TICKERS.values(),
+            ]
+        )
+    )
+    dates = pd.bdate_range("2026-01-02", periods=170)
+    rows = []
+    for index, _date in enumerate(dates):
+        rows.append({ticker: 100 + index * 0.1 for ticker in tickers})
+    rows[-1]["XLK"] = 130
+    rows[-1]["XLP"] = 95
+    rows[-1]["^VIX"] = 18
+    rows[-1]["^TNX"] = 4.2
+    return pd.DataFrame(rows, index=dates)
+
+
 def test_market_briefing_uses_close_data_and_rule_fallback():
     market_briefing_service._CACHE = None
     article = MarketArticleResponse(
@@ -102,3 +123,43 @@ def test_market_briefing_route_returns_payload(client):
         response = client.get("/api/v1/news/market-briefing")
     assert response.status_code == 200
     assert response.json()["status_note"] == "미국 정규장 마감 종가 기준"
+
+
+def test_weekly_market_report_matches_five_minute_report_structure():
+    market_briefing_service._WEEKLY_CACHE = None
+    with (
+        patch.object(
+            market_briefing_service,
+            "_weekly_close_frame",
+            return_value=_weekly_close_frame(),
+        ),
+        patch.object(market_briefing_service, "_fetch_articles", return_value=[]),
+        patch.dict("os.environ", {}, clear=True),
+    ):
+        result = market_briefing_service.fetch_weekly_market_report(
+            force_refresh=True
+        )
+
+    assert result.title == "이번 주 시장, 5분 요약"
+    assert len(result.events) == 5
+    assert len(result.sector_flows) == 11
+    assert len(result.economy_signals) == 4
+    assert len(result.glossary) == 3
+    assert result.generation_mode == "rules"
+    assert "실제 자금 유입액" in result.flow_summary
+
+
+def test_weekly_market_report_route_returns_payload(client):
+    market_briefing_service._WEEKLY_CACHE = None
+    with (
+        patch.object(
+            market_briefing_service,
+            "_weekly_close_frame",
+            return_value=_weekly_close_frame(),
+        ),
+        patch.object(market_briefing_service, "_fetch_articles", return_value=[]),
+        patch.dict("os.environ", {}, clear=True),
+    ):
+        response = client.get("/api/v1/news/weekly-report")
+    assert response.status_code == 200
+    assert len(response.json()["events"]) == 5

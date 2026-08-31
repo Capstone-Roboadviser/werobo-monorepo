@@ -8,6 +8,7 @@ from mobile_backend.api.schemas.news import (
     AssetClassNewsResponse,
     MarketBriefingResponse,
     NewsAssetClass,
+    WeeklyMarketReportResponse,
 )
 from mobile_backend.services import news_service
 from mobile_backend.services import market_briefing_service
@@ -51,4 +52,24 @@ def get_market_briefing() -> MarketBriefingResponse:
         raise HTTPException(
             status_code=503,
             detail="market_briefing_unavailable",
+        ) from exc
+
+
+@router.get(
+    "/weekly-report",
+    response_model=WeeklyMarketReportResponse,
+    summary="쉬운 주간 시장 리포트 조회",
+    description=(
+        "최근 거래일의 마감 데이터와 확인된 뉴스 출처를 이용해 "
+        "5분 분량의 쉬운 주간 시장 리포트를 반환합니다."
+    ),
+)
+def get_weekly_market_report() -> WeeklyMarketReportResponse:
+    try:
+        return market_briefing_service.fetch_weekly_market_report()
+    except market_briefing_service.MarketBriefingUnavailableError as exc:
+        logger.warning("weekly market report unavailable: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="weekly_market_report_unavailable",
         ) from exc
