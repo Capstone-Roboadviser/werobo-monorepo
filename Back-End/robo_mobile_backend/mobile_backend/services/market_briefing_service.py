@@ -445,20 +445,57 @@ def fetch_market_briefing(force_refresh: bool = False) -> MarketBriefingResponse
 
 
 def _weekly_close_frame(tickers: list[str]) -> pd.DataFrame:
-    raw = yf.download(
-        tickers=tickers,
-        period="1y",
-        interval="1d",
-        auto_adjust=True,
-        progress=False,
-        group_by="column",
-        threads=True,
-    )
-    if raw.empty or "Close" not in raw:
+    frames: list[pd.DataFrame] = []
+    chunk_size = 18
+    for start in range(0, len(tickers), chunk_size):
+        chunk = tickers[start : start + chunk_size]
+        raw = yf.download(
+            tickers=chunk,
+            period="1y",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            group_by="column",
+            threads=True,
+        )
+        if raw.empty or "Close" not in raw:
+            continue
+        chunk_close = raw["Close"]
+        if isinstance(chunk_close, pd.Series):
+            chunk_close = chunk_close.to_frame(name=chunk[0])
+        frames.append(chunk_close)
+
+    if not frames:
         raise MarketBriefingUnavailableError("weekly_prices_unavailable")
-    close = raw["Close"]
-    if isinstance(close, pd.Series):
-        close = close.to_frame(name=tickers[0])
+    close = pd.concat(frames, axis=1)
+    close = close.loc[:, ~close.columns.duplicated()]
+
+    required = list(dict.fromkeys([*_INDEX_TICKERS.values(), *_SECTOR_TICKERS.values()]))
+    missing = [ticker for ticker in required if ticker not in close.columns]
+    for ticker in missing:
+        raw = yf.download(
+            tickers=[ticker],
+            period="1y",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            group_by="column",
+            threads=False,
+        )
+        if raw.empty or "Close" not in raw:
+            continue
+        retry_close = raw["Close"]
+        if isinstance(retry_close, pd.Series):
+            retry_close = retry_close.to_frame(name=ticker)
+        elif len(retry_close.columns) == 1:
+            retry_close.columns = [ticker]
+        close = close.join(retry_close, how="outer")
+
+    still_missing = [ticker for ticker in required if ticker not in close.columns]
+    if still_missing:
+        raise MarketBriefingUnavailableError(
+            f"weekly_required_tickers_missing:{','.join(still_missing)}"
+        )
     close.index = pd.to_datetime(close.index)
     cutoff = _completed_session_cutoff()
     close = close[[idx.date() <= cutoff for idx in close.index]]

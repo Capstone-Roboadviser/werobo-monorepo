@@ -79,6 +79,38 @@ def _economy_fixture():
     )
 
 
+def test_weekly_close_downloads_large_universe_in_chunks():
+    tickers = list(
+        dict.fromkeys(
+            [
+                *market_briefing_service._INDEX_TICKERS.values(),
+                *market_briefing_service._SECTOR_TICKERS.values(),
+                *market_briefing_service._WEEKLY_INDICATOR_TICKERS.values(),
+                *market_briefing_service._DOW30,
+            ]
+        )
+    )
+    dates = pd.bdate_range("2026-08-03", periods=20)
+
+    def fake_download(*, tickers, **_kwargs):
+        columns = pd.MultiIndex.from_tuples([("Close", ticker) for ticker in tickers])
+        return pd.DataFrame(100.0, index=dates, columns=columns)
+
+    with (
+        patch.object(market_briefing_service.yf, "download", side_effect=fake_download) as download,
+        patch.object(
+            market_briefing_service,
+            "_completed_session_cutoff",
+            return_value=dates[-1].date(),
+        ),
+    ):
+        result = market_briefing_service._weekly_close_frame(tickers)
+
+    assert download.call_count == 3
+    assert set(market_briefing_service._INDEX_TICKERS.values()) <= set(result.columns)
+    assert set(market_briefing_service._SECTOR_TICKERS.values()) <= set(result.columns)
+
+
 def test_market_briefing_uses_close_data_and_rule_fallback():
     market_briefing_service._CACHE = None
     article = MarketArticleResponse(
