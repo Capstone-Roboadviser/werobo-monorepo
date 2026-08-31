@@ -449,15 +449,19 @@ def _weekly_close_frame(tickers: list[str]) -> pd.DataFrame:
     chunk_size = 18
     for start in range(0, len(tickers), chunk_size):
         chunk = tickers[start : start + chunk_size]
-        raw = yf.download(
-            tickers=chunk,
-            period="1y",
-            interval="1d",
-            auto_adjust=True,
-            progress=False,
-            group_by="column",
-            threads=True,
-        )
+        try:
+            raw = yf.download(
+                tickers=chunk,
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                group_by="column",
+                threads=True,
+            )
+        except Exception:
+            logger.warning("weekly price chunk download failed", exc_info=True)
+            continue
         if raw.empty or "Close" not in raw:
             continue
         chunk_close = raw["Close"]
@@ -473,15 +477,19 @@ def _weekly_close_frame(tickers: list[str]) -> pd.DataFrame:
     required = list(dict.fromkeys([*_INDEX_TICKERS.values(), *_SECTOR_TICKERS.values()]))
     missing = [ticker for ticker in required if ticker not in close.columns]
     for ticker in missing:
-        raw = yf.download(
-            tickers=[ticker],
-            period="1y",
-            interval="1d",
-            auto_adjust=True,
-            progress=False,
-            group_by="column",
-            threads=False,
-        )
+        try:
+            raw = yf.download(
+                tickers=[ticker],
+                period="1y",
+                interval="1d",
+                auto_adjust=True,
+                progress=False,
+                group_by="column",
+                threads=False,
+            )
+        except Exception:
+            logger.warning("weekly price retry failed: %s", ticker, exc_info=True)
+            continue
         if raw.empty or "Close" not in raw:
             continue
         retry_close = raw["Close"]
