@@ -7,7 +7,7 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>USMV Overlay Impact / WeRobo Admin</title>
+  <title>USMV Overlay Impact / ALFIN Admin</title>
   <script>
     (function(){
       try {
@@ -163,7 +163,7 @@ def render_admin_overlay_comparison_page() -> HTMLResponse:
   <div class="rail">
     <span class="rail-brand">
       <span class="mark"></span>
-      <span>WEROBO</span>
+      <span>ALFIN</span>
       <span class="slash">/</span>
       <span class="section">OVERLAY</span>
     </span>

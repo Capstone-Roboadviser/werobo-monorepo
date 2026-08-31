@@ -2,7 +2,7 @@
 
 **Date:** 2026-06-09
 **Status:** Approved (design direction confirmed; building via workflow)
-**Source of truth:** Figma "Robo-advisor" frames `Onboarding - Step 1..8` (file `YoysPCATcd1J2fRULgLfMe`) + capstone report §4.1 (분산투자 당위성 구현) and §4.2 (WeRobo 핵심 서비스).
+**Source of truth:** Figma "Robo-advisor" frames `Onboarding - Step 1..8` (file `YoysPCATcd1J2fRULgLfMe`) + capstone report §4.1 (분산투자 당위성 구현) and §4.2 (ALFIN 핵심 서비스).
 **App:** `Front-End/robo_mobile/` (Flutter, iOS primary).
 
 ---
@@ -30,9 +30,9 @@ Every step shares chrome (see §3). Korean copy is verbatim from the report; Eng
 | 1 | 1/7 | 시장에는 수많은 자산들이 있습니다. | — | 다음 | yes |
 | 2 | 2/7 | 주식 몰빵 투자 정말 괜찮을까요? | 시장이 흔들리는 순간, 내 자산 전체가 함께 무너집니다.\n충격을 나누어 담을 '안전장치'가 없기 때문이죠. | 분산투자하면 어떻게 될까요? | yes |
 | 3 | 3/7 | 분산투자만으로\n위험은 크게 줄어듭니다. → (after first asset) 흔들림은 최소로,\n자산은 꾸준히 우상향합니다. | 서로 다른 성격의 자산들에 분산투자 하는 것만으로도\n리스크를 효과적으로 방어하고 안정적인 수익을 낼 수 있습니다. | 자산을 추가해주세요 (disabled) → 계속하기 | yes |
-| 4 | 4/7 | 하지만 무엇을, 얼마나, 어떻게\n구성해야 할까요? | 수만 가지의 자산 조합에서\n모든 조합의 수익률과 리스크를 계산하여\n최적의 비율을 찾는 것은 불가능에 가깝습니다. | WeRobo에게 맡겨요! | yes |
-| 5 | 5/7 | 가장 완벽한 최적의 조합을\nWeRobo가 찾아냅니다. | 같은 위험이면 더 높은 수익을,\n같은 수익이면 더 낮은 위험인 최적의 조합을 제공합니다. | 다음 | yes |
-| 6 | 6/7 | WeRobo는 시장에 대응하여\n알아서 운용전략을 바꿉니다. | 시시각각 변하는 세계 정세를 WeRobo가\n실시간으로 분석하여 최고의 전략으로 포트폴리오를 운용합니다. | 다음 | yes |
+| 4 | 4/7 | 하지만 무엇을, 얼마나, 어떻게\n구성해야 할까요? | 수만 가지의 자산 조합에서\n모든 조합의 수익률과 리스크를 계산하여\n최적의 비율을 찾는 것은 불가능에 가깝습니다. | ALFIN에게 맡겨요! | yes |
+| 5 | 5/7 | 가장 완벽한 최적의 조합을\nALFIN이 찾아냅니다. | 같은 위험이면 더 높은 수익을,\n같은 수익이면 더 낮은 위험인 최적의 조합을 제공합니다. | 다음 | yes |
+| 6 | 6/7 | ALFIN은 시장에 대응하여\n알아서 운용전략을 바꿉니다. | 시시각각 변하는 세계 정세를 ALFIN이\n실시간으로 분석하여 최고의 전략으로 포트폴리오를 운용합니다. | 다음 | yes |
 | 7 | 7/7 | 최적의 자산 배분에\n최고의 전략으로.\n보다 더 안정적이면서도\n더 높은 수익률을 제공하겠습니다. | — | 투자 시작하기 | **no** |
 
 ### Per-step visuals

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a 7-page scroll-driven story flow before the existing onboarding to establish WeRobo's value proposition (assets exist → diversification → optimal allocation → AI adaptation → start). Shown once per device on first launch, dismissable via Skip.
+**Goal:** Add a 7-page scroll-driven story flow before the existing onboarding to establish ALFIN's value proposition (assets exist → diversification → optimal allocation → AI adaptation → start). Shown once per device on first launch, dismissable via Skip.
 
 **Architecture:** A new `StoryFlowScreen` hosts a `PageView` of 7 text-only pages with a fixed-position background layer (`StoryCanvas`) that interpolates visuals (dots, pie, risk gauge, EF curve, event chips, CTA button) as a pure function of `pageController.page`. State persistence uses `SharedPreferences` via a new `hasSeenStory` flag on `PortfolioState` (mirrors the existing `welcomeBannerSeen` pattern at [Front-End/robo_mobile/lib/app/portfolio_state.dart:108](Front-End/robo_mobile/lib/app/portfolio_state.dart:108)). Splash routing extended to send first-launch users to the story before login.
 
@@ -1286,19 +1286,19 @@ class _StoryFlowScreenState extends State<StoryFlowScreen> {
           '수만 가지의 자산 조합 속에서\n나에게 딱 맞는 최적의 비율을 찾는 것은\n불가능에 가깝습니다.',
     ),
     _StoryPageData(
-      headline: '가장 완벽한 최적의 조합을\nWeRobo가 찾아냅니다.',
+      headline: '가장 완벽한 최적의 조합을\nALFIN이 찾아냅니다.',
       description:
-          '같은 위험 대비 가장 높은 수익률을 낼 수 있는\n자산 조합을 이은 선.\nWeRobo의 알고리즘은 당신의 자산 조합을\n이 곡선 위 최적의 지점에 안착시킵니다.',
+          '같은 위험 대비 가장 높은 수익률을 낼 수 있는\n자산 조합을 이은 선.\nALFIN의 알고리즘은 당신의 자산 조합을\n이 곡선 위 최적의 지점에 안착시킵니다.',
     ),
     _StoryPageData(
       headline:
-          '최적의 자산 조합에 더하여,\nWeRobo는 시장에 대응하여\n알아서 전략을 바꿉니다.',
+          '최적의 자산 조합에 더하여,\nALFIN은 시장에 대응하여\n알아서 전략을 바꿉니다.',
       description:
           '시시각각 변하는 세계 정세를 AI가\n실시간으로 분석하여 최적의 전략으로\n당신의 포트폴리오를 운용합니다.',
     ),
     _StoryPageData(
       headline:
-          '최적의 자산 배분으로, 최선의 전략으로,\n보다 안정적이면서 높은 수익률을\nWeRobo가 제공하겠습니다.',
+          '최적의 자산 배분으로, 최선의 전략으로,\n보다 안정적이면서 높은 수익률을\nALFIN이 제공하겠습니다.',
       description: null,
     ),
   ];

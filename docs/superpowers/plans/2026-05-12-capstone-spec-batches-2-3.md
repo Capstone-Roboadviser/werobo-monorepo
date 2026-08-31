@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship the remaining items from the capstone 2026-05-12 service plan: the high-risk acknowledgement modal, the portfolio detail split with donut animation, the home stat block reorg with WeRobo logo, and the market volatility addition on 내 포트폴리오.
+**Goal:** Ship the remaining items from the capstone 2026-05-12 service plan: the high-risk acknowledgement modal, the portfolio detail split with donut animation, the home stat block reorg with ALFIN logo, and the market volatility addition on 내 포트폴리오.
 
 **Architecture:** Six independent tasks. Each touches a different screen or widget and can be dispatched to a fresh subagent without conflict. No shared state changes beyond the existing theme tokens.
 
@@ -512,9 +512,9 @@ git commit -m "feat(home): stack 평가금액 under 투자금액 in single colum
 
 ---
 
-## Task 5: WeRobo logo above 총손익
+## Task 5: ALFIN logo above 총손익
 
-The home screen should show a small WeRobo wordmark or icon directly above the 총손익 label. Reuse the existing logo asset / `WeRoboTypography.logo` styling if appropriate, but in a smaller size suitable for a home-screen header.
+The home screen should show a small ALFIN wordmark or icon directly above the 총손익 label. Reuse the existing logo asset / `WeRoboTypography.logo` styling if appropriate, but in a smaller size suitable for a home-screen header.
 
 **Files:**
 - Modify: `Front-End/robo_mobile/lib/screens/home/home_tab.dart` (insert above line 1126's 총손익 label)
@@ -523,13 +523,13 @@ The home screen should show a small WeRobo wordmark or icon directly above the �
 
 - [ ] **Step 1: Check the existing logo treatment**
 
-Search for `WeRoboTypography.logo` and the splash/login logo widget. Decide: use the text "WeRobo" in `WeRoboFonts.display` at a reduced size (e.g. 20px) tinted `WeRoboColors.primary`, OR an SVG asset if one exists in `assets/`.
+Search for `WeRoboTypography.logo` and the splash/login logo widget. Decide: use the text "ALFIN" in `WeRoboFonts.display` at a reduced size (e.g. 20px) tinted `WeRoboColors.primary`, OR an SVG asset if one exists in `assets/`.
 
 - [ ] **Step 2: Insert the logo above the 총손익 block**
 
 ```dart
 Text(
-  'WeRobo',
+  'ALFIN',
   style: TextStyle(
     fontFamily: WeRoboFonts.display,
     fontSize: 20,
@@ -558,7 +558,7 @@ Use `xcrun simctl io <UDID> screenshot /tmp/werobo-home.png` and visually confir
 
 ```bash
 git add Front-End/robo_mobile/lib/screens/home/home_tab.dart
-git commit -m "feat(home): add WeRobo wordmark above 총손익"
+git commit -m "feat(home): add ALFIN wordmark above 총손익"
 ```
 
 ---

@@ -46,7 +46,7 @@ class _WeRoboAppState extends State<WeRoboApp> {
         child: ListenableBuilder(
           listenable: _themeNotifier,
           builder: (context, _) => MaterialApp(
-            title: 'WeRobo',
+            title: 'ALFIN',
             debugShowCheckedModeBanner: false,
             theme: WeRoboTheme.light,
             darkTheme: WeRoboTheme.dark,

@@ -13,7 +13,7 @@
 
 ## 1. Goal
 
-Reskin + targeted UX polish of the WeRobo Flutter mobile app. Replace the sky-blue / light-fintech aesthetic with a Neon Carrot orange / flat-monochromatic system per capstone guidelines, and execute the screen-level UX changes prescribed in the PDF (efficient frontier, portfolio detail, home dashboard). Cut the questionnaire-based onboarding. Ship a σ-based digest alert system end-to-end.
+Reskin + targeted UX polish of the ALFIN Flutter mobile app. Replace the sky-blue / light-fintech aesthetic with a Neon Carrot orange / flat-monochromatic system per capstone guidelines, and execute the screen-level UX changes prescribed in the PDF (efficient frontier, portfolio detail, home dashboard). Cut the questionnaire-based onboarding. Ship a σ-based digest alert system end-to-end.
 
 This is **Option B** (Reskin + targeted UX polish), not pure reskin (A) or full rethink (C).
 

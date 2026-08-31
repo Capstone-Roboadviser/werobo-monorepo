@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// WeRobo design tokens — extracted from 캡스톤 UI/UX Figma
+/// ALFIN design tokens — extracted from 캡스톤 UI/UX Figma
 class WeRoboColors {
   WeRoboColors._();
 

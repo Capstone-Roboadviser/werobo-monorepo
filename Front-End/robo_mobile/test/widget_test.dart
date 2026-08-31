@@ -7,6 +7,6 @@ void main() {
     await tester.pumpWidget(
       WeRoboApp(portfolioState: PortfolioState()),
     );
-    expect(find.text('WeRobo'), findsOneWidget);
+    expect(find.text('ALFIN'), findsOneWidget);
   });
 }

@@ -231,7 +231,7 @@ class _LoginScreenState extends State<LoginScreen>
                     children: [
                       const SizedBox(height: 40),
                       Text(
-                        'WeRobo',
+                        'ALFIN',
                         style: WeRoboTypography.logo.copyWith(
                           color: WeRoboColors.primary,
                         ),

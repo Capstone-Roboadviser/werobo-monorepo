@@ -19,8 +19,8 @@ The current onboarding starts at the frontier picker, which assumes the user alr
 Mockups in the Notion page (`UIUX 수정 및 추가 사항`):
 
 - `image.png` — story pages 1–4 (assets exist → diversification reduces risk → optimization is hard)
-- `image 2.png` — story pages 5–7 (WeRobo finds the optimum → AI adapts → CTA)
-- `image 1.png` — iStock gauge reference for the risk dial concept (semicircle, red→yellow→green; emoji faces are NOT carried over — WeRobo-cohesive only)
+- `image 2.png` — story pages 5–7 (ALFIN finds the optimum → AI adapts → CTA)
+- `image 1.png` — iStock gauge reference for the risk dial concept (semicircle, red→yellow→green; emoji faces are NOT carried over — ALFIN-cohesive only)
 
 ## Scope
 
@@ -64,9 +64,9 @@ All Korean text is taken verbatim from the mockups.
 | 2 | 여러 자산에 분산투자 하는 것만으로 투자는 안전해집니다. | RiskGauge needle at 40; below it a single solid red circle | 서로 다른 성격의 자산들에 분산투자 하는 것만으로도 시장의 리스크를 효과적으로 방어하고 안정적인 수익을 낼 수 있습니다. |
 | 3 | (same as page 2) | RiskGauge needle drops to 30; circle has split into a 2-slice pie (red + green) | (same as page 2) |
 | 4 | 하지만, 무엇을 얼마나 어떻게 구성해야 할까요? | Same pie, with `??` marks orbiting/pulsing | 수만 가지의 자산 조합 속에서 나에게 딱 맞는 최적의 비율을 찾는 것은 불가능에 가깝습니다. |
-| 5 | 가장 완벽한 최적의 조합을 WeRobo가 찾아냅니다. | EF curve draws in; same 4 dots reappear along the curve | 같은 위험 대비 가장 높은 수익률을 낼 수 있는 자산 조합을 이은 선. WeRobo의 알고리즘은 당신의 자산 조합을 이 곡선 위 최적의 지점에 안착시킵니다. |
-| 6 | 최적의 자산 조합에 더하여, WeRobo는 시장에 대응하여 알아서 전략을 바꿉니다. | 4 event chips fade in: 유가 변동 / 관세 전쟁 / 인플레이션 / 전쟁 | 시시각각 변하는 세계 정세를 AI가 실시간으로 분석하여 최적의 전략으로 당신의 포트폴리오를 운용합니다. |
-| 7 | 최적의 자산 배분으로, 최선의 전략으로, 보다 안정적이면서 높은 수익률을 WeRobo가 제공하겠습니다. | Empty canvas (text only) | `[ 투자 시작하기 ]` CTA button, centered |
+| 5 | 가장 완벽한 최적의 조합을 ALFIN이 찾아냅니다. | EF curve draws in; same 4 dots reappear along the curve | 같은 위험 대비 가장 높은 수익률을 낼 수 있는 자산 조합을 이은 선. ALFIN의 알고리즘은 당신의 자산 조합을 이 곡선 위 최적의 지점에 안착시킵니다. |
+| 6 | 최적의 자산 조합에 더하여, ALFIN은 시장에 대응하여 알아서 전략을 바꿉니다. | 4 event chips fade in: 유가 변동 / 관세 전쟁 / 인플레이션 / 전쟁 | 시시각각 변하는 세계 정세를 AI가 실시간으로 분석하여 최적의 전략으로 당신의 포트폴리오를 운용합니다. |
+| 7 | 최적의 자산 배분으로, 최선의 전략으로, 보다 안정적이면서 높은 수익률을 ALFIN이 제공하겠습니다. | Empty canvas (text only) | `[ 투자 시작하기 ]` CTA button, centered |
 
 ### Fixed story constants
 

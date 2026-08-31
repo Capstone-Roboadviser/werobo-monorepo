@@ -185,7 +185,7 @@ void main() {
     expect(find.text('리밸런싱 시 별도로 보관됐다가 자동 사용돼요.'), findsNothing);
   });
 
-  testWidgets('shows WeRobo logo above total profit', (tester) async {
+  testWidgets('shows ALFIN logo above total profit', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final state = PortfolioState();
     addTearDown(state.dispose);
@@ -205,7 +205,7 @@ void main() {
     );
     await tester.pump(const Duration(milliseconds: 800));
 
-    final logo = find.byKey(const Key('home_werobo_logo'));
+    final logo = find.byKey(const Key('home_alfin_logo'));
     final totalProfit = find.text('총 손익');
 
     expect(logo, findsOneWidget);

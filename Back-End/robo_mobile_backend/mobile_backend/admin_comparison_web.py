@@ -7,7 +7,7 @@ def render_admin_comparison_page() -> HTMLResponse:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Comparison Board / WeRobo Admin</title>
+  <title>Comparison Board / ALFIN Admin</title>
   <script>
     // Set theme before first paint to prevent light-mode flash on navigation.
     (function(){
@@ -1033,7 +1033,7 @@ def render_admin_comparison_page() -> HTMLResponse:
   <div class="rail">
     <span class="rail-brand">
       <span class="mark"></span>
-      <span>WEROBO</span>
+      <span>ALFIN</span>
       <span class="slash">/</span>
       <span class="section">COMPARISON</span>
     </span>
@@ -2073,7 +2073,7 @@ def render_admin_comparison_page() -> HTMLResponse:
           return;
         }
         if (data?.cache_status === 'hit') {
-          console.info('[WeRobo.AdminComparison] frontier cache hit', {
+          console.info('[ALFIN.AdminComparison] frontier cache hit', {
             source: data.cache_source || 'unknown',
             versionId: data.version_id,
             asOfDate: data.as_of_date,

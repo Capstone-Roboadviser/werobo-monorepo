@@ -437,7 +437,7 @@ class EmbeddedPortfolioEngineAdapter:
             if value is None or value == "":
                 continue
             fields.append(f"{key}={value}")
-        logger.info("[WeRobo.Cache] %s", " ".join(fields))
+        logger.info("[ALFIN.Cache] %s", " ".join(fields))
 
     def _get_managed_universe_snapshot_payload(
         self,

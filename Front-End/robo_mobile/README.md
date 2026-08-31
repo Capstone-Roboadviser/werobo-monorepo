@@ -1,6 +1,6 @@
 # robo_mobile
 
-Flutter 기반 WeRobo 모바일 앱입니다.
+Flutter 기반 ALFIN 모바일 앱입니다.
 
 ## 주요 흐름
 

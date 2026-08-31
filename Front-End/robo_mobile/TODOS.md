@@ -39,7 +39,7 @@
 ## Portfolio Sharing via Share Sheet
 **What:** Tap a share button on the portfolio screen to generate a screenshot + summary text and share to KakaoTalk, iMessage, etc.
 **Why:** Organic growth channel. Users showing their portfolio to friends is the best marketing for a robo-advisor.
-**Pros:** Uses share_plus + screenshot packages. Generates "My WeRobo portfolio: +12.3% this year" with chart image.
+**Pros:** Uses share_plus + screenshot packages. Generates "My ALFIN portfolio: +12.3% this year" with chart image.
 **Cons:** Need to generate a shareable image from the chart widget. Screenshot package handles this.
 **Effort:** S (human) -> S (CC+gstack)
 **Priority:** P2
@@ -76,7 +76,7 @@
 ## Railway Pro Upgrade Decision
 **What:** Decide whether to upgrade from Railway Hobby ($5/mo) to Pro ($20/mo) for always-on deployment.
 **Why:** Hobby tier has 5-10s cold-start latency. First app launch after inactivity is painfully slow. For a "real product beyond capstone," this is the entire first impression.
-**Decision gate:** If WeRobo has real users by 2026-06-15, upgrade to Pro. If capstone-only, keep Hobby.
+**Decision gate:** If ALFIN has real users by 2026-06-15, upgrade to Pro. If capstone-only, keep Hobby.
 **Pros:** Eliminates cold-start. Always-on. Better for demo reliability.
 **Cons:** $20/mo ongoing cost.
 **Context:** The PostAuthLoader screen + offline caching mitigate the UX impact, but they can't fix the fundamental 5-10s delay on first launch. For the capstone demo specifically, hitting the health endpoint before presenting is a manual workaround.

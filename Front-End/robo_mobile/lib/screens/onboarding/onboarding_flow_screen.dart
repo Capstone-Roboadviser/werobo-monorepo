@@ -96,8 +96,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen>
   ValueNotifier<bool> get _currentReady => _readyNotifiers[_index];
 
   /// Forward navigation is gated only on interactive steps that aren't ready.
-  bool get _canAdvance =>
-      !_currentStep.interactive || _currentReady.value;
+  bool get _canAdvance => !_currentStep.interactive || _currentReady.value;
 
   /// The page index to pin forward scrolling at, or null when forward motion
   /// is free. Returns the current page only while an interactive step isn't
@@ -245,7 +244,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen>
         caption: '수만 가지의 자산 조합에서\n'
             '모든 조합의 수익률과 리스크를 계산하여\n'
             '최적의 비율을 찾는 것은 불가능에 가깝습니다.',
-        buttonLabel: 'WeRobo에게 맡겨요!',
+        buttonLabel: 'ALFIN에게 맡겨요!',
         captionBelow: true,
         bodyBuilder: (context, entrance, ready, headline) =>
             OptimalRatioDonutView(entrance: entrance),
@@ -253,7 +252,7 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen>
       // 5 — efficient frontier (display-only)
       OnboardingStep(
         headline: OnboardingHeadline.plain(
-          const ['가장 완벽한 최적의 조합을', 'WeRobo가 찾아냅니다.'],
+          const ['가장 완벽한 최적의 조합을', 'ALFIN이 찾아냅니다.'],
         ),
         caption: '같은 위험이면 더 높은 수익을,\n'
             '같은 수익이면 더 낮은 위험인 최적의 조합을 제공합니다.',
@@ -265,9 +264,9 @@ class _OnboardingFlowScreenState extends State<OnboardingFlowScreen>
       // 6 — AI management
       OnboardingStep(
         headline: OnboardingHeadline.plain(
-          const ['WeRobo는 시장에 대응하여', '알아서 운용전략을 바꿉니다.'],
+          const ['ALFIN은 시장에 대응하여', '알아서 운용전략을 바꿉니다.'],
         ),
-        caption: '시시각각 변하는 세계 정세를 WeRobo가\n'
+        caption: '시시각각 변하는 세계 정세를 ALFIN이\n'
             '실시간으로 분석하여 최고의 전략으로 포트폴리오를 운용합니다.',
         buttonLabel: '다음',
         captionBelow: true,

@@ -1,4 +1,4 @@
-# WeRobo — Monorepo
+# ALFIN — Monorepo
 
 Robo-advisor mobile app for Korean retail investors. Interactive efficient frontier visualization, portfolio analysis, comparison, and rebalancing.
 

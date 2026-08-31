@@ -1,7 +1,7 @@
-# WeRobo Mobile - Flutter Project Guidelines
+# ALFIN Mobile - Flutter Project Guidelines
 
 ## Project Overview
-WeRobo is a robo-advisor mobile app built with Flutter. It helps users find optimal investment portfolios via an efficient frontier visualization and provides portfolio analysis, comparison, and rebalancing.
+ALFIN is a robo-advisor mobile app built with Flutter. It helps users find optimal investment portfolios via an efficient frontier visualization and provides portfolio analysis, comparison, and rebalancing.
 
 ## Build & Run
 - **Font**: Jalnan (custom, in `assets/fonts/`)

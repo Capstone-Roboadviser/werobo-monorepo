@@ -98,7 +98,7 @@ class _SplashScreenState extends State<SplashScreen>
           child: ScaleTransition(
             scale: _scale,
             child: Text(
-              'WeRobo',
+              'ALFIN',
               style: WeRoboTypography.logo.copyWith(
                 color: WeRoboColors.primary,
               ),

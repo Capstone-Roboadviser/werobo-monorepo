@@ -48,7 +48,7 @@ class MoreTab extends StatelessWidget {
             const Spacer(),
             Center(
               child: Text(
-                'WeRobo v1.0.0',
+                'ALFIN v1.0.1',
                 style: WeRoboTypography.caption.themed(context),
               ),
             ),

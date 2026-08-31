@@ -12,18 +12,18 @@ String _suffix(Map<String, Object?> details) {
 }
 
 void logPageEnter(String pageName, [Map<String, Object?> details = const {}]) {
-  debugPrint('[WeRobo.Page] enter $pageName${_suffix(details)}');
+  debugPrint('[ALFIN.Page] enter $pageName${_suffix(details)}');
 }
 
 void logPageExit(String pageName, [Map<String, Object?> details = const {}]) {
-  debugPrint('[WeRobo.Page] exit $pageName${_suffix(details)}');
+  debugPrint('[ALFIN.Page] exit $pageName${_suffix(details)}');
 }
 
 void logAction(String action, [Map<String, Object?> details = const {}]) {
-  debugPrint('[WeRobo.Action] $action${_suffix(details)}');
+  debugPrint('[ALFIN.Action] $action${_suffix(details)}');
 }
 
 void logApi(String phase, String operation,
     [Map<String, Object?> details = const {}]) {
-  debugPrint('[WeRobo.Api] $phase $operation${_suffix(details)}');
+  debugPrint('[ALFIN.Api] $phase $operation${_suffix(details)}');
 }

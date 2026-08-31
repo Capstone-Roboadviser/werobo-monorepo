@@ -15,7 +15,7 @@ class ErrorResponse(BaseModel):
 
 class AuthUserResponse(BaseModel):
     id: int = Field(..., description="내부 사용자 식별자", examples=[1])
-    email: str = Field(..., description="사용자 이메일", examples=["investor@werobo.app"])
+    email: str = Field(..., description="사용자 이메일", examples=["investor@alfin.app"])
     name: str = Field(..., description="표시 이름", examples=["홍길동"])
     provider: str = Field(..., description="인증 제공자", examples=["password"])
     created_at: str = Field(..., description="가입 시각(UTC)", examples=["2026-04-13T08:30:00Z"])

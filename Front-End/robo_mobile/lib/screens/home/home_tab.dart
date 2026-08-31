@@ -373,8 +373,8 @@ class _HomeTabState extends State<HomeTab> with SingleTickerProviderStateMixin {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Text(
-                  'WeRobo',
-                  key: const Key('home_werobo_logo'),
+                  'ALFIN',
+                  key: const Key('home_alfin_logo'),
                   style: WeRoboTypography.logo.copyWith(
                     color: WeRoboColors.primary,
                     fontSize: 22,
@@ -1125,7 +1125,8 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
     // update can shrink the list mid-drag), so re-clamp to the current length
     // before indexing to avoid a RangeError. Mirrors the painter's clamping.
     final maxIndex = valuePts.length - 1;
-    final normalizedStart = math.min(startIdx, endIdx).clamp(0, maxIndex).toInt();
+    final normalizedStart =
+        math.min(startIdx, endIdx).clamp(0, maxIndex).toInt();
     final normalizedEnd = math.max(startIdx, endIdx).clamp(0, maxIndex).toInt();
     if (normalizedEnd - normalizedStart < 1) {
       widget.onRangeSelectionChanged(null);
@@ -1340,8 +1341,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                 ),
                 decoration: BoxDecoration(
                   color: tc.background,
-                  borderRadius:
-                      BorderRadius.circular(WeRoboColors.radiusM),
+                  borderRadius: BorderRadius.circular(WeRoboColors.radiusM),
                 ),
                 child: _InvestedVsCurrentStack(
                   invested: investedAmount,
@@ -1531,8 +1531,7 @@ class _PortfolioHeroChartState extends State<_PortfolioHeroChart>
                     right: 0,
                     top: 8,
                     child: IgnorePointer(
-                      ignoring:
-                          _touchIndex != null && !widget.rangeDigestMode,
+                      ignoring: _touchIndex != null && !widget.rangeDigestMode,
                       child: AnimatedOpacity(
                         opacity: _touchIndex != null && !widget.rangeDigestMode
                             ? 0.0
@@ -1715,8 +1714,8 @@ class _RangeDigestChartAiButton extends StatelessWidget {
         child: BackdropFilter(
           filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
           child: Container(
-            key:
-                Key(active ? 'range_digest_exit' : 'range_digest_chart_ai_button'),
+            key: Key(
+                active ? 'range_digest_exit' : 'range_digest_chart_ai_button'),
             padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
             decoration: BoxDecoration(
               color: active
@@ -1877,7 +1876,6 @@ class _PortfolioIssueFeed extends StatelessWidget {
       ),
     );
   }
-
 }
 
 class _RangeDigestIssueCard extends StatelessWidget {
@@ -3079,7 +3077,6 @@ class _DigestBanner extends StatelessWidget {
     );
   }
 }
-
 
 // ─── Notification dropdown sheet ────────────────────────────
 

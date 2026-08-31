@@ -7,7 +7,7 @@ def render_admin_page() -> HTMLResponse:
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Universe / WeRobo Admin</title>
+  <title>Universe / ALFIN Admin</title>
   <script>
     // Set theme before first paint to prevent light-mode flash on navigation.
     (function(){
@@ -874,7 +874,7 @@ def render_admin_page() -> HTMLResponse:
   <div class="rail">
     <span class="rail-brand">
       <span class="mark"></span>
-      <span>WEROBO</span>
+      <span>ALFIN</span>
       <span class="slash">/</span>
       <span class="section">UNIVERSE</span>
     </span>

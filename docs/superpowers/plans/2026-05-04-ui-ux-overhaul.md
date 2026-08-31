@@ -1,8 +1,8 @@
-# WeRobo UI/UX Overhaul Implementation Plan
+# ALFIN UI/UX Overhaul Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Reskin the WeRobo Flutter app to the Neon Carrot orange / flat-monochromatic system and execute the PDF-driven UX changes (efficient frontier rework, portfolio review screen, home dashboard rework, σ-based digest alert UI) to ship MVP by 2026-05-28.
+**Goal:** Reskin the ALFIN Flutter app to the Neon Carrot orange / flat-monochromatic system and execute the PDF-driven UX changes (efficient frontier rework, portfolio review screen, home dashboard rework, σ-based digest alert UI) to ship MVP by 2026-05-28.
 
 **Architecture:** Theme-first sweep — Phase 1 atomically recolors the entire app via centralized tokens; Phases 2-5 are independently shippable PRs that rework one screen group each; Phase 6 polishes and verifies. Each phase ends with `flutter analyze` clean and tests passing.
 

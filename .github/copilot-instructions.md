@@ -11,7 +11,7 @@ Internal-facing only. The Flutter app in `Front-End/robo_mobile/` is out of scop
 
 ### Users
 
-Internal quant/research team at WeRobo (Korean robo-advisor for retail investors). They sit at a desk, often all day, doing work that feels operationally heavy: adding/removing tickers, wiring asset-role rules, running price refreshes, comparing universe snapshots against each other on a chart board. Language is Korean. They read numerical tables fluently — information density is a feature, not a bug. Job to be done: operate the instrument, not browse a dashboard.
+Internal quant/research team at ALFIN (Korean robo-advisor for retail investors). They sit at a desk, often all day, doing work that feels operationally heavy: adding/removing tickers, wiring asset-role rules, running price refreshes, comparing universe snapshots against each other on a chart board. Language is Korean. They read numerical tables fluently — information density is a feature, not a bug. Job to be done: operate the instrument, not browse a dashboard.
 
 ### Brand Personality
 

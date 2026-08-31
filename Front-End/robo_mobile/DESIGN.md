@@ -1,9 +1,9 @@
-# WeRobo Design System
+# ALFIN Design System
 
 > Source of truth for visual + interaction design. Updated 2026-05-04 to align with the capstone design guidelines (Neon Carrot orange + flat monochromatic palette) and the PDF-spec UX rework (`0502_캡스톤_자산배분 RA_보고서.pdf`).
 
 ## Brand Personality
-WeRobo is a robo-advisor that makes portfolio investment accessible to Korean retail investors. The design communicates **trust through clarity** and **confidence through warmth**. Every screen should feel like a calm, capable financial advisor — friendly enough to invite a beginner in, precise enough that an expert respects the data.
+ALFIN is a robo-advisor that makes portfolio investment accessible to Korean retail investors. The design communicates **trust through clarity** and **confidence through warmth**. Every screen should feel like a calm, capable financial advisor — friendly enough to invite a beginner in, precise enough that an expert respects the data.
 
 ## Aesthetic Direction
 **Style:** Flat design + monochromatic orange. Card-based layouts inspired by Korean fintech offerings (Hanwha Life Offering, Hi-Bank). Minimal chrome, no gradients on UI elements (orange-on-orange tonal contrast carries depth).
@@ -324,7 +324,7 @@ Researched 2026-04-09; refreshed 2026-05-04 with the orange direction.
 
 **Closest references (per PDF):** Hanwha Life Offering app, Hi-Bank — Korean fintech with bold orange + light, card-based dashboards. Differs from earlier benchmarks (Toss/Robinhood/Wealthfront/Betterment) which lean blue+white or black+green.
 
-**Where WeRobo fits:**
+**Where ALFIN fits:**
 - Visual register: Hanwha Life / Hi-Bank (warm, confident, accessible)
 - Functional register: Wealthfront / Betterment (robo-advisor, beginner-friendly, portfolio-first)
 - NOT competing with Toss / Robinhood (active trading, real-time tickers)
