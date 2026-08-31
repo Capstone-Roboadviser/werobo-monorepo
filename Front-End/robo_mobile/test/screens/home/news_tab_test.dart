@@ -24,7 +24,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('이번 주 시장, 5분 요약'), findsOneWidget);
-    expect(find.text('한 줄로'), findsOneWidget);
+    expect(find.text('이번 주 한 줄 요약'), findsOneWidget);
+    final summaryCard = tester.widget<Container>(
+      find.byKey(const Key('weekly_one_line_card')),
+    );
+    final summaryDecoration = summaryCard.decoration! as BoxDecoration;
+    expect(summaryDecoration.gradient, isA<LinearGradient>());
     expect(find.text('이번 주 가장 큰 사건 5가지 (영향이 큰 순서)'), findsOneWidget);
     expect(find.textContaining('연초 대비 +14%'), findsOneWidget);
     expect(find.textContaining('1위.'), findsOneWidget);

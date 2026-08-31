@@ -87,11 +87,9 @@ class _NewsTabState extends State<NewsTab> {
       for (final article in report.sources) article.title: article,
     };
     return [
-      _IntroNotice(text: report.introduction),
-      const SizedBox(height: 16),
-      const _SectionBand(title: '한 줄로'),
-      const SizedBox(height: 10),
       _OneLineCard(text: report.oneLine),
+      const SizedBox(height: 12),
+      _IntroNotice(text: report.introduction),
       if (report.keyFigures.isNotEmpty) ...[
         const SizedBox(height: 10),
         _KeyFiguresCard(figures: report.keyFigures),
@@ -301,15 +299,46 @@ class _OneLineCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _ReportCard(
-      child: Text(
-        text,
-        key: const Key('weekly_one_line'),
-        style: WeRoboTypography.body.copyWith(
-          color: WeRoboThemeColors.of(context).textPrimary,
-          fontWeight: FontWeight.w800,
-          height: 1.55,
+    return Container(
+      key: const Key('weekly_one_line_card'),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF101EB7), Color(0xFF1674ED)],
         ),
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: WeRoboColors.primary.withValues(alpha: 0.26),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '이번 주 한 줄 요약',
+            style: WeRoboTypography.caption.copyWith(
+              color: Colors.white.withValues(alpha: 0.78),
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 9),
+          Text(
+            text,
+            key: const Key('weekly_one_line'),
+            style: WeRoboTypography.body.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              height: 1.55,
+            ),
+          ),
+        ],
       ),
     );
   }
