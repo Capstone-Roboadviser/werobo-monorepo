@@ -7,7 +7,10 @@ import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from mobile_backend.api.schemas.news import MarketArticleResponse
+from mobile_backend.api.schemas.news import (
+    MarketArticleResponse,
+    WeeklyEconomySignalResponse,
+)
 from mobile_backend.services import market_briefing_service
 
 
@@ -58,6 +61,22 @@ def _weekly_close_frame() -> pd.DataFrame:
     rows[-1]["^VIX"] = 18
     rows[-1]["^TNX"] = 4.2
     return pd.DataFrame(rows, index=dates)
+
+
+def _economy_fixture():
+    names = ["제조업 지수", "실업률", "물가", "기준금리", "30년 국채 금리"]
+    return (
+        [
+            WeeklyEconomySignalResponse(
+                signal="green",
+                indicator=name,
+                level="50.0",
+                meaning="확인된 값입니다.",
+            )
+            for name in names
+        ],
+        "확인된 다섯 지표입니다.",
+    )
 
 
 def test_market_briefing_uses_close_data_and_rule_fallback():
@@ -118,6 +137,11 @@ def test_market_briefing_route_returns_payload(client):
             return_value=_close_frame(),
         ),
         patch.object(market_briefing_service, "_fetch_articles", return_value=[]),
+        patch.object(
+            market_briefing_service,
+            "_economy_signals",
+            return_value=_economy_fixture(),
+        ),
         patch.dict("os.environ", {}, clear=True),
     ):
         response = client.get("/api/v1/news/market-briefing")
@@ -141,9 +165,12 @@ def test_weekly_market_report_matches_five_minute_report_structure():
         )
 
     assert result.title == "이번 주 시장, 5분 요약"
+    assert len(result.key_figures) == 3
+    assert "편집 기준" in result.editorial_note
     assert len(result.events) == 5
-    assert len(result.sector_flows) == 11
-    assert len(result.economy_signals) == 4
+    assert len(result.sector_flows) == 6
+    assert len(result.economy_signals) == 5
+    assert len(result.calendar) == 4
     assert len(result.glossary) == 3
     assert result.generation_mode == "rules"
     assert "실제 자금 유입액" in result.flow_summary
@@ -158,8 +185,30 @@ def test_weekly_market_report_route_returns_payload(client):
             return_value=_weekly_close_frame(),
         ),
         patch.object(market_briefing_service, "_fetch_articles", return_value=[]),
+        patch.object(
+            market_briefing_service,
+            "_economy_signals",
+            return_value=_economy_fixture(),
+        ),
         patch.dict("os.environ", {}, clear=True),
     ):
         response = client.get("/api/v1/news/weekly-report")
     assert response.status_code == 200
     assert len(response.json()["events"]) == 5
+
+
+def test_weekly_percentage_validation_accepts_verified_headline_values():
+    article = MarketArticleResponse(
+        title="Inflation slows to 2.6% in official release",
+        link="https://example.com/inflation",
+        published=datetime(2026, 8, 28, 21, 0, tzinfo=timezone.utc),
+        source="Official source",
+    )
+
+    allowed = market_briefing_service._weekly_allowed_percentages(
+        [{"pct": 1.25}],
+        [{"recent_six_month_pct": -3.4, "ytd_pct": 5.67}],
+        [article],
+    )
+
+    assert {"1.2", "1.25", "2", "2.0", "2.6", "3.4", "5.67"} <= allowed

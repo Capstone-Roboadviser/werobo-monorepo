@@ -1321,6 +1321,20 @@ class MobileWeeklyEvent {
   }
 }
 
+class MobileWeeklyKeyFigure {
+  final String value;
+  final String label;
+
+  const MobileWeeklyKeyFigure({required this.value, required this.label});
+
+  factory MobileWeeklyKeyFigure.fromJson(Map<String, dynamic> json) {
+    return MobileWeeklyKeyFigure(
+      value: json['value']?.toString() ?? '',
+      label: json['label']?.toString() ?? '',
+    );
+  }
+}
+
 class MobileWeeklySectorFlow {
   final String name;
   final String etf;
@@ -1350,11 +1364,13 @@ class MobileWeeklySectorFlow {
 class MobileWeeklyEconomySignal {
   final String signal;
   final String indicator;
+  final String level;
   final String meaning;
 
   const MobileWeeklyEconomySignal({
     required this.signal,
     required this.indicator,
+    required this.level,
     required this.meaning,
   });
 
@@ -1362,6 +1378,7 @@ class MobileWeeklyEconomySignal {
     return MobileWeeklyEconomySignal(
       signal: json['signal']?.toString() ?? 'yellow',
       indicator: json['indicator']?.toString() ?? '',
+      level: json['level']?.toString() ?? '미확인',
       meaning: json['meaning']?.toString() ?? '',
     );
   }
@@ -1411,6 +1428,8 @@ class MobileWeeklyMarketReportResponse {
   final String title;
   final String introduction;
   final String oneLine;
+  final List<MobileWeeklyKeyFigure> keyFigures;
+  final String editorialNote;
   final List<MobileWeeklyEvent> events;
   final List<String> otherItems;
   final List<MobileWeeklySectorFlow> sectorFlows;
@@ -1420,6 +1439,7 @@ class MobileWeeklyMarketReportResponse {
   final List<MobileWeeklyCalendarItem> calendar;
   final List<MobileWeeklyGlossaryItem> glossary;
   final List<MobileMarketArticle> sources;
+  final List<String> skillSources;
   final String disclaimer;
   final String generationMode;
 
@@ -1430,6 +1450,8 @@ class MobileWeeklyMarketReportResponse {
     required this.title,
     required this.introduction,
     required this.oneLine,
+    required this.keyFigures,
+    required this.editorialNote,
     required this.events,
     required this.otherItems,
     required this.sectorFlows,
@@ -1439,6 +1461,7 @@ class MobileWeeklyMarketReportResponse {
     required this.calendar,
     required this.glossary,
     required this.sources,
+    required this.skillSources,
     required this.disclaimer,
     required this.generationMode,
   });
@@ -1453,6 +1476,11 @@ class MobileWeeklyMarketReportResponse {
       title: json['title']?.toString() ?? '',
       introduction: json['introduction']?.toString() ?? '',
       oneLine: json['one_line']?.toString() ?? '',
+      keyFigures: (json['key_figures'] as List<dynamic>? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(MobileWeeklyKeyFigure.fromJson)
+          .toList(),
+      editorialNote: json['editorial_note']?.toString() ?? '',
       events: (json['events'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(MobileWeeklyEvent.fromJson)
@@ -1481,6 +1509,9 @@ class MobileWeeklyMarketReportResponse {
       sources: (json['sources'] as List<dynamic>? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(MobileMarketArticle.fromJson)
+          .toList(),
+      skillSources: (json['skill_sources'] as List<dynamic>? ?? const [])
+          .map((item) => item.toString())
           .toList(),
       disclaimer: json['disclaimer']?.toString() ?? '',
       generationMode: json['generation_mode']?.toString() ?? 'rules',

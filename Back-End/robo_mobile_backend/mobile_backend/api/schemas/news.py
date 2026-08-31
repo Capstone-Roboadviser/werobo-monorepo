@@ -86,6 +86,11 @@ class WeeklyEventResponse(BaseModel):
     source_titles: list[str] = Field(default_factory=list)
 
 
+class WeeklyKeyFigureResponse(BaseModel):
+    value: str
+    label: str
+
+
 class WeeklySectorFlowResponse(BaseModel):
     name: str
     etf: str
@@ -97,6 +102,7 @@ class WeeklySectorFlowResponse(BaseModel):
 class WeeklyEconomySignalResponse(BaseModel):
     signal: str
     indicator: str
+    level: str
     meaning: str
 
 
@@ -118,6 +124,8 @@ class WeeklyMarketReportResponse(BaseModel):
     title: str
     introduction: str
     one_line: str
+    key_figures: list[WeeklyKeyFigureResponse]
+    editorial_note: str
     events: list[WeeklyEventResponse]
     other_items: list[str]
     sector_flows: list[WeeklySectorFlowResponse]
@@ -127,5 +135,6 @@ class WeeklyMarketReportResponse(BaseModel):
     calendar: list[WeeklyCalendarItemResponse]
     glossary: list[WeeklyGlossaryItemResponse]
     sources: list[MarketArticleResponse]
+    skill_sources: list[str]
     disclaimer: str
     generation_mode: str

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../app/portfolio_state.dart';
 import '../../app/theme.dart';
 import '../../models/mobile_backend_models.dart';
 import '../../services/mobile_backend_api.dart';
@@ -92,11 +93,15 @@ class _NewsTabState extends State<NewsTab> {
     return [
       _IntroNotice(text: report.introduction),
       const SizedBox(height: 16),
-      const _SectionBand(title: '한 줄로'),
+      const _SectionBand(title: '이번 주, 한 줄로'),
       const SizedBox(height: 10),
       _OneLineCard(text: report.oneLine),
+      const SizedBox(height: 10),
+      _KeyFiguresCard(figures: report.keyFigures),
       const SizedBox(height: 22),
-      const _SectionBand(title: '이번 주 가장 큰 사건 5가지'),
+      const _SectionBand(title: '이번 주 큰 사건 다섯 가지'),
+      const SizedBox(height: 10),
+      _EditorialNote(text: report.editorialNote),
       const SizedBox(height: 10),
       for (final event in report.events) ...[
         _EventCard(event: event, articleByTitle: articleByTitle),
@@ -119,15 +124,19 @@ class _NewsTabState extends State<NewsTab> {
       const SizedBox(height: 10),
       _SummaryNote(label: '읽는 법', text: report.flowSummary),
       const SizedBox(height: 22),
-      const _SectionBand(title: '경기는 지금 어디쯤인가'),
+      const _SectionBand(title: '경기 신호등'),
       const SizedBox(height: 10),
       _EconomySignalCard(signals: report.economySignals),
       const SizedBox(height: 10),
       _SummaryNote(label: '한마디', text: report.economySummary),
       const SizedBox(height: 22),
-      const _SectionBand(title: '다음 주 챙길 것'),
+      const _SectionBand(title: '다음 주 일정'),
       const SizedBox(height: 10),
       _CalendarCard(items: report.calendar),
+      const SizedBox(height: 22),
+      const _SectionBand(title: '고객님 업종 한 줄'),
+      const SizedBox(height: 10),
+      _PersonalSectorCard(text: _personalSectorLine(context, report)),
       const SizedBox(height: 22),
       const _SectionBand(title: '용어 3개만'),
       const SizedBox(height: 10),
@@ -138,9 +147,55 @@ class _NewsTabState extends State<NewsTab> {
         const SizedBox(height: 10),
         _SourceCard(articles: report.sources),
       ],
+      if (report.skillSources.isNotEmpty) ...[
+        const SizedBox(height: 14),
+        _SkillCreditCard(urls: report.skillSources),
+      ],
       const SizedBox(height: 18),
       _Disclaimer(text: report.disclaimer),
     ];
+  }
+
+  String _personalSectorLine(
+    BuildContext context,
+    MobileWeeklyMarketReportResponse report,
+  ) {
+    final provider =
+        context.dependOnInheritedWidgetOfExactType<PortfolioStateProvider>();
+    final stocks = provider?.notifier?.accountSummary?.stockAllocations ??
+        const <MobileStockAllocation>[];
+    if (stocks.isEmpty) {
+      return '포트폴리오를 확정하면 가장 많이 보유한 업종과 이번 주 흐름을 여기에 연결합니다.';
+    }
+
+    final weights = <String, double>{};
+    for (final stock in stocks) {
+      final sector = stock.sectorName.trim();
+      if (sector.isEmpty) continue;
+      weights.update(sector, (value) => value + stock.weight,
+          ifAbsent: () => stock.weight);
+    }
+    if (weights.isEmpty) {
+      return '보유 종목의 업종 정보를 확인하지 못했습니다.';
+    }
+
+    final top = weights.entries.reduce(
+      (left, right) => left.value >= right.value ? left : right,
+    );
+    MobileWeeklySectorFlow? flow;
+    for (final item in report.sectorFlows) {
+      if (item.name == top.key ||
+          item.name.contains(top.key) ||
+          top.key.contains(item.name)) {
+        flow = item;
+        break;
+      }
+    }
+    final weight = (top.value * 100).toStringAsFixed(1);
+    if (flow == null) {
+      return '가장 많이 보유한 업종은 ${top.key}($weight%)입니다. 이번 주 비교 가능한 업종 데이터를 확인하지 못했습니다.';
+    }
+    return '가장 많이 보유한 업종은 ${top.key}($weight%)입니다. ${flow.note}';
   }
 }
 
@@ -331,6 +386,94 @@ class _OneLineCard extends StatelessWidget {
   }
 }
 
+class _KeyFiguresCard extends StatelessWidget {
+  final List<MobileWeeklyKeyFigure> figures;
+
+  const _KeyFiguresCard({required this.figures});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return _ReportCard(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (var index = 0; index < figures.length; index++) ...[
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6),
+                child: Column(
+                  children: [
+                    Text(
+                      figures[index].value,
+                      textAlign: TextAlign.center,
+                      style: WeRoboTypography.heading3.copyWith(
+                        color: figures[index].value.startsWith('-')
+                            ? WeRoboColors.error
+                            : WeRoboColors.primary,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      figures[index].label,
+                      textAlign: TextAlign.center,
+                      style: WeRoboTypography.caption.copyWith(
+                        color: tc.textSecondary,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (index != figures.length - 1)
+              Container(width: 1, height: 48, color: tc.border),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _EditorialNote extends StatelessWidget {
+  final String text;
+
+  const _EditorialNote({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: tc.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: tc.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline_rounded,
+              size: 18, color: WeRoboColors.primary),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Text(
+              text,
+              style: WeRoboTypography.caption.copyWith(
+                color: tc.textSecondary,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _EventCard extends StatelessWidget {
   final MobileWeeklyEvent event;
   final Map<String, MobileMarketArticle> articleByTitle;
@@ -373,7 +516,7 @@ class _EventCard extends StatelessWidget {
           const SizedBox(height: 9),
           _LabeledText(label: '왜', text: event.why),
           const SizedBox(height: 9),
-          _LabeledText(label: '나한테 무슨 의미', text: event.meaning),
+          _LabeledText(label: '고객님께 어떤 의미인가', text: event.meaning),
           if (event.sourceTitles.isNotEmpty) ...[
             const SizedBox(height: 11),
             Wrap(
@@ -651,12 +794,25 @@ class _EconomySignalCard extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        signals[index].indicator,
-                        style: WeRoboTypography.bodySmall.copyWith(
-                          color: tc.textPrimary,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              signals[index].indicator,
+                              style: WeRoboTypography.bodySmall.copyWith(
+                                color: tc.textPrimary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            signals[index].level,
+                            style: WeRoboTypography.bodySmall.copyWith(
+                              color: tc.textPrimary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 3),
                       Text(
@@ -755,6 +911,48 @@ class _CalendarCard extends StatelessWidget {
   }
 }
 
+class _PersonalSectorCard extends StatelessWidget {
+  final String text;
+
+  const _PersonalSectorCard({required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return _ReportCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: WeRoboColors.primary.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.account_balance_wallet_outlined,
+              color: WeRoboColors.primary,
+              size: 19,
+            ),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              text,
+              style: WeRoboTypography.bodySmall.copyWith(
+                color: tc.textPrimary,
+                fontWeight: FontWeight.w700,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _GlossaryCard extends StatelessWidget {
   final List<MobileWeeklyGlossaryItem> items;
 
@@ -832,6 +1030,43 @@ class _SourceCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _SkillCreditCard extends StatelessWidget {
+  final List<String> urls;
+
+  const _SkillCreditCard({required this.urls});
+
+  @override
+  Widget build(BuildContext context) {
+    final tc = WeRoboThemeColors.of(context);
+    return ExpansionTile(
+      tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      title: Text(
+        '사용한 공개 스킬과 출처',
+        style: WeRoboTypography.caption.copyWith(
+          color: tc.textSecondary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+      children: [
+        for (final url in urls)
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            title: Text(
+              Uri.parse(url).pathSegments.last,
+              style: WeRoboTypography.caption.copyWith(
+                color: WeRoboColors.primary,
+              ),
+            ),
+            trailing: const Icon(Icons.open_in_new_rounded, size: 15),
+            onTap: () => _openUrl(url),
+          ),
+      ],
     );
   }
 }
