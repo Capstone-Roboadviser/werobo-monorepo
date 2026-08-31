@@ -856,13 +856,7 @@ class _CalendarCard extends StatelessWidget {
               children: [
                 SizedBox(
                   width: 86,
-                  child: Text(
-                    items[index].whenKst,
-                    style: WeRoboTypography.caption.copyWith(
-                      color: WeRoboColors.primary,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
+                  child: _CalendarWhen(value: items[index].whenKst),
                 ),
                 Expanded(
                   child: Column(
@@ -892,6 +886,35 @@ class _CalendarCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+class _CalendarWhen extends StatelessWidget {
+  final String value;
+
+  const _CalendarWhen({required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    final parts = value.trim().split(RegExp(r'\s+'));
+    final date = parts.take(2).join(' ');
+    final time = parts.skip(2).join(' ');
+    final style = WeRoboTypography.caption.copyWith(
+      color: WeRoboColors.primary,
+      fontWeight: FontWeight.w800,
+      height: 1.25,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(date, maxLines: 1, style: style),
+        if (time.isNotEmpty) ...[
+          const SizedBox(height: 3),
+          Text(time, maxLines: 1, style: style),
+        ],
+      ],
     );
   }
 }

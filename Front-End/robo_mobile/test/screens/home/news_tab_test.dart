@@ -37,6 +37,9 @@ void main() {
     expect(find.text('돈이 어느 업종으로 가고 있나'), findsOneWidget);
     expect(find.text('경기는 지금 어디쯤인가'), findsOneWidget);
     expect(find.text('다음 주 챙길 것'), findsOneWidget);
+    expect(find.text('9/4 금'), findsOneWidget);
+    expect(find.text('밤 9:30'), findsOneWidget);
+    expect(find.text('9/4 금 밤 9:30'), findsNothing);
     expect(find.text('고객님 업종 한 줄'), findsNothing);
     expect(find.text('사용한 공개 스킬과 출처'), findsNothing);
     expect(find.text('포트폴리오 뉴스 브리핑'), findsNothing);
@@ -94,7 +97,13 @@ MobileWeeklyMarketReportResponse _fixture() {
       ),
     ],
     economySummary: '신호등은 현재 상태를 정리한 표시입니다.',
-    calendar: const [],
+    calendar: const [
+      MobileWeeklyCalendarItem(
+        whenKst: '9/4 금 밤 9:30',
+        what: '미국 고용 발표',
+        why: '일자리와 실업률을 확인합니다.',
+      ),
+    ],
     glossary: const [
       MobileWeeklyGlossaryItem(
         term: '연준(Fed)',
